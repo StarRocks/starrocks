@@ -30,6 +30,7 @@
 namespace starrocks {
 class MemTracker;
 class SlotDescriptor;
+class FlatJsonConfig;
 } // namespace starrocks
 
 namespace starrocks {
@@ -196,6 +197,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+        return *this;
+    }
+
     AsyncDeltaWriterBuilder& set_schema_id(int64_t schema_id) {
         _schema_id = schema_id;
         return *this;
@@ -250,6 +256,7 @@ private:
     int64_t _immutable_tablet_size{0};
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};

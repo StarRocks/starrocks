@@ -248,6 +248,10 @@ struct TOlapTableSink {
     // legacy "sender_id == 0 collects all" rule. FE only sets this to true once
     // it knows every target CN supports the mode (rolling-upgrade interlock).
     35: optional bool enable_lake_per_partition_coordinator_txn_log
+    // Table-level Flat JSON policy, delivered with the load plan so the (shared-data)
+    // segment writer decides flattening from the FE-authoritative value rather than the
+    // best-effort tablet-metadata cache.
+    36: optional Types.TFlatJsonConfig flat_json_config
 }
 
 struct TSchemaTableSink {

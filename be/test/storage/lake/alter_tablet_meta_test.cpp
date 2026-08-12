@@ -27,6 +27,8 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log_applier.h"
+#include "storage/lake/versioned_tablet.h"
+#include "storage_primitive/flat_json_config.h"
 #include "test_util.h"
 #include "types/type_descriptor.h"
 
@@ -74,6 +76,55 @@ TEST_F(AlterTabletMetaTest, test_missing_txn_id) {
     auto status = handler.process_update_tablet_meta(update_tablet_meta_req);
     ASSERT_ERROR(status);
     ASSERT_EQ("txn_id not set in request", status.message());
+}
+
+// A compaction (or any writer created off a specific metadata version) must take flat_json from
+// THAT version's metadata (_metadata), not the best-effort latest-metadata cache -- so the flatten
+// decision is version-consistent and does not depend on cache warmth. Verifies
+// VersionedTablet::new_writer_with_schema wires the versioned config onto the writer.
+TEST_F(AlterTabletMetaTest, test_compaction_writer_uses_versioned_flat_json_config) {
+    // Version WITH flat_json_config: the compaction writer must carry it.
+    {
+        auto md = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        md->mutable_flat_json_config()->set_flat_json_enable(true);
+        md->mutable_flat_json_config()->set_flat_json_max_column_max(80);
+        VersionedTablet tablet(_tablet_mgr.get(), md);
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer_with_schema(kHorizontal, next_id(), 0, nullptr,
+                                                                   /*is_compaction=*/true, _tablet_schema));
+        ASSERT_NE(nullptr, writer->flat_json_config());
+        ASSERT_TRUE(writer->flat_json_config()->is_flat_json_enabled());
+        ASSERT_EQ(80, writer->flat_json_config()->get_flat_json_max_column_max());
+    }
+    // Version WITHOUT flat_json_config: writer leaves it null (falls back to global at write time).
+    {
+        auto md = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        md->clear_flat_json_config();
+        VersionedTablet tablet(_tablet_mgr.get(), md);
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer_with_schema(kHorizontal, next_id(), 0, nullptr,
+                                                                   /*is_compaction=*/true, _tablet_schema));
+        ASSERT_EQ(nullptr, writer->flat_json_config());
+    }
+}
+
+// Spill-merged loads build their final segments through cloned writers
+// (LoadSpillPipelineMergeIterator -> TabletWriter::clone()). The clone must inherit the
+// plan-carried flat_json config; otherwise a spilled load silently falls back to the
+// tablet-metadata cache / global config, recreating the nondeterminism this change removes.
+TEST_F(AlterTabletMetaTest, test_clone_writer_propagates_flat_json_config) {
+    auto md = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    md->mutable_flat_json_config()->set_flat_json_enable(true);
+    md->mutable_flat_json_config()->set_flat_json_max_column_max(80);
+    VersionedTablet tablet(_tablet_mgr.get(), md);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer_with_schema(kHorizontal, next_id(), 0, nullptr,
+                                                               /*is_compaction=*/false, _tablet_schema));
+    ASSERT_NE(nullptr, writer->flat_json_config());
+
+    ASSIGN_OR_ABORT(auto cloned, writer->clone());
+    ASSERT_NE(nullptr, cloned->flat_json_config());
+    ASSERT_TRUE(cloned->flat_json_config()->is_flat_json_enabled());
+    ASSERT_EQ(80, cloned->flat_json_config()->get_flat_json_max_column_max());
+    cloned->close();
+    writer->close();
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {

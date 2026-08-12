@@ -43,6 +43,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "runtime/service_contexts.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 
@@ -242,6 +243,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE);
     } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_UPDATE_MODE) {
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+    }
+    if (_parent->_has_flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(_parent->_flat_json_config);
+        flat_json_config.to_pb(request.mutable_flat_json_config());
     }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);

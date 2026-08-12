@@ -462,6 +462,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_partition_id(_partition_id)
                                           .set_slot_descriptors(_slots)
                                           .set_merge_condition(_merge_condition)
+                                          .set_flat_json_config(_flat_json_config)
                                           .set_mem_tracker(_mem_tracker)
                                           .set_immutable_tablet_size(_immutable_tablet_size)
                                           .set_miss_auto_increment_column(_miss_auto_increment_column)
