@@ -1386,6 +1386,21 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
                 assertNull(sortKeyIdxes(mv));
             });
+
+            // Set the desc by hand the way AlterJobMgr does before re-analysing a stored DDL.
+            CreateMaterializedViewStatement reanalyzed = parseMvDdl(incrementalMvDdl("mv_range_legacy", ""));
+            reanalyzed.setDistributionDesc(new RangeDistributionDesc());
+            Analyzer.analyze(reanalyzed, connectContext);
+            assertTrue(reanalyzed.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // A repeated sort key column would persist duplicate positions into the index meta.
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            SemanticException duplicate = assertThrows(SemanticException.class,
+                    () -> analyzeMvDdl(incrementalMvDdl("mv_sort_key_dup",
+                            "DISTRIBUTED BY HASH(id) BUCKETS 3 ", "ORDER BY (id, id) ")),
+                    "a repeated sort key column must be rejected");
+            assertTrue(duplicate.getMessage().contains("Duplicate sort key column"),
+                    "got: " + duplicate.getMessage());
         } finally {
             connectContext.getSessionVariable().setEnableRangeDistribution(previous);
         }

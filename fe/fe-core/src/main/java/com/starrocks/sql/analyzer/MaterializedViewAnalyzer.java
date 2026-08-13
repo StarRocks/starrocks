@@ -329,7 +329,9 @@ public class MaterializedViewAnalyzer {
         if (statement.getRowIdStrategy() == null || CollectionUtils.isEmpty(statement.getOrderByElements())) {
             return;
         }
-        if (usesRangeDistribution(statement, AnalyzerUtils.isEnableRangeDistribution(context))) {
+        // Only for a range distribution this CREATE selects: RANGE has no SQL syntax, so an explicit desc
+        // means a reconstructed DDL, and rejecting one would leave an existing mv unable to reactivate.
+        if (statement.getDistributionDesc() == null && AnalyzerUtils.isEnableRangeDistribution(context)) {
             throw new SemanticException("ORDER BY is not supported on a range-distributed incremental "
                     + "materialized view. Add DISTRIBUTED BY HASH(...) to sort by the ORDER BY columns, "
                     + "or remove ORDER BY.");
@@ -756,8 +758,13 @@ public class MaterializedViewAnalyzer {
             List<String> keyColumns = keyLayout.isSortKeyIndependent()
                     ? keyLayout.keyColumns() : sortKeyColumns;
             if (keyLayout.isSortKeyIndependent()) {
+                Set<String> seenSortKeys = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
                 for (String columnName : sortKeyColumns) {
                     checkSortKeyColumn(columnMap, columnName);
+                    if (!seenSortKeys.add(columnName)) {
+                        throw new SemanticException("Duplicate sort key column " + columnName
+                                + " is not allowed.");
+                    }
                 }
             }
 
