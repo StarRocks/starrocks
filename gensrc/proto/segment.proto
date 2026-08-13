@@ -234,9 +234,10 @@ message ColumnMetaPB {
     optional bytes name = 33;
     optional int32 compression_level = 34;
     // Pointer to the per-column, per-segment compression-dictionary page (a
-    // DICTIONARY_PAGE holding the dictionary bytes). Present only for columns
-    // written with use_zstd_compression; left unset for every other column, so a
-    // segment without such a column serializes byte-identically to before.
+    // DICTIONARY_PAGE holding the dictionary bytes). Present only for a column
+    // written with a per-column ZSTD compression dictionary; left unset for every
+    // other column, so a segment without such a column serializes byte-identically
+    // to before.
     optional PagePointerPB zstd_compression_dict_page = 35;
     // How to interpret the bytes in zstd_compression_dict_page.
     //   unset/false -> raw content (a verbatim data sample); MUST be loaded with

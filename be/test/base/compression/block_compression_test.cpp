@@ -649,7 +649,7 @@ TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
 }
 #endif
 
-// ===================== compression dict compression-dict codec tests =====================
+// ===================== per-column ZSTD dictionary: codec tests =====================
 
 // Roundtrip: a body compressed referencing a CDict decodes correctly with the
 // matching DDict built from the same sample.
@@ -726,7 +726,7 @@ TEST_F(BlockCompressionTest, dict_reset_safety_no_leak_to_next_borrow) {
 
 // I5: a no-dict frame (dictID=0) decodes identically whether or not a
 // raw-content DDict is referenced. This is what makes mixed dict/no-dict pages
-// (raw pages, value-dict pages) in one compression dict column safe on the read path.
+// (raw pages, value-dict pages) in one dictionary column safe on the read path.
 TEST_F(BlockCompressionTest, nodict_frame_decodes_under_ddict) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());

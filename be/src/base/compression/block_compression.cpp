@@ -744,6 +744,17 @@ namespace {
 // Keyed by ZstdDDict::id(), never by address: an address can be recycled by a
 // later allocation, and a stale entry would then look like a hit and decode
 // against the wrong (already freed) dictionary.
+//
+// That key is also what makes the entries safe when a segment is evicted while
+// these threads live on. The context keeps a raw ZSTD_DDict* that the eviction
+// just freed, but nothing ever dereferences it: zstd only reads dctx->ddict
+// while decompressing, decompression only happens on a context acquire() just
+// returned, and acquire() returns a cached context only when its dict_id matches
+// -- which a freed dictionary's id never will, because ids are handed out by a
+// monotonic counter and never reused. The stale pointer is overwritten the next
+// time the slot is chosen as victim, and ZSTD_freeDCtx does not touch a
+// dictionary it does not own. So the DDict outlives every *use* by the context,
+// which is what ZSTD_DCtx_refDDict requires.
 constexpr int kDictDCtxCacheSize = 4; // a scan alternates between a few columns
 
 struct DictDCtxCache {
