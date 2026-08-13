@@ -53,10 +53,32 @@ jobs:
         run: |
           git fetch origin pull/${{ env.PR_NUMBER }}/head:pr-head
 
+      # Materialize the PR's config sources into the working tree. Without this
+      # the checker diffs the base branch against itself -- HEAD is the base
+      # checkout -- so the diff is always empty and no new param is ever found.
+      #
+      # Only these four data files are taken from the PR. The checker script
+      # itself still comes from the trusted base checkout, so nothing executable
+      # crosses over from the untrusted PR head under pull_request_target.
+      - name: Materialize PR config sources for diffing
+        run: |
+          git checkout pr-head -- \
+            be/src/common/config.h \
+            fe/fe-core/src/main/java/com/starrocks/common/Config.java \
+            fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java \
+            fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java
+          git --no-pager diff --stat "origin/${{ steps.branch.outputs.branch }}" -- \
+            be/src/common/config.h \
+            fe/fe-core/src/main/java/com/starrocks/common/Config.java \
+            fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java \
+            fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # stdout carries the comment body; stderr is kept out of it so a warning
+      # or traceback cannot end up posted as the report.
       - name: Run param drift check
         id: drift
         run: |
@@ -65,8 +87,18 @@ jobs:
             --new-params-only \
             --diff-base "origin/${{ steps.branch.outputs.branch }}" \
             --output github-comment \
-            > drift_report.md 2>&1
+            > drift_report.md
           echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      # Exit codes: 0 = no gaps, 1 = gaps found, anything else = the checker
+      # itself broke. Without this the job would treat a crash as "no gaps" and
+      # post the reassuring placeholder.
+      - name: Fail if the checker itself errored
+        if: steps.drift.outputs.exitcode != '0' && steps.drift.outputs.exitcode != '1'
+        run: |
+          echo "::error::param drift checker exited ${{ steps.drift.outputs.exitcode }}"
+          cat drift_report.md
+          exit 1
 
       - name: Post or update PR comment (gaps found)
         if: steps.drift.outputs.exitcode == '1'
@@ -78,7 +110,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clear PR comment (no gaps)
-        if: steps.drift.outputs.exitcode != '1'
+        if: steps.drift.outputs.exitcode == '0'
         uses: thollander/actions-comment-pull-request@v2
         with:
           message: |
