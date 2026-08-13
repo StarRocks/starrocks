@@ -763,8 +763,8 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             parent_meta = std::make_shared<TabletMetadata>(*child_metas.front());
             parent_meta->set_id(parent_info.parent_tablet_id());
         } else {
-            ASSIGN_OR_RETURN(parent_meta,
-                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info));
+            ASSIGN_OR_RETURN(parent_meta, lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version,
+                                                             txn_info, /*skip_sstable_merge=*/true));
         }
         // The parent is a read alias, never the owner of child files. Mark every
         // inherited reference shared so retiring the parent cannot delete a file
