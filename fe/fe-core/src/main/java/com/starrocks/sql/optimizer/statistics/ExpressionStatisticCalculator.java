@@ -1082,7 +1082,8 @@ public class ExpressionStatisticCalculator {
                 Instant start = minInstant.isAfter(maxInstant) ? maxInstant : minInstant;
                 Instant end = minInstant.isAfter(maxInstant) ? minInstant : maxInstant;
                 return hasOffsetTransition(from, start, end) || hasOffsetTransition(to, start, end);
-            } catch (Exception e) {
+            } catch (DateTimeException e) {
+                // Invalid zone id or out-of-range temporal value: keep the widened range.
                 return true;
             }
         }
