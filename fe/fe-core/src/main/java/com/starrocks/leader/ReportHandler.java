@@ -2117,7 +2117,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         TColumn tColumn = column.toThrift();
                         tColumn.setColumn_name(column.getColumnId().getId());
                         column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds(),
-                                olapTable.getZstdCompressionColumnIds());
+                                olapTable.getZstdCompressionColumnIds(), olapTable.getZstdCompressionPageSizes());
                         columnsDesc.add(tColumn);
                     }
                     if (indexMeta.getSortKeyUniqueIds() != null) {

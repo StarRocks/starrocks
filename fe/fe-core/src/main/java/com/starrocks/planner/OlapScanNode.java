@@ -1158,7 +1158,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 for (Column col : olapTable.getSchemaByIndexMetaId(selectedIndexMetaId)) {
                     TColumn tColumn = col.toThrift();
                     tColumn.setColumn_name(col.getColumnId().getId());
-                    col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns, zstdCompressionColumns);
+                    col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns, zstdCompressionColumns,
+                            olapTable.getZstdCompressionPageSizes());
                     columnsDesc.add(tColumn);
                 }
                 // process schema has order by columns
