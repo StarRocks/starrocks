@@ -2486,6 +2486,77 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testConvertTzCombinesNullsFractionFromAllArguments() {
+        // convert_tz is null if any argument is null:
+        // 1 - (1-0.2)*(1-0.5)*(1-0.4) = 1 - 0.8*0.5*0.6 = 0.76
+        final double dtNulls = 0.2;
+        final double fromTzNulls = 0.5;
+        final double toTzNulls = 0.4;
+        final double expectedNulls = 1.0 - (1.0 - dtNulls) * (1.0 - fromTzNulls) * (1.0 - toTzNulls);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 1, 0, 0, 0)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)))
+                        .setNullsFraction(dtNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(fromTzNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(toTzNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(expectedNulls, actual.getNullsFraction(), 0.001);
+        Assertions.assertEquals(0.76, actual.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzNullsFractionWithConstantTimezonesUsesOnlyDatetimeNulls() {
+        // Constant timezones have nullsFraction 0, so result nulls = dt nulls.
+        final double dtNulls = 0.3;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
+                        .setNullsFraction(dtNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("UTC"),
+                        ConstantOperator.createVarchar("Asia/Shanghai")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(dtNulls, actual.getNullsFraction(), 0.001);
+    }
+
+    @Test
     public void testConvertTzMcvPropagationWithConstantTimezones() {
         final String fromTz = "UTC";
         final String toTz = "Asia/Shanghai";
