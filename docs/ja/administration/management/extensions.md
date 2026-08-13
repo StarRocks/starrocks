@@ -1,4 +1,5 @@
 ---
+sidebar_position: 140
 displayed_sidebar: docs
 description: "静的拡張機能を開発して StarRocks FE のコア機能を変更せずに新機能追加や既存機能最適化。"
 ---

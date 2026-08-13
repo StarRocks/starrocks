@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 description: "FAQ for common StarRocks operation and maintenance questions."
 ---

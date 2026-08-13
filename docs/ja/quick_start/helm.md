@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 description: StarRocks をデプロイするために Helm を使用する
 displayed_sidebar: docs
 ---
