@@ -330,6 +330,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
             .fs = _scanner_ctx->fs,
             .data_file_path = _scanner_ctx->file_path,
             .datacache_options = _scanner_ctx->datacache_options,
+            .candidate_node = _scanner_ctx->scan_range->candidate_node,
             .runtime_profile = _scanner_ctx->profile.runtime_profile,
             .chunk_size = _runtime_state->chunk_size(),
     });

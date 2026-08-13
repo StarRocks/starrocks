@@ -147,6 +147,9 @@ struct FormatScannerStats {
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
     int64_t iceberg_delete_files_per_scan = 0;
+    // V3 deletion vectors are counted apart from iceberg_delete_files_per_scan so that the latter
+    // keeps meaning "v2 position-delete load".
+    int64_t iceberg_deletion_vectors_per_scan = 0;
 
     // deletion vector
     int64_t deletion_vector_build_ns = 0;

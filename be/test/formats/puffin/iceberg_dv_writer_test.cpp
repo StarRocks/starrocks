@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "formats/iceberg/iceberg_deletion_vector_reader.h"
+#include "formats/puffin/deletion_vector_blob.h"
 #include "fs/fs_memory.h"
 #include "gutil/endian.h"
 
@@ -39,8 +39,8 @@ static std::string read_all(MemoryFileSystem& fs, const std::string& path, uint6
 // Puffin file bytes and return its positions; also asserts cardinality == record_count.
 static std::vector<uint64_t> positions_of(const std::string& file_bytes, const IcebergDvCommitEntry& entry) {
     const auto* p = reinterpret_cast<const uint8_t*>(file_bytes.data());
-    auto st = IcebergDeletionVectorReader::parse_dv_blob(p + entry.content_offset, entry.content_size_in_bytes,
-                                                         entry.record_count, nullptr);
+    auto st = parse_deletion_vector_blob(p + entry.content_offset, entry.content_size_in_bytes, entry.record_count,
+                                         nullptr);
     EXPECT_TRUE(st.ok()) << st.status().message();
     if (!st.ok()) return {};
     roaring64_bitmap_t* b = st.value();

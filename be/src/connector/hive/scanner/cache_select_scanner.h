@@ -39,9 +39,12 @@ private:
     Status _fetch_parquet();
     Status _fetch_textfile();
     Status _fetch_iceberg_delete_files();
-    Status _fetch_iceberg_deletion_vector();
     Status _create_input_stream();
     Status _write_entire_file(const std::string& file_path, size_t file_size);
+    // Warms only [offset, offset + length) of a file. A V3 deletion vector needs one small blob
+    // out of a Puffin that many data files share, so warming the whole file would re-read it once
+    // per referencing data file.
+    Status _write_file_range(const std::string& file_path, size_t file_size, int64_t offset, int64_t length);
     static Status _write_disk_ranges(std::shared_ptr<SharedBufferedInputStream>& shared_input_stream,
                                      std::shared_ptr<CacheInputStream>& cache_input_stream,
                                      const std::vector<DiskRange>& disk_ranges);

@@ -53,12 +53,16 @@ public class DeleteFileWrapper implements DeleteFile {
 
         DeleteFileWrapper that = (DeleteFileWrapper) o;
 
-        return deleteFile.path().toString().equals(that.deleteFile.path().toString());
+        // V3 deletion vectors share one Puffin path, so contentOffset is what tells them apart.
+        // It is null for position/equality deletes, which keeps their identity unchanged.
+        return deleteFile.path().toString().equals(that.deleteFile.path().toString())
+                && Objects.equals(deleteFile.contentOffset(), that.deleteFile.contentOffset());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(deleteFile.path());
+        // path() is a CharSequence; hash its string form so it stays consistent with equals().
+        return Objects.hash(deleteFile.path().toString(), deleteFile.contentOffset());
     }
 
     @Override

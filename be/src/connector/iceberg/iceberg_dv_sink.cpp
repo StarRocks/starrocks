@@ -26,8 +26,8 @@
 #include "connector_primitive/sink_memory_manager.h"
 #include "formats/column_evaluator.h"
 #include "formats/iceberg/iceberg_delete_builder.h"
-#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 #include "formats/io/async_flush_stream_poller.h"
+#include "formats/puffin/deletion_vector_blob.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/Types_types.h"
@@ -194,7 +194,7 @@ Status IcebergDvSink::merge_previous_deletes(
             ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(prev.path));
             std::vector<uint8_t> buffer(prev.content_size_in_bytes);
             RETURN_IF_ERROR(file->read_at_fully(prev.content_offset, buffer.data(), buffer.size()));
-            ASSIGN_OR_RETURN(auto* bm, formats::IcebergDeletionVectorReader::parse_dv_blob(
+            ASSIGN_OR_RETURN(auto* bm, formats::parse_deletion_vector_blob(
                                                buffer.data(), buffer.size(),
                                                prev.__isset.record_count ? prev.record_count : -1, nullptr));
             _dv_writer.merge_bitmap(ref, bm);

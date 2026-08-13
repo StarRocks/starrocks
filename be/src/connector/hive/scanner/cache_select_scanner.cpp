@@ -50,6 +50,15 @@ void CacheSelectScanner::do_update_counter(HdfsScannerProfile* profile) {
     ADD_COUNTER(root_profile, prefix, TUnit::NONE);
 
     do_update_iceberg_v2_counter(root_profile, prefix);
+
+    // V3 deletion vectors are warmed by blob range, not whole file, so they are reported apart
+    // from DeleteFilesPerScan. The bytes they pull are already covered by the CacheSelect IO
+    // counters; what is missing without this is how many vectors a warm-up actually touched.
+    if (_app_stats.iceberg_deletion_vectors_per_scan > 0) {
+        RuntimeProfile::Counter* dv_per_scan =
+                ADD_CHILD_COUNTER(root_profile, "DeletionVectorsPerScan", TUnit::UNIT, prefix);
+        COUNTER_UPDATE(dv_per_scan, _app_stats.iceberg_deletion_vectors_per_scan);
+    }
 }
 
 void CacheSelectScanner::do_close(RuntimeState* runtime_state) noexcept {}
@@ -71,11 +80,6 @@ Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     // handle iceberg delete files
     if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         RETURN_IF_ERROR(_fetch_iceberg_delete_files());
-    }
-
-    // handle iceberg deletion vector
-    if (_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
-        RETURN_IF_ERROR(_fetch_iceberg_deletion_vector());
     }
 
     return Status::EndOfFile("");
@@ -229,30 +233,36 @@ Status CacheSelectScanner::_fetch_textfile() {
     return _write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges);
 }
 
-// for iceberg delete files, we fetch an entire file directly
 Status CacheSelectScanner::_fetch_iceberg_delete_files() {
+    // V3 deletion vectors travel in this list too, but DeleteFilesPerScan reports v2
+    // position-delete load, so warming a Puffin must not inflate it.
+    int64_t v2_delete_files = 0;
     for (const auto* delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
+        if (delete_file->__isset.deletion_vector) {
+            // Warm only this data file's blob. One Puffin backs many data files and every one of
+            // them runs its own CacheSelectScanner, so warming the whole file here would re-read
+            // it once per referencing data file while the query path only ever reads the blob.
+            const auto& blob = delete_file->deletion_vector;
+            RETURN_IF_ERROR(_write_file_range(delete_file->full_path, delete_file->length, blob.content_offset,
+                                              blob.content_size_in_bytes));
+            _app_stats.iceberg_deletion_vectors_per_scan++;
+            continue;
+        }
+        // A position-delete file is parsed end to end, so it genuinely needs the whole file.
         RETURN_IF_ERROR(_write_entire_file(delete_file->full_path, delete_file->length));
+        v2_delete_files++;
     }
 
-    _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
+    _app_stats.iceberg_delete_files_per_scan += v2_delete_files;
     return Status::OK();
 }
 
-// A puffin file aggregates the deletion vectors of many data files, so warming the whole file
-// covers every scan range that references it.
-Status CacheSelectScanner::_fetch_iceberg_deletion_vector() {
-    const auto& descriptor = *_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor;
-    if (!descriptor.__isset.puffin_file_size_in_bytes || descriptor.puffin_file_size_in_bytes <= 0) {
-        // Older FEs do not ship the puffin length; the query path populates the cache on its own.
-        VLOG(2) << "cache select skips iceberg deletion vector without puffin file size: "
-                << descriptor.puffin_file_path;
-        return Status::OK();
-    }
-    return _write_entire_file(descriptor.puffin_file_path, descriptor.puffin_file_size_in_bytes);
+Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
+    return _write_file_range(file_path, file_size, 0, static_cast<int64_t>(file_size));
 }
 
-Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
+Status CacheSelectScanner::_write_file_range(const std::string& file_path, size_t file_size, int64_t offset,
+                                             int64_t length) {
     formats::FileInputStreamOptions options{};
     options.fs = _scanner_ctx->fs;
     options.file_path = file_path;
@@ -267,13 +277,14 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
                      formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
 
     // Bound each range: an oversized one is kept as a single SharedBuffer, whose first read
-    // reserves the whole file. The reader paths split the same way.
+    // reserves the whole span. The reader paths split the same way.
     std::vector<DiskRange> disk_ranges{};
     const int64_t max_range_size = config::io_coalesce_read_max_buffer_size;
-    for (int64_t offset = 0; offset < static_cast<int64_t>(file_size);) {
-        const int64_t length = std::min(max_range_size, static_cast<int64_t>(file_size) - offset);
-        disk_ranges.emplace_back(offset, length);
-        offset += length;
+    const int64_t end = offset + length;
+    for (int64_t cur = offset; cur < end;) {
+        const int64_t chunk = std::min(max_range_size, end - cur);
+        disk_ranges.emplace_back(cur, chunk);
+        cur += chunk;
     }
 
     return _write_disk_ranges(shared_buffered_input_stream, cache_input_stream, disk_ranges);

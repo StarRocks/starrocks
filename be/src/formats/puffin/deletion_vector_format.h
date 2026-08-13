@@ -22,7 +22,7 @@
 namespace starrocks::formats {
 
 // Single source of truth for the Iceberg deletion-vector-v1 blob framing, shared by
-// the writer (build_deletion_vector_blob) and the reader (IcebergDeletionVectorReader).
+// the writer (build_deletion_vector_blob) and the reader (parse_deletion_vector_blob).
 // Layout: length(4B BE = totalSize - 8) | magic | roaring64 portable body | crc32(4B BE over magic+body).
 inline constexpr int32_t kDvLengthPrefixBytes = 4;
 inline constexpr int32_t kDvMagicBytes = 4;

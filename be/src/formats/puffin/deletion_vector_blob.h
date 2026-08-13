@@ -30,12 +30,33 @@ inline constexpr int32_t kRowPositionFieldId = 2147483645;
 inline constexpr const char* kDvPropReferencedDataFile = "referenced-data-file";
 inline constexpr const char* kDvPropCardinality = "cardinality";
 
+// Per-blob accounting, filled in by parse_deletion_vector_blob when a sink is supplied.
+struct IcebergDVBuildStats {
+    int64_t read_bytes = 0;
+    // Whole-build span. The phase timers below do not add up to it: the bitmap merge and the
+    // buffer allocation are only accounted for here.
+    int64_t build_ns = 0;
+    int64_t read_ns = 0;
+    int64_t deserialize_ns = 0;
+    int64_t checksum_ns = 0;
+    int64_t build_count = 0;
+    int64_t cardinality = 0;
+};
+
 // Serializes a roaring64 bitmap into an Iceberg DV blob:
 //   length(4B BE = size-8) | magic D1 D3 39 64 | roaring64 portable body | crc32(4B BE over magic+body)
 // The returned bytes are the full blob (its length == content_size_in_bytes) and are
-// accepted verbatim by IcebergDeletionVectorReader::parse_dv_blob.
+// accepted verbatim by parse_deletion_vector_blob.
 // Returns Status::InvalidArgument if `bitmap` is null or the blob would exceed INT32_MAX bytes
 // (Iceberg caps a DV blob at Integer.MAX_VALUE; the length prefix / crc length are 32-bit).
 StatusOr<std::string> build_deletion_vector_blob(const roaring64_bitmap_t* bitmap);
+
+// Inverse of build_deletion_vector_blob: validates a complete blob buffer and deserializes it.
+// Checks the length prefix, magic, crc32 and — when record_count >= 0 — the cardinality against
+// the manifest's record count.
+// On success returns a NEW roaring64 bitmap that the CALLER OWNS and must free; on failure
+// nothing is leaked. `stats` may be null.
+StatusOr<roaring64_bitmap_t*> parse_deletion_vector_blob(const uint8_t* data, int64_t size, int64_t record_count,
+                                                         IcebergDVBuildStats* stats);
 
 } // namespace starrocks::formats

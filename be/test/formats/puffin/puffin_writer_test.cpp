@@ -20,7 +20,6 @@
 #include <cstring>
 #include <string>
 
-#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 #include "formats/puffin/deletion_vector_blob.h"
 #include "fs/fs_memory.h"
 #include "gutil/endian.h"
@@ -74,10 +73,10 @@ TEST(PuffinWriterTest, WritesHeaderBlobsAndFooter) {
     EXPECT_EQ(0, memcmp(p + fsize - 4, "PFA1", 4));
 
     // Each blob parses by its returned (offset, length).
-    auto st_a = IcebergDeletionVectorReader::parse_dv_blob(p + meta_a->offset, meta_a->length, 3, nullptr);
+    auto st_a = parse_deletion_vector_blob(p + meta_a->offset, meta_a->length, 3, nullptr);
     ASSERT_TRUE(st_a.ok()) << st_a.status().message();
     roaring::api::roaring64_bitmap_free(st_a.value());
-    auto st_b = IcebergDeletionVectorReader::parse_dv_blob(p + meta_b->offset, meta_b->length, 2, nullptr);
+    auto st_b = parse_deletion_vector_blob(p + meta_b->offset, meta_b->length, 2, nullptr);
     ASSERT_TRUE(st_b.ok()) << st_b.status().message();
     roaring::api::roaring64_bitmap_free(st_b.value());
 

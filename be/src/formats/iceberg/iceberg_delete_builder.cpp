@@ -14,10 +14,13 @@
 
 #include "formats/iceberg/iceberg_delete_builder.h"
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/utility/defer_op.h"
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/runtime_profile.h"
 #include "formats/file_input_stream.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
@@ -175,7 +178,7 @@ Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std:
     return Status::NotSupported(strings::Substitute("unsupported iceberg position-delete file format: $0", format));
 }
 
-StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
+StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_cached_file(
         const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
@@ -186,6 +189,21 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_ac
                                          .app_stats = &app_stats,
                                          .datacache_options = _ctx.datacache_options};
     ASSIGN_OR_RETURN(auto file, create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+    if (cache_input_stream != nullptr) {
+        // Lets a local miss fall back to the node that cache select warmed, as the main data
+        // stream does.
+        cache_input_stream->set_peer_cache_node(_ctx.candidate_node);
+    }
+    return file;
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
+        const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
+        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
+    ASSIGN_OR_RETURN(auto file, open_cached_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
+                                                 cache_input_stream));
+    // A position-delete file is read end to end, so register the whole file as io ranges.
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     int64_t offset = 0;
     while (offset < delete_file.length) {
@@ -197,6 +215,158 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_ac
 
     RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
     return file;
+}
+
+Status IcebergDeleteBuilder::build_deletion_vector(const TIcebergDeleteFile& delete_file) const {
+    if (!delete_file.__isset.deletion_vector) {
+        return Status::InternalError("Iceberg deletion vector blob descriptor is not set");
+    }
+    const auto& blob = delete_file.deletion_vector;
+    if (!blob.__isset.content_offset || !blob.__isset.content_size_in_bytes) {
+        return Status::InternalError(strings::Substitute(
+                "Iceberg deletion vector is missing content_offset/content_size_in_bytes: $0", delete_file.full_path));
+    }
+    // length is what tells create_random_access_file how big the Puffin is; a 0 from an unset
+    // optional would silently produce a zero-length view and turn the read into a bogus
+    // "blob too small" corruption further down.
+    if (!delete_file.__isset.length || delete_file.length <= 0) {
+        return Status::InternalError(strings::Substitute(
+                "Iceberg deletion vector is missing the puffin file length: $0", delete_file.full_path));
+    }
+    const int64_t offset = blob.content_offset;
+    const int64_t size = blob.content_size_in_bytes;
+    // Bound the range against the Puffin size before allocating: a corrupt manifest must fail as
+    // Corruption, not as a multi-terabyte allocation.
+    if (offset < 0 || size <= 0 || offset > delete_file.length - size) {
+        return Status::Corruption(
+                strings::Substitute("Iceberg deletion vector range $0+$1 is out of bounds for puffin $2 of $3 bytes",
+                                    offset, size, delete_file.full_path, delete_file.length));
+    }
+    // The DV must belong to the data file this scanner is reading. Checked before any IO: a
+    // mismatch means the scan range was assembled wrong, and an unset value is exactly the
+    // assembly bug this guards against, so treat it as an error rather than skipping the check.
+    if (!blob.__isset.referenced_data_file || blob.referenced_data_file != _ctx.data_file_path) {
+        return Status::InternalError(strings::Substitute(
+                "Iceberg deletion vector references data file $0 but the scanner is reading $1 [puffin=$2]",
+                blob.__isset.referenced_data_file ? blob.referenced_data_file : "<unset>", _ctx.data_file_path,
+                delete_file.full_path));
+    }
+
+    FormatScannerStats app_stats;
+    FormatScannerStats fs_stats;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<CacheInputStream> cache_input_stream;
+    IcebergDVBuildStats dv_stats;
+    // Counterpart of the v2 path's DeleteFileBuildTime. Timed by hand rather than with
+    // SCOPED_RAW_TIMER: that would only write build_ns when the function returns, i.e. after
+    // update_dv_counter has already published the counters.
+    MonotonicStopWatch build_watch;
+    build_watch.start();
+
+    std::vector<uint8_t> buffer(size);
+    {
+        SCOPED_RAW_TIMER(&dv_stats.read_ns);
+        // A DV blob is one exact contiguous range, so no io_ranges are registered: the shared
+        // buffer stays pass-through and only the DataCache layer wraps the read. Registering the
+        // whole puffin here would pull up to io_coalesce_read_max_buffer_size per split.
+        ASSIGN_OR_RETURN(auto file, open_cached_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
+                                                     cache_input_stream));
+        RETURN_IF_ERROR(file->read_at_fully(offset, buffer.data(), size));
+        dv_stats.read_bytes += size;
+    }
+
+    const int64_t record_count = blob.__isset.record_count ? blob.record_count : -1;
+    auto res = parse_deletion_vector_blob(buffer.data(), size, record_count, &dv_stats);
+    if (!res.ok()) {
+        return Status::Corruption(strings::Substitute("$0 [puffin=$1 offset=$2 size=$3 referenced_data_file=$4]",
+                                                      std::string(res.status().message()), delete_file.full_path,
+                                                      offset, size, blob.referenced_data_file));
+    }
+    // parse_deletion_vector_blob hands over ownership; merge() only ORs it in, so free it here on
+    // every path.
+    roaring64_bitmap_t* parsed = res.value();
+    DeferOp free_parsed([&parsed] { roaring::api::roaring64_bitmap_free(parsed); });
+
+    _deletion_bitmap->merge(parsed);
+    dv_stats.build_ns = static_cast<int64_t>(build_watch.elapsed_time());
+
+    if (_ctx.runtime_profile != nullptr) {
+        update_dv_counter(_ctx.runtime_profile, dv_stats, cache_input_stream);
+    }
+    return Status::OK();
+}
+
+void IcebergDeleteBuilder::update_dv_counter(RuntimeProfile* parent_profile, const IcebergDVBuildStats& stats,
+                                             const std::shared_ptr<CacheInputStream>& cache_input_stream) {
+    static const char* kSection = "IcebergDeletionVector";
+    ADD_COUNTER(parent_profile, kSection, TUnit::NONE);
+    RuntimeProfile::Counter* build_time = ADD_CHILD_TIMER(parent_profile, "IcebergDVBuildTime", kSection);
+    RuntimeProfile::Counter* read_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDVReadBytes", TUnit::BYTES, kSection);
+    RuntimeProfile::Counter* read_time = ADD_CHILD_TIMER(parent_profile, "IcebergDVReadTime", kSection);
+    RuntimeProfile::Counter* deser_time = ADD_CHILD_TIMER(parent_profile, "IcebergDVDeserializeTime", kSection);
+    RuntimeProfile::Counter* crc_time = ADD_CHILD_TIMER(parent_profile, "IcebergDVChecksumTime", kSection);
+    RuntimeProfile::Counter* build_count =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDVBuildCount", TUnit::UNIT, kSection);
+    RuntimeProfile::Counter* cardinality =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDVCardinality", TUnit::UNIT, kSection);
+    COUNTER_UPDATE(build_time, stats.build_ns);
+    COUNTER_UPDATE(read_bytes, stats.read_bytes);
+    COUNTER_UPDATE(read_time, stats.read_ns);
+    COUNTER_UPDATE(deser_time, stats.deserialize_ns);
+    COUNTER_UPDATE(crc_time, stats.checksum_ns);
+    COUNTER_UPDATE(build_count, stats.build_count);
+    COUNTER_UPDATE(cardinality, stats.cardinality);
+
+    if (cache_input_stream == nullptr) {
+        return;
+    }
+    static const char* kCacheSection = "IcebergDV_DataCache";
+    ADD_CHILD_COUNTER(parent_profile, kCacheSection, TUnit::NONE, kSection);
+    RuntimeProfile::Counter* cache_read_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_read_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_read_mem_bytes = ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadMemBytes",
+                                                                      TUnit::BYTES, "IcebergDV_DataCacheReadBytes");
+    RuntimeProfile::Counter* cache_read_disk_bytes = ADD_CHILD_COUNTER(
+            parent_profile, "IcebergDV_DataCacheReadDiskBytes", TUnit::BYTES, "IcebergDV_DataCacheReadBytes");
+    RuntimeProfile::Counter* cache_read_timer =
+            ADD_CHILD_TIMER(parent_profile, "IcebergDV_DataCacheReadTimer", kCacheSection);
+    RuntimeProfile::Counter* cache_write_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheWriteCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_write_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheWriteBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_read_peer_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadPeerCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_read_peer_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadPeerBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_read_peer_timer =
+            ADD_CHILD_TIMER(parent_profile, "IcebergDV_DataCacheReadPeerTimer", kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_peer_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadPeerCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_peer_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadPeerBytes", TUnit::BYTES, kCacheSection);
+
+    const CacheInputStream::Stats& cache_stats = cache_input_stream->stats();
+    COUNTER_UPDATE(cache_read_counter, cache_stats.read_block_cache_count);
+    COUNTER_UPDATE(cache_read_bytes, cache_stats.read_block_cache_bytes);
+    COUNTER_UPDATE(cache_read_mem_bytes, cache_stats.read_mem_cache_bytes);
+    COUNTER_UPDATE(cache_read_disk_bytes, cache_stats.read_disk_cache_bytes);
+    COUNTER_UPDATE(cache_read_timer, cache_stats.read_block_cache_ns);
+    COUNTER_UPDATE(cache_write_counter, cache_stats.write_block_cache_count);
+    COUNTER_UPDATE(cache_write_bytes, cache_stats.write_block_cache_bytes);
+    COUNTER_UPDATE(cache_skip_read_counter, cache_stats.skip_read_cache_count);
+    COUNTER_UPDATE(cache_skip_read_bytes, cache_stats.skip_read_cache_bytes);
+    COUNTER_UPDATE(cache_read_peer_counter, cache_stats.read_peer_cache_count);
+    COUNTER_UPDATE(cache_read_peer_bytes, cache_stats.read_peer_cache_bytes);
+    COUNTER_UPDATE(cache_read_peer_timer, cache_stats.read_peer_cache_ns);
+    COUNTER_UPDATE(cache_skip_read_peer_counter, cache_stats.skip_read_peer_cache_count);
+    COUNTER_UPDATE(cache_skip_read_peer_bytes, cache_stats.skip_read_peer_cache_bytes);
 }
 
 Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const std::string& format) const {

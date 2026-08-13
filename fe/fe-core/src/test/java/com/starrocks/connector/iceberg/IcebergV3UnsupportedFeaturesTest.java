@@ -25,7 +25,9 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TIcebergDeletionVectorDescriptor;
+import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergDeletionVectorBlob;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -43,9 +45,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toPartitionField;
@@ -156,42 +160,50 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     }
 
     @Test
-    public void testDeletionVectorBuildsDescriptor() throws Exception {
+    public void testDeletionVectorRidesInDeleteFiles() throws Exception {
         // data file is parquet, DV references it.
         DataFile dataFile = mock(DataFile.class);
         when(dataFile.location()).thenReturn("/path/to/data-a.parquet");
         when(dataFile.format()).thenReturn(FileFormat.PARQUET);
 
-        DeleteFile dv = mock(DeleteFile.class);
-        when(dv.content()).thenReturn(FileContent.POSITION_DELETES);
-        when(dv.format()).thenReturn(FileFormat.PUFFIN);
-        when(dv.referencedDataFile()).thenReturn("/path/to/data-a.parquet");
-        when(dv.path()).thenReturn("/path/to/dv.puffin");
-        when(dv.contentOffset()).thenReturn(4L);
-        when(dv.contentSizeInBytes()).thenReturn(38L);
-        when(dv.recordCount()).thenReturn(6L);
-        when(dv.fileSizeInBytes()).thenReturn(64L);
+        DeleteFile dv = newDv("/path/to/data-a.parquet", "/path/to/dv.puffin", 4L, 38L, 6L, 64L);
 
         THdfsScanRange range = IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(dv));
 
-        Assertions.assertTrue(range.isSetIceberg_deletion_vector_descriptor());
-        TIcebergDeletionVectorDescriptor d = range.getIceberg_deletion_vector_descriptor();
-        Assertions.assertEquals("/path/to/dv.puffin", d.getPuffin_file_path());
-        Assertions.assertEquals(4L, d.getContent_offset());
-        Assertions.assertEquals(38L, d.getContent_size_in_bytes());
-        Assertions.assertEquals(6L, d.getRecord_count());
-        Assertions.assertEquals("/path/to/data-a.parquet", d.getReferenced_data_file());
+        // The DV must travel as a delete file so every "are there delete files" check sees it.
+        Assertions.assertTrue(range.isSetDelete_files());
+        Assertions.assertEquals(1, range.getDelete_files().size());
+
+        TIcebergDeleteFile df = range.getDelete_files().get(0);
+        Assertions.assertEquals("/path/to/dv.puffin", df.getFull_path());
+        Assertions.assertEquals(TIcebergFileContent.POSITION_DELETES, df.getFile_content());
+        // length is the whole Puffin file, which is what cache select warms.
+        Assertions.assertEquals(64L, df.getLength());
+
+        Assertions.assertTrue(df.isSetDeletion_vector());
+        TIcebergDeletionVectorBlob blob = df.getDeletion_vector();
+        Assertions.assertEquals(4L, blob.getContent_offset());
+        Assertions.assertEquals(38L, blob.getContent_size_in_bytes());
+        Assertions.assertEquals(6L, blob.getRecord_count());
+        Assertions.assertEquals("/path/to/data-a.parquet", blob.getReferenced_data_file());
     }
 
     @Test
-    public void testMultipleDeletionVectorsFailFast() {
+    public void testPositionDeleteCarriesNoDeletionVector() throws Exception {
         DataFile dataFile = mock(DataFile.class);
         when(dataFile.location()).thenReturn("/d.parquet");
         when(dataFile.format()).thenReturn(FileFormat.PARQUET);
-        DeleteFile dv1 = newDv("/d.parquet", "/x.puffin", 4L, 38L, 6L, 64L);
-        DeleteFile dv2 = newDv("/d.parquet", "/y.puffin", 4L, 38L, 6L, 64L);
-        Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(dv1, dv2)));
+
+        DeleteFile posDelete = mock(DeleteFile.class);
+        when(posDelete.content()).thenReturn(FileContent.POSITION_DELETES);
+        when(posDelete.format()).thenReturn(FileFormat.PARQUET);
+        when(posDelete.path()).thenReturn("/pos-delete.parquet");
+        when(posDelete.fileSizeInBytes()).thenReturn(128L);
+
+        THdfsScanRange range = IcebergV3UnsupportedFeaturesTest.buildSingleScanRange(dataFile, List.of(posDelete));
+
+        TIcebergDeleteFile df = range.getDelete_files().get(0);
+        Assertions.assertFalse(df.isSetDeletion_vector(), "position deletes must not carry a DV blob");
     }
 
     @Test
@@ -258,6 +270,47 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertEquals("/path/to/data.parquet", wrapper.referencedDataFile());
         Assertions.assertEquals(1024L, wrapper.contentOffset());
         Assertions.assertEquals(2048L, wrapper.contentSizeInBytes());
+    }
+
+    @Test
+    public void testDeleteFileWrapperDistinguishesDVsSharingPuffinPath() {
+        // Iceberg packs the DVs of one commit into a single Puffin file, so keying the manifest
+        // cache on path alone collapses them and the cached count never matches the manifest's.
+        DeleteFile dv1 = mock(DeleteFile.class);
+        when(dv1.path()).thenReturn("/path/to/deletes.puffin");
+        when(dv1.contentOffset()).thenReturn(4L);
+
+        DeleteFile dv2 = mock(DeleteFile.class);
+        when(dv2.path()).thenReturn("/path/to/deletes.puffin");
+        when(dv2.contentOffset()).thenReturn(40L);
+
+        DeleteFileWrapper w1 = DeleteFileWrapper.wrap(dv1);
+        DeleteFileWrapper w2 = DeleteFileWrapper.wrap(dv2);
+
+        // Only inequality is asserted: unequal objects are allowed to share a hash, so requiring
+        // different hashCodes would over-specify the contract. The HashSet below is what the
+        // manifest cache actually relies on.
+        Assertions.assertNotEquals(w1, w2);
+
+        Set<DeleteFileWrapper> set = new HashSet<>();
+        set.add(w1);
+        set.add(w2);
+        Assertions.assertEquals(2, set.size(), "both DVs must survive in a HashSet");
+    }
+
+    @Test
+    public void testDeleteFileWrapperIdentityUnchangedForPositionDeletes() {
+        // contentOffset is null for position deletes, so their identity must stay path-only.
+        DeleteFile a = mock(DeleteFile.class);
+        when(a.path()).thenReturn("/path/to/pos-delete.parquet");
+        when(a.contentOffset()).thenReturn(null);
+
+        DeleteFile b = mock(DeleteFile.class);
+        when(b.path()).thenReturn("/path/to/pos-delete.parquet");
+        when(b.contentOffset()).thenReturn(null);
+
+        Assertions.assertEquals(DeleteFileWrapper.wrap(a), DeleteFileWrapper.wrap(b));
+        Assertions.assertEquals(DeleteFileWrapper.wrap(a).hashCode(), DeleteFileWrapper.wrap(b).hashCode());
     }
 
     // ========== 2. Extended Types ==========

@@ -162,7 +162,6 @@ target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)
 ADD_BE_LIB(Formats
         formats_aggregate.cpp
         iceberg/iceberg_delete_builder.cpp
-        iceberg/iceberg_deletion_vector_reader.cpp
         )
 
 target_link_libraries(Formats PUBLIC FormatCore FormatCsv FormatJson FormatAvro FormatOrc FormatParquet)

@@ -356,11 +356,27 @@ struct TEsScanRange {
   4: required i32 shard_id
 }
 
+// enterprise-only: locates one deletion-vector-v1 blob inside its Puffin file and carries the
+// metadata needed to validate it. Not self-contained: the enclosing TIcebergDeleteFile supplies
+// full_path (the Puffin path) and length (the whole Puffin file size).
+// content_size_in_bytes is the FULL blob length (length prefix + magic + roaring body + crc).
+struct TIcebergDeletionVectorBlob {
+  1: optional i64 content_offset
+  2: optional i64 content_size_in_bytes
+  3: optional i64 record_count
+  4: optional string referenced_data_file
+}
+
 struct TIcebergDeleteFile {
     1: optional string full_path
     2: optional Descriptors.THdfsFileFormat file_format
     3: optional Types.TIcebergFileContent file_content
     4: optional i64 length
+
+    // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    // Set only for Iceberg V3 deletion vectors; its presence is what selects the DV read path.
+    300: optional TIcebergDeletionVectorBlob deletion_vector
 }
 
 struct TPaimonDeletionFile {
@@ -376,19 +392,6 @@ struct TDeletionVectorDescriptor {
   3: optional i64 offset
   4: optional i64 sizeInBytes
   5: optional i64 cardinality
-}
-
-// Iceberg V3 Deletion Vector descriptor (Puffin blob).
-// Distinct from Delta's TDeletionVectorDescriptor: content_size_in_bytes is the
-// FULL blob length (length prefix + magic + roaring body + crc), and
-// referenced_data_file is required.
-struct TIcebergDeletionVectorDescriptor {
-  1: optional string puffin_file_path
-  2: optional i64 content_offset
-  3: optional i64 content_size_in_bytes
-  4: optional i64 record_count
-  5: optional string referenced_data_file
-  6: optional i64 puffin_file_size_in_bytes
 }
 
 // Hdfs scan range
@@ -513,10 +516,6 @@ struct THdfsScanRange {
 
     // fluss split info
     42: optional string fluss_split_info
-
-    // Enterprise-only fields start at 100, reserve some fields for upstream StarRocks so a sync
-    // never collides on ordinals.
-    100: optional TIcebergDeletionVectorDescriptor iceberg_deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {

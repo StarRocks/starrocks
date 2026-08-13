@@ -23,6 +23,7 @@
 #include "cache/cache_options.h"
 #include "common/status.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/puffin/deletion_vector_blob.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -40,6 +41,8 @@ struct IcebergDeleteBuilderContext {
     FileSystem* fs = nullptr;
     std::string data_file_path;
     DataCacheOptions datacache_options;
+    // "host:port" of the node that likely cached this file already; empty disables peer reads.
+    std::string candidate_node;
     RuntimeProfile* runtime_profile = nullptr;
     int32_t chunk_size = 0;
 };
@@ -72,15 +75,32 @@ public:
 
     Status build_parquet(const TIcebergDeleteFile& delete_file) const;
 
+    // Reads the V3 deletion-vector blob located by delete_file.deletion_vector and ORs it into
+    // the shared bitmap. delete_file.full_path is the Puffin file, length its full size.
+    Status build_deletion_vector(const TIcebergDeleteFile& delete_file) const;
+
     DeletionBitmapPtr deletion_bitmap() const { return _deletion_bitmap; }
 
 private:
     Status build(const TIcebergDeleteFile& delete_file, const std::string& format) const;
 
+    // Opens the file with DataCache and peer-cache fallback but registers no io ranges. The
+    // caller decides the range strategy: whole-file for position deletes, none for a DV blob.
+    StatusOr<std::unique_ptr<RandomAccessFile>> open_cached_file(
+            const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
+            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<CacheInputStream>& cache_input_stream) const;
+
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
             const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
+
+    // V3 deletion vectors publish their own IcebergDeletionVector section rather than the
+    // ICEBERG_V2_MOR one, so a pure-V3 table never looks like it carries v2 merge-on-read load.
+    // The section name matches the write path (IcebergDvSink::update_write_counters).
+    static void update_dv_counter(RuntimeProfile* parent_profile, const IcebergDVBuildStats& stats,
+                                  const std::shared_ptr<CacheInputStream>& cache_input_stream);
 
     static void update_delete_file_io_counter(
             RuntimeProfile* parent_profile, const FormatScannerStats& app_stats, const FormatScannerStats& fs_stats,

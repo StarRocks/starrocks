@@ -108,8 +108,9 @@ private:
     Status read_previous_delete_rows(const TIcebergPreviousDeleteFile& prev,
                                      const formats::IcebergPositionDeleteReader::RowCallback& cb) const;
 
-    // Registers the write-side "IcebergDeletionVector" profile section (mirrors the read-side
-    // section IcebergDeletionVectorReader::update_counter emits).
+    // Registers the write-side counters of the "IcebergDeletionVector" profile section. The read
+    // path publishes its own counters into the same section from
+    // IcebergDeleteBuilder::update_dv_counter, so one section covers V3 DV reads and writes.
     void update_write_counters() const;
 
     struct WriteStats {

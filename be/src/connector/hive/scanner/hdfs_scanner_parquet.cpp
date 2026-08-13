@@ -19,7 +19,6 @@
 #include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/delta/deletion_vector.h"
 #include "formats/iceberg/iceberg_delete_builder.h"
-#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 #include "formats/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
 #include "runtime/runtime_state.h"
@@ -35,24 +34,36 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         return Status::OK();
     }
 
-    if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr &&
-        _scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
-        return Status::InternalError("Both Delta and Iceberg deletion vectors are set on one scan range");
+    if (!_scanner_ctx->table_specific.iceberg_delete_files.empty() &&
+        _scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
+        return Status::InternalError("Both Delta and Iceberg delete files are set on one scan range");
     }
 
     if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
-        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         formats::IcebergDeleteBuilder iceberg_delete_builder(formats::IcebergDeleteBuilderContext{
                 .scan_context = &_scanner_ctx->format_scan_context,
                 .fs = _scanner_ctx->fs,
                 .data_file_path = _scanner_ctx->file_path,
                 .datacache_options = _scanner_ctx->datacache_options,
+                .candidate_node = _scanner_ctx->scan_range->candidate_node,
                 .runtime_profile = _scanner_ctx->profile.runtime_profile,
                 .chunk_size = runtime_state->chunk_size(),
         });
+        // V3 deletion vectors share this list but are counted separately: DeleteFilesPerScan and
+        // the ICEBERG_V2_MOR section must keep meaning "v2 position-delete load" so a pure-V3
+        // table does not look like it needs compaction.
+        int64_t v2_delete_files = 0;
         for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
-            if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+            if (delete_file->__isset.deletion_vector) {
+                // Timed and counted by the IcebergDeletionVector section only: neither
+                // iceberg_delete_file_build_ns (published as IcebergV2FormatTimer/
+                // DeleteFileBuildTime) nor deletion_vector_build_count (Delta Lake's own
+                // section) may pick up V3 DV work.
+                RETURN_IF_ERROR(iceberg_delete_builder.build_deletion_vector(*delete_file));
+            } else if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
                 RETURN_IF_ERROR(iceberg_delete_builder.build_parquet(*delete_file));
+                v2_delete_files++;
             } else {
                 const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                    delete_file->file_content);
@@ -61,7 +72,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
             }
         }
         _skip_rows_ctx->deletion_bitmap = iceberg_delete_builder.deletion_bitmap();
-        _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
+        _app_stats.iceberg_delete_files_per_scan += v2_delete_files;
     } else if (_scanner_ctx->table_specific.paimon_deletion_file != nullptr) {
         formats::PaimonDeleteFileBuilder paimon_delete_file_builder(_scanner_ctx->fs);
         ASSIGN_OR_RETURN(auto deletion_bitmap,
@@ -74,17 +85,6 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 .fs = _scanner_ctx->fs,
                 .table_location = _scanner_ctx->table_location,
                 .datacache_options = _scanner_ctx->datacache_options,
-                .runtime_profile = _scanner_ctx->profile.runtime_profile,
-        });
-        RETURN_IF_ERROR(dv.fill_row_indexes(_skip_rows_ctx));
-        _app_stats.deletion_vector_build_count += 1;
-    } else if (_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
-        SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
-        formats::IcebergDeletionVectorReader dv(formats::IcebergDeletionVectorReaderOptions{
-                .descriptor = *_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor,
-                .fs = _scanner_ctx->fs,
-                .datacache_options = _scanner_ctx->datacache_options,
-                .candidate_node = _scanner_ctx->scan_range->candidate_node,
                 .runtime_profile = _scanner_ctx->profile.runtime_profile,
         });
         RETURN_IF_ERROR(dv.fill_row_indexes(_skip_rows_ctx));

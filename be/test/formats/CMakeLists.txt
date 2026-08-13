@@ -72,7 +72,6 @@ set(FORMAT_ORC_TEST_FILES
 
 set(FORMAT_TABLE_DELETE_TEST_FILES
     iceberg/iceberg_delete_builder_test.cpp
-    iceberg/iceberg_deletion_vector_reader_test.cpp
     paimon/paimon_delete_file_builder_test.cpp
 )
 

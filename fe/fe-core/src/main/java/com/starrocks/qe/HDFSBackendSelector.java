@@ -451,7 +451,12 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         for (TIcebergDeleteFile deleteFile : hdfsScanRange.getDelete_files()) {
-            if (deleteFile.isSetLength()) {
+            if (deleteFile.isSetDeletion_vector()) {
+                // One Puffin file holds the deletion vectors of many data files, so charging its
+                // full length to every scan range that references it would inflate the weight by
+                // the number of those data files. Only the blob is actually read here.
+                weight += deleteFile.getDeletion_vector().getContent_size_in_bytes();
+            } else if (deleteFile.isSetLength()) {
                 weight += deleteFile.getLength();
             }
         }
