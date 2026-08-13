@@ -5,11 +5,11 @@ description: "Apache Spark（DataFrames または SQL）から Stream Load 経�
 
 # Spark コネクタを使用してデータをロードする（推奨）
 
-StarRocks は、Apache Spark™ 用に開発したコネクタである StarRocks Connector for Apache Spark™（以下、Spark コネクタ）を提供しています。これを使用して、Spark を介して StarRocks テーブルにデータをロードできます。基本的な原理は、データを蓄積し、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じて一度に StarRocks にロードすることです。Spark コネクタは Spark DataSource V2 に基づいて実装されています。DataSource は Spark DataFrames または Spark SQL を使用して作成できます。バッチモードと構造化ストリーミングモードの両方がサポートされています。
+StarRocks は、Apache Spark™ 用に開発したコネクタである StarRocks Connector for Apache Spark™（以下、Spark コネクタ）を提供しています。これを使用して、Spark を介して StarRocks テーブルにデータをロードできます。基本的な原理は、データを蓄積し、[STREAM LOAD](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じて一度に StarRocks にロードすることです。Spark コネクタは Spark DataSource V2 に基づいて実装されています。DataSource は Spark DataFrames または Spark SQL を使用して作成できます。バッチモードと構造化ストリーミングモードの両方がサポートされています。
 
 > **注意**
 >
-> StarRocks テーブルにデータをロードできるのは、SELECT および INSERT 権限を持つユーザーのみです。[GRANT](../sql-reference/sql-statements/account-management/GRANT.md) の指示に従って、これらの権限をユーザーに付与できます。
+> StarRocks テーブルにデータをロードできるのは、SELECT および INSERT 権限を持つユーザーのみです。[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) の指示に従って、これらの権限をユーザーに付与できます。
 
 ## バージョン要件
 
@@ -114,7 +114,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 - **必須**: YES
 - **デフォルト値**: なし
-- **説明**: StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [SELECT および INSERT 権限](../sql-reference/sql-statements/account-management/GRANT.md) を持っている必要があります。
+- **説明**: StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [SELECT および INSERT 権限](../../sql-reference/sql-statements/account-management/GRANT.md) を持っている必要があります。
 
 ### `starrocks.password`
 
@@ -132,7 +132,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 - **必須**: NO
 - **デフォルト値**: `TRUE`
-- **説明**: [Stream Load トランザクションインターフェース](../loading/Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
+- **説明**: [Stream Load トランザクションインターフェース](../../Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
 
 ### `starrocks.write.buffer.size`
 
@@ -190,7 +190,7 @@ Stream Load トランザクションインターフェースはリトライを�
 
 - **必須**: NO
 - **デフォルト値**: なし
-- **説明**: Stream Load の動作を制御するために使用されるパラメータ。例えば、パラメータ `starrocks.write.properties.format` はロードされるデータの形式を指定します。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+- **説明**: Stream Load の動作を制御するために使用されるパラメータ。例えば、パラメータ `starrocks.write.properties.format` はロードされるデータの形式を指定します。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
 ### `starrocks.write.properties.format`
 
@@ -534,7 +534,7 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
 
 ### 主キーテーブルにデータをロードする
 
-このセクションでは、StarRocks 主キーテーブルにデータをロードして部分更新や条件付き更新を実現する方法を示します。これらの機能の詳細な紹介については、[Change data through loading](../loading/Load_to_Primary_Key_tables.md) を参照してください。これらの例では Spark SQL を使用します。
+このセクションでは、StarRocks 主キーテーブルにデータをロードして部分更新や条件付き更新を実現する方法を示します。これらの機能の詳細な紹介については、[Change data through loading](../../Load_to_Primary_Key_tables.md) を参照してください。これらの例では Spark SQL を使用します。
 
 #### 準備
 
@@ -674,7 +674,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### BITMAP 型の列にデータをロード
 
-[`BITMAP`](../sql-reference/data-types/other-data-types/BITMAP.md) は、UV のカウントのような count distinct を高速化するためによく使用されます。[Use Bitmap for exact Count Distinct](../using_starrocks/distinct_values/Using_bitmap.md) を参照してください。ここでは、UV のカウントを例に、`BITMAP` 型の列にデータをロードする方法を示します。**`BITMAP` はバージョン 1.1.1 以降でサポートされています**。
+[`BITMAP`](../../sql-reference/data-types/other-data-types/BITMAP.md) は、UV のカウントのような count distinct を高速化するためによく使用されます。[Use Bitmap for exact Count Distinct](../../using_starrocks/distinct_values/Using_bitmap.md) を参照してください。ここでは、UV のカウントを例に、`BITMAP` 型の列にデータをロードする方法を示します。**`BITMAP` はバージョン 1.1.1 以降でサポートされています**。
 
 1. StarRocks 集計テーブルを作成します。
 
@@ -692,7 +692,7 @@ DISTRIBUTED BY HASH(`id`);
 
 2. Spark テーブルを作成します。
 
-    Spark テーブルのスキーマは StarRocks テーブルから推測され、Spark は `BITMAP` 型をサポートしていません。そのため、Spark で対応する列データ型をカスタマイズする必要があります。例えば、`BIGINT` として、オプション `"starrocks.column.types"="visit_users BIGINT"` を設定します。Stream Load を使用してデータを取り込む際、コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して `BIGINT` 型のデータを `BITMAP` 型に変換します。
+    Spark テーブルのスキーマは StarRocks テーブルから推測され、Spark は `BITMAP` 型をサポートしていません。そのため、Spark で対応する列データ型をカスタマイズする必要があります。例えば、`BIGINT` として、オプション `"starrocks.column.types"="visit_users BIGINT"` を設定します。Stream Load を使用してデータを取り込む際、コネクタは [`to_bitmap`](../../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して `BIGINT` 型のデータを `BITMAP` 型に変換します。
 
     `spark-sql` で以下の DDL を実行します：
 
@@ -736,12 +736,12 @@ DISTRIBUTED BY HASH(`id`);
     ```
 
 :::note
-コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md)、[`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 関数を使用します。
+コネクタは [`to_bitmap`](../../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md)、[`bitmap_hash64`](../../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 関数を使用します。
 :::
 
 ### HLL 型の列にデータをロード
 
-[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) は、近似 count distinct に使用できます。[Use HLL for approximate count distinct](../using_starrocks/distinct_values/Using_HLL.md) を参照してください。
+[`HLL`](../../sql-reference/data-types/other-data-types/HLL.md) は、近似 count distinct に使用できます。[Use HLL for approximate count distinct](../../using_starrocks/distinct_values/Using_HLL.md) を参照してください。
 
 ここでは、UV のカウントを例に、`HLL` 型の列にデータをロードする方法を示します。**`HLL` はバージョン 1.1.1 以降でサポートされています**。
 
@@ -761,7 +761,7 @@ DISTRIBUTED BY HASH(`id`);
 
 2. Spark テーブルを作成します。
 
-   Spark テーブルのスキーマは StarRocks テーブルから推測され、Spark は `HLL` 型をサポートしていません。そのため、Spark で対応する列データ型をカスタマイズする必要があります。例えば、`BIGINT` として、オプション `"starrocks.column.types"="visit_users BIGINT"` を設定します。Stream Load を使用してデータを取り込む際、コネクタは [`hll_hash`](../sql-reference/sql-functions/scalar-functions/hll_hash.md) 関数を使用して `BIGINT` 型のデータを `HLL` 型に変換します。
+   Spark テーブルのスキーマは StarRocks テーブルから推測され、Spark は `HLL` 型をサポートしていません。そのため、Spark で対応する列データ型をカスタマイズする必要があります。例えば、`BIGINT` として、オプション `"starrocks.column.types"="visit_users BIGINT"` を設定します。Stream Load を使用してデータを取り込む際、コネクタは [`hll_hash`](../../sql-reference/sql-functions/scalar-functions/hll_hash.md) 関数を使用して `BIGINT` 型のデータを `HLL` 型に変換します。
 
     `spark-sql` で以下の DDL を実行します：
 
@@ -804,7 +804,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### ARRAY 型の列にデータをロード
 
-以下の例は、[`ARRAY`](../sql-reference/data-types/semi_structured/Array.md) 型の列にデータをロードする方法を説明しています。
+以下の例は、[`ARRAY`](../../sql-reference/data-types/semi_structured/Array.md) 型の列にデータをロードする方法を説明しています。
 
 1. StarRocks テーブルを作成します。
 
