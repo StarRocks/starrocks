@@ -1369,6 +1369,35 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                                 "the short-key index must cover every fixed-length sort key column");
                     });
 
+            // RANDOM is normalised to a hash distribution over the key columns, which happens after the
+            // layout is resolved -- the ORDER BY still becomes a sort key of its own.
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_sort_key_random",
+                    "DISTRIBUTED BY RANDOM BUCKETS 3 "),
+                    () -> assertIndependentSortKey("mv_sort_key_random", "id"));
+
+            // The other row-id strategy: __ROW_ID__ is appended to the schema rather than projected first.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_nonagg_multi "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id, date) "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_nonagg_multi");
+                        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
+                        assertEquals(List.of("id", "date"), sortKeyIdxes(mv).stream()
+                                .map(idx -> mv.getBaseSchema().get(idx).getName()).collect(Collectors.toList()));
+                        assertEquals(2, mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getShortKeyColumnCount());
+                    });
+
+            // The independent branch has to validate the sort key columns itself: without that, an unknown
+            // one would only surface later as an internal assertion while resolving positions.
+            SemanticException unknown = assertThrows(SemanticException.class,
+                    () -> analyzeMvDdl(incrementalMvDdl("mv_sort_key_unknown",
+                            "DISTRIBUTED BY HASH(id) BUCKETS 3 ", "ORDER BY (no_such_column) ")),
+                    "an unknown sort key column must be rejected");
+            assertTrue(unknown.getMessage().contains("Sort key not exists")
+                            || unknown.getMessage().contains("no_such_column"),
+                    "got: " + unknown.getMessage());
+
             // A non-incremental mv is a duplicate-key table: its sort key IS its key columns.
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_pct "
                     + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id) "
