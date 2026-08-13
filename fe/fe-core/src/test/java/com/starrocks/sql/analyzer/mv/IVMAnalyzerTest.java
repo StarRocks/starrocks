@@ -1346,6 +1346,11 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                         MaterializedView mv = getMv("test", "mv_sort_key_absent");
                         assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
                         assertNull(sortKeyIdxes(mv), "an mv sorted by its key columns needs no sort key");
+                        // The reconstructed DDL must not name the internal row id as an ORDER BY the user
+                        // never wrote -- re-analysing it has to reproduce this same layout.
+                        assertFalse(mv.getMaterializedViewDdlStmt(false).contains("ORDER BY"),
+                                "got: " + mv.getMaterializedViewDdlStmt(false));
+                        assertActiveRoundTripKeepsSchema("mv_sort_key_absent");
                     });
 
             // Two fixed-length sort columns: both fit the short-key budget, so a count of 1 means the index

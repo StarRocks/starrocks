@@ -308,14 +308,17 @@ public class MaterializedViewAnalyzer {
     private static MvKeyLayout resolveMvKeyLayout(CreateMaterializedViewStatement statement,
                                                   ConnectContext context) {
         checkIvmSortKeySupported(statement, context);
-        List<String> sortKeys = statement.getSortKeys();
-        if (isIvmSortKeyIndependent(statement)) {
-            return new MvKeyLayout(Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID), sortKeys);
+        if (statement.getRowIdStrategy() == null) {
+            // A duplicate-key mv's key columns ARE its sort key; an empty list is chosen from the columns
+            // once they exist.
+            return MvKeyLayout.merged(statement.getSortKeys());
         }
-        // An AUTO_INCREMENT __ROW_ID__ is the primary key, so it has to be in the shared list, and leading.
-        // A list left empty here is filled in from the columns once they exist.
-        return MvKeyLayout.merged(statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT
-                ? prependRowIdToKeys(sortKeys) : sortKeys);
+        // An incremental mv is keyed by __ROW_ID__ alone, whichever row-id strategy produced it. An ORDER BY
+        // is then a sort key of its own; without one the mv sorts by that key column.
+        List<String> rowIdKey = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
+        return CollectionUtils.isEmpty(statement.getOrderByElements())
+                ? MvKeyLayout.merged(rowIdKey)
+                : new MvKeyLayout(rowIdKey, statement.getSortKeys());
     }
 
     /**
@@ -338,12 +341,6 @@ public class MaterializedViewAnalyzer {
         }
     }
 
-    /** Whether the {@code ORDER BY} becomes a sort key of its own instead of merging into the primary key. */
-    private static boolean isIvmSortKeyIndependent(CreateMaterializedViewStatement statement) {
-        return statement.getRowIdStrategy() != null
-                && CollectionUtils.isNotEmpty(statement.getOrderByElements());
-    }
-
     /**
      * Whether an incremental mv ends up range-distributed: RANGE has no SQL syntax, so it is either
      * selected for an omitted clause or injected by internal DDL reconstruction.
@@ -353,17 +350,6 @@ public class MaterializedViewAnalyzer {
         DistributionDesc distributionDesc = statement.getDistributionDesc();
         return distributionDesc instanceof RangeDistributionDesc
                 || (distributionDesc == null && enableRangeDistribution);
-    }
-
-    /** Move/prepend {@code __ROW_ID__} to the head of the sort-keys list. */
-    private static List<String> prependRowIdToKeys(List<String> existing) {
-        List<String> result = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
-        if (existing != null) {
-            existing.stream()
-                    .filter(k -> !IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(k))
-                    .forEach(result::add);
-        }
-        return result;
     }
 
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -495,7 +481,6 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             List<ColWithComment> colWithComments = statement.getColWithComments();
             MvKeyLayout keyLayout = resolveMvKeyLayout(statement, context);
-            statement.setSortKeys(keyLayout.sortKeyColumns());
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
                     statement.getRowIdStrategy(), queryStatement, colWithComments, keyLayout);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
