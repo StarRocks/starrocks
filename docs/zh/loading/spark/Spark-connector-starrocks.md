@@ -6,12 +6,12 @@ description: "通过 StarRocks Spark connector 从 Apache Spark DataFrame 或 SQ
 # 使用 Spark connector 导入数据（推荐）
 
 StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark™)，可以通过 Spark 导入数据至 StarRocks（推荐）。
-基本原理是对数据攒批后，通过 [Stream Load](./StreamLoad.md) 批量导入StarRocks。Connector 导入数据基于Spark DataSource V2 实现，
+基本原理是对数据攒批后，通过 [Stream Load](.././StreamLoad.md) 批量导入StarRocks。Connector 导入数据基于Spark DataSource V2 实现，
 可以通过 Spark DataFrame 或 Spark SQL 创建 DataSource，支持 Batch 和 Structured Streaming。
 
 > **注意**
 >
-> 使用 Spark connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+> 使用 Spark connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 版本要求
 
@@ -119,7 +119,7 @@ connector jar包的命名格式如下
 
 - **是否必填**：是
 - **默认值**：无
-- **描述**：StarRocks 集群账号的用户名。使用 Spark connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT  权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+- **描述**：StarRocks 集群账号的用户名。使用 Spark connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT  权限。如果您的用户账号没有这些权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ### `starrocks.password`
 
@@ -137,7 +137,7 @@ connector jar包的命名格式如下
 
 - **是否必填**：否
 - **默认值**：`true`
-- **描述**：是否使用 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本为 v2.5 或更高。此功能可以在一次导入事务中导入更多数据，同时减少内存使用量，提高性能。
+- **描述**：是否使用 [Stream Load 事务接口](../../Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本为 v2.5 或更高。此功能可以在一次导入事务中导入更多数据，同时减少内存使用量，提高性能。
 
 :::note
 自 1.1.1 版本以来，只有当  `starrocks.write.max.retries` 的值为非正数时，此参数才会生效，因为 Stream Load 事务接口不支持重试。
@@ -193,7 +193,7 @@ connector jar包的命名格式如下
 
 - **是否必填**：否
 - **默认值**：无
-- **描述**：指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
+- **描述**：指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
 
 ### `starrocks.write.properties.format`
 
@@ -522,7 +522,7 @@ MySQL [test]> select * from score_board;
 
 ### 导入至主键表
 
-本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
+本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](.././Load_to_Primary_Key_tables.md)。
 
 以下示例使用 Spark SQL。
 
@@ -663,7 +663,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ### 导入至 BITMAP 列
 
-`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../using_starrocks/distinct_values/Using_bitmap.md)。
+`BITMAP` 常用于加速精确去重计数，例如计算独立访客数（UV），更多信息，请参见[使用 Bitmap 实现精确去重](../../using_starrocks/distinct_values/Using_bitmap.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `BITMAP` 列中。**自版本 1.1.1 起支持导入至 `BITMAP` 列**。
 
@@ -727,12 +727,12 @@ DISTRIBUTED BY HASH(`id`);
     ```
 
 :::note
-如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 或 [`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 函数进行转换。
+如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 或 [`bitmap_hash64`](../../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 函数进行转换。
 :::
 
 ### 导入至 HLL 列
 
-`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../using_starrocks/distinct_values/Using_HLL.md)。
+`HLL` 可用于近似去重计数，更多信息，请参见[使用 HLL 实现近似去重](../../using_starrocks/distinct_values/Using_HLL.md)。
 
 本示例以计算独立访客数（UV）为例，展示如何导入数据至 StarRocks 表 `HLL` 列中。**自版本 1.1.1 起支持导入至 `HLL` 列**。
 
@@ -752,7 +752,7 @@ DISTRIBUTED BY HASH(`id`);
 
 2. 在 Spark SQL 客户端中创建一个表。
 
-   Spark 表 schema 是从 StarRocks 表中推断出来的，而 Spark 不支持 HLL 类型。因此，您需要在 Spark 中自定义相应列的数据类型，例如配置选项 `"starrocks.column.types"="visit_users BIGINT"`，将其配置为 BIGINT 类型。在使用 Stream Load 来导入数据时，Spark connector 使用 [hll_hash](../sql-reference/sql-functions/scalar-functions/hll_hash.md) 函数将 BIGINT 类型的数据转换为 HLL 类型。
+   Spark 表 schema 是从 StarRocks 表中推断出来的，而 Spark 不支持 HLL 类型。因此，您需要在 Spark 中自定义相应列的数据类型，例如配置选项 `"starrocks.column.types"="visit_users BIGINT"`，将其配置为 BIGINT 类型。在使用 Stream Load 来导入数据时，Spark connector 使用 [hll_hash](../../sql-reference/sql-functions/scalar-functions/hll_hash.md) 函数将 BIGINT 类型的数据转换为 HLL 类型。
 
    在 `spark-sql` 中运行如下 DDL 语句：
 
