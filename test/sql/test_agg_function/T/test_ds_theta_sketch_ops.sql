@@ -13,10 +13,11 @@ insert into t1 select generate_series, "B" from table(generate_series(25001, 750
 select grp, cast(length(ds_theta_accumulate(id)) > 0 as int) from t1 group by grp order by grp;
 
 -- ds_theta_estimate is a SCALAR fn on serialized sketches; matches count_distinct within theta error
+-- t1 has unique IDs 1-75000 (A: 1-50000, B: 25001-75000), so total distinct = 75000
 with sk as (select ds_theta_accumulate(id) as s from t1)
-select cast(abs(ds_theta_estimate(s) - 50000) < 5000 as int) from sk
+select cast(abs(ds_theta_estimate(s) - 75000) < 7500 as int) from sk
 union all
-select cast(abs((select ds_theta_count_distinct(id) from t1) - 50000) < 5000 as int);
+select cast(abs((select ds_theta_count_distinct(id) from t1) - 75000) < 7500 as int);
 
 -- ds_theta_combine is an AGGREGATE over a VARBINARY column: union sketches across rows
 with grp_sk as (select grp, ds_theta_accumulate(id) as s from t1 group by grp)
