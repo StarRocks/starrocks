@@ -7,4 +7,3 @@ Use this section when you need the repo map or the current internal harness boun
 - [Repo Topology](repo-topology.md): top-level map, subsystem entrypoints, and where to look first.
 - [BE Boundary Harness](be-boundary-harness.md): phase-1 module-boundary guardrails and the files that enforce them.
 - [Schema Compatibility Harness](schema-compatibility-harness.md): diff-aware guardrails for thrift and protobuf evolution in `gensrc/`.
-- [Exact Tablet Metadata Dump Design](2026-08-12-dump-tablet-metadata-design.md): agent-oriented, exact-only, resource-bounded design for parsing one durable Lake tablet metadata version.
