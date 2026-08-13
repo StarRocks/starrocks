@@ -761,6 +761,13 @@ Status LakePersistentIndex::prepare_merging_iterator(
         // no need to do merge
         return Status::OK();
     }
+    // Record the full picked input set before opening anything: if an open below fails
+    // with corruption, the caller's cleanup handler walks this list to drop every
+    // input's local cache (the failing file itself never makes it into
+    // `merging_sstables`).
+    for (const auto& sstable_pb : sstables_to_merge) {
+        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
+    }
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         ASSIGN_OR_RETURN(auto sstable,
@@ -777,8 +784,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
         read_options.delvec = merging_sstable->delvec();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
-        // add input sstable.
-        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
         ss_debug << sstable_pb.filename() << " | ";
 
         if (sstable_pb.shared()) {
@@ -922,27 +927,35 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     std::unique_ptr<sstable::Iterator> merging_iter_ptr;
     bool merge_base_level = false;
     bool contain_shared_sstables = false;
-    // build merge iterator
-    RETURN_IF_ERROR(prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
-                                             &merge_base_level, &contain_shared_sstables));
-    if (merging_iter_ptr == nullptr) {
-        // no need to do merge
-        return Status::OK();
-    }
     // Corrupted bytes usually come from the local cache copy of an input sstable. Drop
     // those cache entries so the next compaction round re-reads from remote storage,
-    // instead of hitting the same bad blocks and failing forever.
+    // instead of hitting the same bad blocks and failing forever. The handler walks the
+    // input list in `txn_log`, which prepare_merging_iterator fills with the full picked
+    // set before opening anything, so corruption hit while opening an input is covered
+    // too (the failing file never makes it into `sstable_vec`).
     auto drop_input_cache_on_corruption = [&](const Status& st) {
         if (!st.is_corruption()) {
             return;
         }
         StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of " << sstable_vec.size()
+        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of "
+                     << txn_log->op_compaction().input_sstables_size()
                      << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
-        for (const auto& sst : sstable_vec) {
-            (void)drop_corrupted_sstable_cache(sst->filename());
+        for (const auto& sstable_pb : txn_log->op_compaction().input_sstables()) {
+            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()));
         }
     };
+    // build merge iterator
+    auto prepare_st = prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
+                                               &merge_base_level, &contain_shared_sstables);
+    if (!prepare_st.ok()) {
+        drop_input_cache_on_corruption(prepare_st);
+        return prepare_st;
+    }
+    if (merging_iter_ptr == nullptr) {
+        // no need to do merge
+        return Status::OK();
+    }
     if (!merging_iter_ptr->Valid()) {
         drop_input_cache_on_corruption(merging_iter_ptr->status());
         return merging_iter_ptr->status();
