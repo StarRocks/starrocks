@@ -1109,6 +1109,11 @@ public class ExpressionStatisticCalculator {
                             * fromTzStat.getDistinctValuesCount()
                             * toTzStat.getDistinctValuesCount());
 
+            final double nullsFraction = 1.0
+                    - (1.0 - childStat.getNullsFraction())
+                    * (1.0 - fromTzStat.getNullsFraction())
+                    * (1.0 - toTzStat.getNullsFraction());
+
             double minValue = childStat.getMinValue() - maxOffset;
             double maxValue = childStat.getMaxValue() + maxOffset;
 
@@ -1129,7 +1134,7 @@ public class ExpressionStatisticCalculator {
             return ColumnStatistic.builder()
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
-                    .setNullsFraction(childStat.getNullsFraction())
+                    .setNullsFraction(nullsFraction)
                     .setAverageRowSize(callOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .setHistogram(transformHistogramForConvertTz(callOperator, childStat, minValue, maxValue)
