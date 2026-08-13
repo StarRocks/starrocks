@@ -39,6 +39,7 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/datum_variant.h"
 #include "storage/del_vector.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
@@ -58,6 +59,8 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
+#include "storage/variant_tuple.h"
 #include "testutil/chunk_assert.h"
 
 namespace starrocks::lake {
@@ -873,6 +876,76 @@ TEST_P(LakePrimaryKeyPublishTest, test_spill_delete_only_removes_keys) {
     ASSERT_EQ(n, read_rows(tablet_id, 2));
     write_one_txn(3, make_op_chunk(n, /*value_shift=*/0, /*upsert=*/false, _slot_cid_map));
     ASSERT_EQ(0, read_rows(tablet_id, 3));
+}
+
+// A del file is cross-published verbatim to every SPLIT child, so a child must erase only the keys
+// inside its own tablet range. The upsert side is clipped at read time (tablet_range -> short key
+// index -> rowid range); the del file has no index and no guaranteed key order, so publish clips it
+// explicitly in RowsetUpdateState::load_delete.
+//
+// Regression for "unexpected segment id: <rssid> tablet id: <child>": erasing a key it does not own
+// makes the child look that key up in its own primary index, which still carries the ancestor
+// entries inherited via shared sstables, so the lookup can succeed and return a location in a rowset
+// the split pruned away -- and MetaFileBuilder::update_num_del_stat then fails the publish forever.
+//
+// Here the tablet range covers only the lower half of the keys, so a delete of ALL keys must remove
+// exactly the in-range half and leave the rest untouched.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_clips_deletes_to_tablet_range) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    const int kRangeUpperExclusive = n / 2;
+
+    // Range distribution requires the order-preserving big-endian PK encoding; create_sst_seek_range_from
+    // rejects anything else.
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    // Tablet owns [0, n/2): a delete of every key may only take effect on that half.
+    auto* range_pb = _tablet_metadata->mutable_range();
+    {
+        DatumVariant upper(get_type_info(LogicalType::TYPE_INT), Datum(kRangeUpperExclusive));
+        VariantTuple tuple;
+        tuple.append(upper);
+        tuple.to_proto(range_pb->mutable_upper_bound());
+        range_pb->set_upper_bound_included(false);
+    }
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](int64_t version, const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+
+    // v2: all n keys land (a local write is not range-clipped: its segments are not shared and its
+    // rowset carries no range, which is what makes this a usable stand-in for the inherited state).
+    write_one_txn(2, make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map));
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    // v3: delete every key. Before the fix this erased all n and, on a real SPLIT child, tripped
+    // "unexpected segment id" on an ancestor rssid the child no longer has.
+    write_one_txn(3, make_op_chunk(n, /*value_shift=*/0, /*upsert=*/false, _slot_cid_map));
+    EXPECT_EQ(n - kRangeUpperExclusive, read_rows(tablet_id, 3));
 }
 
 // Spill path regression (kevincai review on #75366): when a single op-aware merge task emits more than one
