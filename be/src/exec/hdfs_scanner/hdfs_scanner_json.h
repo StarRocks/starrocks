@@ -34,14 +34,8 @@ public:
     };
 
     struct PreviousParsedItem {
-<<<<<<< HEAD:be/src/exec/hdfs_scanner/hdfs_scanner_json.h
-        explicit PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
-        PreviousParsedItem(const std::string_view& key, int column_index, const TypeDescriptor& type)
-                : key(key), type(type), column_index(column_index) {}
-=======
         PreviousParsedItem(const std::string_view& key, std::vector<ColumnTarget> targets = {})
                 : key(key), targets(std::move(targets)) {}
->>>>>>> b02679872a ([BugFix] Support one JSON field mapping to multiple Hive columns (#77716)):be/src/connector/hive/scanner/hdfs_scanner_json.h
 
         std::string key;
         // Empty means this key (at this position in the row) matches no column.

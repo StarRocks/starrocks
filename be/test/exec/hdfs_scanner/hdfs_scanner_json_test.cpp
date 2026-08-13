@@ -261,7 +261,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_absent_falls_back_to_
 // and reads its own name. Row 3 omits "x" entirely: both c1 and c2 must independently
 // end up NULL, not just one of them.
 TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_fan_out) {
-    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_fan_out_mapping.json";
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_fan_out_mapping.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_mapping_tuple_descriptor();
@@ -270,7 +270,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_fan_out) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots(), serde_properties);
     ASSERT_OK(json_reader.init());
 
-    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[5, 6, NULL]");
@@ -282,7 +282,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_fan_out) {
 // the rest, which is only safe when they share the same type. A mismatch must be
 // rejected up front instead of silently reinterpreting bytes across column types.
 TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_fan_out_type_mismatch) {
-    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_fan_out_mapping.json";
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_fan_out_mapping.json";
 
     create_random_access_file(path);
     parquet::Utils::SlotDesc slots[] = {
