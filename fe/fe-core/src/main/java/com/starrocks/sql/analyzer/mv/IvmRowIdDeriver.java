@@ -89,7 +89,11 @@ public final class IvmRowIdDeriver {
         List<Expr> keys = new ArrayList<>();
         for (Column column : olapTable.getBaseSchema()) {
             if (column.isKey()) {
-                keys.add(new SlotRef(tableRelation.getResolveTableName(), column.getName()));
+                SlotRef key = new SlotRef(tableRelation.getResolveTableName(), column.getName());
+                // The encoding is chosen from the key types before the injected expression is re-analyzed,
+                // so carry the type over; re-analysis resolves the ref to the same column.
+                key.setType(column.getType());
+                keys.add(key);
             }
         }
         return keys.isEmpty() ? null : keys;
@@ -148,7 +152,9 @@ public final class IvmRowIdDeriver {
         List<Expr> exposed = exposeKeysAsOutputs(innerSelect, innerKeys);
         List<Expr> forwarded = new ArrayList<>(exposed.size());
         for (Expr exposedKey : exposed) {
-            forwarded.add(new SlotRef(subquery.getResolveTableName(), ((SlotRef) exposedKey).getColumnName()));
+            SlotRef key = new SlotRef(subquery.getResolveTableName(), ((SlotRef) exposedKey).getColumnName());
+            key.setType(exposedKey.getType());
+            forwarded.add(key);
         }
         return forwarded;
     }
@@ -166,7 +172,9 @@ public final class IvmRowIdDeriver {
             String columnName = EXPOSED_KEY_PREFIX + i + "__";
             items.add(new SelectListItem(keys.get(i).clone(), columnName));
             outputs.add(keys.get(i).clone());
-            exposedRefs.add(new SlotRef(null, columnName));
+            SlotRef exposedRef = new SlotRef(null, columnName);
+            exposedRef.setType(keys.get(i).getType());
+            exposedRefs.add(exposedRef);
         }
         block.getSelectList().setItems(items);
         block.setOutputExpr(outputs);

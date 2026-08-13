@@ -298,7 +298,8 @@ public class IVMAnalyzer {
                 retractableBranches++;
             }
         }
-        return IvmRetractableAdmission.admitRetractableUnion(statement, children, retractableBranches);
+        return IvmRetractableAdmission.admitRetractableUnion(statement, children, retractableBranches,
+                pinnedEncodeRowIdVersion);
     }
 
     private boolean rewriteSelectRelation(SelectRelation selectRelation) throws AnalysisException {
@@ -331,7 +332,8 @@ public class IVMAnalyzer {
         IvmRetractableAdmission.rejectExplicitColumnAliasDerivedTable(selectRelation);
         // Does THIS block's own output carry __ROW_ID__ (from the aggregate above or a retractable PK
         // projection)? The PK-base gate below keys on this, not on nested inputs.
-        boolean rowIdOnOutput = IvmRetractableAdmission.admitRowIdOnOutput(statement, selectRelation, isAggregate);
+        boolean rowIdOnOutput = IvmRetractableAdmission.admitRowIdOnOutput(statement, selectRelation, isAggregate,
+                pinnedEncodeRowIdVersion);
         Relation innerRelation = selectRelation.getRelation();
         // | not ||: rewriteRelation must run to recurse into and reject the nested relation even when this
         // block already has a row id. A nested input can also make the query row-id-computed.

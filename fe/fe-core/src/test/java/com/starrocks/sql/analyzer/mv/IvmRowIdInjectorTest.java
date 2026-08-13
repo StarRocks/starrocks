@@ -79,7 +79,7 @@ public class IvmRowIdInjectorTest {
         };
 
         List<QueryRelation> branches = Lists.newArrayList(branch0, branch1);
-        IvmRowIdInjector.discriminateUnionBranchRowIds(statement, branches);
+        IvmRowIdInjector.discriminateUnionBranchRowIds(statement, branches, null);
 
         assertBranchOrdinal(selectList0, 0, "id");
         assertBranchOrdinal(selectList1, 1, "id");
@@ -105,7 +105,7 @@ public class IvmRowIdInjectorTest {
             }
         };
         Assertions.assertThrows(IllegalStateException.class,
-                () -> IvmRowIdInjector.discriminateUnionBranchRowIds(statement, Lists.newArrayList(branch0)),
+                () -> IvmRowIdInjector.discriminateUnionBranchRowIds(statement, Lists.newArrayList(branch0), null),
                 "a branch whose column 0 is not __ROW_ID__ must be rejected, not silently mis-keyed");
     }
 

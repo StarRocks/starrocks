@@ -45,7 +45,7 @@ final class IvmRetractableAdmission {
      * @return whether this block's own output carries {@code __ROW_ID__}
      */
     static boolean admitRowIdOnOutput(CreateMaterializedViewStatement statement, SelectRelation selectRelation,
-                                      boolean isAggregate) {
+                                      boolean isAggregate, Integer pinnedEncodeRowIdVersion) {
         if (isAggregate) {
             // Aggregate over a cloud-native PK base is maintained by per-group recompute in
             // IvmDeltaAggregateRule.transformRetractable; a mixed PK/non-PK join is rejected there, not here.
@@ -54,7 +54,7 @@ final class IvmRetractableAdmission {
             }
             return true;
         }
-        boolean retractable = IvmRowIdInjector.injectRowId(statement, selectRelation);
+        boolean retractable = IvmRowIdInjector.injectRowId(statement, selectRelation, pinnedEncodeRowIdVersion);
         if (retractable) {
             rejectOrderBy(statement);
         }
@@ -171,7 +171,7 @@ final class IvmRetractableAdmission {
      * {@code false} to leave a fully append-only union to the community AUTO_INCREMENT path.
      */
     static boolean admitRetractableUnion(CreateMaterializedViewStatement statement, List<QueryRelation> children,
-                                         int retractableBranches) {
+                                         int retractableBranches, Integer pinnedEncodeRowIdVersion) {
         if (retractableBranches == 0) {
             return false;
         }
@@ -179,7 +179,7 @@ final class IvmRetractableAdmission {
             throw new SemanticException("IVMAnalyzer does not support a UNION ALL that mixes a retractable "
                     + "cloud-native PRIMARY KEY branch with an append-only branch");
         }
-        IvmRowIdInjector.discriminateUnionBranchRowIds(statement, children);
+        IvmRowIdInjector.discriminateUnionBranchRowIds(statement, children, pinnedEncodeRowIdVersion);
         return true;
     }
 }

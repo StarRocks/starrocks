@@ -44,12 +44,18 @@ final class IvmRowIdInjector {
      * delete/update on the base can target the exact MV rows it produced. Returns false for any shape
      * without a stable per-row identity, leaving the append-only path to the caller's gate.
      */
-    static boolean injectRowId(CreateMaterializedViewStatement statement, SelectRelation selectRelation) {
+    static boolean injectRowId(CreateMaterializedViewStatement statement, SelectRelation selectRelation,
+                               Integer pinnedEncodeRowIdVersion) {
         List<Expr> rowIdKeys = IvmRowIdDeriver.deriveRowIdKeys(selectRelation);
         if (rowIdKeys == null || rowIdKeys.isEmpty()) {
             return false;
         }
-        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
+        // The encoding is part of the mv's primary key, so a refresh must reuse the version the mv was
+        // created with: re-deducing would re-encode every __ROW_ID__, match none of the rows already
+        // written, and leave behind the rows a retraction should have deleted.
+        int encodeRowIdVersion = pinnedEncodeRowIdVersion != null
+                ? IvmOpUtils.getEncodeRowIdVersionChecked(pinnedEncodeRowIdVersion)
+                : IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
@@ -75,19 +81,24 @@ final class IvmRowIdInjector {
 
     /**
      * Retractable UNION ALL: {@link IVMAnalyzer} has already injected each branch's own {@code encode(row-id
-     * keys)}. Re-key each as {@code encode(branch ordinal, keys)} under one shared (max) version so the ordinal
-     * keeps two branches with equal keys as distinct rows -- net-collapse keys only on {@code __ROW_ID__}.
+     * keys)}. Re-key each as {@code encode(branch ordinal, keys)} under one shared version so the ordinal keeps
+     * two branches with equal keys as distinct rows -- net-collapse keys only on {@code __ROW_ID__}. At CREATE
+     * one branch needing the fingerprint moves them all onto it; a refresh reuses the mv's pinned version.
      */
-    static void discriminateUnionBranchRowIds(CreateMaterializedViewStatement statement, List<QueryRelation> branches) {
+    static void discriminateUnionBranchRowIds(CreateMaterializedViewStatement statement, List<QueryRelation> branches,
+                                              Integer pinnedEncodeRowIdVersion) {
         List<List<Expr>> discriminatedKeys = Lists.newArrayList();
-        int encodeRowIdVersion = 0;
+        int deducedVersion = 0;
         for (int i = 0; i < branches.size(); i++) {
             List<Expr> keys = Lists.newArrayList();
             keys.add(new IntLiteral(i));
             keys.addAll(extractRowIdKeys((SelectRelation) branches.get(i)));
             discriminatedKeys.add(keys);
-            encodeRowIdVersion = Math.max(encodeRowIdVersion, IvmOpUtils.deduceEncodeRowIdVersion(keys));
+            deducedVersion = Math.max(deducedVersion, IvmOpUtils.deduceEncodeRowIdVersion(keys));
         }
+        int encodeRowIdVersion = pinnedEncodeRowIdVersion != null
+                ? IvmOpUtils.getEncodeRowIdVersionChecked(pinnedEncodeRowIdVersion)
+                : deducedVersion;
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
