@@ -42,6 +42,11 @@ select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_col_mapping order by c1 
 1	11	111
 2	22	222
 -- !result
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_fan_out_mapping order by c1 asc;
+-- result:
+4	4	444
+5	5	555
+-- !result
 drop catalog hive_catalog_${uuid0};
 -- result:
 -- !result

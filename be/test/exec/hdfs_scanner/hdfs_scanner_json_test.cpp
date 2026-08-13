@@ -256,6 +256,45 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_absent_falls_back_to_
     ASSERT_EQ(chunk->get_column_by_slot_id(2)->debug_string(), "[111, 222, 333]");
 }
 
+// OpenX JsonSerDe resolves each Hive column independently, so mapping.c1=x and
+// mapping.c2=x are both valid and both columns must read x's value. c3 is unmapped
+// and reads its own name. Row 3 omits "x" entirely: both c1 and c2 must independently
+// end up NULL, not just one of them.
+TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_fan_out) {
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_fan_out_mapping.json";
+
+    create_random_access_file(path);
+    auto* tuple_desc = create_mapping_tuple_descriptor();
+    std::map<std::string, std::string> serde_properties{{"mapping.c1", "x"}, {"mapping.c2", "x"}};
+
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots(), serde_properties);
+    ASSERT_OK(json_reader.init());
+
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[5, 6, NULL]");
+    ASSERT_EQ(chunk->get_column_by_slot_id(1)->debug_string(), "[5, 6, NULL]");
+    ASSERT_EQ(chunk->get_column_by_slot_id(2)->debug_string(), "[111, 222, 333]");
+}
+
+// Two columns fanning out from the same json key are decoded once and cloned into
+// the rest, which is only safe when they share the same type. A mismatch must be
+// rejected up front instead of silently reinterpreting bytes across column types.
+TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_fan_out_type_mismatch) {
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_fan_out_mapping.json";
+
+    create_random_access_file(path);
+    parquet::Utils::SlotDesc slots[] = {
+            {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""} // end
+    };
+    auto* tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slots);
+    std::map<std::string, std::string> serde_properties{{"mapping.c1", "x"}, {"mapping.c2", "x"}};
+
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots(), serde_properties);
+    EXPECT_STATUS(Status::NotSupported(""), json_reader.init());
+}
+
 namespace {
 void write_file(const std::string& path, const std::string& content) {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
