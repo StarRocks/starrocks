@@ -200,8 +200,8 @@ class ParamEchoHandler : public HttpHandler {
 public:
     void handle(HttpRequest* req) override {
         HttpChannel::send_reply(req, req->route_param("TabletId") + ":" +
-                                         std::to_string(req->query_param_count("version")) + ":" +
-                                         req->param("TabletId"));
+                                             std::to_string(req->query_param_count("version")) + ":" +
+                                             req->param("TabletId"));
     }
 };
 
@@ -257,8 +257,7 @@ TEST(EvHttpServerAuthTest, verifier_returns_nullopt_dispatches_handler) {
 
     std::atomic<int> verifier_calls{0};
     server->set_auth_verifier(
-            [&](HttpRequest*, HttpHandler::RequiredPrivilege,
-                bool) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+            [&](HttpRequest*, HttpHandler::RequiredPrivilege, bool) -> std::optional<EvHttpServer::AuthVerifyFailure> {
                 ++verifier_calls;
                 return std::nullopt;
             });
@@ -287,8 +286,7 @@ TEST(EvHttpServerAuthTest, verifier_returns_failure_short_circuits_handler) {
 
     std::atomic<int> verifier_calls{0};
     server->set_auth_verifier(
-            [&](HttpRequest*, HttpHandler::RequiredPrivilege,
-                bool) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+            [&](HttpRequest*, HttpHandler::RequiredPrivilege, bool) -> std::optional<EvHttpServer::AuthVerifyFailure> {
                 ++verifier_calls;
                 EvHttpServer::AuthVerifyFailure f;
                 f.http_status = HttpStatus::UNAUTHORIZED;
@@ -323,8 +321,7 @@ TEST(EvHttpServerAuthTest, handler_need_auth_false_bypasses_verifier) {
 
     std::atomic<int> verifier_calls{0};
     server->set_auth_verifier(
-            [&](HttpRequest*, HttpHandler::RequiredPrivilege,
-                bool) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+            [&](HttpRequest*, HttpHandler::RequiredPrivilege, bool) -> std::optional<EvHttpServer::AuthVerifyFailure> {
                 ++verifier_calls;
                 // Verifier would reject if it ran, so seeing the handler run
                 // is a strong signal that the verifier was bypassed.
@@ -379,12 +376,11 @@ TEST(EvHttpServerAuthTest, verifier_receives_always_require_auth) {
     ASSERT_TRUE(server->register_handler(GET, "/probe", handler.get()));
 
     std::atomic<bool> always_require_auth{false};
-    server->set_auth_verifier(
-            [&](HttpRequest*, HttpHandler::RequiredPrivilege, bool force_auth)
-                    -> std::optional<EvHttpServer::AuthVerifyFailure> {
-                always_require_auth = force_auth;
-                return std::nullopt;
-            });
+    server->set_auth_verifier([&](HttpRequest*, HttpHandler::RequiredPrivilege,
+                                  bool force_auth) -> std::optional<EvHttpServer::AuthVerifyFailure> {
+        always_require_auth = force_auth;
+        return std::nullopt;
+    });
 
     ASSERT_OK(server->start());
     HttpClient client;

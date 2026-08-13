@@ -66,7 +66,8 @@ TPrivilegeRequirement::type to_thrift_privilege(HttpHandler::RequiredPrivilege p
 // checks: flag gate → Basic-Auth header → FE master address known → FE
 // checkAuth RPC. Anything before the RPC is unit-testable; the RPC itself is
 // covered by the end-to-end smoke test.
-std::optional<EvHttpServer::AuthVerifyFailure> verify_http_basic_auth(
-        HttpRequest* req, HttpHandler::RequiredPrivilege required_privilege, bool always_require_auth = false);
+std::optional<EvHttpServer::AuthVerifyFailure> verify_http_basic_auth(HttpRequest* req,
+                                                                      HttpHandler::RequiredPrivilege required_privilege,
+                                                                      bool always_require_auth = false);
 
 } // namespace starrocks

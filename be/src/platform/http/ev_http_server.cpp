@@ -457,8 +457,9 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
             }
         } else if (always_require_auth) {
             evhttp_remove_header(evhttp_request_get_input_headers(ev_req), HttpHeaders::EXPECT);
-            HttpChannel::send_reply_json(request.get(), HttpStatus::SERVICE_UNAVAILABLE,
-                                         "{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"auth verifier unavailable\"}");
+            HttpChannel::send_reply_json(
+                    request.get(), HttpStatus::SERVICE_UNAVAILABLE,
+                    "{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"auth verifier unavailable\"}");
             return 0;
         }
     }
