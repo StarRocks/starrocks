@@ -33,8 +33,9 @@ INSERT INTO dw_t2 VALUES (1), (2);
 -- The defect: DISTINCT aggregate + window + uncorrelated EXISTS.
 SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2);
 
--- Same with a PARTITION BY.
-SELECT sum(DISTINCT b) OVER (PARTITION BY a) FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2);
+-- Same with a PARTITION BY. This one needs the ORDER BY: it is the only statement here whose rows
+-- are distinguishable, and the harness compares multi-row results as an exact ordered string.
+SELECT sum(DISTINCT b) OVER (PARTITION BY a) FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2) ORDER BY 1;
 
 -- An explicit LIMIT reaches the repaired visitor directly; that method had never once executed
 -- successfully before the fix.
