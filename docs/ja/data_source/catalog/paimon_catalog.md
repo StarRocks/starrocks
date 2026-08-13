@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks v3.1 以降の Paimon catalog で、Apache Paimon からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
@@ -65,7 +66,7 @@ Paimon クラスターが AWS S3 をストレージとして使用している�
 
 上記の3つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
 
-詳細については、[AWS IAM での認証準備](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)を参照してください。
+詳細については、[AWS IAM での認証準備](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)を参照してください。
 
 ### HDFS
 
@@ -181,7 +182,7 @@ Paimon クラスターのストレージとして AWS S3 を選択する場合�
 | aws.s3.access_key           | いいえ | IAM ユーザーのアクセスキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | いいえ | IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
 
 ##### S3 互換ストレージシステム
 

@@ -392,7 +392,7 @@ After a query has completed, you can view the resource group that the query matc
 
 ### Monitoring resource groups
 
-You can set up [monitoring and alerting](../monitoring/Monitor_and_Alert.md) for your resource groups.
+You can set up [monitoring and alerting](../monitoring/monitoring.md) for your resource groups.
 
 Resource group-related FE and BE metrics are as follows. All the metrics below have a `name` label indicating their corresponding resource group.
 

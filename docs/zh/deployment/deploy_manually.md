@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "如何手动部署存算一体 StarRocks 集群，其中 BE 节点同时处理存储和计算。"
 ---
@@ -9,7 +10,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
+本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](./deployment.md)。
 
 如果要部署存算分离集群，参见 [手动部署存算分离 StarRocks](./deploy_shared_data_manually.md)。
 
@@ -24,7 +25,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
    mkdir -p <meta_dir>
    ```
 
-2. 进入先前准备好的 [StarRocks FE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 FE 配置文件 **fe/conf/fe.conf**。
+2. 进入先前准备好的 [StarRocks FE 部署文件](./preparation/prepare_deployment_files.md)所在路径，修改 FE 配置文件 **fe/conf/fe.conf**。
 
    a. 在配置项 `meta_dir` 中指定元数据路径。
 
@@ -33,7 +34,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       meta_dir = <meta_dir>
       ```
 
-   b. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 FE 端口被占用，您必须在 FE 配置文件中为其分配其他可用端口。
+   b. 如果任何在 [环境配置清单](./preparation/environment_configurations.md) 中提到的 FE 端口被占用，您必须在 FE 配置文件中为其分配其他可用端口。
 
       ```YAML
       http_port = aaaa        # 默认值：8030
@@ -64,7 +65,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       JAVA_HOME = <path_to_JDK>
       ```
 
-   更多高级配置项请参考 [参数配置 - FE 配置项](../administration/management/FE_configuration.md)。
+   更多高级配置项请参考 [参数配置 - FE 配置项](../administration/configuration/FE_parameters/FE_parameters.md)。
 
 3. 启动 FE 节点。
 
@@ -84,7 +85,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
      > **注意**
      >
-     > 如需启用 FQDN 访问，在启动 FE 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
+     > 如需启用 FQDN 访问，在启动 FE 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](./preparation/environment_configurations.md#主机名)。
 
 4. 查看 FE 日志，检查 FE 节点是否启动成功。
 
@@ -113,7 +114,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
    mkdir -p <storage_root_path>
    ```
 
-2. 进入先前准备好的 [StarRocks BE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 BE 配置文件 **be/conf/be.conf**。
+2. 进入先前准备好的 [StarRocks BE 部署文件](./preparation/prepare_deployment_files.md)所在路径，修改 BE 配置文件 **be/conf/be.conf**。
 
    a. 在配置项 `storage_root_path` 中指定数据路径。多块盘配置使用分号（;）隔开。例如：`/data1;/data2`。
 
@@ -122,7 +123,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       storage_root_path = <storage_root_path>
       ```
 
-   b. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 BE 端口被占用，您必须在 BE 配置文件中为其分配其他可用端口。
+   b. 如果任何在 [环境配置清单](./preparation/environment_configurations.md) 中提到的 BE 端口被占用，您必须在 BE 配置文件中为其分配其他可用端口。
 
       ```YAML
       be_port = vvvv                   # 默认值：9060
@@ -150,7 +151,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       JAVA_HOME = <path_to_JDK>
       ```
 
-   更多高级配置项请参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md)。
+   更多高级配置项请参考 [参数配置 - BE 配置项](../administration/configuration/BE_parameters/BE_parameters.md)。
 
 3. 启动 BE 节点。
 
@@ -160,7 +161,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
    > **注意**
    >
-   > - 如需启用 FQDN 访问，在启动 BE 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
+   > - 如需启用 FQDN 访问，在启动 BE 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](./preparation/environment_configurations.md#主机名)。
    > - 启动 BE 节点时无需指定参数 `--host_type`。
 
 4. 查看 BE 日志，检查 BE 节点是否启动成功。
@@ -194,9 +195,9 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 Compute Node（CN）是一种无状态的计算服务，本身不存储数据。您可以通过添加 CN 节点为查询提供额外的计算资源。您可以使用 BE 部署文件部署 CN 节点。CN 节点自 v2.4 版本起支持。
 
-1. 进入先前准备好的 [StarRocks BE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 CN 配置文件 **be/conf/cn.conf**。
+1. 进入先前准备好的 [StarRocks BE 部署文件](./preparation/prepare_deployment_files.md)所在路径，修改 CN 配置文件 **be/conf/cn.conf**。
 
-   a. 如果任何在 [环境配置清单](../deployment/environment_configurations.md) 中提到的 CN 端口被占用，您必须在 CN 配置文件中为其分配其他可用端口。.
+   a. 如果任何在 [环境配置清单](./preparation/environment_configurations.md) 中提到的 CN 端口被占用，您必须在 CN 配置文件中为其分配其他可用端口。.
 
       ```YAML
       be_port = vvvv                   # 默认值：9060
@@ -223,7 +224,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
       JAVA_HOME = <path_to_JDK>
       ```
 
-   由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
+   由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/configuration/BE_parameters/BE_parameters.md) 了解更多 CN 高级配置项。
 
 2. 启动 CN 节点。
 
@@ -233,7 +234,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
    > **注意**
    >
-   > - 如需启用 FQDN 访问，在启动 CN 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](../deployment/environment_configurations.md#主机名)。
+   > - 如需启用 FQDN 访问，在启动 CN 节点之前，请确保您已经在 **/etc/hosts** 中为所有实例分配了主机名。有关详细信息，请参考 [环境配置清单 - 主机名](./preparation/environment_configurations.md#主机名)。
    > - 启动 CN 节点时无需指定参数 `--host_type`。
 
 3. 查看 CN 日志，检查 CN 节点是否启动成功。
@@ -519,4 +520,4 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
 ## 下一步
 
-成功部署 StarRocks 集群后，您可以参考 [部署后设置](../deployment/post_deployment_setup.md) 以获取有关初始管理措施的说明。
+成功部署 StarRocks 集群后，您可以参考 [部署后设置](./manage_deployment/post_deployment_setup.md) 以获取有关初始管理措施的说明。

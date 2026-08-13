@@ -9,7 +9,7 @@ description: "按照指定格式将字符串转换为 DATE 类型的值。"
 
 按照 `format` 指定的格式将 `str` 转换为 DATE 类型的值。如果转换结果不对，返回 NULL。
 
-该函数与 [str_to_date](../date-time-functions/str_to_date.md) 函数功能相同，只是返回值数据类型不同。
+该函数与 [str_to_date](./str_to_date.md) 函数功能相同，只是返回值数据类型不同。
 
 ## 语法
 
