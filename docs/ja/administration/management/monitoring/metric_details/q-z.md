@@ -13,7 +13,7 @@ description: "Alphabetical q - z"
 - [非同期マテリアライズドビューのメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクスとStarletダッシュボードのメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
 
 :::
 
@@ -437,7 +437,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 すべてのトランザクションメトリクスは以下のラベルを共有します。
 
-- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`: 報告元のFEノードがリーダーであるかどうかを示します。リーダーFE (`is_leader="true"`) のみが実際のメトリクス値を報告します。フォロワーは `is_leader="false"` となり、データは報告しません。
 
 ## `starrocks_fe_query_resource_group`
@@ -698,7 +698,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 ## `threadpool_task_exception_total`
 
 - 単位: カウント
-- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
+- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
 
 ## `thrift_connections_total`
 

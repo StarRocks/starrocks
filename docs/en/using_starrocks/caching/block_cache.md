@@ -25,12 +25,12 @@ You can configure Data Cache using the following CN(BE) configuration items:
 
 ### Cache directory
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path) (In shared-data clusters, this item is used to specify the root path where the cached data is stored.)
 
 ### Cache disk size
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
-- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
+- [starlet_star_cache_disk_size_percent](../../administration/configuration/BE_parameters/BE_parameters.md#starlet_star_cache_disk_size_percent)
 
 The disk size of the cache in a shared-data cluster takes the greater value between `datacache_disk_size` and `starlet_star_cache_disk_size_percent`.
 

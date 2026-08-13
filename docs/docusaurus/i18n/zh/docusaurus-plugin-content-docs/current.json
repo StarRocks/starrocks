@@ -15,10 +15,6 @@
     "message": "最佳实践",
     "description": "The label for category Best Practices in sidebar docs"
   },
-  "sidebar.docs.category.Project Help": {
-    "message": "技术支持",
-    "description": "The label for category Project Help in sidebar docs"
-  },
   "sidebar.docs.category.Deployment": {
     "message": "部署 StarRocks",
     "description": "The label for category Deployment in sidebar docs"
@@ -218,10 +214,6 @@
   "sidebar.docs.category.SQL Statements": {
     "message": "SQL 参考",
     "description": "The label for category SQL Statements in sidebar docs"
-  },
-  "sidebar.docs.category.SQL Statements.link.generated-index.title": {
-    "message": "SQL 命令",
-    "description": "The generated-index page title for category SQL Statements in sidebar docs"
   },
   "sidebar.docs.category.User account management": {
     "message": "用户账户管理",
@@ -571,14 +563,6 @@
     "message": "查询调优",
     "description": "The label for category Query Tuning in sidebar docs"
   },
-  "sidebar.docs.category.Query Tuning.link.generated-index.title": {
-    "message": "查询调优最佳实践",
-    "description": "The generated-index page title for category Query Tuning in sidebar docs"
-  },
-  "sidebar.docs.category.Query Tuning.link.generated-index.description": {
-    "message": "学习如何在 StarRocks 中分析、调优和优化查询。",
-    "description": "The generated-index page description for category Query Tuning in sidebar docs"
-  },
   "sidebar.docs.category.数据分布": {
     "message": "数据分布",
     "description": "The label for category 数据分布 in sidebar docs"
@@ -598,5 +582,25 @@
   "sidebar.docs.category.dictionary": {
     "message": "dictionary",
     "description": "The label for category dictionary in sidebar docs"
+  },
+  "sidebar.docs.category.datasource-catalog": {
+    "message": "数据目录",
+    "description": "The label for category 'Catalog' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.migration-loading": {
+    "message": "导入数据",
+    "description": "The label for category 'Data Loading' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.root-loading": {
+    "message": "导入数据",
+    "description": "The label for category 'Data Loading' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.sql-data-type-string": {
+    "message": "字符串类型",
+    "description": "The label for category 'String' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.sql-fxn-string": {
+    "message": "字符串函数",
+    "description": "The label for category 'String' in sidebar 'docs'"
   }
 }
