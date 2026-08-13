@@ -128,7 +128,12 @@ jobs:
         run: |
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service
-          retry git pull
+          # Force to upstream instead of `git pull`: the shared /var/lib copy can be
+          # transiently dirty (the backport flow edits ci_robot/files/backport_blacklist.txt
+          # then commits/force-pushes), which makes a plain pull fail with "local changes
+          # would be overwritten by merge". We only need the latest tooling here.
+          retry git fetch origin
+          git reset --hard @{u}
 
       - name: pr branch
         run: |
@@ -247,7 +252,7 @@ jobs:
           if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
             cp -rf /var/lib/elastic-service ./elastic-service
           fi
-          cd elastic-service && retry git pull
+          cd elastic-service && retry git fetch origin && git reset --hard @{u}
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
@@ -341,7 +346,12 @@ jobs:
         run: |
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service
-          retry git pull
+          # Force to upstream instead of `git pull`: the shared /var/lib copy can be
+          # transiently dirty (the backport flow edits ci_robot/files/backport_blacklist.txt
+          # then commits/force-pushes), which makes a plain pull fail with "local changes
+          # would be overwritten by merge". We only need the latest tooling here.
+          retry git fetch origin
+          git reset --hard @{u}
 
       - name: pr branch
         run: |
@@ -460,7 +470,7 @@ jobs:
           if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
             cp -rf /var/lib/elastic-service ./elastic-service
           fi
-          cd elastic-service && retry git pull
+          cd elastic-service && retry git fetch origin && git reset --hard @{u}
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
