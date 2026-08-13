@@ -301,7 +301,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：`sample` 模式（首页采样）下，为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, zstd_compression_dict_sample_bytes)`，因此该参数同时限定了 `sample` 模式下的字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
+- 描述：为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, zstd_compression_dict_sample_bytes)`，因此该参数同时限定了字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
 - 引入版本：v4.2
 
 ### cumulative_compaction_check_interval_seconds

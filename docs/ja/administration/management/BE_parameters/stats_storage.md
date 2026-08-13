@@ -241,7 +241,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: バイト
 - 変更可能: はい
-- 説明: `sample` モード (先頭ページサンプリング) で圧縮ディクショナリを構築する際に、最初の対象データページからサンプリングするバイト数。既定値は 64 KB のデータページ約 1 つ分に相当します。実際のサンプルは `min(ページのエンコード済み値のサイズ, zstd_compression_dict_sample_bytes)` となるため、このパラメータは `sample` モードにおけるディクショナリサイズの上限にもなります。この値は列ライターの作成時に読み取られるため、変更はそれ以降に書き込まれる Segment に対して有効になります。このパラメータは `enable_zstd_compression_dict` が `true` の場合にのみ有効です。
+- 説明: 圧縮ディクショナリを構築する際に、最初の対象データページからサンプリングするバイト数。既定値は 64 KB のデータページ約 1 つ分に相当します。実際のサンプルは `min(ページのエンコード済み値のサイズ, zstd_compression_dict_sample_bytes)` となるため、このパラメータはディクショナリサイズの上限にもなります。この値は列ライターの作成時に読み取られるため、変更はそれ以降に書き込まれる Segment に対して有効になります。このパラメータは `enable_zstd_compression_dict` が `true` の場合にのみ有効です。
 - 導入バージョン: v4.2
 
 ### create_tablet_worker_count

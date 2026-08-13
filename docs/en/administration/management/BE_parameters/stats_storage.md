@@ -295,7 +295,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The number of bytes sampled from the first eligible data page to build the compression dictionary in `sample` mode (first-page sampling). The default corresponds to roughly one 64 KB data page. The actual sample is `min(size of the encoded values of the page, zstd_compression_dict_sample_bytes)`, so this parameter also bounds the dictionary size in `sample` mode. The value is read when a column writer is created, so a change takes effect for the segments written afterwards. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
+- Description: The number of bytes sampled from the first eligible data page to build the compression dictionary. The default corresponds to roughly one 64 KB data page. The actual sample is `min(size of the encoded values of the page, zstd_compression_dict_sample_bytes)`, so this parameter also bounds the dictionary size. The value is read when a column writer is created, so a change takes effect for the segments written afterwards. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
 - Introduced in: v4.2
 
 ### create_tablet_worker_count
