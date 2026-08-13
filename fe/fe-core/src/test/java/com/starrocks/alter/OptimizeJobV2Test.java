@@ -231,19 +231,10 @@ public class OptimizeJobV2Test extends DDLTestBase {
      */
     @Test
     public void testTempPartitionNotVisibleWaitsThenFinishes() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
-
-        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-
-        job.runPendingJob();
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
 
         // the rewrite of the temp partition is committed but not published yet
         List<Long> rewriteTxnIds = Lists.newArrayList();
@@ -275,21 +266,13 @@ public class OptimizeJobV2Test extends DDLTestBase {
      */
     @Test
     public void testInFlightIngestionOnSourcePartitionCancelsJob() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
         Partition sourcePartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
         long sourcePartitionId = sourcePartition.getId();
 
-        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-
-        job.runPendingJob();
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
 
         // a load starts writing into the source partition while the rewrite is running
         long txnId = beginTxnWriting(db, olapTable, sourcePartition);
@@ -312,19 +295,10 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     @Test
     public void testOptimizeTableFinishWithoutConcurrentIngestion() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
-
-        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-
-        job.runPendingJob();
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
 
         markAllRewriteTasksSucceeded(db, job);
 
@@ -349,7 +323,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\"replication_num\" = \"1\");");
 
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "testOptimizePartitioned");
@@ -359,14 +332,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
                 "alter table testOptimizePartitioned partition (p1) distributed by hash(v1) buckets 5",
                 starRocksAssert.getCtx());
-        schemaChangeHandler.process(stmt.getAlterClauseList(), db, olapTable);
-        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-
-        job.runPendingJob();
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, stmt);
 
         // a load is writing into p2, which this job does not replace
         beginTxnWriting(db, olapTable, untouchedPartition);
@@ -378,6 +344,24 @@ public class OptimizeJobV2Test extends DDLTestBase {
         // p1 was replaced by its rewritten partition, p2 was left alone
         Assertions.assertNotEquals(optimizedPartition.getId(), olapTable.getPartition("p1").getId());
         Assertions.assertEquals(untouchedPartition.getId(), olapTable.getPartition("p2").getId());
+    }
+
+    /**
+     * Submit the given alter statement and drive its optimize job until the rewrite tasks are outstanding,
+     * which is the state every concurrency test starts from.
+     */
+    private OptimizeJobV2 startOptimizeJobUpToRunning(Database db, OlapTable olapTable, AlterTableStmt stmt)
+            throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(stmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assertions.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        return job;
     }
 
     /**

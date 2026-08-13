@@ -14,6 +14,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,16 +50,8 @@ public class TxnStateLogUtils {
      */
     public static void logIgnoredTablets(TransactionState txnState, long tableId,
                                          Map<Long, List<Long>> ignoredTabletsByPartition) {
-        if (ignoredTabletsByPartition.isEmpty()) {
-            return;
-        }
         for (Map.Entry<Long, List<Long>> entry : ignoredTabletsByPartition.entrySet()) {
-            List<Long> tabletIds = entry.getValue();
-            LOG.warn("{}: txn {} (label {}) wrote {} tablets of table {} physical partition {} which no longer"
-                            + " exists, those rows are dropped while the transaction still succeeds, tablets: {}{}",
-                    ROWS_DROPPED_MARKER, txnState.getTransactionId(), txnState.getLabel(), tabletIds.size(),
-                    tableId, entry.getKey(), tabletIds.subList(0, Math.min(tabletIds.size(), MAX_REPORTED_TABLETS)),
-                    tabletIds.size() > MAX_REPORTED_TABLETS ? " ..." : "");
+            LOG.warn(buildIgnoredTabletsMessage(txnState, tableId, entry.getKey(), entry.getValue()));
         }
     }
 
@@ -66,8 +59,25 @@ public class TxnStateLogUtils {
      * Report a committed partition that disappeared before its transaction could be published.
      */
     public static void logDroppedCommittedPartition(TransactionState txnState, long tableId, long physicalPartitionId) {
-        LOG.warn("{}: txn {} (label {}) committed into table {} physical partition {} which was dropped before"
-                        + " publish, the partition is removed from the transaction and its rows are lost",
+        LOG.warn(buildDroppedCommittedPartitionMessage(txnState, tableId, physicalPartitionId));
+    }
+
+    @VisibleForTesting
+    static String buildIgnoredTabletsMessage(TransactionState txnState, long tableId, long physicalPartitionId,
+                                             List<Long> tabletIds) {
+        String reported = tabletIds.subList(0, Math.min(tabletIds.size(), MAX_REPORTED_TABLETS))
+                + (tabletIds.size() > MAX_REPORTED_TABLETS ? " ..." : "");
+        return String.format("%s: txn %d (label %s) wrote %d tablets of table %d physical partition %d which no"
+                        + " longer exists, those rows are dropped while the transaction still succeeds, tablets: %s",
+                ROWS_DROPPED_MARKER, txnState.getTransactionId(), txnState.getLabel(), tabletIds.size(),
+                tableId, physicalPartitionId, reported);
+    }
+
+    @VisibleForTesting
+    static String buildDroppedCommittedPartitionMessage(TransactionState txnState, long tableId,
+                                                        long physicalPartitionId) {
+        return String.format("%s: txn %d (label %s) committed into table %d physical partition %d which was dropped"
+                        + " before publish, the partition is removed from the transaction and its rows are lost",
                 ROWS_DROPPED_MARKER, txnState.getTransactionId(), txnState.getLabel(), tableId, physicalPartitionId);
     }
 }

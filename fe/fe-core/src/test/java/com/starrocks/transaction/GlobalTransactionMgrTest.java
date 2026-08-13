@@ -1618,15 +1618,9 @@ public class GlobalTransactionMgrTest {
         long logicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1;
         long physicalPartitionId = logicalPartitionId + 100;
 
-        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
-                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable1,
-                transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        // register the write target the same way the tablet sink does when the load plan is built
-        TransactionState transactionState =
-                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId);
-        transactionState.addPartitionLoadedIndexes(GlobalStateMgrTestUtil.testTableId1, physicalPartitionId,
-                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
-        Assertions.assertEquals(TransactionStatus.PREPARE, transactionState.getTransactionStatus());
+        long transactionId = beginTxnTargeting(physicalPartitionId);
+        Assertions.assertEquals(TransactionStatus.PREPARE, masterTransMgr
+                .getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId).getTransactionStatus());
 
         Assertions.assertEquals(Lists.newArrayList(transactionId),
                 masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
@@ -1640,13 +1634,7 @@ public class GlobalTransactionMgrTest {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
 
-        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
-                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable1,
-                transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        TransactionState transactionState =
-                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId);
-        transactionState.addPartitionLoadedIndexes(GlobalStateMgrTestUtil.testTableId1, physicalPartitionId,
-                Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        beginTxnTargeting(physicalPartitionId);
 
         // another partition of the same table must not be reported: ingestion into a partition that is not
         // being replaced has to leave the replacement alone
@@ -1689,5 +1677,19 @@ public class GlobalTransactionMgrTest {
                 Sets.newHashSet(GlobalStateMgrTestUtil.testPartitionId1)).isEmpty());
         Assertions.assertTrue(masterTransMgr.existCommittedTxns(GlobalStateMgrTestUtil.testDbId1,
                 GlobalStateMgrTestUtil.testTableId1, physicalPartitionId));
+    }
+
+    /**
+     * Begin a transaction and register the given physical partition as a write target, which is what the
+     * tablet sink does when a load plan is built, before any row reaches a backend.
+     */
+    private long beginTxnTargeting(long physicalPartitionId) throws Exception {
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable1,
+                transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId)
+                .addPartitionLoadedIndexes(GlobalStateMgrTestUtil.testTableId1, physicalPartitionId,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        return transactionId;
     }
 }
