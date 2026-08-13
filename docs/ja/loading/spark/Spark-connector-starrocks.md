@@ -132,7 +132,7 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 - **必須**: NO
 - **デフォルト値**: `TRUE`
-- **説明**: [Stream Load トランザクションインターフェース](../../Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
+- **説明**: [Stream Load トランザクションインターフェース](../Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
 
 ### `starrocks.write.buffer.size`
 
