@@ -1,0 +1,7 @@
+position: 150
+label: 'FAQ'
+collapsible: true
+collapsed: true
+link:
+  id: faq
+  type: doc

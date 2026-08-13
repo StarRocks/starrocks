@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 sidebar_label: "Troubleshooting"
 description: "How to monitor data load job status via SQL interfaces, identify performance bottlenecks, and troubleshoot anomalies in StarRocks data loading operations."
@@ -496,7 +497,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-These metrics are available under the **BE Load** category in Grafana. If you cannot find this category, verify that you are using the [latest Grafana dashboard template](../../administration/management/monitoring/Monitor_and_Alert.md#125-configure-dashboard).
+These metrics are available under the **BE Load** category in Grafana. If you cannot find this category, verify that you are using the [latest Grafana dashboard template](../../administration/management/monitoring/monitoring.md#125-configure-dashboard).
 
 ##### ThreadPool
 

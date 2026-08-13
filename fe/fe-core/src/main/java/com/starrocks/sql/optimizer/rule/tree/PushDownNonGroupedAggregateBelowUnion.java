@@ -200,7 +200,7 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
             // 2. Build a new UNION ALL operator.
             PhysicalUnionOperator newUnion = new PhysicalUnionOperator(unionOutputColumns, newChildOutputColumns,
                     true, union.getLimit(), union.getPredicate(), null,
-                    union.isFromIcebergEqualityDeleteRewrite());
+                    union.isFromIcebergEqualityDeleteRewrite(), union.getGlobalDicts());
             OptExpression newUnionExpr = OptExpression.builder()
                     .with(ctx.unionExpr())
                     .setOp(newUnion)

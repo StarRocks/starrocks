@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "DataGrip から StarRocks JDBC または MySQL ドライバーを使用して接続し、スキーマブラウジングとクエリを行う方法を説明します。"
 ---

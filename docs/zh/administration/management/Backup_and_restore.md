@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks 支持将数据备份为快照并从远端存储恢复至任意集群。"
 ---
