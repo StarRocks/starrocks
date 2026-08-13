@@ -24,6 +24,7 @@
 namespace starrocks {
 
 class ColumnExprPredicate;
+class PredicateTree;
 
 // Wrapper for ColumnExprPredicate that adds segment-specific inverted index bitmap state.
 // Used for fallback evaluation of MATCH predicates in OR queries when multiple segments
@@ -74,5 +75,9 @@ private:
     const std::vector<rowid_t>* _rowid_buffer;     // Pointer to SegmentIterator's rowid buffer
     mutable std::vector<uint8_t> _tmp_select;      // Reusable buffer for evaluate_and/evaluate_or
 };
+
+// Returns whether any remaining predicate for cid needs physical column data.
+// A GIN fallback predicate evaluates a pre-loaded rowid bitmap and does not read the column.
+bool remaining_predicates_require_column(const PredicateTree& tree, ColumnId cid);
 
 } // namespace starrocks

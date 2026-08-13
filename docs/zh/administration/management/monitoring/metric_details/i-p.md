@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../monitoring.md)。
 
 :::
 
@@ -55,37 +55,6 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 标签：`compaction_type` (`manual` 或 `auto`)
 - 描述：Iceberg 压缩 (`rewrite_data_files`) 任务的总数。
-
-## `iceberg_delete_bytes`
-
-- 单位：字节
-- 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，这表示已删除数据文件的大小。对于 `position` 删除，这表示创建的位置删除文件的大小。
-
-## `iceberg_delete_duration_ms_total`
-
-- 单位：毫秒
-- 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务的总执行时间（毫秒）。每个任务的持续时间在其结束后添加。`delete_type` 区分两种删除方法。
-
-## `iceberg_delete_rows`
-
-- 单位：行
-- 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，这表示已删除数据文件中的行数。对于 `position` 删除，这表示创建的位置删除数。
-
-## `iceberg_delete_total`
-
-- 单位：计数
-- 类型：累积
-- 标签：
-  - `status` (`success` 或 `failed`)
-  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
-  - `delete_type` (`position` 或 `metadata`)
-- 描述：针对 Iceberg 表的 `DELETE` 任务总数。无论任务成功或失败，每当任务结束时，该指标都会增加 1。`delete_type` 区分两种删除方法：`position`（生成位置删除文件）和 `metadata`（元数据级别删除）。
 
 ## `iceberg_merge_bytes`
 
