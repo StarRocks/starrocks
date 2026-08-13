@@ -872,6 +872,10 @@ public class CreateTableAnalyzerTest {
         // the hidden REPLACE column must not make the table look like it carries a user REPLACE value,
         // which would forbid dropping a key column
         starRocksAssert.alterTable("ALTER TABLE test.t_agg_drop_key DROP COLUMN `channel`");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_agg_drop_key");
+        Assertions.assertTrue(table.getBaseSchema().stream().noneMatch(c -> c.getName().equals("channel")));
+        Assertions.assertNotNull(getGeneratedPartitionColumn("t_agg_drop_key"));
     }
 
     @Test
