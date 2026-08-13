@@ -19,6 +19,7 @@
 #include <cstdint>
 
 #include "base/testutil/parallel_test.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -26,6 +27,87 @@
 #include "column/vectorized_fwd.h"
 
 namespace starrocks {
+
+// The element offsets claim ~2.5GB each (bytes buffer stays empty; serialize_size only reads offsets)
+// so their sum overflows uint32 without allocating multi-GB. |*out_data| lets the caller
+// reset_column() before scope end, since ~BinaryColumnBase() DCHECKs bytes/offsets consistency.
+static ArrayColumn::MutablePtr make_oversized_serialize_array(LargeBinaryColumn** out_data) {
+    auto data = LargeBinaryColumn::create();
+    *out_data = data.get();
+    data->get_offset().push_back(2'500'000'000ULL);
+    data->get_offset().push_back(5'000'000'000ULL);
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(0);
+    auto elements = NullableColumn::create(std::move(data), std::move(nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    return ArrayColumn::create(std::move(elements), std::move(offsets));
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_serialize_size_saturates_on_overflow) {
+    LargeBinaryColumn* data = nullptr;
+    auto column = make_oversized_serialize_array(&data);
+    ASSERT_EQ(1, column->size());
+    ASSERT_LT(column->elements_column_raw_ptr()->serialize_size(0), Column::SERIALIZE_SIZE_LIMIT);
+    ASSERT_LT(column->elements_column_raw_ptr()->serialize_size(1), Column::SERIALIZE_SIZE_LIMIT);
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->max_one_element_serialize_size());
+    EXPECT_TRUE(serialize_size_overflow(column->serialize_size(0)));
+    data->reset_column();
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_serialize_size_normal_not_saturated) {
+    auto offsets = UInt32Column::create();
+    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
+    column->elements_column_raw_ptr()->append_datum("ab");
+    column->elements_column_raw_ptr()->append_datum("cde");
+    column->offsets_column_raw_ptr()->append(2);
+    // 4 (array header) + [1 + 4 + 2] + [1 + 4 + 3]
+    EXPECT_EQ(19u, column->serialize_size(0));
+    EXPECT_FALSE(serialize_size_overflow(column->serialize_size(0)));
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_nullable_serialize_size_saturates_on_overflow) {
+    LargeBinaryColumn* data = nullptr;
+    auto array = make_oversized_serialize_array(&data);
+    auto null_col = NullColumn::create();
+    null_col->append(0);
+    auto nullable = NullableColumn::create(std::move(array), std::move(null_col));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, nullable->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, nullable->max_one_element_serialize_size());
+    data->reset_column();
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_serialize_size_overflow_helper) {
+    EXPECT_EQ(UINT32_MAX, Column::SERIALIZE_SIZE_LIMIT);
+    EXPECT_FALSE(serialize_size_overflow(0));
+    EXPECT_FALSE(serialize_size_overflow(static_cast<size_t>(UINT32_MAX) - 1));
+    EXPECT_TRUE(serialize_size_overflow(static_cast<size_t>(UINT32_MAX)));
+    EXPECT_TRUE(serialize_size_overflow(static_cast<size_t>(UINT32_MAX) + 1));
+    EXPECT_TRUE(serialize_size_overflow(static_cast<size_t>(5) * 1024 * 1024 * 1024));
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_nullable_serialize_size_null_row) {
+    // A null row short-circuits to the 1-byte null flag and must not be flagged as overflow.
+    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(0);
+    auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    auto null_col = NullColumn::create();
+    null_col->append(1); // row 0 is NULL
+    auto nullable = NullableColumn::create(std::move(array), std::move(null_col));
+    EXPECT_EQ(sizeof(uint8_t), nullable->serialize_size(0));
+    EXPECT_FALSE(serialize_size_overflow(nullable->serialize_size(0)));
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_create) {

@@ -750,4 +750,33 @@ PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupport
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_serialize_size_saturates_on_huge_element) {
+    // Offset claims 5GB with no bytes allocated (serialize_size only reads offsets); reset_column()
+    // before scope end since ~BinaryColumnBase() DCHECKs bytes/offsets consistency.
+    auto column = BinaryColumn::create();
+    column->get_offset().push_back(5ULL * 1024 * 1024 * 1024);
+    ASSERT_EQ(1, column->size());
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->max_one_element_serialize_size());
+    EXPECT_TRUE(serialize_size_overflow(column->serialize_size(0)));
+    column->reset_column();
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_serialize_size_boundary) {
+    // Exactly UINT32_MAX - 1 stays representable; exactly UINT32_MAX saturates.
+    auto below = BinaryColumn::create();
+    below->get_offset().push_back(static_cast<uint64_t>(UINT32_MAX) - 1 - sizeof(uint32_t));
+    EXPECT_EQ(UINT32_MAX - 1, below->serialize_size(0));
+    EXPECT_FALSE(serialize_size_overflow(below->serialize_size(0)));
+    below->reset_column();
+
+    auto at = BinaryColumn::create();
+    at->get_offset().push_back(static_cast<uint64_t>(UINT32_MAX) - sizeof(uint32_t));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, at->serialize_size(0));
+    EXPECT_TRUE(serialize_size_overflow(at->serialize_size(0)));
+    at->reset_column();
+}
+
 } // namespace starrocks

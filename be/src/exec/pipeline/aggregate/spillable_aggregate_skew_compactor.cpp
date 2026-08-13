@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "common/runtime_profile.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -61,9 +62,9 @@ spill::SpillSkewChunkCompactor make_spill_aggregate_skew_compactor(AggregatorPar
             if (!chunk_merging->is_empty()) {
                 RETURN_IF_ERROR(merger->evaluate_groupby_exprs(chunk_merging.get()));
                 if (merger->only_group_by_exprs()) {
-                    merger->build_hash_set(chunk_merging->num_rows());
+                    TRY_CATCH_BAD_ALLOC(merger->build_hash_set(chunk_merging->num_rows()));
                 } else {
-                    merger->build_hash_map(chunk_merging->num_rows(), false);
+                    TRY_CATCH_BAD_ALLOC(merger->build_hash_map(chunk_merging->num_rows(), false));
                     RETURN_IF_ERROR(merger->compute_batch_agg_states(chunk_merging.get(), chunk_merging->num_rows()));
                 }
             }
