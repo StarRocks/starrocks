@@ -40,6 +40,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
@@ -219,10 +220,11 @@ public abstract class ScanNode extends PlanNode {
     protected String explainColumnDict(String prefix) {
         StringBuilder output = new StringBuilder();
         if (!appliedDictStringColumns.isEmpty()) {
-            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+            int limit = Math.max(0, Config.explain_dict_column_size);
+            int maxSize = Math.min(appliedDictStringColumns.size(), limit);
             List<String> printList = appliedDictStringColumns.subList(0, maxSize);
             String format_template = "dict_col=%s";
-            if (appliedDictStringColumns.size() > 5) {
+            if (appliedDictStringColumns.size() > limit) {
                 format_template = format_template + "...";
             }
             output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));

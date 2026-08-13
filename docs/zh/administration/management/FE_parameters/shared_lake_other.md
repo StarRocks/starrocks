@@ -886,6 +886,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 获取 Elasticsearch 索引并同步 StarRocks 外部表元数据的时间间隔。
 - 引入版本: -
 
+### `explain_dict_column_size`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: `EXPLAIN VERBOSE` 输出中每个 Scan 节点的 `dict_col` 字段所列出的低基数字典优化列的最大数量。当某个 Scan 节点应用的字典列数量超过该值时，列表将被截断并以省略号结尾。小于或等于 `0` 的值会被视为 `0`，即完全截断该列表。该参数仅影响 `EXPLAIN VERBOSE` 的输出，不会改变字典优化在查询中的实际应用方式。
+- 引入版本: v4.2.0
+
 ### `hive_meta_cache_refresh_interval_s`
 
 - 默认值: 3600 * 2
