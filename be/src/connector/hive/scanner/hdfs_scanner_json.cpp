@@ -59,9 +59,9 @@ Status HdfsJsonReader::_validate_fan_out_targets() const {
     for (const auto& [key, targets] : _desc_dict) {
         for (size_t i = 1; i < targets.size(); i++) {
             if (!(targets[i].second == targets[0].second)) {
-                return Status::NotSupported(fmt::format(
-                        "Json field '{}' is mapped to columns '{}' and '{}' with different types", key,
-                        targets[0].first->col_name(), targets[i].first->col_name()));
+                return Status::NotSupported(
+                        fmt::format("Json field '{}' is mapped to columns '{}' and '{}' with different types", key,
+                                    targets[0].first->col_name(), targets[i].first->col_name()));
             }
         }
     }
@@ -192,8 +192,8 @@ Status HdfsJsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* ch
                 auto* column = chunk->get_column_raw_ptr_by_index(target.column_index);
                 if (primary_column == nullptr) {
                     auto value = field.value().value();
-                    RETURN_IF_ERROR(_construct_column(value, column, target.type,
-                                                      _prev_parsed_position[key_index].key));
+                    RETURN_IF_ERROR(
+                            _construct_column(value, column, target.type, _prev_parsed_position[key_index].key));
                     primary_column = column;
                 } else {
                     column->append(*primary_column, primary_column->size() - 1, 1);
