@@ -61,6 +61,7 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -1653,5 +1654,30 @@ public class MaterializedViewTest extends StarRocksTestBase {
             }
         };
         Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    @Test
+    public void testMVColumnUniqueIdAssignedOnCreate() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_uid_test\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT k1, k2, sum(v1) as total FROM base_t1 GROUP BY k1, k2;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "mv_uid_test");
+
+        List<Column> schema = mv.getBaseSchema();
+        Assertions.assertEquals(3, schema.size());
+        Set<Integer> uniqueIds = new HashSet<>();
+        for (Column col : schema) {
+            Assertions.assertTrue(col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "Column " + col.getName() + " should have a valid unique id, but got " + col.getUniqueId());
+            Assertions.assertTrue(uniqueIds.add(col.getUniqueId()),
+                    "Duplicate column unique id " + col.getUniqueId() + " found for column " + col.getName());
+        }
+        Assertions.assertEquals(schema.size() - 1, mv.getMaxColUniqueId());
+        starRocksAssert.dropMaterializedView("mv_uid_test");
     }
 }
