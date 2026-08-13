@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -73,6 +74,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
@@ -1122,6 +1124,29 @@ public class TransactionState implements Writable, GsonPreProcessable {
             return null;
         }
         return loadedPartitionIndexes.get(physicalPartitionId);
+    }
+
+    /**
+     * Get the physical partitions of the given table that this transaction may write to.
+     * <p>
+     * The returned set is filled in before any data is written to those partitions: the tablet sink
+     * registers its target partitions when the sink is built ({@link com.starrocks.planner.OlapTableSink}),
+     * and partitions opened later at runtime are registered by the FE before their location is handed
+     * back to the BE. A BE can only write to a partition present in the sink parameter, so this set is a
+     * superset of the partitions this transaction can touch. Callers rely on that contract to detect
+     * ingestion that is concurrent with a partition replacement.
+     *
+     * @return physical partition ids, empty if this transaction has not registered any partition yet
+     */
+    public Set<Long> getLoadedPhysicalPartitionIds(long tableId) {
+        readLock();
+        try {
+            Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.get(tableId);
+            return loadedPartitionIndexes == null ? Collections.emptySet()
+                    : ImmutableSet.copyOf(loadedPartitionIndexes.keySet());
+        } finally {
+            readUnlock();
+        }
     }
 
     @Override

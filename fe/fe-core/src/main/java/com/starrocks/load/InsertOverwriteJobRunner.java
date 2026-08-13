@@ -1004,15 +1004,18 @@ public class InsertOverwriteJobRunner {
             if (partition == null) {
                 throw new DmlException("temp partition id:%s does not exist", partitionId);
             }
-            if (hasCommittedNotVisible(partitionId)) {
+            if (hasCommittedNotVisibleTxn(partition)) {
                 throw new DmlException("temp partition %s still has committed transactions not visible",
                         partition.getName());
             }
         }
     }
 
-    protected boolean hasCommittedNotVisible(long partitionId) {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .existCommittedTxns(dbId, tableId, partitionId);
+    /**
+     * Whether the data written into the given temp partition is published, see
+     * {@link PartitionUtils#hasCommittedNotVisibleTxn(long, long, Partition)}. Overridable for testability.
+     */
+    protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+        return PartitionUtils.hasCommittedNotVisibleTxn(dbId, tableId, partition);
     }
 }
