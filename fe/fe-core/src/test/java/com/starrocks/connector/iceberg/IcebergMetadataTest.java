@@ -3625,6 +3625,47 @@ public class IcebergMetadataTest extends TableTestBase {
                 "expected Iceberg's replaced-data-file conflict error, got: " + e.getMessage());
     }
 
+    @Test
+    public void testCommitRewriteFallsBackToCurrentSnapshotWhenBaseMissing() throws Exception {
+        // A rewrite whose sink extra carries no plan-time snapshot -- e.g. a plan that
+        // produced no IcebergScanNode to freeze one from. The commit must still scope
+        // validateFromSnapshot (falling back to the current snapshot) rather than skip it
+        // or fail, so an ordinary rewrite with nothing to conflict against still commits.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotBeforeRewrite = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo rewriteCommit = new TSinkCommitInfo();
+        rewriteCommit.setIs_rewrite(true);
+        rewriteCommit.setIceberg_data_file(buildRewriteOutputDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        // deliberately no setBaseSnapshotId(...)
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(rewriteCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "rewrite commit must produce a snapshot");
+        Assertions.assertNotEquals(snapshotBeforeRewrite, newSnapshot.snapshotId(),
+                "rewrite commit must advance the snapshot id past the pre-rewrite state");
+    }
+
     private long mergeCounterValue(String name, String labelKey, String labelValue) {
         for (Metric<?> metric : MetricRepo.getMetricsByName(name)) {
             if (!(metric instanceof LongCounterMetric)) {
