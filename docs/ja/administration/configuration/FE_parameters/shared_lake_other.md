@@ -375,6 +375,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：HdfsFsManager が管理する未使用のキャッシュ HDFS/ObjectStore FileSystem の Time-to-live (秒単位)。FileSystemExpirationChecker (60 秒ごとに実行) はこの値を使用して各 HdfsFs.isExpired(...) を呼び出します。期限切れになるとマネージャーは基盤となる FileSystem を閉じ、キャッシュから削除します。アクセサーメソッド (例: `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`) は最終アクセス時刻を更新するため、有効期限は非アクティブに基づいています。値が小さいとアイドルリソースの保持は減りますが、再オープンオーバーヘッドが増加します。値が大きいとハンドルが長く保持され、より多くのリソースを消費する可能性があります。
 - 導入時期：v3.2.0
 
+### `enable_lake_add_index_fast_path`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データテーブルに対する ADD INDEX および DROP INDEX の変更を、シャドウインデックスを作成しないメタデータのみの高速パスで処理するかどうか。`false` に設定すると、通常のスキーマ変更の経路にフォールバックします。この項目はセーフティバルブとして用意されており、高速パスがサポートされるデフォルトです。
+
 ### `lake_autovacuum_grace_period_minutes`
 
 - デフォルト：30
