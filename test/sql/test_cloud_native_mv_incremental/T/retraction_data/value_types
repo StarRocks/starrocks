@@ -59,13 +59,18 @@ SELECT id, v, s FROM mv_pv_null ORDER BY id;
 SELECT COUNT(*) AS diff FROM (SELECT id,v,s FROM mv_pv_null EXCEPT SELECT id,v,s FROM pv_null) t;
 SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,s FROM pv_null EXCEPT SELECT id,v,s FROM mv_pv_null) t;
 
--- name: test_ivm_ret_value_struct_unsupported @cloud
--- KNOWN BUG (CelerData/celerdata-enterprise#59543): a STRUCT value column fails IVM MV creation on the retractable
--- path -- "StructType SlotRef must have an non-empty usedStructFiledPos". A struct in a single-table
--- projection has no reason to be rejected (only non-orderable JOIN output is). Asserting the current
--- error so the gap is tracked; flip this to a supported diff=0 case once the plan-generation bug is fixed.
+-- name: test_ivm_ret_value_struct @cloud
+-- Complex value type (STRUCT) carried through a retractable PK projection MV. EXCEPT cannot compare
+-- STRUCT, so the deterministic post-DML snapshot is the oracle: after update id2 and delete id3 the MV
+-- must equal the base rows {(1,{"a":1,"b":10},a),(2,{"a":9,"b":90},b)}.
 CREATE TABLE pv_st (id INT NOT NULL, st STRUCT<a INT, b INT>, s VARCHAR(16))
   PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
-INSERT INTO pv_st VALUES (1,row(1,10),'a'),(2,row(2,20),'b');
+INSERT INTO pv_st VALUES (1,row(1,10),'a'),(2,row(2,20),'b'),(3,row(3,30),'c');
 CREATE MATERIALIZED VIEW mv_pv_st REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, st, s FROM pv_st;
+REFRESH MATERIALIZED VIEW mv_pv_st WITH SYNC MODE;
+UPDATE pv_st SET st = row(9,90) WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pv_st WITH SYNC MODE;
+DELETE FROM pv_st WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_pv_st WITH SYNC MODE;
+SELECT id, st, s FROM mv_pv_st ORDER BY id;

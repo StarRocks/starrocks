@@ -122,16 +122,29 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,s FROM pv_null EXCEPT SELECT i
 -- result:
 0
 -- !result
--- name: test_ivm_ret_value_struct_unsupported @cloud
+-- name: test_ivm_ret_value_struct @cloud
 CREATE TABLE pv_st (id INT NOT NULL, st STRUCT<a INT, b INT>, s VARCHAR(16))
   PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
-INSERT INTO pv_st VALUES (1,row(1,10),'a'),(2,row(2,20),'b');
+INSERT INTO pv_st VALUES (1,row(1,10),'a'),(2,row(2,20),'b'),(3,row(3,30),'c');
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv_pv_st REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, st, s FROM pv_st;
 -- result:
-[REGEX].*StructType SlotRef must have.*non-empty usedStructFiledPos.*
+-- !result
+REFRESH MATERIALIZED VIEW mv_pv_st WITH SYNC MODE;
+UPDATE pv_st SET st = row(9,90) WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pv_st WITH SYNC MODE;
+DELETE FROM pv_st WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pv_st WITH SYNC MODE;
+SELECT id, st, s FROM mv_pv_st ORDER BY id;
+-- result:
+1	{"a":1,"b":10}	a
+2	{"a":9,"b":90}	b
 -- !result
