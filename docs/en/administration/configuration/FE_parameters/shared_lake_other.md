@@ -356,6 +356,14 @@ This topic introduces the following types of FE configurations:
 - Description: Time-to-live in seconds for an unused cached HDFS/ObjectStore FileSystem managed by HdfsFsManager. The FileSystemExpirationChecker (runs every 60s) calls each HdfsFs.isExpired(...) using this value; when expired the manager closes the underlying FileSystem and removes it from the cache. Accessor methods (for example `HdfsFs.getDFSFileSystem`, `getUserName`, `getConfiguration`) update the last-access timestamp, so expiry is based on inactivity. Lower values reduce idle resource holding but increase reopen overhead; higher values keep handles longer and may consume more resources.
 - Introduced in: v3.2.0
 
+### `enable_lake_add_index_fast_path`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to route ADD INDEX and DROP INDEX alters on shared-data tables through the metadata-only fast path, which creates no shadow index. Set this item to `false` to fall back to the regular schema change path. This item is intended as a safety valve; the fast path is the supported default.
+
 ### `lake_autovacuum_grace_period_minutes`
 
 - Default: 30
