@@ -166,7 +166,7 @@ SELECT /*+ SET_VAR
 
 ### ユーザーのプロパティとして変数を設定
 
-[ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
+[ALTER USER](./sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
 
 例：
 
