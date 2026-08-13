@@ -290,6 +290,34 @@ public class MaterializedViewAnalyzer {
     }
 
     /**
+     * How an mv's key columns relate to its sort key. A duplicate-key mv has no row identity of its own, so
+     * its key columns ARE its sort key and both lists are equal; an incremental mv is keyed by
+     * {@code __ROW_ID__}, so the two can differ.
+     */
+    private record MvKeyLayout(List<String> keyColumns, List<String> sortKeyColumns) {
+        static MvKeyLayout merged(List<String> columns) {
+            List<String> shared = columns == null ? Lists.newArrayList() : columns;
+            return new MvKeyLayout(shared, shared);
+        }
+
+        boolean isSortKeyIndependent() {
+            return !keyColumns.equals(sortKeyColumns);
+        }
+    }
+
+    private static MvKeyLayout resolveMvKeyLayout(CreateMaterializedViewStatement statement,
+                                                  ConnectContext context) {
+        List<String> sortKeys = statement.getSortKeys();
+        if (isIvmSortKeyIndependent(statement, context)) {
+            return new MvKeyLayout(Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID), sortKeys);
+        }
+        // An AUTO_INCREMENT __ROW_ID__ is the primary key, so it has to be in the shared list, and leading.
+        // A list left empty here is filled in from the columns once they exist.
+        return MvKeyLayout.merged(statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT
+                ? prependRowIdToKeys(sortKeys) : sortKeys);
+    }
+
+    /**
      * Whether the incremental mv's {@code ORDER BY} becomes a sort key of its own instead of being merged
      * into the primary key. Never for a range-distributed mv: there the sort key defines the tablet
      * boundaries and the storage engine requires it to equal the primary key.
@@ -452,16 +480,11 @@ public class MaterializedViewAnalyzer {
 
             // set the columns into createMaterializedViewStatement
             List<ColWithComment> colWithComments = statement.getColWithComments();
-            List<String> keyCols = statement.getSortKeys();
-            boolean isSortKeyIndependent = isIvmSortKeyIndependent(statement, context);
-            statement.setSortKeyIndependent(isSortKeyIndependent);
-            if (!isSortKeyIndependent && statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT) {
-                // AUTO_INCREMENT __ROW_ID__ is the PK; force it to be the leading sort key.
-                keyCols = prependRowIdToKeys(keyCols);
-                statement.setSortKeys(keyCols);
-            }
+            MvKeyLayout keyLayout = resolveMvKeyLayout(statement, context);
+            statement.setSortKeys(keyLayout.sortKeyColumns());
+            statement.setSortKeyIndependent(keyLayout.isSortKeyIndependent());
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
-                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyCols, isSortKeyIndependent);
+                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyLayout);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
@@ -623,8 +646,7 @@ public class MaterializedViewAnalyzer {
                                                                        RowIdStrategy rowIdStrategy,
                                                                        QueryStatement queryStatement,
                                                                        List<ColWithComment> colWithComments,
-                                                                       List<String> keyCols,
-                                                                       boolean isSortKeyIndependent) {
+                                                                       MvKeyLayout keyLayout) {
             // note: PRIMARY_KEYS uses REPLACE aggregate type for now
             AggregateType aggregateType = keysType == KeysType.DUP_KEYS ?
                     AggregateType.NONE : AggregateType.REPLACE;
@@ -687,23 +709,23 @@ public class MaterializedViewAnalyzer {
                 mvColumns.add(column);
             }
 
-            // Append the storage-filled __ROW_ID__. Final position is decided by the reorder step
-            // below (caller has already put __ROW_ID__ at the head of keyCols).
+            // Append the storage-filled __ROW_ID__. Final position is decided by the reorder step below.
             // QUERY_COMPUTED MVs already have __ROW_ID__ from the loop above (IVMAnalyzer adds it).
             if (rowIdStrategy == RowIdStrategy.AUTO_INCREMENT) {
                 mvColumns.add(createAutoIncrementRowIdColumn());
             }
 
             // set duplicate key, when sort key is set, it is dup key col.
-            if (CollectionUtils.isEmpty(keyCols)) {
-                keyCols = chooseSortKeysByDefault(mvColumns);
+            List<String> sortKeyColumns = keyLayout.sortKeyColumns();
+            if (CollectionUtils.isEmpty(sortKeyColumns)) {
+                sortKeyColumns = chooseSortKeysByDefault(mvColumns);
             }
 
-            if (keyCols.isEmpty()) {
+            if (sortKeyColumns.isEmpty()) {
                 throw new SemanticException("Sort key of materialized view is empty");
             }
 
-            if (keyCols.size() > mvColumns.size()) {
+            if (sortKeyColumns.size() > mvColumns.size()) {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
@@ -720,17 +742,17 @@ public class MaterializedViewAnalyzer {
 
             // Key columns must lead the schema, so an independent sort key is validated but keeps its query
             // position; the index meta refers to those columns by position instead.
-            List<String> leadingColumns = isSortKeyIndependent
-                    ? Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID) : keyCols;
-            if (isSortKeyIndependent) {
-                for (String columnName : keyCols) {
+            List<String> keyColumns = keyLayout.isSortKeyIndependent()
+                    ? keyLayout.keyColumns() : sortKeyColumns;
+            if (keyLayout.isSortKeyIndependent()) {
+                for (String columnName : sortKeyColumns) {
                     checkSortKeyColumn(columnMap, columnName);
                 }
             }
 
             List<Pair<Column, Integer>> reorderedColumns = new ArrayList<>();
             Set<String> usedColumns = new LinkedHashSet<>();
-            for (String columnName : leadingColumns) {
+            for (String columnName : keyColumns) {
                 Pair<Column, Integer> columnPair = checkSortKeyColumn(columnMap, columnName);
                 Column keyColumn = columnPair.first;
                 keyColumn.setIsKey(true);
