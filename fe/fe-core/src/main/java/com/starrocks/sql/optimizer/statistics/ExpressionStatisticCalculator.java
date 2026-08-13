@@ -47,11 +47,14 @@ import org.apache.logging.log4j.Logger;
 
 import java.math.BigInteger;
 import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
+import java.time.zone.ZoneOffsetTransition;
+import java.time.zone.ZoneRules;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1063,6 +1066,36 @@ public class ExpressionStatisticCalculator {
             }
         }
 
+        /**
+         * convert_tz is only a constant wall-clock shift while both zones keep the same UTC offset over
+         * the whole input range. Around a DST transition the mapping is not monotonic in wall-clock space,
+         * e.g. UTC 00:30 and 01:30 both map to Europe/Berlin 02:30 on 2024-10-27 while 00:59 maps to 02:59,
+         * so converting only the endpoints would under-range the result.
+         */
+        private boolean hasTimezoneOffsetDrift(double minValue, double maxValue,
+                                               ConstantOperator fromTz, ConstantOperator toTz) {
+            try {
+                ZoneId from = ZoneId.of(fromTz.getVarchar());
+                ZoneId to = ZoneId.of(toTz.getVarchar());
+                Instant minInstant = Utils.getDatetimeFromLong((long) minValue).atZone(from).toInstant();
+                Instant maxInstant = Utils.getDatetimeFromLong((long) maxValue).atZone(from).toInstant();
+                Instant start = minInstant.isAfter(maxInstant) ? maxInstant : minInstant;
+                Instant end = minInstant.isAfter(maxInstant) ? minInstant : maxInstant;
+                return hasOffsetTransition(from, start, end) || hasOffsetTransition(to, start, end);
+            } catch (Exception e) {
+                return true;
+            }
+        }
+
+        private boolean hasOffsetTransition(ZoneId zone, Instant start, Instant end) {
+            ZoneRules rules = zone.getRules();
+            if (!rules.getOffset(start).equals(rules.getOffset(end))) {
+                return true;
+            }
+            ZoneOffsetTransition next = rules.nextTransition(start);
+            return next != null && !next.getInstant().isAfter(end);
+        }
+
         private ColumnStatistic calcConvertTzStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
             // Timezone offsets differ by at most 26 hours
             // (see ExtractRangePredicateFromScalarApplyRule).
@@ -1082,7 +1115,9 @@ public class ExpressionStatisticCalculator {
             Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
             Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
             if (fromTz.isPresent() && toTz.isPresent()
-                    && !childStat.hasNaNValue() && !childStat.isInfiniteRange()) {
+                    && !childStat.hasNaNValue() && !childStat.isInfiniteRange()
+                    && !hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),
+                            fromTz.get(), toTz.get())) {
                 OptionalDouble convertedMin = convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
                 OptionalDouble convertedMax = convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
                 if (convertedMin.isPresent() && convertedMax.isPresent()) {
