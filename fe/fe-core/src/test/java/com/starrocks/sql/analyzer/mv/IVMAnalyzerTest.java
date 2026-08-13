@@ -1340,6 +1340,22 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                         assertNull(sortKeyIdxes(mv), "an mv sorted by its key columns needs no sort key");
                     });
 
+            // Two fixed-length sort columns: both fit the short-key budget, so a count of 1 means the index
+            // was sized from the key columns instead.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_multi "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id, c1) "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, c1, SUM(c2) AS sm FROM `iceberg0`.`unpartitioned_db`.`t_numeric` "
+                    + "GROUP BY id, c1",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_multi");
+                        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
+                        assertEquals(2, sortKeyIdxes(mv).size());
+                        assertEquals(sortKeyIdxes(mv).size(),
+                                mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getShortKeyColumnCount(),
+                                "the short-key index must cover every fixed-length sort key column");
+                    });
+
             // A non-incremental mv is a duplicate-key table: its sort key IS its key columns.
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_pct "
                     + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id) "
