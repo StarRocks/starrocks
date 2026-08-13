@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.partitiontraits.ADBCPartitionTraits;
 import com.starrocks.connector.partitiontraits.BenchmarkPartitionTraits;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
@@ -75,6 +76,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
+                    .put(Table.TableType.ADBC, ADBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .put(Table.TableType.FLUSS, FlussPartitionTraits::new)
                     .put(Table.TableType.BENCHMARK, BenchmarkPartitionTraits::new)

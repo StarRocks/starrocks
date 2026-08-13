@@ -28,6 +28,7 @@ target_link_libraries(ModuleBootstrap PRIVATE
         HdfsFileSystem
         ComputeEnv
         Connector
+        ConnectorADBC
         ConnectorFile
         ConnectorHive
         ConnectorIceberg

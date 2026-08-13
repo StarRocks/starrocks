@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -138,6 +139,7 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
+                || table.getType() == Table.TableType.ADBC
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
         }
@@ -353,6 +355,21 @@ public class AstToStringBuilder {
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
             sb.append("\"table\" = \"").append(jdbcTable.getCatalogTableName()).append("\"");
             sb.append("\n)");
+        } else if (table.getType() == Table.TableType.ADBC) {
+            ADBCTable adbcTable = (ADBCTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            Map<String, String> adbcProps = adbcTable.getProperties();
+            if (adbcProps != null && !adbcProps.isEmpty()) {
+                List<String> propEntries = adbcProps.entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .map(e -> "\"" + e.getKey() + "\" = \"" + e.getValue() + "\"")
+                        .collect(Collectors.toList());
+                sb.append(Joiner.on(",\n").join(propEntries)).append("\n");
+            }
+            sb.append(")");
         }
         sb.append(";");
 
@@ -443,7 +460,7 @@ public class AstToStringBuilder {
 
         // Partition column names
         List<String> partitionNames;
-        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+        if (table.getType() != JDBC && table.getType() != Table.TableType.ADBC && !table.isUnPartitioned()) {
             if (!table.isIcebergTable()) {
                 createTableSql.append("\nPARTITION BY (");
                 partitionNames = table.getPartitionColumnNames();
