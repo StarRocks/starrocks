@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <curl/curl.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
 #include <iostream>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_thrift_server_fwd.h"
 #include "common/configbase.h"
@@ -54,6 +56,12 @@ int main(int argc, char** argv) {
     if (!init_config()) {
         return 1;
     }
+    const CURLcode curl_status = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_status != CURLE_OK) {
+        std::cerr << "failed to initialize libcurl, curl_status=" << curl_status << std::endl;
+        return 1;
+    }
+    starrocks::DeferOp curl_cleanup([] { curl_global_cleanup(); });
 
     starrocks::config::max_memory_sink_batch_count = 20;
     starrocks::config::thrift_max_message_size = 1073741824;

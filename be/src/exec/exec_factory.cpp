@@ -46,6 +46,7 @@
 #include "exec/aggregate/aggregate_streaming_node.h"
 #include "exec/aggregate/distinct_blocking_node.h"
 #include "exec/aggregate/distinct_streaming_node.h"
+#include "exec/ai_project_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
 #include "exec/capture_version_node.h"
@@ -294,6 +295,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         return Status::OK();
     case TPlanNodeType::PROJECT_NODE:
         CREATE_NODE(ProjectNode, pool, tnode, descs);
+        return Status::OK();
+    case TPlanNodeType::AI_PROJECT_NODE:
+        CREATE_NODE(AIProjectNode, pool, tnode, descs);
         return Status::OK();
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         CREATE_NODE(TableFunctionNode, pool, tnode, descs);

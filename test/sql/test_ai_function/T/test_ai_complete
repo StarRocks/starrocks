@@ -1,0 +1,57 @@
+-- name: test_ai_complete @sequential
+-- A secure BE-local AI_FUNCTION_MODEL_API_KEY is required before an AI fragment opens,
+-- so this case deliberately fixes only the FE analyzer/planner SQL contract with EXPLAIN.
+-- Existing loopback HTTP/provider and AIProject pipeline BE UTs cover the execution contract.
+
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_endpoint" = "https://models.example.test/v1/chat/completions");
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "integration-test-model");
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_provider" = "openai_compatible");
+
+-- All four overloads must analyze and construct an AIProject plan.
+EXPLAIN SELECT ai_complete('prompt-overload');
+EXPLAIN SELECT ai_complete(
+    'prompt-options-overload',
+    CAST(NULL AS MAP<VARCHAR, JSON>)
+);
+EXPLAIN SELECT ai_complete('explicit-model', 'model-prompt-overload');
+EXPLAIN SELECT ai_complete(
+    'explicit-model',
+    'model-prompt-options-overload',
+    map{'temperature': 0.0}
+);
+
+-- NULL prompts and multi-row VALUES/UNION inputs must remain plannable.
+EXPLAIN SELECT ai_complete(CAST(NULL AS VARCHAR));
+EXPLAIN SELECT id, ai_complete(prompt)
+FROM (VALUES
+    (1, 'values-first'),
+    (2, CAST(NULL AS VARCHAR)),
+    (3, 'values-third')
+) AS v(id, prompt)
+ORDER BY id;
+EXPLAIN SELECT id, ai_complete('explicit-model', prompt)
+FROM (
+    SELECT 4 AS id, 'union-first' AS prompt
+    UNION ALL
+    SELECT 5, CAST(NULL AS VARCHAR)
+    UNION ALL
+    SELECT 6, 'union-third'
+) AS u
+ORDER BY id;
+
+-- Analyzer failures are part of the public SQL contract.
+EXPLAIN SELECT ai_complete('reserved-option', map{'model': 'forbidden'});
+EXPLAIN SELECT ai_complete('nonconstant-options', map{'temperature': temperature})
+FROM (VALUES (0.1)) AS v(temperature);
+EXPLAIN SELECT DISTINCT ai_complete('forbidden-distinct');
+
+-- Prompt-only calls require a default model; explicit-model calls do not.
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
+EXPLAIN SELECT ai_complete('missing-default-model');
+EXPLAIN SELECT ai_complete('explicit-model', 'plans-without-default-model');
+
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("ai_default_chat_endpoint" = "");
+    ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
+    ADMIN SET FRONTEND CONFIG ("ai_default_chat_provider" = "");
+} END CLEANUP

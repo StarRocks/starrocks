@@ -767,6 +767,10 @@ public class FragmentNormalizer {
 
     public boolean normalize() {
         PlanNode root = fragment.getPlanRoot();
+        if (fragment.collectNodes().stream().anyMatch(AIProjectNode.class::isInstance)) {
+            setUncacheable(true);
+            return false;
+        }
 
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();

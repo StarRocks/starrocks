@@ -15,6 +15,8 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
@@ -27,6 +29,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 
 import java.util.List;
 
@@ -61,6 +66,52 @@ public class SPMPlanRewriteTest extends PlanTestBase {
             }
         }
         return 0L;
+    }
+
+    @ParameterizedTest(name = "{index}: {0}")
+    @ValueSource(strings = {
+            "select ai_complete(cast(v2 as varchar)) from t0",
+            "select 'a' x union all select 'b' x order by ai_complete(x)",
+            "select x from (values (concat(ai_complete('p'), '!'))) v(x)"
+    })
+    public void testAIFunctionRewriteReturnsOriginalAsMiss(String sql) {
+        assertAIFunctionRewriteReturnsOriginalAsMiss(sql);
+    }
+
+    private void assertAIFunctionRewriteReturnsOriginalAsMiss(String sql) {
+        String oldEndpoint = Config.ai_default_chat_endpoint;
+        String oldModel = Config.ai_default_chat_model;
+        String oldProvider = Config.ai_default_chat_provider;
+        SQLPlanStorage originalStorage = connectContext.getSqlPlanStorage();
+        SQLPlanStorage spyStorage = Mockito.spy(originalStorage);
+        try {
+            Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
+            Config.ai_default_chat_model = "default-model";
+            Config.ai_default_chat_provider = "openai_compatible";
+            Deencapsulation.setField(connectContext, "sqlPlanStorage", spyStorage);
+
+            StatementBase original = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+            long hitBefore = getMetricValue("spm_rewrite_total", "hit");
+            long missBefore = getMetricValue("spm_rewrite_total", "miss");
+            long errorBefore = getMetricValue("spm_rewrite_total", "error");
+
+            SPMPlanner planner = new SPMPlanner(connectContext);
+            StatementBase rewritten = planner.plan(original);
+
+            Assertions.assertSame(original, rewritten);
+            Assertions.assertNull(planner.getBaseline());
+            Assertions.assertEquals(hitBefore, getMetricValue("spm_rewrite_total", "hit"));
+            Assertions.assertEquals(missBefore + 1, getMetricValue("spm_rewrite_total", "miss"));
+            Assertions.assertEquals(errorBefore, getMetricValue("spm_rewrite_total", "error"));
+            Mockito.verify(spyStorage, Mockito.never()).findBaselinePlan(
+                    Mockito.anyString(), Mockito.anyLong());
+        } finally {
+            Deencapsulation.setField(connectContext, "sqlPlanStorage", originalStorage);
+            Config.ai_default_chat_endpoint = oldEndpoint;
+            Config.ai_default_chat_model = oldModel;
+            Config.ai_default_chat_provider = oldProvider;
+        }
     }
 
     @Test
