@@ -785,6 +785,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -885,6 +887,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                         tableName, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -1056,6 +1060,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();

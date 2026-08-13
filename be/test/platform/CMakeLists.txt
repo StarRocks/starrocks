@@ -20,6 +20,13 @@ set(PLATFORM_TEST_FILES
     http_client_test.cpp
     http_metrics_test.cpp
     key_cache_test.cpp
+    llm/ai_admission_controller_test.cpp
+    llm/ai_http_client_test.cpp
+    llm/ai_metrics_test.cpp
+    llm/ai_task_dispatcher_test.cpp
+    llm/openai_compatible_provider_test.cpp
+    llm/ai_rate_limiter_test.cpp
+    llm/ai_runtime_test.cpp
     llm/llm_cache_test.cpp
     llm/model_config_test.cpp
     path_rw_test.cpp

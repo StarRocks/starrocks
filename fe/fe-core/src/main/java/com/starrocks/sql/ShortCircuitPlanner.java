@@ -24,10 +24,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -76,8 +79,52 @@ public class ShortCircuitPlanner {
         if (!connectContext.getSessionVariable().isEnableShortCircuit()) {
             return false;
         }
+        if (containsAIFunction(root)) {
+            return false;
+        }
         return root.getOp().accept(new LogicalPlanChecker(), root, null);
     }
+
+    private static boolean containsAIFunction(OptExpression expression) {
+        Operator operator = expression.getOp();
+        if (containsAIFunction(operator.getPredicate())
+                || containsAIFunction(operator.getPredicateCommonOperators())) {
+            return true;
+        }
+
+        Projection projection = operator.getProjection();
+        if (projection != null && (containsAIFunction(projection.getColumnRefMap())
+                || containsAIFunction(projection.getCommonSubOperatorMap()))) {
+            return true;
+        }
+
+        if (operator instanceof LogicalProjectOperator project
+                && containsAIFunction(project.getColumnRefMap())) {
+            return true;
+        }
+        if (operator instanceof LogicalAIProjectOperator aiProject
+                && (containsAIFunction(aiProject.getColumnRefMap())
+                || containsAIFunction(aiProject.getCommonSubOperatorMap()))) {
+            return true;
+        }
+        return expression.getInputs().stream().anyMatch(ShortCircuitPlanner::containsAIFunction);
+    }
+
+    private static boolean containsAIFunction(Map<ColumnRefOperator, ScalarOperator> expressions) {
+        return expressions != null && expressions.values().stream().anyMatch(ShortCircuitPlanner::containsAIFunction);
+    }
+
+    private static boolean containsAIFunction(ScalarOperator expression) {
+        if (expression == null) {
+            return false;
+        }
+        if (expression instanceof CallOperator call
+                && call.getFunction() != null && call.getFunction().isAi()) {
+            return true;
+        }
+        return expression.getChildren().stream().anyMatch(ShortCircuitPlanner::containsAIFunction);
+    }
+
     protected static boolean isRedundant(Map<ColumnRefOperator, ScalarOperator> projections) {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projections.entrySet()) {
             if (!entry.getKey().equals(entry.getValue())) {
