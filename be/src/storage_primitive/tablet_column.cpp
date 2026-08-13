@@ -52,6 +52,7 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _aggregation(rhs._aggregation),
           _type(rhs._type),
           _index_length(rhs._index_length),
+          _zstd_compression_page_size(rhs._zstd_compression_page_size),
           _precision(rhs._precision),
           _scale(rhs._scale),
           _extended_info(rhs._extended_info ? std::make_unique<ExtendedColumnInfo>(*rhs._extended_info) : nullptr),
@@ -71,6 +72,7 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _aggregation(rhs._aggregation),
           _type(rhs._type),
           _index_length(rhs._index_length),
+          _zstd_compression_page_size(rhs._zstd_compression_page_size),
           _precision(rhs._precision),
           _scale(rhs._scale),
           _extended_info(std::move(rhs._extended_info)),
@@ -105,6 +107,7 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_precision, rhs->_precision);
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
+    swap(_zstd_compression_page_size, rhs->_zstd_compression_page_size);
     swap(_extra_fields, rhs->_extra_fields);
     swap(_agg_state_desc, rhs->_agg_state_desc);
     swap(_extended_info, rhs->_extended_info);
@@ -276,6 +279,7 @@ bool operator==(const TabletColumn& a, const TabletColumn& b) {
     }
     if (a._length != b._length) return false;
     if (a._index_length != b._index_length) return false;
+    if (a._zstd_compression_page_size != b._zstd_compression_page_size) return false;
     return true;
 }
 
