@@ -310,10 +310,35 @@ public class TabletReshardUtilsTest {
                 TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
         assertTrue(e.getMessage().contains("superseded by index 200"), e.getMessage());
         assertTrue(e.getMessage().contains("1000"), e.getMessage());
+        // The replacement tablet ids are spelled out: the partition-level SHOW PROC path this message
+        // used to point at needs system-level OPERATE, which a user holding only ALTER on the table --
+        // enough to trigger this rejection -- does not have.
+        assertTrue(e.getMessage().contains("[2000]"), e.getMessage());
 
         // The live index is still accepted.
         assertDoesNotThrowStarRocks(() ->
                 TabletReshardUtils.checkIndexNotSuperseded(partition, newIndex, 2000L, "db", "t"));
+    }
+
+    // A partition can hold far more tablets than belong in an error string, so the list is truncated
+    // with the full count kept.
+    @Test
+    public void checkIndexNotSuperseded_truncatesLongTabletList() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        for (int i = 0; i < 25; ++i) {
+            newIndex.addTablet(new LakeTablet(2000L + i), null, false);
+        }
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+        assertTrue(e.getMessage().contains("2019]"), e.getMessage());
+        assertTrue(e.getMessage().contains("(first 20 of 25)"), e.getMessage());
+        assertFalse(e.getMessage().contains("2020"), e.getMessage());
     }
 
     private interface ThrowingRunnable {

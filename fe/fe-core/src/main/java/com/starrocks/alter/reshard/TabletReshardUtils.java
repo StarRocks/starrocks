@@ -31,6 +31,8 @@ import java.util.List;
 public class TabletReshardUtils {
     private static final Logger LOG = LogManager.getLogger(TabletReshardUtils.class);
 
+    private static final int MAX_TABLETS_IN_ERROR_MESSAGE = 20;
+
     // Reshard size invariants — DO NOT change individually.
     //
     // Let T = Config.tablet_reshard_target_size.
@@ -220,9 +222,30 @@ public class TabletReshardUtils {
             throw new StarRocksException("Tablet " + tabletId + " belongs to materialized index "
                     + index.getId() + ", which has already been superseded by index " + latest.getId()
                     + " in physical partition " + physicalPartition.getId() + " in table "
-                    + dbName + '.' + tableName + ". It is no longer part of the table; list the current"
-                    + " tablets with SHOW PROC '/dbs/" + dbName + '/' + tableName + "/partitions/"
-                    + physicalPartition.getId() + '/' + latest.getId() + "'");
+                    + dbName + '.' + tableName + ". It is no longer part of the table; the current"
+                    + " tablets of that partition are " + describeTablets(latest));
         }
+    }
+
+    // The replacement ids, spelled out in the message rather than pointed at with SHOW PROC: the
+    // partition-level proc path requires system-level OPERATE, while triggering this rejection only
+    // requires ALTER on the table, so a user who can hit the error may not be able to run the command
+    // that would resolve it. Truncated because a partition can hold a lot of tablets and this goes into
+    // an error string.
+    private static String describeTablets(MaterializedIndex index) {
+        List<Tablet> tablets = index.getTablets();
+        StringBuilder sb = new StringBuilder("[");
+        int shown = Math.min(tablets.size(), MAX_TABLETS_IN_ERROR_MESSAGE);
+        for (int i = 0; i < shown; ++i) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(tablets.get(i).getId());
+        }
+        sb.append(']');
+        if (shown < tablets.size()) {
+            sb.append(" (first ").append(shown).append(" of ").append(tablets.size()).append(')');
+        }
+        return sb.toString();
     }
 }
