@@ -791,11 +791,18 @@ struct AggregatePublishContext {
 
     using PublishRequestCtx = RequestContext<PublishVersionResponse>;
     std::vector<PublishRequestCtx> publish_request_ctx;
+    // "host:port txn=.. tablets=.." per sub-request, filled before any dispatch so the completion
+    // callback can name the peer it is reporting on without racing the dispatch loop.
+    std::vector<std::string> sub_desc;
 
     AggregatePublishContext() : begin_us(butil::gettimeofday_us()) {}
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(mutex);
+        // Log here: the FE's own RPC budget equals the one this aggregator hands each sub-request,
+        // so a sub-request failure is reported back after the FE has already timed out and the
+        // reason never reaches it. Without this line the failure is invisible on both sides.
+        LOG(WARNING) << "aggregate publish sub-request failed: " << error;
         has_failure = true;
         publish_status = Status::InternalError(error);
     }
@@ -891,18 +898,28 @@ struct AggregatePublishContext {
     }
 };
 
-static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx) {
+// A sub-publish this slow is on course to burn the whole shared 60s budget; name it while we still can.
+static constexpr int64_t kSlowSubRequestUs = 20 * 1000 * 1000;
+static const std::string kUnknownSubRequest = "unknown sub-request";
+
+static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx,
+                                 int sub_index) {
     // no need to release cntl and resp.
     // the resource will be release after all publish_request finished.
     DeferOp defer([&]() { ctx->count_down(); });
+    const std::string& desc =
+            sub_index < static_cast<int>(ctx->sub_desc.size()) ? ctx->sub_desc[sub_index] : kUnknownSubRequest;
     if (cntl->Failed()) {
-        ctx->handle_failure("link rpc channel failed");
+        ctx->handle_failure(fmt::format("[{}] rpc failed after {}us: errcode={} {}", desc, cntl->latency_us(),
+                                        cntl->ErrorCode(), cntl->ErrorText()));
     } else if (resp->status().status_code() != 0) {
         std::string msg;
         for (const auto& str : resp->status().error_msgs()) {
             msg += str;
         }
-        ctx->handle_failure(msg);
+        ctx->handle_failure(fmt::format("[{}] returned error after {}us: {}", desc, cntl->latency_us(), msg));
+    } else if (cntl->latency_us() > kSlowSubRequestUs) {
+        LOG(WARNING) << "aggregate publish sub-request slow: [" << desc << "] took " << cntl->latency_us() << "us";
     }
     ctx->aggregate_response(resp);
 }
@@ -917,6 +934,16 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     // Collected up front, over every sub-request: the loop below stops dispatching once one of
     // them fails, and the expected set must describe the whole publish either way.
     collect_expected_metadata_tablet_ids(*request, &ctx.expected_tablet_ids);
+
+    // Fill every description first: a callback may fire while this loop is still dispatching, and
+    // appending to the vector then would reallocate under it.
+    ctx.sub_desc.reserve(request->publish_reqs_size());
+    for (int i = 0; i < request->publish_reqs_size(); ++i) {
+        const auto& node = request->compute_nodes(i);
+        const auto& req = request->publish_reqs(i);
+        ctx.sub_desc.push_back(fmt::format("{}:{} txns={} tablets={}", node.host(), node.brpc_port(),
+                                           get_txn_ids_string(&req), JoinInts(req.tablet_ids(), ",")));
+    }
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure) {
@@ -945,7 +972,7 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
         auto* cntl_ptr = ctx.publish_request_ctx.back().cntl.get();
         auto* resp_ptr = ctx.publish_request_ctx.back().resp.get();
         (*res)->publish_version(cntl_ptr, &single_req, resp_ptr,
-                                brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx));
+                                brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx, i));
     }
 
     // wait for publish task finish
