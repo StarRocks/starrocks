@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "Query data directly from Delta Lake"
@@ -32,7 +33,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 
@@ -154,7 +155,7 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 <DatabricksMetaParams />
 
@@ -206,7 +207,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
