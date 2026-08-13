@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 ---
 
@@ -8,9 +9,9 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-このトピックでは、共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](../deployment/deployment_overview.md)を参照してください。
+このトピックでは、共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](./deployment.md)を参照してください。
 
-共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）をデプロイするには、[共有データ StarRocks を手動でデプロイする](../deployment/deploy_shared_data_manually.md)を参照してください。
+共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）をデプロイするには、[共有データ StarRocks を手動でデプロイする](./deploy_shared_data_manually.md)を参照してください。
 
 ## ステップ 1: Leader FE ノードを起動する
 
@@ -23,7 +24,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
    mkdir -p <meta_dir>
    ```
 
-2. 以前に準備した[StarRocks FE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
+2. 以前に準備した[StarRocks FE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
 
    a. 設定項目 `meta_dir` にメタデータディレクトリを指定します。
 
@@ -32,7 +33,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       meta_dir = <meta_dir>
       ```
 
-   b. [環境設定チェックリスト](../deployment/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   b. [環境設定チェックリスト](./preparation/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       http_port = aaaa        # デフォルト: 8030
@@ -63,7 +64,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/management/FE_configuration.md)を参照してください。
+   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/configuration/FE_parameters/FE_parameters.md)を参照してください。
 
 3. FE ノードを起動します。
 
@@ -83,7 +84,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
      > **注意**
      >
-     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#ホスト名)を参照してください。
+     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
 
 4. FE ログを確認して、FE ノードが正常に起動したかどうかを確認します。
 
@@ -110,7 +111,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
    mkdir -p <storage_root_path>
    ```
 
-2. 以前に準備した[StarRocks BE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、BE 設定ファイル **be/conf/be.conf** を修正します。
+2. 以前に準備した[StarRocks BE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、BE 設定ファイル **be/conf/be.conf** を修正します。
 
    a. 設定項目 `storage_root_path` にデータディレクトリを指定します。複数のボリュームはセミコロン (;) で区切ります。例: `/data1;/data2`。
 
@@ -119,7 +120,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
       storage_root_path = <storage_root_path>
       ```
 
-   b. [環境設定チェックリスト](../deployment/environment_configurations.md#be-ポート)で言及されている BE ポートが占有されている場合は、BE 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   b. [環境設定チェックリスト](./preparation/environment_configurations.md#be-ポート)で言及されている BE ポートが占有されている場合は、BE 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       be_port = vvvv                   # デフォルト: 9060
@@ -147,7 +148,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/management/BE_configuration.md)を参照してください。
+   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/configuration/BE_parameters/BE_parameters.md)を参照してください。
 
 3. BE ノードを起動します。
 
@@ -157,7 +158,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
 
       > **注意**
       >
-      > - FQDN アクセスを有効にして BE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#ホスト名)を参照してください。
+      > - FQDN アクセスを有効にして BE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
       > - BE ノードを起動する際にパラメータ `--host_type` を指定する必要はありません。
 
 4. BE ログを確認して、BE ノードが正常に起動したかどうかを確認します。
@@ -450,4 +451,4 @@ FE または BE ノードを起動する際に発生するエラーを特定す�
 
 ## 次に行うこと
 
-StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](../deployment/post_deployment_setup.md)を参照してください。
+StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](./manage_deployment/post_deployment_setup.md)を参照してください。

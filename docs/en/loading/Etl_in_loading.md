@@ -1,4 +1,5 @@
 ---
+sidebar_position: 150
 displayed_sidebar: docs
 ---
 
@@ -123,7 +124,7 @@ This section uses `file1.csv` and `table1` as an example. The four columns of `f
 
 #### Load data from a local file system
 
-If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
+If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](./StreamLoad.md) job:
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -142,7 +143,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](./hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -164,7 +165,7 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 #### Load data from a Kafka cluster
 
-If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](../loading/RoutineLoad.md) job:
+If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](./kafka/RoutineLoad.md) job:
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table101 ON table1
@@ -222,7 +223,7 @@ This section uses `file1.csv` and `table1` as an example. If you want to load on
 
 #### Load data from a local file system
 
-If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
+If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](./StreamLoad.md) job:
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -238,7 +239,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](./hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -257,7 +258,7 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 #### Load data from a Kafka cluster
 
-If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](../loading/RoutineLoad.md) job:
+If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](./kafka/RoutineLoad.md) job:
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
@@ -310,7 +311,7 @@ This section uses `file2.csv` and `table2` as an example. `file2.csv` consists o
 
 #### Load data from a local file system
 
-If `file2.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
+If `file2.csv` is stored in your local file system, run the following command to create a [Stream Load](./StreamLoad.md) job:
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
@@ -331,7 +332,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
+If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](./hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -354,7 +355,7 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 #### Load data from a Kafka cluster
 
-If the data of `file2.csv` is published to `topic2` of your Kafka cluster, execute the following statement to create a [Routine Load](../loading/RoutineLoad.md) job:
+If the data of `file2.csv` is published to `topic2` of your Kafka cluster, execute the following statement to create a [Routine Load](./kafka/RoutineLoad.md) job:
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table201 ON table2
@@ -412,7 +413,7 @@ The four data files are stored in the `/user/starrocks/data/input/` path of your
 
 ### Load data from an HDFS cluster
 
-Execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
+Execute the following statement to create a [Broker Load](./hdfs_load.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
 
 ```SQL
 LOAD LABEL test_db.label4

@@ -25,12 +25,12 @@ v3.4.0 以降、StarRocks は共有データクラスタ内の external catalog 
 
 ### キャッシュディレクトリ
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) （共有データクラスタでは、この項目はキャッシュされたデータが保存されるルートパスを指定するために使用されます。）
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path) （共有データクラスタでは、この項目はキャッシュされたデータが保存されるルートパスを指定するために使用されます。）
 
 ### キャッシュディスクサイズ
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
-- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
+- [starlet_star_cache_disk_size_percent](../../administration/configuration/BE_parameters/BE_parameters.md#starlet_star_cache_disk_size_percent)
 
 共有データクラスタ内のキャッシュのディスクサイズは、`datacache_disk_size` と `starlet_star_cache_disk_size_percent` のうち大きい方の値を取ります。
 

@@ -270,7 +270,7 @@ StarRocks が使用する基盤ストレージエンジンの処理ロジック�
 
 ### ネットワーク設定
 
-Spark が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/management/BE_configuration.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認してください。
+Spark が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認してください。
 
 ### データ例
 

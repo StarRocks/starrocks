@@ -72,7 +72,7 @@ SHOW BACKEND BLACKLIST;
 
 BE ノードが FE ノードへの接続を失うたびに、または BE ノードでタイムアウトが原因でクエリが失敗するたびに、FE ノードは BE ノードを BE ブラックリストに追加します。FE ノードは、ブラックリストにある BE ノードの接続失敗を一定期間内にカウントすることで、その接続性を常に評価します。StarRocks は、接続失敗の数が事前に指定された閾値を下回った場合にのみ、ブラックリストにある BE ノードを削除します。
 
-次の [FE 設定](./FE_configuration.md) を使用して、BE ブラックリストの自動管理を設定できます:
+次の [FE 設定](../configuration/FE_parameters/FE_parameters.md) を使用して、BE ブラックリストの自動管理を設定できます:
 
 - `black_host_history_sec`: BE ブラックリストにある BE ノードの過去の接続失敗を保持する期間。
 - `black_host_connect_failures_within_time`: ブラックリストにある BE ノードに許容される接続失敗の閾値。
