@@ -1,0 +1,17 @@
+```SQL
+LOAD LABEL [<database_name>.]<label_name>
+(
+    DATA INFILE ("<file_path>"[, "<file_path>" ...])
+    INTO TABLE <table_name>
+)
+WITH RESOURCE <resource_name>
+(
+    "spark.executor.memory" = "3g",
+    "broker.username" = "<hdfs_username>",
+    "broker.password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "strict_mode" = "{true | false}"   
+)
+```
