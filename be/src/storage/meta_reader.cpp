@@ -664,6 +664,11 @@ Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Colum
 }
 
 size_t SegmentMetaCollecter::_collect_column_size_recursive(ColumnReader* col_reader) {
+    // A Flat JSON root footprint already aggregates its sub-readers.
+    if (col_reader->is_flat_json()) {
+        return col_reader->total_mem_footprint();
+    }
+
     size_t total_mem_footprint = col_reader->total_mem_footprint();
 
     if (col_reader->sub_readers() != nullptr) {
