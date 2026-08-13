@@ -40,4 +40,3 @@ If yes, please specify the type of change:
   - [ ] 4.2
   - [ ] 4.1
   - [ ] 4.0
-  - [ ] 3.5
