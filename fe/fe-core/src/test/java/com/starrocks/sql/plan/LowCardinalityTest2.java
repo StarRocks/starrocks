@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -3347,5 +3348,66 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |      [29: cast, INT, true] | [32: expr, INT, true] | [20: expr, BOOLEAN, true]", plan);
         String thrift = getThriftPlan(sql);
         Assertions.assertTrue(thrift.contains("TGlobalDict(columnId:28"), thrift);
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT
+                       max(source), min(source), count(source), sum(length(source)),
+                       max(value), min(value), count(value), sum(length(value))
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // Aggregate is not pushed
+            assertContains(plan, "  10:AGGREGATE (update serialize)\n" +
+                    "  |  output: max(34: expr), min(34: expr), count(34: expr), sum(22: length), max(36: c_user)," +
+                    " min(36: c_user), count(36: c_user), sum(23: length)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  9:Project\n" +
+                    "  |  <slot 22> : DictDecode(34: expr, [length(<place-holder>)])\n" +
+                    "  |  <slot 23> : DictDecode(36: c_user, [length(<place-holder>)])\n" +
+                    "  |  <slot 34> : 34: expr\n" +
+                    "  |  <slot 36> : 36: c_user\n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithoutDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // update stage is pushed below the union, merge stage is above it.
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                    "  |  output: max(33: max), min(34: min), count(24: count), max(35: max), min(36: min), count(27: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
     }
 }
