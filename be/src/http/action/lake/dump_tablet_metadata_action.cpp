@@ -18,9 +18,16 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <string>
 #include <string_view>
 
+#include "base/coding.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "common/storage_define.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "http/action/lake/dump_tablet_metadata_serializer.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
@@ -29,16 +36,18 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
-#include "storage/lake/exact_tablet_metadata_reader.h"
+#include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/protobuf_file.h"
 #include "storage/storage_env.h"
+#include "storage/utils.h"
 
 namespace starrocks::lake {
 namespace {
 
-constexpr uint64_t kMaxMetadataBytes = 16ULL << 20;
-constexpr uint64_t kMaxBundleFooterBytes = 16ULL << 20;
-constexpr size_t kMaxResponseBytes = 64ULL << 20;
+constexpr uint64_t kMaxLogicalMetadataBytes = 16ULL << 20;
+constexpr size_t kMaxResponseBytes = 32ULL << 20;
 constexpr int64_t kMaxTrackedMemoryBytes = 256LL << 20;
 
 constexpr std::string_view kInvalidArgumentBody =
@@ -56,10 +65,12 @@ constexpr std::string_view kCorruptMetadataBody =
 constexpr std::string_view kSerializationFailedBody =
         R"({"code":"SERIALIZATION_FAILED","message":"tablet metadata serialization failed"})";
 
+enum class MetadataLayout : uint8_t { kNonBundled, kBundled };
+
 struct DumpTabletMetadataRequestContext {
     int64_t tablet_id = 0;
     int64_t version = 0;
-    TabletMetadataStorageFormat format = TabletMetadataStorageFormat::kStandalone;
+    MetadataLayout layout = MetadataLayout::kNonBundled;
     ConcurrentLimiterGuard admission;
 
     DumpTabletMetadataRequestContext() = default;
@@ -102,6 +113,141 @@ bool parse_positive_decimal(std::string_view value, int64_t* result) {
     return true;
 }
 
+Status validate_metadata_identity(const TabletMetadataPB& metadata, int64_t tablet_id, int64_t version) {
+    if (metadata.id() != tablet_id || metadata.version() != version) {
+        return Status::Corruption("tablet metadata identity does not match the diagnostic request");
+    }
+    return Status::OK();
+}
+
+struct BoundedMetadataInput {
+    std::unique_ptr<RandomAccessFile> file;
+    int64_t size = 0;
+};
+
+StatusOr<BoundedMetadataInput> open_bounded_metadata_object(const std::shared_ptr<FileSystem>& fs,
+                                                            const std::string& path, int64_t max_object_size) {
+    if (max_object_size <= 0) {
+        return Status::CapacityLimitExceed("dump_tablet_metadata physical object limit is not positive");
+    }
+    RandomAccessFileOptions options{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(options, path));
+    ASSIGN_OR_RETURN(const int64_t size, file->get_size());
+    if (size <= 0) {
+        return Status::Corruption("tablet metadata object is empty");
+    }
+    if (size > max_object_size) {
+        return Status::CapacityLimitExceed("tablet metadata object exceeds the diagnostic size limit");
+    }
+    return BoundedMetadataInput{std::move(file), size};
+}
+
+StatusOr<TabletMetadataPtr> read_standalone_metadata(const std::shared_ptr<FileSystem>& fs, const std::string& path,
+                                                     int64_t tablet_id, int64_t version, bool remap_tablet_id,
+                                                     int64_t max_object_size) {
+    ASSIGN_OR_RETURN(auto input, open_bounded_metadata_object(fs, path, max_object_size));
+    std::string content(static_cast<size_t>(input.size), '\0');
+    RETURN_IF_ERROR(input.file->read_at_fully(0, content.data(), input.size));
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    RETURN_IF_ERROR(ProtobufFileWithHeader::load_from_buffer(metadata.get(), content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                             /*allow_plain_protobuf_fallback=*/true));
+    if (metadata->version() != version || (!remap_tablet_id && metadata->id() != tablet_id)) {
+        return Status::Corruption("tablet metadata identity does not match the diagnostic request");
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+    if (remap_tablet_id) {
+        metadata->set_id(tablet_id);
+    }
+    return metadata;
+}
+
+StatusOr<TabletMetadataPtr> read_bundle_metadata(BoundedMetadataInput input, const std::string& path, int64_t tablet_id,
+                                                 int64_t version) {
+    std::string content(static_cast<size_t>(input.size), '\0');
+    RETURN_IF_ERROR(input.file->read_at_fully(0, content.data(), input.size));
+    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(path, content));
+
+    const uint64_t raw_footer_size =
+            decode_fixed64_le(reinterpret_cast<const uint8_t*>(content.data() + content.size() - sizeof(uint64_t)));
+    const bool checksummed = (raw_footer_size & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t footer_size = raw_footer_size & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    const uint64_t footer_suffix_size = sizeof(uint64_t) + (checksummed ? sizeof(uint32_t) : 0);
+    if (content.size() < footer_suffix_size || footer_size > content.size() - footer_suffix_size) {
+        return Status::Corruption("invalid tablet metadata bundle footer");
+    }
+    const uint64_t footer_offset = content.size() - footer_suffix_size - footer_size;
+
+    const auto page_it = bundle->tablet_meta_pages().find(tablet_id);
+    if (page_it == bundle->tablet_meta_pages().end()) {
+        return Status::NotFound("tablet metadata is absent from the bundle");
+    }
+    const uint64_t offset = page_it->second.offset();
+    const uint64_t size = page_it->second.size();
+    if (size == 0 || offset > footer_offset || size > footer_offset - offset) {
+        return Status::Corruption("invalid tablet metadata page in bundle");
+    }
+    const std::string_view page(content.data() + offset, size);
+    const auto checksum_it = bundle->tablet_meta_page_checksum().find(tablet_id);
+    if (checksum_it != bundle->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, page.data(), page.size()) != checksum_it->second) {
+        return Status::Corruption("tablet metadata page checksum mismatch");
+    }
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (!metadata->ParseFromArray(page.data(), static_cast<int>(page.size()))) {
+        return Status::Corruption("failed to parse tablet metadata page");
+    }
+    RETURN_IF_ERROR(validate_metadata_identity(*metadata, tablet_id, version));
+    normalize_tablet_metadata_after_load(metadata.get());
+
+    const auto schema_id_it = bundle->tablet_to_schema().find(tablet_id);
+    if (schema_id_it == bundle->tablet_to_schema().end()) {
+        return Status::Corruption("tablet schema mapping is absent from bundle metadata");
+    }
+    const auto schema_it = bundle->schemas().find(schema_id_it->second);
+    if (schema_it == bundle->schemas().end()) {
+        return Status::Corruption("tablet schema is absent from bundle metadata");
+    }
+    metadata->mutable_schema()->CopyFrom(schema_it->second);
+    (*metadata->mutable_historical_schemas())[schema_id_it->second].CopyFrom(schema_it->second);
+    force_cloud_native_pk_persistent_index(metadata.get());
+
+    for (const auto& [_, historical_schema_id] : metadata->rowset_to_schema()) {
+        const auto historical_schema_it = bundle->schemas().find(historical_schema_id);
+        if (historical_schema_it == bundle->schemas().end()) {
+            return Status::Corruption("historical tablet schema is absent from bundle metadata");
+        }
+        (*metadata->mutable_historical_schemas())[historical_schema_id].CopyFrom(historical_schema_it->second);
+    }
+    return metadata;
+}
+
+StatusOr<TabletMetadataPtr> read_exact_metadata(TabletManager* tablet_manager, int64_t tablet_id, int64_t version,
+                                                MetadataLayout layout) {
+    const std::string logical_path = tablet_manager->tablet_metadata_location(tablet_id, version);
+    if (auto cached = tablet_manager->metacache()->lookup_tablet_metadata(logical_path); cached != nullptr) {
+        RETURN_IF_ERROR(validate_metadata_identity(*cached, tablet_id, version));
+        return cached;
+    }
+
+    const bool shared_initial = layout == MetadataLayout::kBundled && version == 1;
+    const std::string physical_path =
+            layout == MetadataLayout::kNonBundled
+                    ? logical_path
+                    : (shared_initial ? tablet_manager->tablet_initial_metadata_location(tablet_id)
+                                      : tablet_manager->bundle_tablet_metadata_location(tablet_id, version));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(physical_path));
+    const int64_t max_object_size = config::lake_dump_tablet_metadata_max_object_size_bytes;
+
+    if (layout == MetadataLayout::kNonBundled || shared_initial) {
+        return read_standalone_metadata(fs, physical_path, tablet_id, version, shared_initial, max_object_size);
+    }
+
+    ASSIGN_OR_RETURN(auto input, open_bounded_metadata_object(fs, physical_path, max_object_size));
+    return read_bundle_metadata(std::move(input), physical_path, tablet_id, version);
+}
+
 Status run_pipeline(HttpRequest* req, TabletManager* tablet_manager,
                     const DumpTabletMetadataRequestContext& request_context, PipelineStage* stage) {
     MemTracker* prior_tracker = CurrentThread::mem_tracker();
@@ -114,14 +260,14 @@ Status run_pipeline(HttpRequest* req, TabletManager* tablet_manager,
         return Status::ServiceUnavailable("lake tablet manager is unavailable");
     }
 
-    ExactTabletMetadataReader reader(tablet_manager->location_provider(), {kMaxMetadataBytes, kMaxBundleFooterBytes});
-    auto metadata_or = reader.read(request_context.tablet_id, request_context.version, request_context.format);
+    auto metadata_or = read_exact_metadata(tablet_manager, request_context.tablet_id, request_context.version,
+                                           request_context.layout);
     if (!metadata_or.ok()) {
         return metadata_or.status();
     }
     auto metadata = std::move(metadata_or).value();
-    if (metadata->SpaceUsedLong() > kMaxTrackedMemoryBytes) {
-        return Status::CapacityLimitExceed("tablet metadata protobuf exceeds the diagnostic memory limit");
+    if (metadata->ByteSizeLong() > kMaxLogicalMetadataBytes) {
+        return Status::CapacityLimitExceed("tablet metadata protobuf exceeds the diagnostic size limit");
     }
 
     *stage = PipelineStage::kSerialize;
@@ -133,7 +279,7 @@ Status run_pipeline(HttpRequest* req, TabletManager* tablet_manager,
     add_diagnostic_headers(req);
     {
         CurrentThreadMemTrackerSetter restore_caller_tracker(prior_tracker);
-        HttpChannel::send_reply_json(req, HttpStatus::OK, response.body);
+        HttpChannel::send_reply_json(req, HttpStatus::OK, response);
     }
     return Status::OK();
     TRY_CATCH_ALLOC_SCOPE_END()
@@ -142,7 +288,7 @@ Status run_pipeline(HttpRequest* req, TabletManager* tablet_manager,
 void send_pipeline_error(HttpRequest* req, const Status& status, PipelineStage stage, std::string_view* result_code) {
     if (status.is_capacity_limit_exceeded() || status.is_mem_limit_exceeded()) {
         *result_code = "METADATA_TOO_LARGE";
-        send_json(req, HttpStatus::REQUEST_ENTITY_TOO_LARGE, kMetadataTooLargeBody);
+        send_json(req, HttpStatus::BAD_REQUEST, kMetadataTooLargeBody);
     } else if (stage == PipelineStage::kSerialize) {
         *result_code = "SERIALIZATION_FAILED";
         send_json(req, HttpStatus::INTERNAL_SERVER_ERROR, kSerializationFailedBody);
@@ -168,11 +314,9 @@ int DumpTabletMetadataAction::on_header(HttpRequest* req) {
     const auto version_it = query.find("version");
     const auto bundle_it = query.find("is_bundle");
     if (query.size() != 2 || version_it == query.end() || bundle_it == query.end() ||
-        req->query_param_count("version") != 1 || req->query_param_count("is_bundle") != 1 ||
-        !parse_positive_decimal(req->route_param("TabletId"), &tablet_id) ||
+        !parse_positive_decimal(req->param("TabletId"), &tablet_id) ||
         !parse_positive_decimal(version_it->second, &version) ||
-        (bundle_it->second != "true" && bundle_it->second != "false") ||
-        (version == 1 && bundle_it->second == "true")) {
+        (bundle_it->second != "true" && bundle_it->second != "false")) {
         send_json(req, HttpStatus::BAD_REQUEST, kInvalidArgumentBody);
         return -1;
     }
@@ -180,8 +324,7 @@ int DumpTabletMetadataAction::on_header(HttpRequest* req) {
     auto context = std::make_unique<DumpTabletMetadataRequestContext>();
     context->tablet_id = tablet_id;
     context->version = version;
-    context->format = bundle_it->second == "true" ? TabletMetadataStorageFormat::kBundle
-                                                  : TabletMetadataStorageFormat::kStandalone;
+    context->layout = bundle_it->second == "true" ? MetadataLayout::kBundled : MetadataLayout::kNonBundled;
     if (!context->admission.set_limiter(&_limiter)) {
         send_json(req, HttpStatus::SERVICE_UNAVAILABLE, kBusyBody);
         const auto elapsed_ms =
@@ -224,14 +367,5 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
 void DumpTabletMetadataAction::free_handler_ctx(void* handler_ctx) {
     delete static_cast<DumpTabletMetadataRequestContext*>(handler_ctx);
 }
-
-#ifdef BE_TEST
-void DumpTabletMetadataAction::overwrite_handler_ctx_ids_for_test(void* handler_ctx, int64_t tablet_id,
-                                                                  int64_t version) {
-    auto* context = static_cast<DumpTabletMetadataRequestContext*>(handler_ctx);
-    context->tablet_id = tablet_id;
-    context->version = version;
-}
-#endif
 
 } // namespace starrocks::lake

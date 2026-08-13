@@ -207,7 +207,6 @@ set(STORAGE_FILES
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
-    lake/exact_tablet_metadata_reader.cpp
     lake/lake_proto_normalizer.cpp
     lake/rowset.cpp
     lake/segment_metadata_filter.cpp

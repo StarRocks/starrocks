@@ -43,10 +43,6 @@ public:
 
     RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
-#ifdef BE_TEST
-    static void overwrite_handler_ctx_ids_for_test(void* handler_ctx, int64_t tablet_id, int64_t version);
-#endif
-
 private:
     TabletManager* _tablet_manager;
     ConcurrentLimiter _limiter{1};

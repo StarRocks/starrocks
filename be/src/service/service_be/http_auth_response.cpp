@@ -91,10 +91,9 @@ TPrivilegeRequirement::type to_thrift_privilege(HttpHandler::RequiredPrivilege p
     return TPrivilegeRequirement::OPERATE;
 }
 
-std::optional<EvHttpServer::AuthVerifyFailure> verify_http_basic_auth(HttpRequest* req,
-                                                                      HttpHandler::RequiredPrivilege required_privilege,
-                                                                      bool always_require_auth) {
-    if (!always_require_auth && !config::enable_http_auth) {
+std::optional<EvHttpServer::AuthVerifyFailure> verify_http_basic_auth(
+        HttpRequest* req, HttpHandler::RequiredPrivilege required_privilege) {
+    if (!config::enable_http_auth) {
         return std::nullopt;
     }
 

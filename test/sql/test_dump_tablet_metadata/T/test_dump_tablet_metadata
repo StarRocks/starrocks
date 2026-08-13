@@ -1,6 +1,5 @@
 -- name: test_dump_tablet_metadata_exact_reads @cloud @sequential
 
-shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata_contract.py
 CREATE DATABASE db_${uuid0};
 USE db_${uuid0};
 CREATE TABLE standalone_meta (k INT) DUPLICATE KEY(k)

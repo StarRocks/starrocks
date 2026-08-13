@@ -15,7 +15,6 @@
 #include "storage/lake/lake_replication_txn_manager.h"
 
 #include <atomic>
-#include <limits>
 #include <mutex>
 
 #include "base/coding.h"
@@ -35,7 +34,6 @@
 #include "platform/key_cache.h"
 #include "replication_txn_manager.h"
 #include "storage/del_file_stream_converter.h"
-#include "storage/lake/exact_tablet_metadata_reader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_proto_normalizer.h"
@@ -75,11 +73,89 @@ StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id
                                                                const std::string& meta_dir,
                                                                const std::shared_ptr<FileSystem>& source_fs) {
     const auto bundle_path = join_path(meta_dir, tablet_metadata_filename(0, version));
-    constexpr ExactTabletMetadataReadLimits kUnlimitedLimits{
-            .max_metadata_bytes = std::numeric_limits<uint64_t>::max(),
-            .max_bundle_footer_bytes = std::numeric_limits<uint64_t>::max(),
-    };
-    return read_bundle_tablet_metadata_page(tablet_id, version, bundle_path, source_fs, kUnlimitedLimits);
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, bundle_path));
+    ASSIGN_OR_RETURN(auto file_size, input_file->get_size());
+
+    constexpr size_t kSizeFieldSize = sizeof(uint64_t);
+    if (file_size < kSizeFieldSize) {
+        return Status::Corruption(
+                fmt::format("Source metadata bundle {} is too small: {} bytes", bundle_path, file_size));
+    }
+
+    std::string size_field(kSizeFieldSize, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - kSizeFieldSize, size_field.data(), size_field.size()));
+    const uint64_t raw_bundle_metadata_size = decode_fixed64_le(reinterpret_cast<const uint8_t*>(size_field.data()));
+    const bool checksummed = (raw_bundle_metadata_size & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t bundle_metadata_size = raw_bundle_metadata_size & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    const size_t footer_suffix_size = kSizeFieldSize + (checksummed ? sizeof(uint32_t) : 0);
+    if (file_size < footer_suffix_size || bundle_metadata_size == 0 ||
+        bundle_metadata_size > static_cast<uint64_t>(file_size - footer_suffix_size)) {
+        return Status::Corruption(
+                fmt::format("Invalid source metadata bundle footer in {}, file_size={}, "
+                            "bundle_metadata_size={}",
+                            bundle_path, file_size, bundle_metadata_size));
+    }
+
+    const uint64_t bundle_metadata_offset = file_size - footer_suffix_size - bundle_metadata_size;
+    std::string footer(bundle_metadata_size + footer_suffix_size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(bundle_metadata_offset, footer.data(), footer.size()));
+    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(bundle_path, footer));
+
+    auto page_it = bundle->tablet_meta_pages().find(tablet_id);
+    if (page_it == bundle->tablet_meta_pages().end()) {
+        return Status::NotFound(
+                fmt::format("Tablet {} is absent from source metadata bundle {}", tablet_id, bundle_path));
+    }
+    const uint64_t offset = page_it->second.offset();
+    const uint32_t size = page_it->second.size();
+    if (offset > bundle_metadata_offset || size > bundle_metadata_offset - offset) {
+        return Status::Corruption(fmt::format("Invalid source tablet metadata page in {}, offset={}, size={}",
+                                              bundle_path, offset, size));
+    }
+
+    std::string page(size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(offset, page.data(), page.size()));
+    auto checksum_it = bundle->tablet_meta_page_checksum().find(tablet_id);
+    if (checksum_it != bundle->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, page.data(), page.size()) != checksum_it->second) {
+        return Status::Corruption(
+                fmt::format("Mismatched checksum for tablet {} metadata in {}", tablet_id, bundle_path));
+    }
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (!metadata->ParseFromArray(page.data(), page.size())) {
+        return Status::Corruption(fmt::format("Failed to parse tablet {} metadata from {}", tablet_id, bundle_path));
+    }
+    if (metadata->id() != tablet_id) {
+        return Status::Corruption(fmt::format("Tablet ID mismatch in {}, expected={}, actual={}", bundle_path,
+                                              tablet_id, metadata->id()));
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+
+    auto schema_id_it = bundle->tablet_to_schema().find(tablet_id);
+    if (schema_id_it == bundle->tablet_to_schema().end()) {
+        return Status::Corruption(
+                fmt::format("Schema mapping for tablet {} is absent from {}", tablet_id, bundle_path));
+    }
+    auto schema_it = bundle->schemas().find(schema_id_it->second);
+    if (schema_it == bundle->schemas().end()) {
+        return Status::Corruption(
+                fmt::format("Schema {} for tablet {} is absent from {}", schema_id_it->second, tablet_id, bundle_path));
+    }
+    metadata->mutable_schema()->CopyFrom(schema_it->second);
+    (*metadata->mutable_historical_schemas())[schema_id_it->second].CopyFrom(schema_it->second);
+    force_cloud_native_pk_persistent_index(metadata.get());
+
+    for (const auto& [_, historical_schema_id] : metadata->rowset_to_schema()) {
+        auto historical_schema_it = bundle->schemas().find(historical_schema_id);
+        if (historical_schema_it == bundle->schemas().end()) {
+            return Status::Corruption(fmt::format("Historical schema {} for tablet {} is absent from {}",
+                                                  historical_schema_id, tablet_id, bundle_path));
+        }
+        (*metadata->mutable_historical_schemas())[historical_schema_id].CopyFrom(historical_schema_it->second);
+    }
+    return metadata;
 }
 } // namespace
 

@@ -25,12 +25,6 @@ class TabletMetadataPB;
 
 namespace starrocks::lake {
 
-struct DumpTabletMetadataJson {
-    std::string body;
-    bool redacted = false;
-};
-
-StatusOr<DumpTabletMetadataJson> serialize_dump_tablet_metadata(const TabletMetadataPB& metadata,
-                                                                size_t max_response_bytes);
+StatusOr<std::string> serialize_dump_tablet_metadata(const TabletMetadataPB& metadata, size_t max_response_bytes);
 
 } // namespace starrocks::lake

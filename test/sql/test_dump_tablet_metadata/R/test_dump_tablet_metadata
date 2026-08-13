@@ -1,9 +1,4 @@
 -- name: test_dump_tablet_metadata_exact_reads @cloud @sequential
-shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata_contract.py
--- result:
-0
-response_envelope_contract=PASS
--- !result
 CREATE DATABASE db_${uuid0};
 -- result:
 -- !result
@@ -33,7 +28,6 @@ shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_m
 0
 standalone_exact=PASS
 bundle_exact=PASS
-wrong_format_status=404
 unknown_parameter_status=400
 missing_version_status=400
 -- !result

@@ -70,6 +70,10 @@ CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
+// Maximum physical metadata object size that the dump_tablet_metadata diagnostic API may read
+// after an exact-version metadata-cache miss. Values <= 0 fail closed for cache-miss requests.
+CONF_mInt64(lake_dump_tablet_metadata_max_object_size_bytes, /*32MB=*/"33554432");
+
 CONF_mBool(lake_print_delete_log, "false");
 
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness

@@ -177,15 +177,6 @@ TEST_F(VerifyHttpBasicAuthTest, flag_off_skips_verification) {
     EXPECT_FALSE(result.has_value());
 }
 
-TEST_F(VerifyHttpBasicAuthTest, always_require_auth_ignores_disabled_flag) {
-    config::enable_http_auth = false;
-    HttpRequest req(_ev_req);
-    auto result = verify_http_basic_auth(&req, HttpHandler::RequiredPrivilege::OPERATE,
-                                         /*always_require_auth=*/true);
-    ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(HttpStatus::UNAUTHORIZED, result->http_status);
-}
-
 TEST_F(VerifyHttpBasicAuthTest, missing_authorization_header_returns_401) {
     config::enable_http_auth = true;
     HttpRequest req(_ev_req);

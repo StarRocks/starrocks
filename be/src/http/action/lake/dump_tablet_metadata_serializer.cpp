@@ -28,8 +28,6 @@
 #include <vector>
 
 #include "gen_cpp/lake_types.pb.h"
-#include "http/action/lake/dump_tablet_metadata_serializer_internal.h"
-
 namespace starrocks::lake {
 namespace dump_tablet_metadata_internal {
 
@@ -124,8 +122,7 @@ Status capacity_limit_status() {
 
 } // namespace
 
-StatusOr<DumpTabletMetadataJson> serialize_dump_tablet_metadata(const TabletMetadataPB& metadata,
-                                                                size_t max_response_bytes) {
+StatusOr<std::string> serialize_dump_tablet_metadata(const TabletMetadataPB& metadata, size_t max_response_bytes) {
     TabletMetadataPB redacted_metadata = metadata;
     RedactedFieldNames redacted_fields;
     dump_tablet_metadata_internal::redact_encryption_metadata(&redacted_metadata, &redacted_fields);
@@ -171,7 +168,7 @@ StatusOr<DumpTabletMetadataJson> serialize_dump_tablet_metadata(const TabletMeta
         return capacity_limit_status();
     }
 
-    return DumpTabletMetadataJson{sink.TakeString(), !redacted_fields.empty()};
+    return sink.TakeString();
 }
 
 } // namespace starrocks::lake

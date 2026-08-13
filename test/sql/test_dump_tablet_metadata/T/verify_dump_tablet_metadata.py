@@ -178,12 +178,6 @@ def main():
 
     verify_exact(base_url, standalone_id, standalone_version, False)
     verify_exact(base_url, bundled_id, bundled_version, True)
-    wrong_format = require_status(
-        "{}/api/cloudnative/dump_tablet_metadata/{}?version={}&is_bundle=true".format(
-            base_url, standalone_id, standalone_version
-        ),
-        404,
-    )
     unknown_parameter = require_status(
         "{}/api/cloudnative/dump_tablet_metadata/{}?version={}&is_bundle=false&pretty=true".format(
             base_url, standalone_id, standalone_version
@@ -197,7 +191,6 @@ def main():
 
     print("standalone_exact=PASS")
     print("bundle_exact=PASS")
-    print("wrong_format_status={}".format(wrong_format))
     print("unknown_parameter_status={}".format(unknown_parameter))
     print("missing_version_status={}".format(missing_version))
     return 0

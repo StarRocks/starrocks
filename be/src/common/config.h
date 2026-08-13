@@ -1482,6 +1482,9 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+// Maximum physical metadata object size that the dump_tablet_metadata diagnostic API may read
+// after an exact-version metadata-cache miss. Values <= 0 fail closed for cache-miss requests.
+CONF_mInt64(lake_dump_tablet_metadata_max_object_size_bytes, /*32MB=*/"33554432");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
