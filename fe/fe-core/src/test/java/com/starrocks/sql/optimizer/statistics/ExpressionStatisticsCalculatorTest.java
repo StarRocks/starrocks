@@ -2400,9 +2400,10 @@ public class ExpressionStatisticsCalculatorTest {
         final double fromTzNdv = 1;
         final double toTzNdv = 2;
         final double nullsFraction = 0.1;
-        final double minEpoch = getLongFromDateTime(LocalDateTime.of(2021, 1, 10, 8, 30, 0));
-        final double maxEpoch = getLongFromDateTime(LocalDateTime.of(2021, 12, 25, 23, 59, 59));
-        final double maxOffsetSec = 26.0 * 3600.0;
+        final LocalDateTime minDt = LocalDateTime.of(2021, 1, 10, 8, 30, 0);
+        final LocalDateTime maxDt = LocalDateTime.of(2021, 12, 25, 23, 59, 59);
+        final double minEpoch = getLongFromDateTime(minDt);
+        final double maxEpoch = getLongFromDateTime(maxDt);
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
         final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
@@ -2437,8 +2438,9 @@ public class ExpressionStatisticsCalculatorTest {
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
 
         Assertions.assertFalse(actual.isUnknown());
-        Assertions.assertEquals(minEpoch - maxOffsetSec, actual.getMinValue(), 0.001);
-        Assertions.assertEquals(maxEpoch + maxOffsetSec, actual.getMaxValue(), 0.001);
+        // Variable zones: estimated range must cover conversions under near-extreme offsets.
+        assertConvertTzStatRangeCovers(actual, "UTC", "Asia/Shanghai", minDt, maxDt);
+        assertConvertTzStatRangeCovers(actual, "Pacific/Kiritimati", "Etc/GMT+12", minDt, maxDt);
         Assertions.assertEquals(nullsFraction, actual.getNullsFraction(), 0.001);
         Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(100, 2*1*2)
         Assertions.assertEquals(DateType.DATETIME.getTypeSize(), actual.getAverageRowSize(), 0.001);
@@ -2523,6 +2525,10 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(2, mcv.size());
         Assertions.assertEquals(100L, mcv.get(convertTzMcvKey(dt1, fromTz, toTz)));
         Assertions.assertEquals(200L, mcv.get(convertTzMcvKey(dt2, fromTz, toTz)));
+        // Converted MCV inputs must lie inside the estimated/bucket range.
+        assertConvertTzStatRangeCovers(actual, fromTz, toTz,
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 14, 45, 0));
     }
 
     @Test
@@ -2588,6 +2594,9 @@ public class ExpressionStatisticsCalculatorTest {
 
         Assertions.assertNull(actual.getHistogram());
         Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+        assertConvertTzStatRangeCoversEveryMinute(actual, "UTC", "Asia/Shanghai",
+                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
+                LocalDateTime.of(2024, 1, 15, 14, 45, 0));
     }
 
     @Test
@@ -2643,12 +2652,13 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
-    public void testConvertTzUsesExactRangeForConstantTimezones() {
+    public void testConvertTzRangeCoversSamplesForConstantTimezones() {
         final String fromTz = "UTC";
         final String toTz = "Asia/Shanghai";
-        final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
-        final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
-        final double maxOffsetSec = 26.0 * 3600.0;
+        final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
+        final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
+        final double minValue = getLongFromDateTime(minDt);
+        final double maxValue = getLongFromDateTime(maxDt);
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
@@ -2668,25 +2678,59 @@ public class ExpressionStatisticsCalculatorTest {
                         ConstantOperator.createVarchar(toTz)));
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
-        final double expectedMin = convertTzDateTimeValue(minValue, fromTz, toTz);
-        final double expectedMax = convertTzDateTimeValue(maxValue, fromTz, toTz);
 
-        Assertions.assertEquals(expectedMin, actual.getMinValue(), 0.001);
-        Assertions.assertEquals(expectedMax, actual.getMaxValue(), 0.001);
-        // Exact conversion must be tighter than the conservative ±26h widen.
-        Assertions.assertTrue(actual.getMinValue() > minValue - maxOffsetSec);
-        Assertions.assertTrue(actual.getMaxValue() < maxValue + maxOffsetSec);
+        assertConvertTzStatRangeCoversEveryMinute(actual, fromTz, toTz, minDt, maxDt);
         Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
     }
 
     @Test
-    public void testConvertTzReordersExactRangeWhenOffsetFlipsEndpoints() {
-        // Negative overall shift (Shanghai -> UTC): both endpoints move earlier.
-        // Result min/max must still be ordered via min()/max() of the converted endpoints.
+    public void testConvertTzRangeCoversSamplesAcrossDstTransition() {
+        // Europe/Berlin falls back on 2024-10-27. Endpoint-only conversion under-ranges because
+        // UTC 00:59 -> Berlin 02:59 lies outside convert(00:30)/convert(01:30).
+        final String fromTz = "UTC";
+        final String toTz = "Europe/Berlin";
+        final LocalDateTime minDt = LocalDateTime.of(2024, 10, 27, 0, 30, 0);
+        final LocalDateTime maxDt = LocalDateTime.of(2024, 10, 27, 1, 30, 0);
+        final LocalDateTime foldPeak = LocalDateTime.of(2024, 10, 27, 0, 59, 0);
+        final double minValue = getLongFromDateTime(minDt);
+        final double maxValue = getLongFromDateTime(maxDt);
+
+        final double convertedMin = convertTzDateTimeValue(minValue, fromTz, toTz);
+        final double convertedMax = convertTzDateTimeValue(maxValue, fromTz, toTz);
+        final double convertedFoldPeak = convertTzDateTimeValue(getLongFromDateTime(foldPeak), fromTz, toTz);
+        Assertions.assertTrue(convertedFoldPeak > Math.max(convertedMin, convertedMax)
+                || convertedFoldPeak < Math.min(convertedMin, convertedMax));
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minValue)
+                        .setMaxValue(maxValue)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        assertConvertTzStatRangeCoversEveryMinute(actual, fromTz, toTz, minDt, maxDt);
+    }
+
+    @Test
+    public void testConvertTzRangeCoversSamplesWhenOffsetShiftsEarlier() {
         final String fromTz = "Asia/Shanghai";
         final String toTz = "UTC";
-        final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
-        final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
+        final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
+        final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
+        final double minValue = getLongFromDateTime(minDt);
+        final double maxValue = getLongFromDateTime(maxDt);
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
@@ -2706,19 +2750,15 @@ public class ExpressionStatisticsCalculatorTest {
                         ConstantOperator.createVarchar(toTz)));
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
-        final double convertedMin = convertTzDateTimeValue(minValue, fromTz, toTz);
-        final double convertedMax = convertTzDateTimeValue(maxValue, fromTz, toTz);
 
-        Assertions.assertEquals(Math.min(convertedMin, convertedMax), actual.getMinValue(), 0.001);
-        Assertions.assertEquals(Math.max(convertedMin, convertedMax), actual.getMaxValue(), 0.001);
         Assertions.assertTrue(actual.getMinValue() <= actual.getMaxValue());
+        assertConvertTzStatRangeCoversEveryMinute(actual, fromTz, toTz, minDt, maxDt);
     }
 
     @Test
     public void testConvertTzFallsBackToWidenedRangeWhenTimezoneInvalid() {
         final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
         final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
-        final double maxOffsetSec = 26.0 * 3600.0;
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
@@ -2739,14 +2779,14 @@ public class ExpressionStatisticsCalculatorTest {
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
 
-        Assertions.assertEquals(minValue - maxOffsetSec, actual.getMinValue(), 0.001);
-        Assertions.assertEquals(maxValue + maxOffsetSec, actual.getMaxValue(), 0.001);
+        // Invalid zone: cannot evaluate samples; range must still cover the input domain.
+        Assertions.assertTrue(actual.getMinValue() <= minValue);
+        Assertions.assertTrue(actual.getMaxValue() >= maxValue);
         Assertions.assertNull(actual.getHistogram());
     }
 
     @Test
     public void testConvertTzKeepsWidenedRangeWhenChildRangeIsInfinite() {
-        final double maxOffsetSec = 26.0 * 3600.0;
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
@@ -2766,9 +2806,26 @@ public class ExpressionStatisticsCalculatorTest {
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
 
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY - maxOffsetSec, actual.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY + maxOffsetSec, actual.getMaxValue(), 0.001);
+        Assertions.assertTrue(actual.isInfiniteRange());
         Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+    }
+
+    private static void assertConvertTzStatRangeCovers(ColumnStatistic actual, String fromTz, String toTz,
+                                                       LocalDateTime... samples) {
+        for (LocalDateTime sample : samples) {
+            final double converted = convertTzDateTimeValue(getLongFromDateTime(sample), fromTz, toTz);
+            Assertions.assertTrue(
+                    converted >= actual.getMinValue() - 0.001 && converted <= actual.getMaxValue() + 0.001,
+                    () -> "convert_tz(" + sample + ", " + fromTz + ", " + toTz + ") = " + converted
+                            + " outside estimated range [" + actual.getMinValue() + ", " + actual.getMaxValue() + "]");
+        }
+    }
+
+    private static void assertConvertTzStatRangeCoversEveryMinute(ColumnStatistic actual, String fromTz, String toTz,
+                                                                  LocalDateTime start, LocalDateTime end) {
+        for (LocalDateTime sample = start; !sample.isAfter(end); sample = sample.plusMinutes(1)) {
+            assertConvertTzStatRangeCovers(actual, fromTz, toTz, sample);
+        }
     }
 
     private static String convertTzMcvKey(String datetime, String fromTz, String toTz) {
