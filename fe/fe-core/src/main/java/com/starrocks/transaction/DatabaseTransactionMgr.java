@@ -2151,6 +2151,9 @@ public class DatabaseTransactionMgr {
                         dbId, countEvicted, Config.label_keep_max_num, Config.label_keep_max_second,
                         youngestCountEvictedAgeMs / 1000);
             }
+            // Proactively release age-expired cache entries every cleanup cycle, so an idle database
+            // does not hold them until the next read or checkpoint. This cleanup runs on every FE node.
+            terminalStateCache.evictExpired();
         } finally {
             writeUnlock();
         }

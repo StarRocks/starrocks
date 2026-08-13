@@ -36,7 +36,7 @@ import java.util.Map;
  * for {@code ABORTED}.
  *
  * <p>Entries are looked up by transaction id and by label. The cache is bounded by
- * {@code transaction_terminal_state_cache_num} (LRU); entries older than
+ * {@code transaction_terminal_state_cache_num} (FIFO, oldest inserted evicted first); entries older than
  * {@code label_keep_max_second} are treated as absent so nothing lives forever. Each entry keeps
  * only the id, label, status, reason, finish time and source type, so the heap cost is a small
  * fraction of a full {@link TransactionState} (which carries per-partition commit info).
@@ -71,19 +71,21 @@ class TxnTerminalStateCache {
         }
     }
 
-    // Single canonical access-order LRU of Records, capped at transaction_terminal_state_cache_num.
-    // This is the ONLY place Records live, so total retention (and the image snapshot) is bounded to
-    // exactly the configured maximum -- not doubled by a second Record index.
+    // Single canonical insertion-ordered (FIFO) map of Records, capped at transaction_terminal_state_cache_num.
+    // Eviction drops the oldest inserted; reads deliberately do not promote, since a finished txn is only
+    // re-read during recovery, so a hot old entry must not push out a newer one. This is the ONLY place
+    // Records live, so total retention (and the image snapshot) is bounded to exactly the configured
+    // maximum -- not doubled by a second Record index.
     private final LinkedHashMap<Long, Record> byTxnId;
     // Secondary index only: label -> latest txn id (a pointer, not a second Record store). Pruned when
     // its target is evicted from byTxnId, so it never dangles and adds no Record retention. getByLabel
-    // resolves through byTxnId (touching it), which keeps a label-hot record resident under the single
-    // cap -- so a frequently label-queried outcome can't be silently evicted while id-only ones stay.
+    // resolves the pointer through byTxnId without reordering (FIFO), so a read never changes what the
+    // cache keeps.
     private final Map<String, Long> labelToTxnId;
 
     TxnTerminalStateCache() {
         labelToTxnId = new HashMap<>();
-        byTxnId = new LinkedHashMap<Long, Record>(16, 0.75f, true) {
+        byTxnId = new LinkedHashMap<Long, Record>(16, 0.75f, false) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<Long, Record> eldest) {
                 int capacity = Config.transaction_terminal_state_cache_num;
@@ -174,9 +176,25 @@ class TxnTerminalStateCache {
     }
 
     /**
+     * Proactively drop age-expired records (and drain any excess left by a runtime cap reduction) so an
+     * idle database releases the memory instead of holding it until the next read or checkpoint. Called
+     * every cycle by the periodic cleanup ({@link DatabaseTransactionMgr#removeExpiredTxns}), which runs
+     * on every FE node. Uses the same {@link #valid} predicate as reads, so it also reclaims memory when
+     * the cache is disabled at runtime; mirrors {@link #snapshot}'s copy-then-remove to avoid a
+     * concurrent modification while iterating.
+     */
+    synchronized void evictExpired() {
+        trimToCapacity();
+        for (Record r : new ArrayList<>(byTxnId.values())) {
+            if (!valid(r)) {
+                removeRecord(r);
+            }
+        }
+    }
+
+    /**
      * @return the cached outcome for {@code txnId}, or null if absent or too old. An expired (or
-     * disabled-cache) record is pruned on access rather than left to occupy capacity and evict still
-     * valid entries after byTxnId.get touches it to most-recently-used.
+     * disabled-cache) record is pruned on access rather than left to occupy capacity.
      */
     synchronized Record getByTxnId(long txnId) {
         Record r = byTxnId.get(txnId);
@@ -191,10 +209,9 @@ class TxnTerminalStateCache {
     }
 
     /**
-     * @return the latest cached outcome for {@code label}, or null if absent or too old. Resolving
-     * through byTxnId.get touches the record in the LRU, so an actively label-queried outcome stays
-     * resident under the single capacity rather than aging out as if unused. An expired record (or a
-     * dangling label pointer) is pruned on access.
+     * @return the latest cached outcome for {@code label}, or null if absent or too old. The lookup
+     * resolves the label pointer through byTxnId without reordering (FIFO), so a read never changes
+     * what the cache keeps. An expired record (or a dangling label pointer) is pruned on access.
      */
     synchronized Record getByLabel(String label) {
         Long txnId = labelToTxnId.get(label);
@@ -223,7 +240,7 @@ class TxnTerminalStateCache {
             return false;
         }
         if (r.finishTime <= 0) {
-            // Finish time unknown: fall back to the LRU capacity bound only.
+            // Finish time unknown: fall back to the capacity bound only.
             return true;
         }
         return (System.currentTimeMillis() - r.finishTime) / 1000 <= Config.label_keep_max_second;
@@ -244,7 +261,7 @@ class TxnTerminalStateCache {
     }
 
     // Bring the cache into line with the current config: clear everything when disabled, otherwise
-    // evict the eldest (least-recently-used) entries until size <= cap. removeEldestEntry only trims
+    // evict the eldest (oldest-inserted) entries until size <= cap. removeEldestEntry only trims
     // one entry per insert, so a runtime reduction of the cap needs this proactive drain.
     private void trimToCapacity() {
         int capacity = Config.transaction_terminal_state_cache_num;
@@ -254,7 +271,7 @@ class TxnTerminalStateCache {
             return;
         }
         while (byTxnId.size() > capacity) {
-            Record eldest = byTxnId.values().iterator().next(); // access-order: eldest first
+            Record eldest = byTxnId.values().iterator().next(); // insertion-order: eldest (oldest inserted) first
             removeRecord(eldest);
         }
     }

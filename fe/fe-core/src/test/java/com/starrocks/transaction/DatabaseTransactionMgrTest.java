@@ -778,6 +778,29 @@ public class DatabaseTransactionMgrTest {
                 () -> masterDbTransMgr.commitPreparedTransaction(txnId1));
     }
 
+    // The proactive age-sweep must fire through the real removeExpiredTxns() wiring, not just a direct
+    // cache call. Populate the cache by count-eviction (which also drains the finished-txn deque, so the
+    // db is idle), age the cached entries out, and confirm a later removeExpiredTxns() releases them even
+    // though its count/age loop has nothing to do.
+    @Test
+    public void testRemoveExpiredTxnsSweepsAgedCacheOnIdleDb() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // Populate the cache by count-eviction; this drains the finished-txn deque, leaving the db idle.
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 0;
+        Config.transaction_terminal_state_cache_num = 50000;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertTrue(masterDbTransMgr.getTerminalStateCacheSize() > 0);
+
+        // Age the cached outcomes out. The deque is empty now, so removeExpiredTxns()'s count/age loop
+        // breaks immediately; only the proactive evictExpired() sweep can release the memory.
+        Config.label_keep_max_second = -1;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertEquals(0, masterDbTransMgr.getTerminalStateCacheSize());
+    }
+
     // Repro + regression for the production 2PC re-commit path used by the Flink connector on
     // savepoint/resume. GlobalTransactionMgr.prepareTransaction/commitPreparedTransaction dereference
     // getTransactionState(...).getTableIdList() to lock tables BEFORE delegating to

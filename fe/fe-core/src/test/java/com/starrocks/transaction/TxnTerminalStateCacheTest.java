@@ -47,7 +47,7 @@ public class TxnTerminalStateCacheTest {
     }
 
     // Item 6: a "born-dead" outcome already older than label_keep_max_second must not be cached, since
-    // it could never satisfy a read (valid() would reject it) and would only waste LRU capacity.
+    // it could never satisfy a read (valid() would reject it) and would only waste cache capacity.
     @Test
     public void testBornDeadEntryNotCached() {
         Config.transaction_terminal_state_cache_num = 100;
@@ -139,11 +139,12 @@ public class TxnTerminalStateCacheTest {
         assertEquals(0, dst2.size());
     }
 
-    // A label-queried record stays resident under the single capacity: getByLabel resolves through
-    // byTxnId, touching it, so a label-hot outcome survives eviction while an un-accessed one is
-    // dropped. It therefore remains in the snapshot, without a second Record index doubling retention.
+    // FIFO eviction: a read does NOT promote an entry, so the oldest-inserted is evicted when the cap is
+    // exceeded, even if it was just read. This keeps the most recent outcomes, which fits the one-shot,
+    // time-ordered nature of transactions (an old entry is only re-read during recovery, so it must not
+    // push out a newer one).
     @Test
-    public void testLabelHotRecordSurvivesEvictionAndInSnapshot() {
+    public void testFifoEvictsOldestInsertedRegardlessOfReads() {
         Config.transaction_terminal_state_cache_num = 2; // small cap to force eviction
         Config.label_keep_max_second = 3600;
         TxnTerminalStateCache cache = new TxnTerminalStateCache();
@@ -151,19 +152,19 @@ public class TxnTerminalStateCacheTest {
 
         cache.put(terminalTxn(1L, "A", TransactionStatus.VISIBLE, now));
         cache.put(terminalTxn(2L, "B", TransactionStatus.VISIBLE, now));
-        cache.getByLabel("A");                                            // touch txn1 -> most recently used
-        cache.put(terminalTxn(3L, "C", TransactionStatus.VISIBLE, now));  // evicts the un-touched eldest (txn2)
+        cache.getByLabel("A");                                            // read the oldest -> no promotion under FIFO
+        cache.put(terminalTxn(3L, "C", TransactionStatus.VISIBLE, now));  // evicts the oldest-inserted (txn1)
 
-        assertNotNull(cache.getByTxnId(1L));   // label-hot record survived
-        assertNotNull(cache.getByLabel("A"));
-        assertNull(cache.getByTxnId(2L));      // un-accessed record evicted
-        assertNull(cache.getByLabel("B"));     // its label pointer was pruned on eviction
+        assertNull(cache.getByTxnId(1L));      // oldest-inserted evicted despite being read
+        assertNull(cache.getByLabel("A"));     // its label pointer was pruned on eviction
+        assertNotNull(cache.getByTxnId(2L));   // newer entries kept
+        assertNotNull(cache.getByTxnId(3L));
 
         java.util.Set<Long> ids = new java.util.HashSet<>();
         for (TxnTerminalStateCache.Record r : cache.snapshot()) {
             ids.add(r.txnId);
         }
-        assertEquals(java.util.Set.of(1L, 3L), ids);
+        assertEquals(java.util.Set.of(2L, 3L), ids);
     }
 
     // Codex P2: total retention (and the snapshot) must not exceed the configured capacity. Inserting
@@ -255,5 +256,43 @@ public class TxnTerminalStateCacheTest {
         assertEquals(java.util.Set.of(2L), ids); // only the fresh record is serialized
         assertEquals(1, cache.size());           // aged record removed from memory, not just hidden
         assertNull(cache.getByLabel("aged"));    // its label pointer is gone too
+    }
+
+    // Comment C: the proactive sweep drops age-expired records with no read, insert, or snapshot, so an
+    // idle database releases the memory instead of holding it until the next read or checkpoint.
+    @Test
+    public void testEvictExpiredReleasesAgedRecordsWhenIdle() {
+        Config.transaction_terminal_state_cache_num = 100;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        cache.put(terminalTxn(1L, "aged", TransactionStatus.VISIBLE, now - 100_000L)); // valid on admission
+        cache.put(terminalTxn(2L, "fresh", TransactionStatus.VISIBLE, now));
+        assertEquals(2, cache.size());
+
+        Config.label_keep_max_second = 10; // the 100s-old record is now past the read window
+
+        cache.evictExpired(); // proactive sweep, no getBy*/put/snapshot on the aged record
+
+        assertEquals(1, cache.size());        // aged record released from memory
+        assertNull(cache.getByLabel("aged")); // and its label pointer
+        assertNotNull(cache.getByTxnId(2L));  // fresh record kept
+    }
+
+    // evictExpired also reclaims everything when the cache is disabled at runtime, so a database that
+    // goes idle after the cap is set to 0 does not keep old entries pinned.
+    @Test
+    public void testEvictExpiredClearsWhenDisabled() {
+        Config.transaction_terminal_state_cache_num = 100;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        cache.put(terminalTxn(1L, "a", TransactionStatus.VISIBLE, now));
+        cache.put(terminalTxn(2L, "b", TransactionStatus.VISIBLE, now));
+        assertEquals(2, cache.size());
+
+        Config.transaction_terminal_state_cache_num = 0; // disabled at runtime
+        cache.evictExpired();
+        assertEquals(0, cache.size());
     }
 }
