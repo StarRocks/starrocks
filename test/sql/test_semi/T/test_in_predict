@@ -112,4 +112,32 @@ select st1 not in (row(1, [2,1,3], map{1:1, 2:2}, row(1, 2)),row(1, [2,1,3], map
 
 select st1 in (map{}) from sc2 order by 1;
 select st1 not in (map{}) from sc2 order by 1;
+select 10 in (select v1 from sc2), 10 not in (select v1 from sc2) from sc2;
+
+-- IN-subquery rewrite: NULL semantics coverage
+drop table if exists sc3;
+CREATE TABLE `sc3` (`v1` int NOT NULL) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into sc3 values (1), (2), (10);
+
+-- rewrite path: const IN (subquery over NOT NULL column)
+select 10 in (select v1 from sc3), 10 not in (select v1 from sc3);
+select 100 in (select v1 from sc3), 100 not in (select v1 from sc3);
+
+drop table if exists sc4;
+CREATE TABLE `sc4` (`v1` int NULL) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into sc4 values (1), (2), (null);
+
+-- preserve NULL semantics: nullable column with NULL values, rewrite skipped
+select 100 in (select v1 from sc4), 100 not in (select v1 from sc4);
+select 1 in (select v1 from sc4), 1 not in (select v1 from sc4);
+select null in (select v1 from sc3), null not in (select v1 from sc3);
+-- empty subquery: any LHS becomes FALSE/TRUE (no NULL)
+select 10 in (select v1 from sc3 where false), 10 not in (select v1 from sc3 where false);
+select null in (select v1 from sc3 where false), null not in (select v1 from sc3 where false);
 

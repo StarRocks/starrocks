@@ -226,11 +226,14 @@ public class SubqueryTest extends PlanTestBase {
 
     @Test
     public void testCorrelatedComplexInSubQuery() throws Exception {
+        // Constant LHS over a correlated IN-subquery: handled by the EXISTS / NULL-aware
+        // CASE rewrite in SqlToScalarOperatorTranslator, so plan generation must succeed.
         String sql = "SELECT v4  FROM t1\n" +
                 "WHERE ( (\"1969-12-09 14:18:03\") IN (\n" +
                 "          SELECT t2.v8 FROM t2 WHERE (t1.v5) = (t2.v9))\n" +
                 "    ) IS NULL\n";
-        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "JOIN");
     }
 
     @Test
