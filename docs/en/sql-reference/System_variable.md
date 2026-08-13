@@ -167,7 +167,7 @@ SELECT /*+ SET_VAR
 
 ### Set variables as user properties
 
-You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+You can set session variables as user properties using the [ALTER USER](./sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
 
 Example:
 
