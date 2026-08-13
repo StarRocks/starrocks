@@ -1669,7 +1669,6 @@ public class SharedDataStorageVolumeMgrTest {
         svm.removeStorageVolume(storageVolumeName);
     }
 
-<<<<<<< HEAD
     @Test
     public void testUpdateBaseStorageVolumeName() throws DdlException, AlreadyExistsException {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
@@ -1746,7 +1745,8 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertEquals(baseSvName, sv2.getBaseStorageVolumeName());
         // Base storage volume itself should not be updated
         Assertions.assertNull(baseSv.getBaseStorageVolumeName());
-=======
+    }
+
     // ------------------------------------------------------------------
     // ALTER STORAGE VOLUME credential switching.
     //
@@ -1976,6 +1976,5 @@ public class SharedDataStorageVolumeMgrTest {
         // Instance profile without a role is stored as a profile credential, which carries no
         // role fields at all.
         Assertions.assertFalse(params.containsKey(AWS_S3_IAM_ROLE_ARN));
->>>>>>> 8198eaa996e... [Enhancement] Persist AWS web identity credentials for storage volumes (#77638)
     }
 }
