@@ -46,6 +46,33 @@ jobs:
         with:
           labels: ${{ matrix.version }}
 
+  # INTERIM (pre-reconcile): branch-4.2 is CD-exclusive — StarRocks has no 4.2 branch, so a
+  # fix synced onto the shared branch-4.1 line has no other way to reach 4.2. When a SYNCED
+  # PR MERGES into branch-4.1, ask Mergify to also backport it to branch-4.2. Keyed on the
+  # MERGE (not sync-PR creation): repo-sync pending PRs get closed & recreated, so acting at
+  # creation would double-post; only the single final merge fires this. REMOVE once
+  # reconcile --synced derives the full CD window incl 4.2 for synced PRs.
+  #
+  # Discriminator = the machine-generated head branch `branch-4.1-sync-pr-<N>` (repo-sync's
+  # `${BRANCH}-sync-pr-${PR_ID}`), AND the `sync` label. Both are set by repo-sync and always
+  # co-occur, so no miss; requiring the head pattern makes a human-mislabeled PR unable to
+  # trigger this write action (the `sync` label alone could be added by hand).
+  synced-branch-4-1-imply-4-2:
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'branch-4.1' &&
+      github.repository == 'CelerData/celerdata-enterprise' &&
+      contains(github.event.pull_request.labels.*.name, 'sync') &&
+      startsWith(github.head_ref, 'branch-4.1-sync-pr-')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: also backport this merged branch-4.1 synced fix to branch-4.2
+        run: |
+          gh pr comment "${PR_NUMBER}" -R "${GITHUB_REPOSITORY}" --body "@Mergifyio backport branch-4.2"
+
   # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
   # job above and only PRINTS the computed target set (never posts @Mergifyio), for
   # reconciliation against the manual matrix before cutover. continue-on-error so it
