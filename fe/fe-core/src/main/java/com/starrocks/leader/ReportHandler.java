@@ -1398,7 +1398,8 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
-                                            .setZstdCompressionColumnNames(zstdCompressionColumns)
+                                            .setZstdCompressionColumns(zstdCompressionColumns,
+                                                    olapTable.getZstdCompressionPageSizes())
                                             .setIndexes(index.getMetaId() == olapTable.getBaseIndexMetaId() ?
                                                         olapTable.getCopiedIndexes() :
                                                         OlapTable.getIndexesBySchema(

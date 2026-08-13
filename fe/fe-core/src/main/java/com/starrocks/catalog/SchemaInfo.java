@@ -326,12 +326,17 @@ public class SchemaInfo {
 
         private Map<ColumnId, Integer> zstdCompressionPageSizes;
 
-        public Builder setZstdCompressionPageSizes(Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        // The column set and the per-column page sizes are set together on purpose.
+        // They are two halves of one property, and a caller that supplies only the
+        // names produces a schema the BE reads as "use the default page size" while
+        // SHOW CREATE TABLE still reports the size the user asked for.
+        public Builder setZstdCompressionColumns(Collection<ColumnId> zstdCompressionColumnNames,
+                                                 Map<ColumnId, Integer> zstdCompressionPageSizes) {
             this.zstdCompressionPageSizes = zstdCompressionPageSizes;
-            return this;
+            return setZstdCompressionColumnNames(zstdCompressionColumnNames);
         }
 
-        public Builder setZstdCompressionColumnNames(Collection<ColumnId> zstdCompressionColumnNames) {
+        private Builder setZstdCompressionColumnNames(Collection<ColumnId> zstdCompressionColumnNames) {
             Preconditions.checkState(this.zstdCompressionColumnNames == null);
             if (zstdCompressionColumnNames != null) {
                 this.zstdCompressionColumnNames = new HashSet<>(zstdCompressionColumnNames);
@@ -385,8 +390,8 @@ public class SchemaInfo {
                 .setIndexes(indexes)
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
-                .setZstdCompressionColumnNames(table.getZstdCompressionColumnIds())
-                .setZstdCompressionPageSizes(table.getZstdCompressionPageSizes())
+                .setZstdCompressionColumns(table.getZstdCompressionColumnIds(),
+                        table.getZstdCompressionPageSizes())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())

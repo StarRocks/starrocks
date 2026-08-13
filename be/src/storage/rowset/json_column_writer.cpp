@@ -65,6 +65,7 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _global_dict(opts.flat_json_dicts),
           _column_name(opts.field_name),
           _use_zstd_compression(opts.use_zstd_compression),
+          _data_page_size(opts.data_page_size),
           _zstd_compression_dict_sample_bytes(opts.zstd_compression_dict_sample_bytes) {}
 
 Status FlatJsonColumnWriter::init() {
@@ -248,6 +249,9 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         if (_use_zstd_compression && (is_string_type(_flat_types[i]) || _flat_types[i] == LogicalType::TYPE_JSON)) {
             opts.use_zstd_compression = true;
             opts.zstd_compression_dict_sample_bytes = _zstd_compression_dict_sample_bytes;
+        }
+        if (_data_page_size > 0) {
+            opts.data_page_size = _data_page_size;
         }
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);

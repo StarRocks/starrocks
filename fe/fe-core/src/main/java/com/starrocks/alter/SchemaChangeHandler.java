@@ -175,6 +175,20 @@ public class SchemaChangeHandler extends AlterHandler {
     // all shadow indexes should have this prefix in name
     public static final String SHADOW_NAME_PREFIX = "__starrocks_shadow_";
 
+    // Page sizes keyed by lower-cased column name, with "no size" and "the default"
+    // both erased, so two spellings of the same request compare equal.
+    private static Map<String, Integer> normalizedPageSizes(Map<?, Integer> pageSizes) {
+        Map<String, Integer> normalized = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        if (pageSizes != null) {
+            for (Map.Entry<?, Integer> entry : pageSizes.entrySet()) {
+                if (entry.getValue() != null && entry.getValue() > 0) {
+                    normalized.put(entry.getKey().toString(), entry.getValue());
+                }
+            }
+        }
+        return normalized;
+    }
+
     public SchemaChangeHandler() {
         super("schema change");
     }
@@ -1831,9 +1845,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
         boolean hasZstdCompressionChange = false;
         Set<String> oriZstdCompressionColumns = olapTable.getZstdCompressionColumnNames();
+        Map<String, Integer> oriZstdCompressionPageSizes = normalizedPageSizes(olapTable.getZstdCompressionPageSizes());
+        Map<String, Integer> newZstdCompressionPageSizes = normalizedPageSizes(zstdCompressionPageSizeNames);
         if (zstdCompressionColumns != null) {
-            // the property is specified in this ALTER statement
-            if (!zstdCompressionColumns.equals(oriZstdCompressionColumns)) {
+            // the property is specified in this ALTER statement. Comparing the column
+            // names alone would miss "v:64k" -> "v:4m": the same column set, a
+            // different page size, and no index marked for alteration -- the request
+            // would be accepted and silently dropped.
+            if (!zstdCompressionColumns.equals(oriZstdCompressionColumns)
+                    || !newZstdCompressionPageSizes.equals(oriZstdCompressionPageSizes)) {
                 hasZstdCompressionChange = true;
             }
         } else {
@@ -1956,6 +1976,13 @@ public class SchemaChangeHandler extends AlterHandler {
                     boolean isNewZstdCompressionColumn = zstdCompressionColumns != null
                             && zstdCompressionColumns.contains(columnName);
                     if (isOldZstdCompressionColumn != isNewZstdCompressionColumn) {
+                        needAlter = true;
+                        break;
+                    }
+                    // the column set can stay the same while its page size changes ("v:64k" -> "v:1m").
+                    // that still has to rewrite the index, otherwise the ALTER is accepted and dropped.
+                    if (isOldZstdCompressionColumn && !Objects.equals(oriZstdCompressionPageSizes.get(columnName),
+                            newZstdCompressionPageSizes.get(columnName))) {
                         needAlter = true;
                         break;
                     }
@@ -4689,8 +4716,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     .addColumns(entry.getValue())
                     .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
-                    .setZstdCompressionColumnNames(schemaChangeData.getZstdCompressionColumns())
-                    .setZstdCompressionPageSizes(schemaChangeData.getZstdCompressionPageSizes())
+                    .setZstdCompressionColumns(schemaChangeData.getZstdCompressionColumns(),
+                            schemaChangeData.getZstdCompressionPageSizes())
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())

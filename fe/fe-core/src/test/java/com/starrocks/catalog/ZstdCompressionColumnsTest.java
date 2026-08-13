@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -373,6 +375,68 @@ public class ZstdCompressionColumnsTest {
                 Assertions.assertTrue(tColumn.isUse_zstd_compression());
                 Assertions.assertEquals(0, tColumn.getZstd_compression_page_size());
             }
+        }
+    }
+
+    @Test
+    public void testPageSizeOnlyAlterIsDetected() throws Exception {
+        // Same column set, different page size. Comparing column names alone would
+        // accept this and drop it on the floor: no index marked for alteration, and
+        // the catalog map only updated when the change flag is set.
+        starRocksAssert.withTable(createTableSql("t_page_alter",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:64k\""));
+        OlapTable table = getTable("t_page_alter");
+        Assertions.assertEquals(Integer.valueOf(64 * 1024),
+                table.getZstdCompressionPageSizes().get(ColumnId.create("v1")));
+
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_page_alter SET (\""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:1m\")");
+        waitForSchemaChangeJob(table);
+
+        Assertions.assertEquals(Integer.valueOf(1024 * 1024),
+                table.getZstdCompressionPageSizes().get(ColumnId.create("v1")));
+        Assertions.assertTrue(showCreateTable("t_page_alter").contains("v1:" + (1024 * 1024)),
+                showCreateTable("t_page_alter"));
+    }
+
+    @Test
+    public void testPageSizeReachesEveryTabletSchemaPath() throws Exception {
+        // The page size has to travel on every path that builds a tablet schema, not
+        // just the one the create path happens to use: a schema that carries the
+        // column flag without the size tells the BE "default page size" while SHOW
+        // CREATE TABLE still reports what was asked for.
+        starRocksAssert.withTable(createTableSql("t_page_paths",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\""));
+        OlapTable table = getTable("t_page_paths");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+
+        List<TTabletSchema> schemas = Lists.newArrayList();
+        schemas.add(SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId,
+                table.getIndexMetaByMetaId(baseIndexMetaId)).toTabletSchema());
+        schemas.add(SchemaInfo.newBuilder()
+                .setId(baseIndexMetaId)
+                .setKeysType(table.getKeysType())
+                .setShortKeyColumnCount(table.getIndexMetaByMetaId(baseIndexMetaId).getShortKeyColumnCount())
+                .setSchemaHash(0)
+                .setStorageType(table.getStorageType())
+                .addColumns(table.getBaseSchema())
+                .setBloomFilterColumnNames(table.getBfColumnIds())
+                .setBloomFilterFpp(table.getBfFpp())
+                .setZstdCompressionColumns(table.getZstdCompressionColumnIds(),
+                        table.getZstdCompressionPageSizes())
+                .build()
+                .toTabletSchema());
+
+        for (TTabletSchema schema : schemas) {
+            boolean seen = false;
+            for (TColumn tColumn : schema.getColumns()) {
+                if ("v1".equalsIgnoreCase(tColumn.getColumn_name())) {
+                    seen = true;
+                    Assertions.assertTrue(tColumn.isUse_zstd_compression());
+                    Assertions.assertEquals(256 * 1024, tColumn.getZstd_compression_page_size());
+                }
+            }
+            Assertions.assertTrue(seen, "v1 missing from tablet schema");
         }
     }
 

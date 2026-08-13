@@ -94,6 +94,10 @@ protected:
     // the flat string/JSON sub-columns (the `remain` blob is the primary target).
     // The fallback plain _json_writer already carries this flag via its own opts.
     bool _use_zstd_compression = false;
+    // The parent column's data page size. The flattened sub-columns are what
+    // actually holds the data, so a per-column page size that stopped at the
+    // parent would have no effect on a JSON column at all.
+    uint32_t _data_page_size = 0;
     uint32_t _zstd_compression_dict_sample_bytes = 0;
 };
 } // namespace starrocks

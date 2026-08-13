@@ -1325,7 +1325,7 @@ public class RestoreJob extends AbstractJob {
                         .addColumns(indexMeta.getSchema())
                         .setBloomFilterColumnNames(bfColumns)
                         .setBloomFilterFpp(bfFpp)
-                        .setZstdCompressionColumnNames(zstdCompressionColumns)
+                        .setZstdCompressionColumns(zstdCompressionColumns, localTbl.getZstdCompressionPageSizes())
                         .setIndexes(localTbl.getCopiedIndexes())
                         .setPrimaryKeyEncodingType(localTbl.getPrimaryKeyEncodingType())
                         .build().toTabletSchema();
