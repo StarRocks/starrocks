@@ -761,6 +761,32 @@ public class CreateTableAnalyzerTest {
     }
 
     @Test
+    public void testNonDeterministicPartitionExprIsRejected() {
+        // rand() would send rows of the same aggregate key to different partitions, so the generated
+        // column would no longer be determined by the keys
+        analyzeFail("CREATE TABLE test.t_agg_nondeterministic (\n" +
+                        "  `k` bigint NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL,\n" +
+                        "  `pv` bigint SUM\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`k`, `city`)\n" +
+                        "PARTITION BY floor(rand() * 2 + k)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should be deterministic");
+        // the same holds for a duplicate key table: partition pruning would be wrong there too
+        analyzeFail("CREATE TABLE test.t_dup_nondeterministic (\n" +
+                        "  `k` bigint NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k`, `city`)\n" +
+                        "PARTITION BY floor(rand() * 2 + k)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should be deterministic");
+    }
+
+    @Test
     public void testPartitionExprSpellingMustMatchTheDeclaredColumn() {
         // a generated column resolves its source columns case sensitively, so a partition expression
         // that spells the column differently cannot create a table at all, for any keys type. The
