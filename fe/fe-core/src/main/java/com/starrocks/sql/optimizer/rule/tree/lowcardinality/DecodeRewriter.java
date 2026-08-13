@@ -69,6 +69,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /*
  * Rewrite the whole plan using the dict column by from bottom-up
@@ -300,10 +301,16 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), encodedUnionColumns);
         Projection newProjection = rewriteProjection(unionOp.getProjection(), encodedUnionColumns);
 
+        List<Pair<Integer, ColumnDict>> globalDicts = IntStream.range(0, newColumnRefOp.size())
+                .filter(i -> context.stringRefToDicts.containsKey(unionOp.getOutputColumnRefOp().get(i).getId()))
+                .mapToObj(i -> Pair.create(
+                        newColumnRefOp.get(i).getId(),
+                        context.stringRefToDicts.get(unionOp.getOutputColumnRefOp().get(i).getId()))).toList();
+
         PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
                 unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
-                unionOp.isFromIcebergEqualityDeleteRewrite());
-        return rewriteOptExpression(optExpression, newUnionOp, info.outputStringColumns);
+                unionOp.isFromIcebergEqualityDeleteRewrite(), globalDicts);
+        return rewriteOptExpression(optExpression, newUnionOp, finalInfo.outputStringColumns);
     }
 
 
