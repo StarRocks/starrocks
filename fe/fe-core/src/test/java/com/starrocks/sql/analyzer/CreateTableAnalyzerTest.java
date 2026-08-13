@@ -761,9 +761,11 @@ public class CreateTableAnalyzerTest {
     }
 
     @Test
-    public void testDropPartitionSourceColumnIsRejectedCaseInsensitively() throws Exception {
-        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
-        starRocksAssert.withTable("CREATE TABLE test.t_agg_drop_source (\n" +
+    public void testPartitionExprSpellingMustMatchTheDeclaredColumn() {
+        // a generated column resolves its source columns case sensitively, so a partition expression
+        // that spells the column differently cannot create a table at all, for any keys type. The
+        // source column of such a table can therefore never be dropped later.
+        String ddl = "CREATE TABLE test.t_agg_mixed_case_key (\n" +
                 "  `event_day` datetime NOT NULL,\n" +
                 "  `city` varchar(64) NOT NULL,\n" +
                 "  `pv` bigint SUM\n" +
@@ -771,13 +773,8 @@ public class CreateTableAnalyzerTest {
                 "AGGREGATE KEY(`event_day`, `city`)\n" +
                 "PARTITION BY date_trunc('week', EVENT_DAY)\n" +
                 "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
-                "PROPERTIES(\"replication_num\" = \"1\")");
-
-        // the partition expression spells the column differently from the declaration, dropping it
-        // would leave the generated column referencing a column that no longer exists
-        Throwable exception = assertThrows(Exception.class,
-                () -> starRocksAssert.alterTable("ALTER TABLE test.t_agg_drop_source DROP COLUMN `event_day`"));
-        assertThat(exception.getMessage(), containsString("can not be dropped"));
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeFail(ddl, "does not exist");
     }
 
     @Test
