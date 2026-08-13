@@ -178,7 +178,11 @@ class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using DestColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
-    using DestPrimitiveType = typename RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
+    // Valid decimal data always fits DestDecimalType, so the scaled intermediate only needs to be as
+    // wide as DestDecimalType itself (min int64, since decimal32/64 arithmetic on a plain int64 is much
+    // cheaper than always widening to int128: multiply/divide compile to native instructions instead of
+    // calls to __multi3/__divti3, and the loop is far more friendly to the compiler/CPU pipeline).
+    using DestPrimitiveType = std::conditional_t<(sizeof(DestDecimalType) <= sizeof(int64_t)), int64_t, int128_t>;
 
     PrimitiveToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
         if (src_scale < dst_scale) {
@@ -187,6 +191,29 @@ public:
         } else if (src_scale > dst_scale) {
             _scale_type = DecimalScaleType::kScaleDown;
             _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+        }
+    }
+
+    // _scale_type is loop-invariant but was previously re-checked on every element, which both adds a
+    // per-row branch and defeats vectorization/ILP. Dispatch on it once via a template parameter instead,
+    // matching the pattern already used by BinaryToDecimalConverter::t_convert below.
+    template <DecimalScaleType ST>
+    void t_convert(size_t size, DestDecimalType* dst_data, const SourceType* src_data) {
+        for (size_t i = 0; i < size; i++) {
+            DestPrimitiveType value;
+            if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
+                // Reinterpret the source through its unsigned bit pattern so a high-bit
+                // unsigned value is zero-extended instead of sign-extended.
+                value = static_cast<std::make_unsigned_t<SourceType>>(src_data[i]);
+            } else {
+                value = src_data[i];
+            }
+            if constexpr (ST == DecimalScaleType::kScaleUp) {
+                value *= _scale_factor;
+            } else if constexpr (ST == DecimalScaleType::kScaleDown) {
+                value /= _scale_factor;
+            }
+            dst_data[i] = DestDecimalType(value);
         }
     }
 
@@ -206,30 +233,25 @@ public:
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-        bool has_null = false;
         size_t size = src_column->size();
-        for (size_t i = 0; i < size; i++) {
-            dst_null_data[i] = src_null_data[i];
-            if (dst_null_data[i]) {
-                has_null = true;
-                continue;
-            }
-            DestPrimitiveType value;
-            if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
-                // Reinterpret the source through its unsigned bit pattern so a high-bit
-                // unsigned value is zero-extended instead of sign-extended.
-                value = static_cast<std::make_unsigned_t<SourceType>>(src_data[i]);
-            } else {
-                value = src_data[i];
-            }
-            if (_scale_type == DecimalScaleType::kScaleUp) {
-                value *= _scale_factor;
-            } else if (_scale_type == DecimalScaleType::kScaleDown) {
-                value /= _scale_factor;
-            }
-            dst_data[i] = DestDecimalType(value);
+        memcpy(dst_null_data.data(), src_null_data.data(), size);
+
+        // Computing the scaled value for null rows is harmless (the row is masked out by the null flag
+        // regardless), so we no longer branch per-row on nullness either — same tradeoff already made by
+        // NumericToNumericConverter::convert above.
+        switch (_scale_type) {
+        case DecimalScaleType::kScaleUp:
+            t_convert<DecimalScaleType::kScaleUp>(size, dst_data.data(), src_data.data());
+            break;
+        case DecimalScaleType::kScaleDown:
+            t_convert<DecimalScaleType::kScaleDown>(size, dst_data.data(), src_data.data());
+            break;
+        default:
+            t_convert<DecimalScaleType::kNoScale>(size, dst_data.data(), src_data.data());
+            break;
         }
-        dst_nullable_column->set_has_null(has_null);
+
+        dst_nullable_column->set_has_null(src_nullable_column->has_null());
         return Status::OK();
     }
 

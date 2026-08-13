@@ -28,7 +28,7 @@ SET PASSWORD [FOR user_identity] =
 
 如果 `[FOR user_identity]` 字段没有指定，那么会修改当前用户的密码。
 
-注意此处的 `user_identity` 语法与 [CREATE USER](../account-management/CREATE_USER.md) 章节中的相同。且必须为使用 `CREATE USER` 创建过的 `user_identity`。否则会报错用户不存在。如果不指定 `user_identity`，则会修改当前用户的密码。可以通过 `SHOW GRANTS;` 查看当前用户。
+注意此处的 `user_identity` 语法与 [CREATE USER](./CREATE_USER.md) 章节中的相同。且必须为使用 `CREATE USER` 创建过的 `user_identity`。否则会报错用户不存在。如果不指定 `user_identity`，则会修改当前用户的密码。可以通过 `SHOW GRANTS;` 查看当前用户。
 
 `PASSWORD()` 方式输入的是明文密码。如果不用 `PASSWORD()` 方式而直接使用字符串，需要传递的是已加密的密码。
 
