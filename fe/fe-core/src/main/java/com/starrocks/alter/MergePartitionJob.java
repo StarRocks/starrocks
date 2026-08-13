@@ -756,7 +756,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     targetTable.dropTempPartition(tempPartitionName, true);
                     hasFailedTask = true;
                     if (hasIngestion) {
-                        errMsg += tempPartitionName + " has ingestion during optimize"
+                        errMsg += tempPartitionName + " has ingestion during merge partitions"
                                 + PartitionUtils.formatConflictingTxnIds(conflictingTxnIds) + ", ";
                     } else {
                         errMsg += tempPartitionName + " rewrite task execute failed, ";

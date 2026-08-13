@@ -524,6 +524,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             //   - committed but not published yet, and in flight: reported as a conflicting transaction
             Map<String, Long> partitionLastVersion = Maps.newHashMap();
             Map<String, List<Long>> partitionConflictingTxnIds = Maps.newHashMap();
+            // sourcePartitionNames is persisted with the job, so rebuild it from scratch rather than
+            // appending: entries left over from a previous pass would no longer line up one to one with
+            // tmpPartitionNames, and the removals below only drop a single occurrence each.
+            sourcePartitionNames.clear();
             optimizeClause.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId)).forEach(
                         partition -> {
