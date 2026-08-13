@@ -59,6 +59,7 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
 #include "storage_primitive/primary_key_encoder.h"
+#include "types/logical_type.h"
 
 namespace starrocks::lake {
 
@@ -1492,6 +1493,24 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 // rssid; sparse iff K is small both absolutely (< sdcg_sparse_max_rows) and relative to M
                 // (K/M < sdcg_dense_threshold). M==0 (unknown) or no rows => dense fallback.
                 bool take_sparse = false;
+                // Does this batch carry a column type the sparse overlay READER cannot materialize? One
+                // unsupported column disqualifies the whole batch, because a single `.spcols` carries all
+                // of the batch's value columns. Enforced at the authoritative guard further below (after
+                // every take_sparse writer); see there for the full rationale.
+                const bool batch_has_overlay_unsupported_type = [&]() {
+                    for (size_t i = 0; i < partial_schema.num_fields(); ++i) {
+                        switch (partial_schema.field(i)->type()->type()) {
+                        case TYPE_ARRAY:
+                        case TYPE_MAP:
+                        case TYPE_STRUCT:
+                            return true;
+                        default:
+                            break;
+                        }
+                    }
+                    return false;
+                }();
+
                 int64_t K = 0;
                 if (sdcg_enabled && source_num_rows > 0) {
                     std::set<uint32_t> distinct;
@@ -1648,6 +1667,35 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                                 params.tablet->id(), rssid, K, source_num_rows, sh_chain, sig.heterogeneous,
                                 sdcg_auto_mode_name(rec), take_sparse);
                     }
+                }
+
+                // AUTHORITATIVE complex-type guard -- deliberately placed AFTER every writer of take_sparse
+                // (the K/M rule, the flexible force, and the auto cost model), because each of those can
+                // turn take_sparse back on and an earlier-only guard would be silently overridden.
+                //
+                // A sparse/packed `.spcols` layer is read back through LayeredOverlayColumnIterator, which
+                // materializes the overlay value column with ChunkFactory::column_from_field_type(). That
+                // factory ABORTS the process on ARRAY / MAP / STRUCT ("array not supported",
+                // chunk_factory.cpp:124-131) -- CHECK is fatal in release builds too, and since the fault is
+                // on the READ path, every retry re-kills the node (observed: 3/3 BEs down, no self-recovery).
+                // Writing such a layer is therefore accepted-then-fatal, so these batches must stay off the
+                // sparse path entirely.
+                //
+                // Fallback targets, both verified to handle these types (ArrayColumn/MapColumn/StructColumn
+                // all implement update_rows, and the overlay is read by the ordinary DCG column iterator):
+                //   - non-flexible -> plain dense `.cols`
+                //   - flexible     -> masked-dense `.cols` (_update_source_chunk_by_upt_flexible); safe to
+                //     force because flexible+merge_condition is rejected above, so condition_idx < 0 always
+                //     holds here and the masked-dense gate is satisfied. Leaving flex_column false would send
+                //     a flexible batch down the non-flexible dense path and clobber the omitted columns.
+                if (batch_has_overlay_unsupported_type && take_sparse) {
+                    VLOG(1) << fmt::format(
+                            "SDCG: forcing dense for tablet_id: {} rssid: {} -- batch carries a column type "
+                            "the sparse overlay reader cannot materialize (ARRAY/MAP/STRUCT)",
+                            params.tablet->id(), rssid);
+                    take_sparse = false;
+                    flex_column = flexible_mode;
+                    StorageMetrics::instance()->sdcg_write_mode_dense_total.increment(1);
                 }
 
                 if (take_sparse && flexible_mode) {
@@ -1938,7 +1986,29 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 // plain SPARSE_PERCOL `.spcols` overlays: their (source_rowid -> value) rows can be remapped onto the
 // compaction output via the rows mapper. Flexible/packed presence lists and a dense conflicting layer
 // are NOT handled by the simple rowid-remap replay and force a discard.
-static bool dcg_conflict_is_replayable(const DeltaColumnGroupVerPB& dcg, int64_t compact_version) {
+// Unique ids of columns whose type the REPLAY reader cannot materialize. replay_sparse_overlays_onto_output
+// rebuilds every racing layer's value column with ChunkFactory::column_from_field_type() -- on BOTH its
+// SPARSE_PERCOL and its DENSE_COLS branch -- and that factory aborts the process on ARRAY / MAP / STRUCT
+// (chunk_factory.cpp:124-131). The write-side guard keeps these types out of `.spcols`, but a racing layer
+// can still be a plain dense `.cols`, so replay must reject them here as well.
+static std::unordered_set<uint32_t> replay_unsupported_column_uids(const TabletSchemaPB& schema) {
+    std::unordered_set<uint32_t> uids;
+    for (const auto& col : schema.column()) {
+        switch (string_to_logical_type(col.type())) {
+        case TYPE_ARRAY:
+        case TYPE_MAP:
+        case TYPE_STRUCT:
+            uids.insert(static_cast<uint32_t>(col.unique_id()));
+            break;
+        default:
+            break;
+        }
+    }
+    return uids;
+}
+
+static bool dcg_conflict_is_replayable(const DeltaColumnGroupVerPB& dcg, int64_t compact_version,
+                                       const std::unordered_set<uint32_t>& replay_unsupported_uids) {
     // PACKED (flexible / per-row heterogeneous) racing layers ARE replayable: a packed file is a
     // SPARSE_PERCOL file carrying per-column presence roaring; the replay reader gates winner cells by
     // that roaring. So no blanket column_presence_lists rejection here -- only the file kind matters below.
@@ -1950,6 +2020,16 @@ static bool dcg_conflict_is_replayable(const DeltaColumnGroupVerPB& dcg, int64_t
             // whole-column rewrite read by base ordinal; sparse = per-source_rowid). Any other kind is not.
             if (kind != SPARSE_PERCOL && kind != DENSE_COLS) {
                 return false;
+            }
+            // ... and regardless of kind, the replay reader must be able to materialize every value column
+            // this layer carries. Falling back to MUST_DISCARD here costs one compaction result; letting a
+            // complex-typed layer through would abort the node in replay.
+            if (!replay_unsupported_uids.empty() && i < dcg.unique_column_ids_size()) {
+                for (uint32_t uid : dcg.unique_column_ids(i).column_ids()) {
+                    if (replay_unsupported_uids.count(uid) > 0) {
+                        return false;
+                    }
+                }
             }
         }
     }
@@ -1981,6 +2061,10 @@ CompactionConflictKind CompactionUpdateConflictChecker::classify_conflict(const 
     //    only plain-sparse DCG overlays => REPLAYABLE_DCG. Scan ALL segments so the kind reflects the
     //    worst conflict (MUST_DISCARD dominates).
     bool found_replayable = false;
+    // Computed once for the whole classification; empty for the overwhelmingly common all-scalar schema,
+    // in which case the per-layer check below short-circuits.
+    const std::unordered_set<uint32_t> replay_unsupported_uids =
+            has_dcg ? replay_unsupported_column_uids(metadata.schema()) : std::unordered_set<uint32_t>{};
     for (uint32_t segment : input_segments) {
         if (has_idg) {
             auto idg_ver_iter = metadata.idg_meta().idgs().find(segment);
@@ -2003,7 +2087,8 @@ CompactionConflictKind CompactionUpdateConflictChecker::classify_conflict(const 
                     }
                 }
                 if (conflict) {
-                    if (!dcg_conflict_is_replayable(dcg_ver_iter->second, op_compaction.compact_version())) {
+                    if (!dcg_conflict_is_replayable(dcg_ver_iter->second, op_compaction.compact_version(),
+                                                    replay_unsupported_uids)) {
                         return CompactionConflictKind::MUST_DISCARD;
                     }
                     found_replayable = true;
