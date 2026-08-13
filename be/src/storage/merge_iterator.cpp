@@ -27,9 +27,31 @@
 namespace starrocks {
 
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
+<<<<<<< HEAD:be/src/storage/merge_iterator.cpp
 inline int compare_chunk(size_t key_columns, const std::vector<uint32_t>& sort_key_idxes, const Chunk& lhs, size_t m,
                          const Chunk& rhs, size_t n, const std::string& merge_condition) {
     for (unsigned int sort_key_idx : sort_key_idxes) {
+=======
+// The `compare_at` result is multiplied by `sort_order`, so the null hint must be `null_first`, which already
+// carries the `sort_order` factor. Using `nan_direction()` here would cancel that factor out and place the NULLs
+// at the opposite end of a descending run, disagreeing with how the runs themselves were sorted.
+inline int compare_column(const ColumnPtr& lc, size_t m, const ColumnPtr& rc, size_t n, const SortDesc* sort_desc) {
+    int sort_order = 1;
+    int null_first = -1;
+    if (sort_desc) {
+        sort_order = sort_desc->sort_order;
+        null_first = sort_desc->null_first;
+    }
+    return lc->compare_at(m, n, *rc, null_first) * sort_order;
+}
+
+// Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
+inline int compare_chunk(size_t key_columns, const std::vector<uint32_t>& sort_key_idxes,
+                         const std::shared_ptr<SortDescs>& sort_descs, const Chunk& lhs, size_t m, const Chunk& rhs,
+                         size_t n, const std::string& merge_condition) {
+    for (size_t pos = 0; pos < sort_key_idxes.size(); ++pos) {
+        uint32_t sort_key_idx = sort_key_idxes[pos];
+>>>>>>> 819d5030d6 ([BugFix] Sort a run and merge the runs by the same NULL convention  (#77679)):be/src/storage_primitive/merge_iterator.cpp
         const ColumnPtr& lc = lhs.get_column_by_index(sort_key_idx);
         const ColumnPtr& rc = rhs.get_column_by_index(sort_key_idx);
         if (int r = lc->compare_at(m, n, *rc, -1); r != 0) {
