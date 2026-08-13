@@ -137,9 +137,15 @@ public:
         return Status::OK();
     }
 
+    // NOTE: the comparators below feed `compare_at` with `null_first` rather than `nan_direction()`, because
+    // `sort_and_tie_helper` reverses the comparison result for a descending order. That is the same convention
+    // as the merge phase(`compare_chunk_row`) and the top-n compare phase(`ColumnCompare`), which apply
+    // `sort_order` on top of a `compare_at(null_first)` result. Passing `nan_direction()` here would place the
+    // NULLs nested in ARRAY/MAP/STRUCT at the opposite end for a descending order, so a sorted run and the
+    // merge of several sorted runs would disagree on the order.
     Status do_visit(const ArrayColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
-            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.null_first);
         };
 
         return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
@@ -148,7 +154,7 @@ public:
 
     Status do_visit(const MapColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
-            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.null_first);
         };
 
         return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
@@ -157,7 +163,7 @@ public:
 
     Status do_visit(const StructColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
-            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.null_first);
         };
 
         return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
@@ -357,11 +363,12 @@ public:
         return Status::OK();
     }
 
+    // See the note on ColumnSorter for why `null_first` is the hint passed to `compare_at` here.
     Status do_visit(const ArrayColumn& column) {
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
-            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.null_first);
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
@@ -374,7 +381,7 @@ public:
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
-            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.null_first);
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
@@ -387,7 +394,7 @@ public:
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
-            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.null_first);
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
@@ -406,7 +413,7 @@ public:
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
-            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.null_first);
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
