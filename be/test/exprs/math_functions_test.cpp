@@ -2021,6 +2021,21 @@ TEST_F(VecMathFunctionsTest, innerProduct) {
     ASSERT_FLOAT_EQ(res[1], 5.0f);
 }
 
+TEST_F(VecMathFunctionsTest, innerProductDiffersFromCosineForUnnormalizedVectors) {
+    auto base_col = build_float_array_column({{2, 0}});
+    auto target_col = build_float_array_column({{3, 0}});
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto inner_product = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), columns);
+    ASSERT_TRUE(inner_product.ok());
+    auto cosine_similarity = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(cosine_similarity.ok());
+
+    ASSERT_FLOAT_EQ(ColumnHelper::cast_to<TYPE_FLOAT>(inner_product.value())->get_data()[0], 6.0f);
+    ASSERT_FLOAT_EQ(ColumnHelper::cast_to<TYPE_FLOAT>(cosine_similarity.value())->get_data()[0], 1.0f);
+}
+
 // cosine_similarity: zero vector returns 0 (not NaN/inf)
 TEST_F(VecMathFunctionsTest, cosineSimilarityZeroVector) {
     auto base_col = build_float_array_column({{0, 0, 0}});

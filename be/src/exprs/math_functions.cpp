@@ -1251,12 +1251,18 @@ static inline float sum_squares_float(const float* data, size_t dim) {
     return sum;
 }
 
-template <bool isNorm>
-static inline void vector_cosine_similarity(const float* base_vec, size_t dim, const float* column_data,
-                                            size_t num_rows, float* out) {
+enum class VectorSimilarityAlgorithm {
+    kCosineSimilarity,
+    kNormalizedCosineSimilarity,
+    kInnerProduct,
+};
+
+template <VectorSimilarityAlgorithm algorithm>
+static inline void vector_similarity_fixed_query(const float* base_vec, size_t dim, const float* column_data,
+                                                 size_t num_rows, float* out) {
     float base_sum = 0.0f;
     float base_inv_norm = 0.0f;
-    if constexpr (!isNorm) {
+    if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
         base_sum = sum_squares_float(base_vec, dim);
         if (base_sum == 0.0f) {
             for (size_t i = 0; i < num_rows; ++i) {
@@ -1284,25 +1290,23 @@ static inline void vector_cosine_similarity(const float* base_vec, size_t dim, c
             __m256 target_vec_data = _mm256_loadu_ps(target + j);
             __m256 mul_vec = _mm256_mul_ps(base_vec_data, target_vec_data);
             sum_vec = _mm256_add_ps(sum_vec, mul_vec);
-            if constexpr (!isNorm) {
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
                 __m256 target_mul_vec = _mm256_mul_ps(target_vec_data, target_vec_data);
                 target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
             }
         }
         sum += sum_m256(sum_vec);
-        if constexpr (!isNorm) {
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
             target_sum += sum_m256(target_sum_vec);
         }
 #endif
         for (; j < dim; ++j) {
             sum += base_vec[j] * target[j];
-            if constexpr (!isNorm) {
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
                 target_sum += target[j] * target[j];
             }
         }
-        if constexpr (isNorm) {
-            out[i] = sum;
-        } else {
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
             if (target_sum == 0.0f) {
                 out[i] = 0.0f;
             } else {
@@ -1313,12 +1317,14 @@ static inline void vector_cosine_similarity(const float* base_vec, size_t dim, c
                 out[i] = sum * base_inv_norm / std::sqrt(target_sum);
 #endif
             }
+        } else {
+            out[i] = sum;
         }
     }
 }
 
-template <bool isNorm>
-static inline void cosine_similarity_fixed_dim_float(const float* base_data, const float* target_data, size_t num_rows,
+template <VectorSimilarityAlgorithm algorithm>
+static inline void vector_similarity_fixed_dim_float(const float* base_data, const float* target_data, size_t num_rows,
                                                      size_t dim, float* out) {
     for (size_t i = 0; i < num_rows; ++i) {
         const float* base = base_data + i * dim;
@@ -1338,7 +1344,7 @@ static inline void cosine_similarity_fixed_dim_float(const float* base_data, con
             __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
             sum_vec = _mm256_add_ps(sum_vec, mul_vec);
 
-            if constexpr (!isNorm) {
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
                 __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
                 base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
                 __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
@@ -1346,31 +1352,31 @@ static inline void cosine_similarity_fixed_dim_float(const float* base_data, con
             }
         }
         sum += sum_m256(sum_vec);
-        if constexpr (!isNorm) {
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
             base_sum += sum_m256(base_sum_vec);
             target_sum += sum_m256(target_sum_vec);
         }
 #endif
         for (; j < dim; ++j) {
             sum += base[j] * target[j];
-            if constexpr (!isNorm) {
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
                 base_sum += base[j] * base[j];
                 target_sum += target[j] * target[j];
             }
         }
-        if constexpr (isNorm) {
-            out[i] = sum;
-        } else {
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
             if (base_sum == 0.0f || target_sum == 0.0f) {
                 out[i] = 0.0f;
             } else {
                 out[i] = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
             }
+        } else {
+            out[i] = sum;
         }
     }
 }
 
-template <LogicalType TYPE, bool isNorm>
+template <LogicalType TYPE, VectorSimilarityAlgorithm algorithm>
 static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Columns& columns,
                                              const char* function_name) {
     DCHECK_EQ(columns.size(), 2);
@@ -1477,7 +1483,7 @@ static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Col
             }
             const float* base_vec = reinterpret_cast<const float*>(base_data_head);
             const float* target_data = reinterpret_cast<const float*>(target_data_head);
-            vector_cosine_similarity<isNorm>(base_vec, dim, target_data, target_size, result_data);
+            vector_similarity_fixed_query<algorithm>(base_vec, dim, target_data, target_size, result_data);
             return result;
         }
         // target is const (size-1), base has N rows.
@@ -1492,7 +1498,7 @@ static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Col
             }
             const float* target_vec = reinterpret_cast<const float*>(target_data_head);
             const float* base_data = reinterpret_cast<const float*>(base_data_head);
-            vector_cosine_similarity<isNorm>(target_vec, dim, base_data, target_size, result_data);
+            vector_similarity_fixed_query<algorithm>(target_vec, dim, base_data, target_size, result_data);
             return result;
         }
         uint32_t dim = target_offset[1] - target_offset[0];
@@ -1500,9 +1506,9 @@ static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Col
             if (dim == 0) {
                 return Status::InvalidArgument(fmt::format("{} requires non-empty arrays in each row", function_name));
             }
-            cosine_similarity_fixed_dim_float<isNorm>(reinterpret_cast<const float*>(base_data_head),
-                                                      reinterpret_cast<const float*>(target_data_head), target_size,
-                                                      dim, result_data);
+            vector_similarity_fixed_dim_float<algorithm>(reinterpret_cast<const float*>(base_data_head),
+                                                         reinterpret_cast<const float*>(target_data_head), target_size,
+                                                         dim, result_data);
             return result;
         }
         if (!offsets_equal_nonzero(base_offset, target_offset, target_size)) {
@@ -1537,12 +1543,12 @@ static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Col
         CppType result_value = 0;
         for (size_t j = 0; j < dim_size; j++) {
             sum += base_data[j] * target_data[j];
-            if constexpr (!isNorm) {
+            if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
                 base_sum += base_data[j] * base_data[j];
                 target_sum += target_data[j] * target_data[j];
             }
         }
-        if constexpr (!isNorm) {
+        if constexpr (algorithm == VectorSimilarityAlgorithm::kCosineSimilarity) {
             if (base_sum == 0 || target_sum == 0) {
                 result_value = 0;
             } else {
@@ -1560,12 +1566,16 @@ static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Col
 
 template <LogicalType TYPE, bool isNorm>
 StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
-    return vector_similarity<TYPE, isNorm>(context, columns, "cosine_similarity");
+    if constexpr (isNorm) {
+        return vector_similarity<TYPE, VectorSimilarityAlgorithm::kNormalizedCosineSimilarity>(context, columns,
+                                                                                               "cosine_similarity");
+    }
+    return vector_similarity<TYPE, VectorSimilarityAlgorithm::kCosineSimilarity>(context, columns, "cosine_similarity");
 }
 
 template <LogicalType TYPE>
 StatusOr<ColumnPtr> MathFunctions::inner_product(FunctionContext* context, const Columns& columns) {
-    return vector_similarity<TYPE, true>(context, columns, "inner_product");
+    return vector_similarity<TYPE, VectorSimilarityAlgorithm::kInnerProduct>(context, columns, "inner_product");
 }
 
 // explicitly instantiate template function.
