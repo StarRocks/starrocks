@@ -247,6 +247,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Blob Storage にアクセスするためにネイティブ SDK を使用するかどうか。これにより、マネージド ID およびサービスプリンシパルでの認証が可能になります。この項目が `false` に設定されている場合、共有キーと SAS トークンでの認証のみが許可されます。
 - 導入時期：v3.4.4
 
+### `s3_use_native_sdk_for_glob`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：S3 および S3 互換オブジェクトストア (`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs`、`tos`) について、FILES() テーブル関数内の glob パスの解決にネイティブ AWS S3 SDK を使用するかどうか。この項目が `true` に設定されている場合、ワイルドカードの最長リテラルプレフィックスが S3 `ListObjectsV2` にプッシュダウンされ、Hadoop `globStatus` で親プレフィックス全体を列挙する必要がなくなります。プレフィックス配下のオブジェクトが多く、一致するものが少ない場合はこちらのほうが大幅に高速です。`false` に設定すると Hadoop `globStatus` の経路にフォールバックします。
+- 導入時期：v4.1.4
+
 ### `cloud_native_hdfs_url`
 
 - デフォルト：Empty string
