@@ -137,7 +137,7 @@ connector jar包的命名格式如下
 
 - **是否必填**：否
 - **默认值**：`true`
-- **描述**：是否使用 [Stream Load 事务接口](../../Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本为 v2.5 或更高。此功能可以在一次导入事务中导入更多数据，同时减少内存使用量，提高性能。
+- **描述**：是否使用 [Stream Load 事务接口](../Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本为 v2.5 或更高。此功能可以在一次导入事务中导入更多数据，同时减少内存使用量，提高性能。
 
 :::note
 自 1.1.1 版本以来，只有当  `starrocks.write.max.retries` 的值为非正数时，此参数才会生效，因为 Stream Load 事务接口不支持重试。
