@@ -1686,20 +1686,38 @@ public class MaterializedViewAnalyzer {
             int numBuckets = 0;
             if (distributionDesc != null) {
                 numBuckets = distributionDesc.getBuckets();
-                if (distributionDesc instanceof RandomDistributionDesc) {
-                    LOG.warn("Check distribution for primary key mv, ignore random distribution, " +
-                            "use hash distribution with key columns: {}",
-                            Joiner.on(",").join(keyColNames));
-                } else if (distributionDesc instanceof HashDistributionDesc) {
-                    HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
-                    List<String> distColumns = hashDistributionDesc.getDistributionColumnNames();
-                    LOG.warn("Check distribution for primary key mv, ignore defined dist columns: {}, key columns: {}",
-                            Joiner.on(",").join(distColumns), Joiner.on(",").join(keyColNames));
+                String replaced = describeReplacedDistribution(distributionDesc, keyColNames);
+                if (replaced != null) {
+                    LOG.warn("Incremental materialized view {}: {} is ignored, the view is distributed by HASH({}) " +
+                                    "so that incremental refresh can locate rows by primary key. " +
+                                    "The bucket number is unchanged.",
+                            statement.getTblName(), replaced, Joiner.on(", ").join(keyColNames));
                 }
             }
             HashDistributionDesc result = new HashDistributionDesc(numBuckets, keyColNames);
             statement.setDistributionDesc(result);
             return result;
+        }
+
+        /**
+         * The distribution clause as written, rendered for a message, or null when the normalization
+         * above keeps it as written.
+         */
+        @VisibleForTesting
+        static String describeReplacedDistribution(DistributionDesc distributionDesc, List<String> keyColNames) {
+            if (distributionDesc instanceof RandomDistributionDesc) {
+                return "DISTRIBUTED BY RANDOM";
+            }
+            if (!(distributionDesc instanceof HashDistributionDesc)) {
+                return null;
+            }
+            List<String> distColumns = ((HashDistributionDesc) distributionDesc).getDistributionColumnNames();
+            if (distColumns.size() == keyColNames.size()
+                    && IntStream.range(0, distColumns.size())
+                    .allMatch(i -> distColumns.get(i).equalsIgnoreCase(keyColNames.get(i)))) {
+                return null;
+            }
+            return "DISTRIBUTED BY HASH(" + Joiner.on(", ").join(distColumns) + ")";
         }
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {

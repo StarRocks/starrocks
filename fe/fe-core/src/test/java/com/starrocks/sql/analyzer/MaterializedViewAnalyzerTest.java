@@ -29,6 +29,8 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -544,5 +546,33 @@ public class MaterializedViewAnalyzerTest {
         String sql = "create materialized view mv_on_iceberg_view refresh manual as " +
                 "SELECT id, data, date FROM `iceberg0`.`view_db`.`iceberg_view` as a;";
         analyzeFail(sql, "Create/Rebuild materialized view do not support the table type: ICEBERG_VIEW");
+    }
+
+    /**
+     * Report the distribution the DDL asked for only when it differs from the one the MV gets: a
+     * reconstructed DDL already names the key columns and must stay quiet.
+     */
+    @Test
+    public void testDescribeReplacedDistribution() {
+        List<String> keyColumns = Arrays.asList("__ROW_ID__", "id");
+
+        Assertions.assertEquals("DISTRIBUTED BY HASH(id)",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new HashDistributionDesc(8, Lists.newArrayList("id")), keyColumns));
+        Assertions.assertEquals("DISTRIBUTED BY RANDOM",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new RandomDistributionDesc(), keyColumns));
+        Assertions.assertEquals("DISTRIBUTED BY HASH(id, __ROW_ID__)",
+                MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                        new HashDistributionDesc(8, Lists.newArrayList("id", "__ROW_ID__")), keyColumns),
+                "a different column order is a different distribution");
+
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new HashDistributionDesc(8, Lists.newArrayList("__ROW_ID__", "id")), keyColumns));
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new HashDistributionDesc(8, Lists.newArrayList("__row_id__", "ID")), keyColumns),
+                "column names are case-insensitive");
+        Assertions.assertNull(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.describeReplacedDistribution(
+                new RangeDistributionDesc(), keyColumns));
     }
 }
