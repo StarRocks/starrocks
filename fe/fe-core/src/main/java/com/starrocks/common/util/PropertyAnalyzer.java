@@ -1121,6 +1121,9 @@ public class PropertyAnalyzer {
             zstdCompressionPageSizes = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             String zstdCompressionColumnsStr = properties.get(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
             if (Strings.isNullOrEmpty(zstdCompressionColumnsStr)) {
+                // an empty value means "no columns". The key still has to be consumed here,
+                // otherwise the caller rejects the leftover entry as an unknown property.
+                properties.remove(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
                 return zstdCompressionPageSizes;
             }
 
@@ -1141,26 +1144,26 @@ public class PropertyAnalyzer {
                         .orElse(null);
                 if (column == null) {
                     throw new AnalysisException(
-                            String.format("Invalid compression dict column '%s': not exists", zstdCompressionColumn));
+                            String.format("Invalid zstd compression column '%s': not exists", zstdCompressionColumn));
                 }
 
                 Type type = column.getType();
 
-                // compression dict only supports string(char/varchar/string) or json columns
+                // zstd compression columns are only string(char/varchar/string) or json columns
                 if (!type.isStringType() && !type.isJsonType()) {
                     throw new AnalysisException(String.format(
-                            "Invalid compression dict column '%s': unsupported type %s, "
+                            "Invalid zstd compression column '%s': unsupported type %s, "
                                     + "only CHAR/VARCHAR/STRING/JSON are supported", zstdCompressionColumn, type));
                 }
 
-                // compression dict is only used in value columns, not key columns.
+                // only value columns can be compressed this way, not key columns.
                 if (column.isKey()) {
                     throw new AnalysisException(
-                            "Compression dict column only used in value columns. invalid column: " + zstdCompressionColumn);
+                            "Zstd compression column only used in value columns. invalid column: " + zstdCompressionColumn);
                 }
 
                 if (zstdCompressionColumnSet.contains(zstdCompressionColumn)) {
-                    throw new AnalysisException(String.format("Duplicate compression dict column '%s'", zstdCompressionColumn));
+                    throw new AnalysisException(String.format("Duplicate zstd compression column '%s'", zstdCompressionColumn));
                 }
 
                 zstdCompressionColumnSet.add(zstdCompressionColumn);

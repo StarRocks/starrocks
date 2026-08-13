@@ -179,6 +179,19 @@ public class PropertyAnalyzerTest {
 
         // absent property returns null
         Assertions.assertNull(PropertyAnalyzer.analyzeZstdCompressionColumns(Maps.newHashMap(), columns));
+
+        // an empty value means "no columns", and still has to consume the key -- a leftover
+        // entry is rejected as an unknown property by the caller.
+        Map<String, String> emptyValue = Maps.newHashMap();
+        emptyValue.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "");
+        Assertions.assertTrue(PropertyAnalyzer.analyzeZstdCompressionColumns(emptyValue, columns).isEmpty());
+        Assertions.assertFalse(emptyValue.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+
+        Map<String, String> emptyPageSizes = Maps.newHashMap();
+        emptyPageSizes.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "");
+        Assertions.assertTrue(
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(emptyPageSizes, columns).isEmpty());
+        Assertions.assertFalse(emptyPageSizes.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
     }
 
     @Test
@@ -198,7 +211,7 @@ public class PropertyAnalyzerTest {
             PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
             Assertions.fail();
         } catch (AnalysisException e) {
-            Assertions.assertTrue(e.getMessage().contains("Invalid compression dict column 'vx'"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("Invalid zstd compression column 'vx'"), e.getMessage());
         }
 
         // unsupported type (BIGINT)
@@ -225,7 +238,7 @@ public class PropertyAnalyzerTest {
             PropertyAnalyzer.analyzeZstdCompressionColumns(properties, columns);
             Assertions.fail();
         } catch (AnalysisException e) {
-            Assertions.assertTrue(e.getMessage().contains("Duplicate compression dict column 'V1'"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("Duplicate zstd compression column 'V1'"), e.getMessage());
         }
     }
 
