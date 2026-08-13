@@ -667,12 +667,17 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
         DecodeInfo info = context.operatorDecodeInfo.get(consume);
+        // Only rewrite the CTE output map to dict refs for columns that still arrive at this
+        // consume in dict form. A column that was decoded inside the CTE producer (e.g. by
+        // lead() with a non-null default) must keep its string ref here; otherwise the consume
+        // references a producer dict slot that the produce fragment no longer emits, and the
+        // query fails at BE with "slot_id N not found".
         Map<ColumnRefOperator, ScalarOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
-                        (e) -> new Pair<>(
-                                context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
-                                e.getValue().isColumnRef()
-                                        && context.stringRefToDictRefMap.containsKey((ColumnRefOperator) e.getValue())
-                                ? context.stringRefToDictRefMap.get((ColumnRefOperator) e.getValue()) : e.getValue()))
+                        (e) -> e.getValue() instanceof ColumnRefOperator col &&
+                                info.inputStringColumns.contains(col.getId())
+                                ? new Pair<>(context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
+                                        context.stringRefToDictRefMap.getOrDefault(col, col))
+                                : new Pair<>(e.getKey(), e.getValue()))
                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
         ColumnRefSet supportColumns = new ColumnRefSet(consume.getCteOutputColumnRefMap().entrySet().stream()
                 .filter(k -> info.inputStringColumns.contains(k.getValue().cast())).map(Map.Entry::getKey).toList());
