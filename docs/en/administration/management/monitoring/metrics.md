@@ -15,7 +15,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for warehouse query queue](./metrics-warehouse_queue.md)
 - [Metrics for warehouse CN Group](./metrics-warehouse_cngroup.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](./Monitor_and_Alert.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](./monitoring.md).
 
 :::
 

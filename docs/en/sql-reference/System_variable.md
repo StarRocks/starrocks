@@ -167,7 +167,7 @@ SELECT /*+ SET_VAR
 
 ### Set variables as user properties
 
-You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+You can set session variables as user properties using the [ALTER USER](./sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
 
 Example:
 
@@ -750,7 +750,7 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 
 ### enable_insert_strict
 
-* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 * **Default**: true
 
 ### enable_lake_prepared_physical_split_scan
@@ -1067,7 +1067,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 ### enable_scan_datacache
 
-* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
+* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
 
@@ -1616,7 +1616,7 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 ### plan_mode
 
-* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg.md#appendix-periodic-metadata-refresh-strategy). Valid values:
   * `auto`: The system will automatically select the retrieval plan.
   * `local`: The FE parses Iceberg manifest files locally and streams scan ranges to BEs incrementally as manifests are processed. This avoids collecting all splits before execution begins, reducing memory usage and first-byte latency.
   * `distributed`: Manifest parsing is offloaded to multiple BEs in parallel. The FE must wait for all BEs to finish before delivering any scan ranges, which can cause high memory usage and long wait times on large tables with many manifest files. Prefer this only if FE CPU is a bottleneck and the table has a very large number of manifests.

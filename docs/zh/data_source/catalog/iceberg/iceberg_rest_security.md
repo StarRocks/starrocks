@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "通过 JWT 认证和临时凭证实现 Iceberg REST Catalog 的安全访问和统一权限管理。"
 ---
@@ -29,7 +30,7 @@ description: "通过 JWT 认证和临时凭证实现 Iceberg REST Catalog 的安
 
 ### 第一步：设置 JWT 认证
 
-在 StarRocks 中，配置一个 **[基于 JWT 的安全集成](../../../administration/user_privs/authentication/security_integration.md#create-a-security-integration-with-jwt)** 或 [创建一个使用 JWT 认证的用户](https://docs.starrocks.io/en/docs/administration/user_privs/authentication/jwt_authentication/)。
+在 StarRocks 中，配置一个 **[基于 JWT 的安全集成](../../../administration/user_privs/authentication/security_integration.md#create-a-security-integration-with-jwt)** 或 [创建一个使用 JWT 认证的用户](../../../administration/user_privs/authentication/jwt_authentication.md)。
 
 ### 第二步：创建 Iceberg REST Catalog 并配置安全设置
 

@@ -15,7 +15,7 @@ sidebar_position: 10
 - [仓库查询队列监控指标](./metrics-warehouse_queue.md)
 - [仓库 CN Group 监控指标](./metrics-warehouse_cngroup.md)
 
-关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./Monitor_and_Alert.md)。
+关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./monitoring.md)。
 
 :::
 

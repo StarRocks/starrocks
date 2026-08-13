@@ -15,7 +15,7 @@ sidebar_position: 10
 - [ウェアハウスキューメトリクス](./metrics-warehouse_queue.md)
 - [ウェアハウス CN Group メトリクス](./metrics-warehouse_cngroup.md)
 
-StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./Monitor_and_Alert.md)を参照してください。
+StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./monitoring.md)を参照してください。
 
 :::
 

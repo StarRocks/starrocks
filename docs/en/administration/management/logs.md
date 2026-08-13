@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "Overview of StarRocks logging: FE and BE log file types, content, configuration, log rolling and retention strategies for troubleshooting and performance..."
 ---

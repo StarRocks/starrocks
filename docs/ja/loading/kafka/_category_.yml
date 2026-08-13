@@ -1,0 +1,7 @@
+position: 50
+label: 'Load data from Apache Kafka'
+collapsible: true
+collapsed: true
+link:
+  id: kafka
+  type: doc
