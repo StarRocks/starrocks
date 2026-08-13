@@ -725,15 +725,9 @@ DISTRIBUTED BY HASH(`id`);
     2 rows in set (0.01 sec)
     ```
 
-<<<<<<< HEAD
-> **注意**
->
-> 如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 函数进行转换。
-=======
 :::note
 如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 或 [`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 函数进行转换。
 :::
->>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 ### 导入至 HLL 列
 

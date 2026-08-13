@@ -36,9 +36,6 @@ displayed_sidebar: docs
 
 ### 1.1
 
-<<<<<<< HEAD
-### 1.1.2
-=======
 #### 1.1.4
 
 このリリースでは、いくつかの新機能と改善を含んでいます。
@@ -80,7 +77,6 @@ displayed_sidebar: docs
 - JSON 型の書き込みに関する誤りを修正しました。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
 
 #### 1.1.2
->>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 **機能**
 
