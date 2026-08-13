@@ -33,6 +33,7 @@ public:
 
     void create_random_access_file(const std::string& path);
     TupleDescriptor* create_tuple_descriptor();
+    TupleDescriptor* create_mapping_tuple_descriptor();
     static std::string gen_check_str(size_t start, size_t end);
     static std::string gen_check_int(size_t start, size_t end);
 
@@ -67,9 +68,14 @@ void HdfsScannerJsonReaderTest::create_random_access_file(const std::string& pat
 
 TupleDescriptor* HdfsScannerJsonReaderTest::create_tuple_descriptor() {
     parquet::Utils::SlotDesc slots[] = {
-            {"c1", TypeDescriptor::from_logical_type(TYPE_INT)},
-            {"c2", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
-            {""} // end
+            {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""} // end
+    };
+    return parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slots);
+}
+
+TupleDescriptor* HdfsScannerJsonReaderTest::create_mapping_tuple_descriptor() {
+    parquet::Utils::SlotDesc slots[] = {
+            {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_DESC}, {""} // end
     };
     return parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slots);
 }
@@ -205,6 +211,49 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_wrong_order_json) {
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3, 4, 5, NULL, 7, NULL]");
     ASSERT_EQ(chunk->get_column_by_slot_id(1)->debug_string(),
               "['str_1', 'str_2', 'str_3', 'str_4', NULL, 'str_6', 'str_7', NULL]");
+}
+
+// Mirrors a real OpenX JsonSerDe table created with:
+//   create table t(c1 int, c2 int, c3 int) row format serde
+//   'org.openx.data.jsonserde.JsonSerDe' with serdeproperties
+//   ('mapping.c1'='c_1', 'mapping.c2'='c_2');
+// c1/c2 must be read from the renamed json fields c_1/c_2, while
+// unmapped c3 is still read by its own name.
+TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping) {
+    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_column_mapping.json";
+
+    create_random_access_file(path);
+    auto* tuple_desc = create_mapping_tuple_descriptor();
+    std::map<std::string, std::string> serde_properties{{"mapping.c1", "c_1"}, {"mapping.c2", "c_2"}};
+
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots(), serde_properties);
+    ASSERT_OK(json_reader.init());
+
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, NULL]");
+    ASSERT_EQ(chunk->get_column_by_slot_id(1)->debug_string(), "[11, 22, NULL]");
+    ASSERT_EQ(chunk->get_column_by_slot_id(2)->debug_string(), "[111, 222, 333]");
+}
+
+// Without serde_properties, mapped json field names are just ordinary (unmatched)
+// fields: they populate no column, and every mapping-eligible column is NULL.
+TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_absent_falls_back_to_plain_names) {
+    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_column_mapping.json";
+
+    create_random_access_file(path);
+    auto* tuple_desc = create_mapping_tuple_descriptor();
+
+    HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
+    ASSERT_OK(json_reader.init());
+
+    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
+    ASSERT_EQ(chunk->num_rows(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[NULL, NULL, NULL]");
+    ASSERT_EQ(chunk->get_column_by_slot_id(1)->debug_string(), "[NULL, NULL, NULL]");
+    ASSERT_EQ(chunk->get_column_by_slot_id(2)->debug_string(), "[111, 222, 333]");
 }
 
 namespace {
