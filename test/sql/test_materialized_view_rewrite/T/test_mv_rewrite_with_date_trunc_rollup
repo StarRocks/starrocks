@@ -51,10 +51,10 @@ function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), cou
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) >= '2020-10-01' group by k1;", "test_mv1")
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) >= '2020-01-01' group by k1;", "test_mv1")
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('day', k2) = '2020-10-22' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) = '2020-10-19' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('month', k2) = '2020-10-01' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) = '2020-10-01' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) = '2020-01-01' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) = '2020-10-19' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('month', k2) = '2020-10-01' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) = '2020-10-01' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) = '2020-01-01' group by k1;", "test_mv1")
 
 select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2) order by 1;
 select k1, date_trunc('week', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('week', k2) order by 1;
@@ -85,10 +85,10 @@ function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), cou
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) >= '2020-10-01' group by k1;", "test_mv1")
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) >= '2020-01-01' group by k1;", "test_mv1")
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('day', k2) = '2020-10-22' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) = '2020-10-19' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('month', k2) = '2020-10-01' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) = '2020-10-01' group by k1;", "test_mv1")
-function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) = '2020-01-01' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) = '2020-10-19' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('month', k2) = '2020-10-01' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) = '2020-10-01' group by k1;", "test_mv1")
+function: check_no_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) = '2020-01-01' group by k1;", "test_mv1")
 
 select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2) order by 1;
 select k1, date_trunc('week', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('week', k2) order by 1;
