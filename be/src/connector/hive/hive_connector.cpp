@@ -963,7 +963,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 serde_lib = file_desc->get_serde_lib();
             }
             if (serde_lib == OPENXJSON_SERDE_LIB) {
-                scanner = new HdfsJsonScanner();
+                // TODO: FileTableDescriptor doesn't carry serde properties from FE yet, so
+                // column name mapping ("mapping.<column>") only works for HdfsTableDescriptor.
+                scanner = hdfs_desc != nullptr ? new HdfsJsonScanner(hdfs_desc->get_serde_properties())
+                                               : new HdfsJsonScanner();
             } else {
                 scanner = new HdfsTextScanner();
             }
