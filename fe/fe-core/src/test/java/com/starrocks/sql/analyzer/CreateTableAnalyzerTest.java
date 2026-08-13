@@ -761,6 +761,26 @@ public class CreateTableAnalyzerTest {
     }
 
     @Test
+    public void testDropPartitionSourceColumnIsRejectedCaseInsensitively() throws Exception {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withTable("CREATE TABLE test.t_agg_drop_source (\n" +
+                "  `event_day` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `pv` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`event_day`, `city`)\n" +
+                "PARTITION BY date_trunc('week', EVENT_DAY)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        // the partition expression spells the column differently from the declaration, dropping it
+        // would leave the generated column referencing a column that no longer exists
+        Throwable exception = assertThrows(Exception.class,
+                () -> starRocksAssert.alterTable("ALTER TABLE test.t_agg_drop_source DROP COLUMN `event_day`"));
+        assertThat(exception.getMessage(), containsString("can not be dropped"));
+    }
+
+    @Test
     public void testAggregateTablePartitionExprOnValueColumnIsCaseInsensitive() {
         // the expression spells the column differently from the declaration; the guard that keeps the
         // generated column functionally determined by the keys must still reject it
