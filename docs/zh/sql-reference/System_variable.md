@@ -163,7 +163,7 @@ SELECT /*+ SET_VAR
 
 ### 设置变量为用户属性
 
-您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+您可以通过 [ALTER USER](./sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
 
 示例：
 
