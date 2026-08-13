@@ -109,7 +109,7 @@ public class VectorSearchOptions {
                 "LimitK: " + limitK + ", " +
                 "Order: " + (resultOrder == RESULT_ORDER_ASC ? "ASC" : "DESC") + ", " +
                 "Query Vector: " + queryVector + ", " +
-                "Predicate Range: " + predicateRange +
+                "Predicate Range: " + (hasPredicateRange ? Double.toString(predicateRange) : "N/A") +
                 "\n";
     }
 }

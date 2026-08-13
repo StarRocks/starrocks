@@ -69,10 +69,7 @@ Status TenAnnIndexBuilderProxy::init() {
     auto meta_copy = meta;
     meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = write_index_cache;
     if (params[index::vector::METRIC_TYPE] == static_cast<int>(tenann::MetricType::kCosineSimilarity)) {
-        // Keep the physical implementation of logical cosine indexes inside StarRocks. This is deliberately
-        // not a table/index property: readers infer the physical metric from the serialized index, while all
-        // new cosine builds (including compaction and async rebuilds) consistently use inner product.
-        meta_copy.index_writer_options()["cosine_backend"] = "inner_product";
+        meta_copy.index_writer_options()["cosine_backend"] = resolve_vector_index_cosine_backend(meta);
     }
 
     try {

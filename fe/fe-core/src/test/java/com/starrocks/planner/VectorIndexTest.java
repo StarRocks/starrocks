@@ -151,7 +151,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -166,7 +166,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A");
 
         // Constant vector with cast.
         sql = "select c1 from test_cosine " +
@@ -176,7 +176,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: N/A");
 
         sql = "select c1 from test_cosine " +
                 "order by approx_cosine_similarity([cast(1.1 as float),cast(2.1 as float),cast(3.1 as float)" +
@@ -185,7 +185,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: N/A");
 
         sql = "select c1 from test_cosine " +
                 "order by approx_cosine_similarity([cast(1.1 as int),cast(2.1 as int),cast(3.1 as int)" +
@@ -194,7 +194,7 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: N/A");
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
         }
@@ -473,7 +473,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          Refine: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "          Refine: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                 "     tabletList=\n" +
@@ -499,14 +499,14 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A");
 
         sql = "select c1 from test_l2 " +
                 "order by approx_l2_distance(c1, [1.1,2.2,3.3,4.4,5.5]) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
                 "          Refine: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: N/A");
 
         // Predicate argument order doesn't matter.
         sql = "select c1 from test_cosine " +
@@ -605,7 +605,7 @@ public class VectorIndexTest extends PlanTestBase {
                     "     table: test_ivfpq, rollup: test_ivfpq\n" +
                     "     VECTORINDEX: ON\n" +
                     "          Refine: ON, Distance Column: <0:__vector_approx_l2_distance>, LimitK: 10, " +
-                    "Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: -1.0");
+                    "Order: ASC, Query Vector: [1.1, 2.2, 3.3, 4.4], Predicate Range: N/A");
         } finally {
             connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
         }
@@ -938,6 +938,7 @@ public class VectorIndexTest extends PlanTestBase {
         assertContains(plan, "VECTORINDEX: ON");
         assertContains(plan, "__vector_approx_inner_product");
         assertContains(plan, "Order: DESC");
+        assertContains(plan, "Predicate Range: N/A");
 
         String rangeSql = "select c0, approx_inner_product(" + query + ", c1) as score "
                 + "from test.test_inner_product where approx_inner_product(" + query + ", c1) >= -2.5 "
@@ -945,6 +946,13 @@ public class VectorIndexTest extends PlanTestBase {
         String rangePlan = getFragmentPlan(rangeSql);
         assertContains(rangePlan, "VECTORINDEX: ON");
         assertContains(rangePlan, "Predicate Range: -2.5");
+
+        String negativeOneRangeSql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product where approx_inner_product(" + query + ", c1) >= -1 "
+                + "order by score desc limit 10";
+        String negativeOneRangePlan = getFragmentPlan(negativeOneRangeSql);
+        assertContains(negativeOneRangePlan, "Predicate Range: -1.0");
+        assertNotContains(negativeOneRangePlan, "Predicate Range: N/A");
 
         String wrongOrderSql = "select c0, approx_inner_product(" + query + ", c1) as score "
                 + "from test.test_inner_product order by score asc limit 10";

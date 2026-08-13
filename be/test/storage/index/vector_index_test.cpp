@@ -262,6 +262,33 @@ TEST_F(VectorIndexWriterTest, build_populates_index_cache_when_enabled) {
     EXPECT_TRUE(cache.cached(index_path));
 }
 
+TEST_F(VectorIndexWriterTest, resolve_cosine_backend_by_index_shape) {
+    const std::string old_backend = config::vector_index_cosine_backend;
+    DeferOp restore([old_backend] { config::vector_index_cosine_backend = old_backend; });
+
+    tenann::IndexMeta hnsw_meta;
+    hnsw_meta.SetIndexType(tenann::IndexType::kFaissHnsw);
+    hnsw_meta.index_params()[index::vector::QUANTIZER] = static_cast<int>(tenann::ScalarQuantizerType::kFlat);
+
+    tenann::IndexMeta ivfpq_meta;
+    ivfpq_meta.SetIndexType(tenann::IndexType::kFaissIvfPq);
+
+    config::vector_index_cosine_backend = "l2";
+    EXPECT_EQ(resolve_vector_index_cosine_backend(hnsw_meta), "l2");
+    EXPECT_EQ(resolve_vector_index_cosine_backend(ivfpq_meta), "l2");
+
+    for (auto quantizer :
+         {tenann::ScalarQuantizerType::kSQ4, tenann::ScalarQuantizerType::kSQ8, tenann::ScalarQuantizerType::kPQ}) {
+        hnsw_meta.index_params()[index::vector::QUANTIZER] = static_cast<int>(quantizer);
+        EXPECT_EQ(resolve_vector_index_cosine_backend(hnsw_meta), "inner_product");
+    }
+
+    config::vector_index_cosine_backend = "inner_product";
+    hnsw_meta.index_params()[index::vector::QUANTIZER] = static_cast<int>(tenann::ScalarQuantizerType::kFlat);
+    EXPECT_EQ(resolve_vector_index_cosine_backend(hnsw_meta), "inner_product");
+    EXPECT_EQ(resolve_vector_index_cosine_backend(ivfpq_meta), "inner_product");
+}
+
 // --- B1 quantizer property tests ---
 // These tests intentionally avoid asserting on individual parsed-meta fields
 // (string -> enum mapping is trivial). Instead each test exercises the path
@@ -359,6 +386,39 @@ TEST_F(VectorIndexWriterTest, hnsw_sq8_inner_product_end_to_end) {
     searcher->AnnSearch(q, result.size(), result.data(), reinterpret_cast<uint8_t*>(scores.data()));
     EXPECT_EQ(result[0], 10);
     EXPECT_GT(scores[0], 60.0f);
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_sq8_cosine_end_to_end) {
+    const std::string old_backend = config::vector_index_cosine_backend;
+    DeferOp restore([old_backend] { config::vector_index_cosine_backend = old_backend; });
+    config::vector_index_cosine_backend = "l2";
+
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "cosine_similarity");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "sq8");
+
+    auto path = test_vector_index_dir + "/sq8_cosine_" + vector_index_name;
+    write_vector_index(path, tablet_index);
+
+    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {}));
+    auto searcher = tenann::AnnSearcherFactory::CreateSearcherFromMeta(meta);
+    searcher->ReadIndex(path);
+
+    std::vector<float> query{1.0f, 2.0f, 3.0f};
+    tenann::PrimitiveSeqView q{.data = reinterpret_cast<uint8_t*>(query.data()),
+                               .size = 3,
+                               .elem_type = tenann::PrimitiveType::kFloatType};
+    std::vector<int64_t> result(3, -1);
+    std::vector<float> scores(3, 0.0f);
+    searcher->AnnSearch(q, result.size(), result.data(), reinterpret_cast<uint8_t*>(scores.data()));
+    EXPECT_NE(result[0], -1);
+    EXPECT_NEAR(scores[0], 1.0f, 0.02f);
 }
 
 TEST_F(VectorIndexWriterTest, hnsw_pq_rejects_unsupported_nbits) {
