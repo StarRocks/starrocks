@@ -34,7 +34,7 @@ description: "Alphabetical t - z"
 ## `threadpool_task_exception_total`
 
 - Unit: Count
-- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
 
 ## `thrift_connections_total`
 
