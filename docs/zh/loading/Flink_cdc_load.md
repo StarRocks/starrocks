@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 ---
 
@@ -541,4 +542,4 @@ flink.starrocks.sink.properties.strip_outer_array=true
    END;
    ```
 
-更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。
+更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/data_migration/loading/synchronize_mysql_into_sr.md)。

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 ---
 
@@ -82,7 +83,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
    Starting taskexecutor daemon on host.
    ```
 
-You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-stable/docs/try-flink/local_installation/).
+You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-stable/).
 
 ## Before you begin
 
@@ -102,7 +103,7 @@ Follow these steps to deploy the Flink connector:
 
 ### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port) (default: `9060`).
 
 ## Parameters
 

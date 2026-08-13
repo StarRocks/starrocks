@@ -12,7 +12,7 @@ sidebar_position: 10
 - [非同期マテリアライズドビューのメトリクス](./metrics-materialized_view.md)
 - [共有データダッシュボードメトリクス、および Starlet ダッシュボードメトリクス](./metrics-shared-data.md)
 
-StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./Monitor_and_Alert.md)を参照してください。
+StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./monitoring.md)を参照してください。
 
 ## メトリック項目
 
@@ -1814,7 +1814,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - **`<metric_name>_count`**: このフェーズで記録されたトランザクションの総数。
 
 すべてのトランザクションメトリクスは以下のラベルを共有します。
-- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、全体的なトランザクションパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループは、FE パラメータ [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) を介して設定できます。
+- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、全体的なトランザクションパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループは、FE パラメータ [`txn_latency_metric_report_groups`](../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups) を介して設定できます。
 - `is_leader`: 報告元の FE ノードがリーダーであるかどうかを示します。リーダー FE（`is_leader="true"`）のみが実際のメトリック値を報告します。フォロワーは `is_leader="false"` となり、データを報告しません。
 
 #### starrocks_fe_txn_total_latency_ms

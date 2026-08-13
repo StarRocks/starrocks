@@ -1,4 +1,5 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 ---
 
@@ -300,7 +301,7 @@ Currently, incremental merge is not supported.
 
 ## Troubleshooting
 
-- Before using external catalogs in dbt, you must create them in StarRocks. There is documentation on that [here](../data_source/catalog/catalog_overview.md).
+- Before using external catalogs in dbt, you must create them in StarRocks. See the [catalog overview](../data_source/catalog/catalog_overview.md).
 - External sources should be accessed using the `{{ source('external_source_name', 'table_name' }}` macro. 
 - `dbt seed` was not tested for external catalogs and is not currently supported.
 - In order for `dbt` to create models in external databases that do not currently exist, the location of the models must be set through properties. 

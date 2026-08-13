@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 :::note
 
-デフォルトでは、`user_admin` ロールを持つユーザーまたはロールのみがこのビューにアクセスできます。他のユーザーにこのビューの SELECT 権限を付与するには、[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) を使用してください。
+デフォルトでは、`user_admin` ロールを持つユーザーまたはロールのみがこのビューにアクセスできます。他のユーザーにこのビューの SELECT 権限を付与するには、[GRANT](../sql-statements/account-management/GRANT.md) を使用してください。
 
 :::
 
