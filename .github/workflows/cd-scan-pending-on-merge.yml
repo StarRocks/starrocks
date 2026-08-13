@@ -1,0 +1,36 @@
+name: CD SCAN PENDING (ON MERGE)
+
+# Event-driven kick for the reverse-sync pending release loop. When a reverse-sync
+# (CelerData -> StarRocks) PR MERGES, promptly run cd-scan-pending.yml so the next
+# file-overlapping `pending` PR is released without waiting for the 30-min cron.
+#
+# This mirrors the forward side, where send_pr_notification.py dispatches
+# sync-scan-pending.yml after a sync PR is merged. The reverse cd-sync-pipeline.yml is
+# a trimmed v1 (BUILD + auto-merge only, no notification hook), so the kick lives here.
+#
+# pull_request_target:closed fires on every PR close; the job `if` restricts it to a
+# merged reverse-sync PR. It keys on the executor's head-branch signature
+# `<base>-cd-sync-pr-<N>` (set unconditionally by repo-sync.yml and NOT altered by the
+# model-2 scrub, unlike the `cd-sync` label/title marker) so it fires whether or not
+# scrub is active.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  kick-scan-pending:
+    runs-on: [self-hosted, sync]
+    if: >
+      github.repository == 'StarRocks/starrocks' &&
+      github.event.pull_request.merged == true &&
+      contains(github.head_ref, '-cd-sync-pr-')
+    steps:
+      - name: dispatch cd-scan-pending
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          gh workflow run cd-scan-pending.yml -R ${{ github.repository }} || true
