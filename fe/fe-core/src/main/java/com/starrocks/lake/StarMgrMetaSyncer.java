@@ -613,7 +613,7 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                             starmgrShardIds = starOSAgent.listShard(groupId);
                         } catch (DdlException e) {
                             if (isShardGroupNotExist(e) && table.getPhysicalPartition(physicalPartition.getId()) == null) {
-                                LOG.info("skip syncing removed partition {} shard group {}, because it has been removed " +
+                                LOG.debug("skip syncing removed partition {} shard group {}, because it has been removed " +
                                                 "from StarMgr",
                                         physicalPartition.getParentId(), groupId);
                                 continue;
