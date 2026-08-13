@@ -307,8 +307,9 @@ public class MaterializedViewAnalyzer {
 
     private static MvKeyLayout resolveMvKeyLayout(CreateMaterializedViewStatement statement,
                                                   ConnectContext context) {
+        checkIvmSortKeySupported(statement, context);
         List<String> sortKeys = statement.getSortKeys();
-        if (isIvmSortKeyIndependent(statement, context)) {
+        if (isIvmSortKeyIndependent(statement)) {
             return new MvKeyLayout(Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID), sortKeys);
         }
         // An AUTO_INCREMENT __ROW_ID__ is the primary key, so it has to be in the shared list, and leading.
@@ -318,16 +319,27 @@ public class MaterializedViewAnalyzer {
     }
 
     /**
-     * Whether the incremental mv's {@code ORDER BY} becomes a sort key of its own instead of being merged
-     * into the primary key. Never for a range-distributed mv: there the sort key defines the tablet
-     * boundaries and the storage engine requires it to equal the primary key.
+     * A range-distributed table derives its tablet boundaries from its sort key, which the storage engine
+     * requires to equal the primary key -- and an incremental mv's primary key is the derived
+     * {@code __ROW_ID__}, a column the user cannot name. An {@code ORDER BY} there could therefore only be
+     * reinterpreted, so it is rejected. A duplicate-key mv is exempt, as it is for CREATE TABLE.
      */
-    private static boolean isIvmSortKeyIndependent(CreateMaterializedViewStatement statement,
-                                                   ConnectContext context) {
+    private static void checkIvmSortKeySupported(CreateMaterializedViewStatement statement,
+                                                ConnectContext context) {
         if (statement.getRowIdStrategy() == null || CollectionUtils.isEmpty(statement.getOrderByElements())) {
-            return false;
+            return;
         }
-        return !usesRangeDistribution(statement, AnalyzerUtils.isEnableRangeDistribution(context));
+        if (usesRangeDistribution(statement, AnalyzerUtils.isEnableRangeDistribution(context))) {
+            throw new SemanticException("ORDER BY is not supported on a range-distributed incremental "
+                    + "materialized view. Add DISTRIBUTED BY HASH(...) to sort by the ORDER BY columns, "
+                    + "or remove ORDER BY.");
+        }
+    }
+
+    /** Whether the {@code ORDER BY} becomes a sort key of its own instead of merging into the primary key. */
+    private static boolean isIvmSortKeyIndependent(CreateMaterializedViewStatement statement) {
+        return statement.getRowIdStrategy() != null
+                && CollectionUtils.isNotEmpty(statement.getOrderByElements());
     }
 
     /**
@@ -482,7 +494,6 @@ public class MaterializedViewAnalyzer {
             List<ColWithComment> colWithComments = statement.getColWithComments();
             MvKeyLayout keyLayout = resolveMvKeyLayout(statement, context);
             statement.setSortKeys(keyLayout.sortKeyColumns());
-            statement.setSortKeyIndependent(keyLayout.isSortKeyIndependent());
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
                     statement.getRowIdStrategy(), queryStatement, colWithComments, keyLayout);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());

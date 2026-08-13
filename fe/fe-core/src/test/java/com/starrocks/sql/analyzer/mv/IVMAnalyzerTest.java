@@ -794,7 +794,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
         try {
             connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            String rangeDdl = incrementalMvDdl("mv_ivm_range", "");
+            String rangeDdl = incrementalMvDdl("mv_ivm_range", "", "");
             CreateMaterializedViewStatement rangeStmt = analyzeMvDdl(rangeDdl);
             assertTrue(rangeStmt.getDistributionDesc() instanceof RangeDistributionDesc);
             assertTrue(IvmTrialRewriter.buildMockMv(rangeStmt).getDefaultDistributionInfo()
@@ -850,7 +850,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     throw new AssertionError("AUTO CREATE analysis must not invoke the IVM trial");
                 }
             };
-            CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", ""));
+            CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", "", ""));
             assertEquals(MaterializedView.RefreshMode.AUTO, supported.getCurrentRefreshMode());
             assertTrue(supported.getDistributionDesc() instanceof RangeDistributionDesc);
             assertEquals(0, autoTrialInvocationCount, "supported AUTO must not invoke the IVM trial");
@@ -871,15 +871,23 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
         connectContext.getSessionVariable().setEnableRangeDistribution(true);
         try {
+            // The reorder comes from the storage-filled __ROW_ID__ being moved to the front of a
+            // non-aggregate mv's schema; an aggregate mv projects its __ROW_ID__ first and keeps query order.
             String ddl = "CREATE MATERIALIZED VIEW mv_trial_reordered "
-                    + "REFRESH DEFERRED MANUAL ORDER BY (id) "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
                     + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
-                    + "AS SELECT AVG(c1) AS av, id, SUM(c2) AS sm "
-                    + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
             CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
             MaterializedView mockMv = IvmTrialRewriter.buildMockMv(stmt);
             assertEquals(schemaFingerprint(stmt.getMvColumnItems()), schemaFingerprint(mockMv.getBaseSchema()));
-            assertEquals(RangeDistributionInfo.class, mockMv.getDefaultDistributionInfo().getClass());
+
+            // A range-distributed mv carries no ORDER BY of its own.
+            CreateMaterializedViewStatement aggStmt = analyzeMvDdl(
+                    incrementalMvDdl("mv_trial_agg_states", "", ""));
+            MaterializedView aggMockMv = IvmTrialRewriter.buildMockMv(aggStmt);
+            assertEquals(schemaFingerprint(aggStmt.getMvColumnItems()),
+                    schemaFingerprint(aggMockMv.getBaseSchema()));
+            assertEquals(RangeDistributionInfo.class, aggMockMv.getDefaultDistributionInfo().getClass());
 
             ColumnRefFactory factory = new ColumnRefFactory();
             List<ColumnRefOperator> queryOutputs = stmt.getQueryStatement().getQueryRelation().getScope()
@@ -908,7 +916,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
         try {
             connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            String ddl = incrementalMvDdl("mv_active_range", "");
+            String ddl = incrementalMvDdl("mv_active_range", "", "");
             starRocksAssert.withMaterializedView(ddl, () -> {
                 MaterializedView mv = getMv("test", "mv_active_range");
                 assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
@@ -1366,14 +1374,16 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                         assertNull(sortKeyIdxes(mv));
                     });
 
-            // Range distribution needs the sort key to equal the primary key, so ORDER BY keeps being
-            // merged into the key columns there.
             connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_sort_key_range", ""), () -> {
-                MaterializedView mv = getMv("test", "mv_sort_key_range");
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> analyzeMvDdl(incrementalMvDdl("mv_sort_key_range", "")),
+                    "a range-distributed incremental mv must reject ORDER BY");
+            assertTrue(e.getMessage().contains("ORDER BY is not supported on a range-distributed"),
+                    "got: " + e.getMessage());
+
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_range_no_order", "", ""), () -> {
+                MaterializedView mv = getMv("test", "mv_range_no_order");
                 assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
-                assertTrue(keyColumnNames(mv).contains("id"),
-                        "a range-distributed mv keeps ORDER BY in its key columns, got: " + keyColumnNames(mv));
                 assertNull(sortKeyIdxes(mv));
             });
         } finally {
@@ -1425,8 +1435,16 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     private static String incrementalMvDdl(String name, String distributionClause) {
+        return incrementalMvDdl(name, distributionClause, "ORDER BY (id) ");
+    }
+
+    /**
+     * An omitted distribution clause selects range distribution when {@code enable_range_distribution} is on,
+     * and a range-distributed incremental mv rejects {@code ORDER BY}, so those callers pass none.
+     */
+    private static String incrementalMvDdl(String name, String distributionClause, String orderByClause) {
         return "CREATE MATERIALIZED VIEW " + name + " " + distributionClause
-                + "REFRESH DEFERRED MANUAL ORDER BY (id) "
+                + "REFRESH DEFERRED MANUAL " + orderByClause
                 + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
                 + "AS SELECT SUM(c2) AS sm, id, c1, AVG(c2) AS av "
                 + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";

@@ -3244,12 +3244,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     /**
      * The sort key column positions for the index meta, or null to let the storage sort by the key columns.
-     * Only an mv marked by {@code MaterializedViewAnalyzer#isIvmSortKeyIndependent} has a sort key of its
-     * own; passing one for any other mv would change how the storage derives range boundaries.
+     * An mv whose sort key IS its key columns needs no explicit one. This comparison is only safe because a
+     * range-distributed incremental mv rejects ORDER BY (see
+     * {@code MaterializedViewAnalyzer#checkIvmSortKeySupported}): its sort keys would be a prefix of its key
+     * columns, and emitting them would change how the storage derives its tablet boundaries.
      */
     private static List<Integer> independentSortKeyIdxes(CreateMaterializedViewStatement stmt,
                                                          List<Column> baseSchema) {
-        if (!stmt.isSortKeyIndependent()) {
+        if (CollectionUtils.isEmpty(stmt.getSortKeys())) {
             return null;
         }
         List<Integer> sortKeyIdxes = Lists.newArrayList();
@@ -3265,7 +3267,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Preconditions.checkState(idx >= 0, "sort key column %s not found in mv schema", sortKey);
             sortKeyIdxes.add(idx);
         }
-        return sortKeyIdxes;
+        List<Integer> keyColumnIdxes = Lists.newArrayList();
+        for (int i = 0; i < baseSchema.size(); i++) {
+            if (baseSchema.get(i).isKey()) {
+                keyColumnIdxes.add(i);
+            }
+        }
+        return sortKeyIdxes.equals(keyColumnIdxes) ? null : sortKeyIdxes;
     }
 
     // TODO(murphy) refactor it into MVManager

@@ -475,7 +475,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 `refresh_mode` 为 `INCREMENTAL` 的物化视图是以内部 Row ID 列为主键的主键表，因此 `ORDER BY` 定义的是独立的排序键，不会成为主键的一部分。
 
 - 对于哈希分布或随机分布的物化视图，排序键即 `ORDER BY` 指定的列。
-- 对于 Range 分布的物化视图，排序键决定 Tablet 的区间边界，必须与主键相同，因此 `ORDER BY` 指定的列会成为主键的一部分。
+- 对于 Range 分布的物化视图，**不支持 `ORDER BY`**：排序键决定 Tablet 的区间边界，必须与主键相同，而该主键列无法由用户指定。如需排序键，请显式指定 `DISTRIBUTED BY HASH(...)`。
 - 如果省略 `ORDER BY`，物化视图按其主键排序。
 
 #### 支持的增量算子
