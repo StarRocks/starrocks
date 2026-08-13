@@ -220,7 +220,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_wrong_order_json) {
 // c1/c2 must be read from the renamed json fields c_1/c_2, while
 // unmapped c3 is still read by its own name.
 TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping) {
-    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_column_mapping.json";
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_column_mapping.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_mapping_tuple_descriptor();
@@ -229,7 +229,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping) {
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots(), serde_properties);
     ASSERT_OK(json_reader.init());
 
-    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, NULL]");
@@ -240,7 +240,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping) {
 // Without serde_properties, mapped json field names are just ordinary (unmatched)
 // fields: they populate no column, and every mapping-eligible column is NULL.
 TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_absent_falls_back_to_plain_names) {
-    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_column_mapping.json";
+    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_column_mapping.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_mapping_tuple_descriptor();
@@ -248,7 +248,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_column_name_mapping_absent_falls_back_to_
     HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
     ASSERT_OK(json_reader.init());
 
-    auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 50));
     ASSERT_EQ(chunk->num_rows(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[NULL, NULL, NULL]");
