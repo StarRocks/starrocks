@@ -63,6 +63,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
@@ -192,6 +193,32 @@ public class StorageVolumeTest {
                 .getRegion());
         Assertions.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
+    }
+
+    @Test
+    public void testAWSWebIdentityCredentialRoundTrip() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+        storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
+        storageParams.put(AWS_S3_EXTERNAL_ID, "external_id");
+
+        StorageVolume storageVolume = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
+                storageParams, true, "");
+        FileStoreInfo fileStoreInfo = storageVolume.toFileStoreInfo();
+        Assertions.assertTrue(fileStoreInfo.getS3FsInfo().getCredential().hasWebIdentityCredential());
+        Assertions.assertEquals("iam_role_arn", fileStoreInfo.getS3FsInfo().getCredential()
+                .getWebIdentityCredential().getIamRoleArn());
+        Assertions.assertEquals("external_id", fileStoreInfo.getS3FsInfo().getCredential()
+                .getWebIdentityCredential().getExternalId());
+
+        Map<String, String> restoredParams = StorageVolume.getParamsFromFileStoreInfo(fileStoreInfo);
+        Assertions.assertEquals("true", restoredParams.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertEquals("false", restoredParams.get(AWS_S3_USE_INSTANCE_PROFILE));
+        Assertions.assertEquals("false", restoredParams.get(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR));
+        Assertions.assertEquals("iam_role_arn", restoredParams.get(AWS_S3_IAM_ROLE_ARN));
+        Assertions.assertEquals("external_id", restoredParams.get(AWS_S3_EXTERNAL_ID));
     }
 
     @Test
