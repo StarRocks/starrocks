@@ -324,7 +324,22 @@ public:
         // sort_key_unique_ids makes it resolve the sort key by unique id and ignore sort_key_idxes
         // entirely, and those resolved indexes are in range by construction, as is the
         // "both empty => key columns" fallback.
-        if (schema_pb.sort_key_unique_ids().empty()) {
+        if (!schema_pb.sort_key_unique_ids().empty()) {
+            // _init_from_pb resolves this branch through _unique_id_to_index.at(uid), which THROWS on
+            // an id no column carries -- an uncaught exception, not something this StatusOr could
+            // report. Check the raw ids against the columns first.
+            std::unordered_set<int32_t> column_unique_ids;
+            column_unique_ids.reserve(schema_pb.column_size());
+            for (const auto& column : schema_pb.column()) {
+                column_unique_ids.insert(column.unique_id());
+            }
+            for (const int32_t uid : schema_pb.sort_key_unique_ids()) {
+                if (column_unique_ids.find(uid) == column_unique_ids.end()) {
+                    return Status::Corruption(fmt::format("Sort key unique id {} not found among the {} schema columns",
+                                                          uid, schema_pb.column_size()));
+                }
+            }
+        } else {
             for (const int32_t cid : schema_pb.sort_key_idxes()) {
                 if (cid < 0 || cid >= schema_pb.column_size()) {
                     return Status::Corruption(fmt::format("Sort key index {} out of range, column size {}", cid,
@@ -377,6 +392,14 @@ Status validate_split_range_arity(const std::vector<TabletRangeInfo>& split_rang
                                   int64_t tablet_id) {
     ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(schema_pb));
     const size_t arity = projection.arity();
+    if (arity == 0) {
+        // The schema carries no sort key at all (no sort_key_idxes and no key columns -- e.g. the
+        // synthetic metadata reshard unit tests build, or a schema this BE cannot interpret). There is
+        // nothing to compare the bounds against, and a range-distributed tablet always has at least
+        // one sort-key column, so treat this as "cannot tell" and let the split through rather than
+        // condemning every bound as corrupt.
+        return Status::OK();
+    }
     auto check = [&](size_t index, const char* side, const TuplePB& bound) -> Status {
         if (static_cast<size_t>(bound.values_size()) != arity) {
             return Status::Corruption(

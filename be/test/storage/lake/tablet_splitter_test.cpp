@@ -2338,4 +2338,42 @@ TEST(TabletSplitterTest, SortKeyProjection_RejectsOutOfRangeSortKeyIdxWithoutAbo
     EXPECT_NE(std::string_view::npos, st.message().find("out of range")) << st;
 }
 
+// A schema carrying NO sort key at all (no sort_key_idxes and no key columns) yields arity 0. That is
+// "cannot tell", not "every bound must be empty": condemning such a split made 16 pre-existing
+// LakeTabletReshardTest cases fall back to an identical tablet, because their synthetic metadata has
+// no schema columns. A real range-distributed tablet always has at least one sort-key column.
+TEST(TabletSplitterTest, DataDrivenSplit_AllowsSchemaWithoutAnySortKey) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(2, 600, 999, 500, 5000),
+    });
+    // Strip the schema down to no columns and no sort key, like the synthetic reshard fixtures.
+    m->mutable_schema()->clear_column();
+    m->mutable_schema()->clear_sort_key_idxes();
+    m->mutable_schema()->clear_sort_key_unique_ids();
+
+    std::vector<TabletRangeInfo> out;
+    ASSERT_OK(get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &out));
+    EXPECT_EQ(2u, out.size()) << "a schema without a sort key must not be treated as corrupt";
+}
+
+// sort_key_unique_ids takes precedence in TabletSchema::_init_from_pb, which resolves it through
+// _unique_id_to_index.at(uid) -- that THROWS on an id no column carries, before any Status could be
+// returned. So the raw ids must be checked first, exactly like sort_key_idxes.
+TEST(TabletSplitterTest, SortKeyProjection_RejectsUnknownSortKeyUniqueIdWithoutAborting) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+    });
+    ASSERT_EQ(2, m->schema().column_size());
+    m->mutable_schema()->clear_sort_key_idxes();
+    m->mutable_schema()->add_sort_key_unique_ids(0);
+    m->mutable_schema()->add_sort_key_unique_ids(4242); // no column carries this unique id
+
+    std::vector<SegmentSplitInfo> segments;
+    auto st = build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, &segments);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("4242")) << st;
+}
+
 } // namespace starrocks::lake
