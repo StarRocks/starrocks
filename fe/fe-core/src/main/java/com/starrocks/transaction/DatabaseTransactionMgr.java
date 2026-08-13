@@ -959,6 +959,57 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    /**
+     * Find the running transactions that may write to any of the given physical partitions.
+     * <p>
+     * A transaction is reported as conflicting when either
+     * <ul>
+     *   <li>it is already COMMITTED and its commit info covers one of the partitions, or</li>
+     *   <li>it is still in flight (PREPARE/PREPARED) and its tablet sink has registered one of the
+     *       partitions as a write target, see {@link TransactionState#getLoadedPhysicalPartitionIds}.</li>
+     * </ul>
+     * Callers that are about to replace or drop those partitions must invoke this while holding the
+     * table write lock, so that no transaction can commit in between.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     * @return ids of the conflicting transactions, empty if there is none
+     */
+    public List<Long> getConflictingTxnIds(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Take a snapshot under the transaction manager lock and evaluate the candidates outside of it:
+        // transaction level locks are taken before the manager lock elsewhere (see abortTransaction),
+        // so holding both at the same time would invert the lock order.
+        List<TransactionState> candidates;
+        readLock();
+        try {
+            candidates = idToRunningTransactionState.values().stream()
+                    .filter(txn -> txn.isRunning() && txn.getTableIdList().contains(tableId))
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+
+        List<Long> conflictingTxnIds = Lists.newArrayList();
+        for (TransactionState txn : candidates) {
+            if (touchesPartitions(txn, tableId, physicalPartitionIds)) {
+                conflictingTxnIds.add(txn.getTransactionId());
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    private static boolean touchesPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
+        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+        if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null
+                && !Collections.disjoint(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds)) {
+            return true;
+        }
+        return !Collections.disjoint(txn.getLoadedPhysicalPartitionIds(tableId), physicalPartitionIds);
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {
@@ -1314,10 +1365,7 @@ public class DatabaseTransactionMgr {
                         // partition maybe dropped between commit and publish version, ignore this error
                         if (physicalPartition == null) {
                             droppedPartitionIds.add(physicalPartitionId);
-                            LOG.warn(
-                                    "partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    physicalPartitionId,
-                                    copiedState);
+                            TxnStateLogUtils.logDroppedCommittedPartition(copiedState, tableId, physicalPartitionId);
                             continue;
                         }
                         // The version of a replication transaction may not continuously

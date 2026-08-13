@@ -76,8 +76,8 @@ public class MergePartitionJobTest extends DDLTestBase {
         String tempPartitionName = "tmp_p1";
         MergePartitionJob job = new MergePartitionJob(1L, 2L, 3L, "tbl", 1000L) {
             @Override
-            protected boolean hasCommittedNotVisible(long partitionId) {
-                return partitionId == 100L;
+            protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+                return partition.getId() == 100L;
             }
         };
 
@@ -281,7 +281,7 @@ public class MergePartitionJobTest extends DDLTestBase {
         Assertions.assertEquals(1, handler.getAlterJobsV2().size());
         MergePartitionJob job = Mockito.spy((MergePartitionJob) handler.getAlterJobsV2().values().iterator().next());
         Mockito.doReturn(true).when(job).isPreviousLoadFinished();
-        Mockito.doReturn(false).when(job).hasCommittedNotVisible(Mockito.anyLong());
+        Mockito.doReturn(false).when(job).hasCommittedNotVisibleTxn(Mockito.any());
         return job;
     }
 
