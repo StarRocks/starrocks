@@ -375,6 +375,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 由 HdfsFsManager 管理的未使用的缓存 HDFS/ObjectStore FileSystem 的存活时间（秒）。FileSystemExpirationChecker（每 60 秒运行一次）使用此值调用每个 HdfsFs.isExpired(...)；过期时，管理器关闭底层 FileSystem 并将其从缓存中删除。访问器方法（例如 `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`）更新最后访问时间戳，因此过期基于不活动。较低的值会减少空闲资源占用，但会增加重新打开的开销；较高的值会保持句柄更长时间，并可能消耗更多资源。
 - 引入版本: v3.2.0
 
+### `enable_lake_add_index_fast_path`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离表上的 ADD INDEX 和 DROP INDEX 变更是否走仅修改元数据的快速路径（不创建影子索引）。设置为 `false` 时回退到常规的 Schema Change 路径。该项作为安全开关提供，快速路径是受支持的默认行为。
+
 ### `lake_autovacuum_grace_period_minutes`
 
 - 默认值: 30
