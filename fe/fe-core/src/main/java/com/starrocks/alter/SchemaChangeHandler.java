@@ -3026,6 +3026,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for alter clauses
 
+        if (propertyMap.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            // A column clause may carry table properties ("ADD COLUMN c STRING PROPERTIES (...)"),
+            // and those keep the fast-schema-evolution path eligible. Both fast jobs finish by
+            // rebuilding the schema and the indexes and never persist this table-level property,
+            // so the change would reach the tablets and then be lost from FE metadata, leaving
+            // SHOW CREATE TABLE and every later tablet on the old setting. A ModifyTableProperties
+            // clause already leaves the fast path for the same reason.
+            fastSchemaEvolution = false;
+        }
+
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
                 modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
         if (schemaChangeData.isShortKeyChanged()) {

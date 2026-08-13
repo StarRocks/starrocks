@@ -400,6 +400,30 @@ public class ZstdCompressionColumnsTest {
     }
 
     @Test
+    public void testAddColumnCarryingThePropertyPersistsIt() throws Exception {
+        // A column clause can carry table properties, and that keeps the fast-schema-evolution
+        // path eligible. Those jobs finish by rebuilding the schema and the indexes and never
+        // persist this table-level property, so the change would reach the tablets and then
+        // vanish from FE metadata. (The property names an existing column: the column set is
+        // resolved against the table's current schema, so a column added by the same statement
+        // is not yet nameable -- the same holds for bloom_filter_columns.)
+        starRocksAssert.withTable(createTableSql("t_add_col_prop", ""));
+        OlapTable table = getTable("t_add_col_prop");
+        Assertions.assertNull(table.getZstdCompressionColumnNames());
+
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_add_col_prop ADD COLUMN v9 STRING PROPERTIES (\""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\")");
+        waitForSchemaChangeJob(table);
+
+        Assertions.assertTrue(table.getZstdCompressionColumnNames().contains("v1"),
+                String.valueOf(table.getZstdCompressionColumnNames()));
+        Assertions.assertEquals(Integer.valueOf(256 * 1024),
+                table.getZstdCompressionPageSizes().get(ColumnId.create("v1")));
+        Assertions.assertTrue(showCreateTable("t_add_col_prop").contains("v1:" + (256 * 1024)),
+                showCreateTable("t_add_col_prop"));
+    }
+
+    @Test
     public void testPageSizeReachesEveryTabletSchemaPath() throws Exception {
         // The page size has to travel on every path that builds a tablet schema, not
         // just the one the create path happens to use: a schema that carries the
