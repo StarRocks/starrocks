@@ -43,7 +43,7 @@ JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc2/tenann-v0.5.1-rc2-x86_64.tar.gz"
 TENANN_NAME="tenann-v0.5.1-rc2-x86_64.tar.gz"
 TENANN_SOURCE="tenann-v0.5.1-rc2"
-TENANN_MD5SUM="f72e03c1965cb9d65a4acc7949399fe0"
+TENANN_MD5SUM="d3ee63132e0d3633fb417789feb9cb03"
 
 # starcache
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc2/starcache-centos7_amd64.tar.gz"
