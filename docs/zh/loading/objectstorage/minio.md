@@ -176,7 +176,7 @@ Query OK, 10000000 rows affected (3.17 sec)
 {'label':'insert_a5da3ff5-9ee4-11ee-90b0-02420a060004', 'status':'VISIBLE', 'txnId':'17'}
 ```
 
-建表完成后，您可以通过 [DESCRIBE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Utility/DESCRIBE/) 查看新建表的表结构：
+建表完成后，您可以通过 [DESCRIBE](../../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) 查看新建表的表结构：
 
 ```SQL
 DESCRIBE user_behavior_inferred;
