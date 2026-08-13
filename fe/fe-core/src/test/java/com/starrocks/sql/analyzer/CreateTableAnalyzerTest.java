@@ -22,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -732,6 +733,47 @@ public class CreateTableAnalyzerTest {
         String ddl = starRocksAssert.showCreateTable("show create table test.t_agg_week");
         Assertions.assertFalse(ddl.contains(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX));
         assertThat(ddl, containsString("date_trunc('week', dt)"));
+    }
+
+    @Test
+    public void testAggregateTableWithInferredKeysAndGeneratedPartitionColumn() throws Exception {
+        // the keys type is inferred from the value columns, so it is not known yet when the
+        // generated partition column is created
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.t_agg_inferred_keys (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `pv` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        OlapTable table = (OlapTable) AnalyzeTestUtil.getStarRocksAssert().getTable("test", "t_agg_inferred_keys");
+        Assertions.assertEquals(KeysType.AGG_KEYS, table.getKeysType());
+        Column generatedColumn = getGeneratedPartitionColumn("t_agg_inferred_keys");
+        Assertions.assertNotNull(generatedColumn);
+        // the generated column must not be swept into the inferred key list
+        Assertions.assertFalse(generatedColumn.isKey());
+        Assertions.assertEquals(AggregateType.REPLACE, generatedColumn.getAggregationType());
+        Assertions.assertEquals(List.of("dt", "city"), table.getKeyColumns().stream()
+                .map(Column::getName).collect(Collectors.toList()));
+    }
+
+    @Test
+    public void testAggregateTablePartitionExprOnValueColumnIsCaseInsensitive() {
+        // the expression spells the column differently from the declaration; the guard that keeps the
+        // generated column functionally determined by the keys must still reject it
+        analyzeFail("CREATE TABLE test.t_agg_mixed_case_value (\n" +
+                        "  `dt` datetime NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL,\n" +
+                        "  `last_day` datetime MAX,\n" +
+                        "  `pv` bigint SUM\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`dt`, `city`)\n" +
+                        "PARTITION BY date_trunc('week', LAST_DAY)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should base on key column");
     }
 
     @Test

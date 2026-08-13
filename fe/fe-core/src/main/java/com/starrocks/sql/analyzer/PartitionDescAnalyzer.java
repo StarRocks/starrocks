@@ -593,7 +593,9 @@ public class PartitionDescAnalyzer {
 
     private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs, KeysType keysType)
             throws AnalysisException {
-        List<String> slotRefs = Lists.newArrayList();
+        // the expression carries the column name as the user spelled it, which may differ in case
+        // from the declared column, so the source columns are collected case insensitively
+        Set<String> slotRefs = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (desc.getPartitionExprs() != null) {
             slotRefs.addAll(desc.getPartitionExprs().stream()
                     .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())

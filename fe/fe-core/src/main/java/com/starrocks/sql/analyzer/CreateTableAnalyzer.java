@@ -326,6 +326,10 @@ public class CreateTableAnalyzer {
             List<String> keysColumnNames = Lists.newArrayList();
             if (columnDefs.stream().anyMatch(c -> c.getAggregateType() != null)) {
                 for (ColumnDef columnDef : columnDefs) {
+                    // generated column should not be key, its aggregate type is filled in below
+                    if (columnDef.isGeneratedColumn()) {
+                        continue;
+                    }
                     if (columnDef.getAggregateType() == null) {
                         keysColumnNames.add(columnDef.getName());
                     }
@@ -371,6 +375,21 @@ public class CreateTableAnalyzer {
         KeysType keysType = keysDesc.getKeysType();
         if (keysType == null) {
             throw new SemanticException("Keys type is null.");
+        }
+
+        if (keysType == KeysType.AGG_KEYS) {
+            // An AGG_KEYS table requires an aggregate type on every non-key column. The generated
+            // partition column is functionally determined by the key columns, because
+            // PartitionDescAnalyzer#analyzeListPartitionExprs rejects a partition expression that
+            // references an aggregated column, so every row merged into one aggregate group carries
+            // the same value here and REPLACE is an identity operation. This mirrors what
+            // MaterializedViewAnalyzer#genGeneratedPartitionColumn does for non-duplicate views.
+            // The keys type may be inferred from the value columns, so this cannot be decided
+            // earlier, when the column is generated.
+            columnDefs.stream()
+                    .filter(c -> c.isGeneratedColumn() && c.getAggregateType() == null
+                            && c.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                    .forEach(c -> c.setAggregateType(AggregateType.REPLACE));
         }
 
         List<String> keysColumnNames = keysDesc.getKeysColumnNames();
@@ -661,16 +680,12 @@ public class CreateTableAnalyzer {
                 // An AGG_KEYS table requires an aggregate type on every non-key column. The generated
                 // partition column is always functionally determined by the key columns, because
                 // PartitionDescAnalyzer#analyzeListPartitionExprs rejects partition expressions that
-                // reference an aggregated column. All rows merged into one aggregate group therefore
-                // carry the same value here, which makes REPLACE an identity operation. This mirrors
-                // what MaterializedViewAnalyzer#genGeneratedPartitionColumn does for non-DUP views.
-                AggregateType generatedAggregateType = null;
-                if (stmt.getKeysDesc() != null && stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS) {
-                    generatedAggregateType = AggregateType.REPLACE;
-                }
+                // reference an aggregated column. The aggregate type is filled in by analyzeKeysDesc,
+                // which runs after the keys type is known: it may still be inferred from the value
+                // columns at this point.
                 // generated column expression should be saved in unanalyzed way in meta
                 ColumnDef generatedPartitionColumn = new ColumnDef(
-                        columnName, typeDef, null, false, generatedAggregateType, null, true,
+                        columnName, typeDef, null, false, null, null, true,
                         ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
                 columnDefs.add(generatedPartitionColumn);
                 partitionExprs.add((FunctionCallExpr) partitionExpr);
