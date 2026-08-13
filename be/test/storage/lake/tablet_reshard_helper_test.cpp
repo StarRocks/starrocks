@@ -471,6 +471,7 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to
 // num_rows > 0 || has_delete_predicate; PrimaryKeyTxnLogApplier::apply_write_log returns early on
 // the same condition), so the rows of a cross-published write would vanish while the transaction
 // still reported VISIBLE.
+
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_never_zeroes_an_overlapping_rowset) {
     // 1 row split 4 ways: the plain apportionment gives index 0 one row and indexes 1..3 zero.
     RowsetMetadataPB rowset;
@@ -690,6 +691,30 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     add_segment_span(&partial_bounds, 42, 42);
     partial_bounds.add_segment_metas()->set_filename("no_bounds.dat");
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(partial_bounds, co_range(40, 50)));
+}
+
+// KNOWN LIMITATION, pinned deliberately: the envelope is [min, max] over the segments, so a rowset
+// whose keys are SPARSE -- present in two distant sub-ranges and absent from the ones between --
+// still classifies every intervening sibling as kYes. Such a sibling then gets num_rows >= 1 even
+// though its range filter yields no rows.
+//
+// That is the conservative direction (kNo must be a proof, never a guess), and it is not a new state:
+// the pre-existing index-based apportionment already hands a row-empty sibling a non-zero share
+// whenever num_rows >= split_count -- e.g. 2 rows split 4 ways gives [1, 1, 0, 0], so sibling 1 is
+// row-empty with num_rows == 1 today. Deciding it exactly would mean reading the rowset's segment
+// index on the publish hot path.
+TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap_sparse_envelope_is_conservative) {
+    // Keys only in [1, 2] and [98, 99]; nothing in [40, 50).
+    RowsetMetadataPB sparse;
+    add_segment_span(&sparse, 1, 2);
+    add_segment_span(&sparse, 98, 99);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(sparse, co_range(40, 50)))
+            << "the envelope spans the gap, so an intervening sibling cannot be proven empty";
+
+    // A sibling strictly outside the envelope is still proven empty, which is the case that matters
+    // for conservation.
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(sparse, co_range(std::nullopt, 1)));
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(sparse, co_range(100, std::nullopt)));
 }
 
 // ranges_are_contiguous --------------------------------------------------------
