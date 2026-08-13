@@ -31,7 +31,7 @@ public:
     // A single json key can be mapped to more than one Hive column (e.g. mapping.c1=x and
     // mapping.c2=x both point at json field "x"), so a key resolves to a list of targets.
     struct ColumnTarget {
-        int column_index;
+        size_t column_index;
         TypeDescriptor type;
     };
 
