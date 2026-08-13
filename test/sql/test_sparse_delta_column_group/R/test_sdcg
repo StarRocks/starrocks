@@ -274,3 +274,57 @@ select pk from t where g match 'alpha' order by pk;
 drop database test_sdcg_gin force;
 -- result:
 -- !result
+-- name: test_sdcg_complex_type_forced_dense @cloud
+create database test_sdcg_ctype;
+-- result:
+-- !result
+use test_sdcg_ctype;
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+update information_schema.be_configs set value = "2" where name = "sdcg_sparse_min_segment_rows";
+-- result:
+-- !result
+update information_schema.be_configs set value = "0.9" where name = "sdcg_dense_threshold";
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, a ARRAY<INT>, c2 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1,[1,2,3],100),(2,[1,2,3],200),(3,[1,2,3],300),(4,[1,2,3],400),(5,[1,2,3],500);
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,a" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_array.json ${url}/api/test_sdcg_ctype/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select pk, array_length(a), a[1], c2 from t order by pk;
+-- result:
+1	2	9	100
+2	2	9	200
+3	3	1	300
+4	3	1	400
+5	3	1	500
+-- !result
+update information_schema.be_configs set value = "65536" where name = "sdcg_sparse_min_segment_rows";
+-- result:
+-- !result
+update information_schema.be_configs set value = "0.3" where name = "sdcg_dense_threshold";
+-- result:
+-- !result
+drop database test_sdcg_ctype force;
+-- result:
+-- !result
