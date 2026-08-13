@@ -12,7 +12,7 @@ sidebar_position: 10
 - [异步物化视图监控项](./metrics-materialized_view.md)
 - [存算分离集群监控项](./metrics-shared-data.md)
 
-关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./Monitor_and_Alert.md)。
+关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./monitoring.md)。
 
 ## 监控项说明
 
@@ -1840,7 +1840,7 @@ sidebar_position: 10
 
 所有事务指标都共享以下标签：
 
-- `type`: 按导入作业的源类型对事务进行分类（例如 `all`、`stream_load`、`routine_load`）。这有助于监控整体事务性能以及特定导入类型的性能。可以通过 FE 参数 [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) 配置上报的组。
+- `type`: 按导入作业的源类型对事务进行分类（例如 `all`、`stream_load`、`routine_load`）。这有助于监控整体事务性能以及特定导入类型的性能。可以通过 FE 参数 [`txn_latency_metric_report_groups`](../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups) 配置上报的组。
 - `is_leader`: 指示上报的 FE 节点是否为 Leader。只有 Leader FE (`is_leader="true"`) 会上报实际的指标值。Follower FE 的 `is_leader` 将为 `false` 并且不会上报任何数据。
 
 #### starrocks_fe_txn_total_latency_ms
