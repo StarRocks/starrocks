@@ -122,8 +122,12 @@ jobs:
   backport-check-subtask:
     needs: title-check
     runs-on: ubuntu-latest
+    # always(): also convert checkbox -> label for SYNC PRs (unified checkbox-driven model).
+    # sync PRs skip the sync-checker -> title-check chain, so without always() this job would
+    # be skipped for them and their (AI-ticked / carried) checkboxes would never become the
+    # labels the static backport matrix reads. Relevant on SR for CD->SR reverse-synced PRs.
     if: >
-      (
+      always() && (
         startsWith(github.event.pull_request.title, '[BugFix]') ||
         startsWith(github.event.pull_request.title, '[Enhancement]') ||
         startsWith(github.event.pull_request.title, '[Doc]') ||
@@ -147,7 +151,10 @@ jobs:
           labels: ${{ matrix.version }}
 
       - name: check-done
-        if: contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
+        # don't gate SYNC PRs on this human-acknowledgement checkbox — they are machine
+        # generated (reverse sync is AI-ticked / injected), no human to force. Only enforce
+        # it on non-sync (author-authored) PRs.
+        if: contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels') && !contains(github.event.pull_request.labels.*.name, 'sync')
         run: |
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
