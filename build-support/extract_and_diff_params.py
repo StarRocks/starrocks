@@ -43,6 +43,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -606,17 +607,28 @@ def get_new_param_names_from_diff(
     introduced in the current branch, avoiding noise from the pre-existing backlog.
     Pass --diff-base to override the comparison ref (e.g. origin/branch-4.1 for
     release-branch PRs, or HEAD^1 when running against a merge commit).
+
+    A failed diff raises rather than returning an empty set. An empty set is
+    indistinguishable from "this PR adds no parameters", which would make a
+    broken ref, a missing git binary, or a timeout report a clean bill of health.
     """
+    cmd = ["git", "diff", diff_base, "--"] + [str(p) for p in source_paths]
     try:
         result = subprocess.run(
-            ["git", "diff", diff_base, "--"] + [str(p) for p in source_paths],
+            cmd,
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
             timeout=30,
+            check=True,
         )
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return set()
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"'{' '.join(cmd)}' exited {exc.returncode}: "
+            f"{(exc.stderr or '').strip()}"
+        ) from exc
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        raise RuntimeError(f"could not run '{' '.join(cmd)}': {exc}") from exc
 
     names: set[str] = set()
     for line in result.stdout.splitlines():
@@ -807,6 +819,16 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--print-doc-paths",
+        action="store_true",
+        help=(
+            "Print the repo-relative documentation paths this script reads, one "
+            "per line, and exit. CI uses this to materialize the same set of doc "
+            "files from the PR head instead of hardcoding a second copy of the "
+            "list in the workflow."
+        ),
+    )
+    ap.add_argument(
         "--fe-config", type=Path, default=FE_CONFIG_PATH,
         help="Path to Config.java",
     )
@@ -842,6 +864,11 @@ def main() -> int:
         help="Only process this single parameter name (useful for testing AI descriptions)",
     )
     args = ap.parse_args()
+
+    if args.print_doc_paths:
+        for path in FE_PARAM_DOCS + BE_PARAM_DOCS + SESSION_VAR_DOCS:
+            print(path.relative_to(REPO_ROOT))
+        return 0
 
     # Extract from source code
     fe_params = parse_fe_configs(args.fe_config)
@@ -965,8 +992,12 @@ if __name__ == "__main__":
     #   0 = no gaps, 1 = gaps found, 2 = the checker itself could not run.
     # A broken checker must not share an exit code with either verdict, or CI
     # will mistake it for a result and post a comment built from nothing.
+    # Catch Exception, not just the expected failures: an uncaught exception
+    # would exit 1, which CI reads as "gaps found", and it would then post a
+    # report built from empty stdout. SystemExit derives from BaseException, so
+    # the intentional 0 and 1 returns from main() pass through untouched.
     try:
         sys.exit(main())
-    except FileNotFoundError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
         sys.exit(2)

@@ -53,29 +53,44 @@ jobs:
         run: |
           git fetch origin pull/${{ env.PR_NUMBER }}/head:pr-head
 
-      # Materialize the PR's config sources into the working tree. Without this
-      # the checker diffs the base branch against itself -- HEAD is the base
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Materialize the PR's inputs into the working tree. Without this the
+      # checker diffs the base branch against itself -- HEAD is the base
       # checkout -- so the diff is always empty and no new param is ever found.
       #
-      # Only these four data files are taken from the PR. The checker script
-      # itself still comes from the trusted base checkout, so nothing executable
-      # crosses over from the untrusted PR head under pull_request_target.
-      - name: Materialize PR config sources for diffing
+      # Both halves of the comparison have to come from the PR head. The config
+      # sources supply the new parameters; the parameter reference pages supply
+      # the headings they are matched against. Taking only the sources would
+      # report a false gap for a PR that adds a parameter and documents it in the
+      # same change, which is the pattern contributors are asked to follow.
+      #
+      # Everything checked out here is data -- Java, C++ headers, and Markdown,
+      # none of it executed. The checker script itself still comes from the
+      # trusted base checkout, so nothing executable crosses over from the
+      # untrusted PR head under pull_request_target.
+      - name: Materialize PR sources and docs for diffing
         run: |
+          # pipefail so a failure in --print-doc-paths cannot be masked by the
+          # exit status of the xargs on the right-hand side of the pipe.
+          set -o pipefail
+
           git checkout pr-head -- \
             be/src/common/config.h \
             fe/fe-core/src/main/java/com/starrocks/common/Config.java \
             fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java \
             fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java
-          git --no-pager diff --stat "origin/${{ steps.branch.outputs.branch }}" -- \
-            be/src/common/config.h \
-            fe/fe-core/src/main/java/com/starrocks/common/Config.java \
-            fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java \
-            fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+          # Ask the checker which doc files it reads rather than keeping a second
+          # copy of the list here. A workflow copy would silently fall out of step
+          # with the script, which is how the stale management/ paths went
+          # unnoticed in the first place.
+          python3 build-support/extract_and_diff_params.py --print-doc-paths \
+            | xargs git checkout pr-head --
+
+          git --no-pager diff --stat "origin/${{ steps.branch.outputs.branch }}"
 
       # stdout carries the comment body; stderr is kept out of it so a warning
       # or traceback cannot end up posted as the report.
