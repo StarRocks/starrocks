@@ -1,4 +1,5 @@
 ---
+sidebar_position: 90
 displayed_sidebar: docs
 description: "Flink または Kafka からのデータロード用に Stream Load トランザクションインターフェース（2 フェーズコミット）で複数テーブルトランザクションを実装する方法。"
 keywords: ['Stream Load']
@@ -19,7 +20,7 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 Stream Load トランザクションインターフェースは、HTTP プロトコル互換のツールや言語を使用して API 操作を呼び出すことをサポートします。このトピックでは、curl を例にとってこのインターフェースの使用方法を説明します。このインターフェースは、トランザクション管理、データ書き込み、トランザクションの事前コミット、トランザクションの重複排除、トランザクションのタイムアウト管理など、さまざまな機能を提供します。
 
 :::note
-Stream Load は CSV および JSON ファイル形式をサポートします。個々のサイズが 10 GB を超えない少数のファイルからデータをロードしたい場合、この方法が推奨されます。Stream Load は Parquet ファイル形式をサポートしていません。Parquet ファイルからデータをロードする必要がある場合は、[INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を使用してください。
+Stream Load は CSV および JSON ファイル形式をサポートします。個々のサイズが 10 GB を超えない少数のファイルからデータをロードしたい場合、この方法が推奨されます。Stream Load は Parquet ファイル形式をサポートしていません。Parquet ファイルからデータをロードする必要がある場合は、[INSERT+files()](./InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を使用してください。
 :::
 
 ### トランザクション管理
@@ -62,11 +63,11 @@ Stream Load トランザクションインターフェースは、StarRocks の�
 
 ### トランザクションのタイムアウト管理
 
-トランザクションを開始する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、`PREPARE` 状態から `PREPARED` 状態へのトランザクションのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションが準備完了状態に達しない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second)によって決定されます（デフォルト：600 秒）。
+トランザクションを開始する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、`PREPARE` 状態から `PREPARED` 状態へのトランザクションのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションが準備完了状態に達しない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`stream_load_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#stream_load_default_timeout_second)によって決定されます（デフォルト：600 秒）。
 
 トランザクションを開始する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態のまま保持できるタイムアウト期間（秒単位）を指定できます。この期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
 
-トランザクションを準備する際、HTTP リクエストヘッダーの `prepared_timeout` フィールドを使用して、トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションがコミットされない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト：86400秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
+トランザクションを準備する際、HTTP リクエストヘッダーの `prepared_timeout` フィールドを使用して、トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションがコミットされない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`prepared_transaction_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト：86400秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 ## 利点
 
@@ -108,7 +109,7 @@ Stream Load トランザクションインターフェースには、次の制�
 
 #### ネットワーク設定の確認
 
-ロードしたいデータが存在するマシンが、StarRocks クラスターの FE および BE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port) (デフォルト: `8030`) および [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (デフォルト: `8040`) を介してアクセスできることを確認してください。
+ロードしたいデータが存在するマシンが、StarRocks クラスターの FE および BE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (デフォルト: `8030`) および [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) (デフォルト: `8040`) を介してアクセスできることを確認してください。
 
 ## 基本操作
 
@@ -318,7 +319,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **NOTE**
 >
-> `prepared_timeout` フィールドはオプションです。指定されない場合、デフォルト値は FE 設定 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト: 86400 秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
+> `prepared_timeout` フィールドはオプションです。指定されない場合、デフォルト値は FE 設定 [`prepared_transaction_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト: 86400 秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 #### 戻り結果
 
@@ -542,6 +543,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## 参考文献
 
-Stream Load の適用シナリオやサポートされているデータファイル形式、および Stream Load の動作については、[Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load) を参照してください。
+Stream Load の適用シナリオやサポートされているデータファイル形式、および Stream Load の動作については、[Loading from a local file system via Stream Load](./StreamLoad.md#loading-from-a-local-file-system-via-stream-load) を参照してください。
 
 Stream Load ジョブの作成に関する構文やパラメータについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "How to integrate StarRocks with Marimo, a reactive Python notebook for reproducible and interactive data analysis."
 ---

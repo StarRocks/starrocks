@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "SQL Digest fingerprints user SQL statements by removing parameters to group and analyze SQL queries with identical structure for performance insights."
 ---

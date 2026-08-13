@@ -389,7 +389,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ### 监控资源组
 
-您可以为资源组设置[监控与报警](../monitoring/Monitor_and_Alert.md)。
+您可以为资源组设置[监控与报警](../monitoring/monitoring.md)。
 
 可监控的资源组相关的 FE 与 BE 指标 如下所示。下面所有指标都带有 label `name`，表示其对应的资源组。
 

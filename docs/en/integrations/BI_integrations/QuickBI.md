@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "How to connect QuickBI to StarRocks for visualized data analysis."
 ---
