@@ -194,7 +194,7 @@ Because Stream Load transaction interface does not support retry. If this parame
 
 - **Required**: NO
 - **Default value**: None
-- **Description**: The parameters that are used to control Stream Load behavior. For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
+- **Description**: The parameters that are used to control Stream Load behavior. For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 ### `starrocks.write.properties.format`
 
@@ -753,7 +753,7 @@ The connector uses [`to_bitmap`](../../sql-reference/sql-functions/bitmap-functi
 
 ### Load data into columns of HLL type
 
-[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../../using_starrocks/distinct_values/Using_HLL.md).
+[`HLL`](../../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../../using_starrocks/distinct_values/Using_HLL.md).
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.  **`HLL` is supported since version 1.1.1**.
 
