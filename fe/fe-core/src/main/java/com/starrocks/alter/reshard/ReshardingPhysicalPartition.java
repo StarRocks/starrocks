@@ -39,7 +39,8 @@ public class ReshardingPhysicalPartition {
 
     protected Future<Map<Long, TabletRange>> publishFuture;
 
-    // Reason this partition's last publish attempt failed, or null while it is healthy. Scoped to
+    // Reason this partition's last publish attempt failed, cleared once it publishes or the partition
+    // is dropped from the table (runRunningJob then skips it, so no publish result would). Scoped to
     // the partition (not the job) so a partition that recovers stops reporting even while a sibling
     // partition is still retrying. Deliberately NOT serialized: a publish failure is always retried
     // and never terminal, so it must not reach the journal. volatile because runRunningJob writes it

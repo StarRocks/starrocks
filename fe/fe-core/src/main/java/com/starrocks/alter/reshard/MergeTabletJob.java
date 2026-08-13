@@ -213,6 +213,12 @@ public class MergeTabletJob extends TabletReshardJob {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
                 if (physicalPartition == null) {
+                    // The partition was dropped mid-job (DROP PARTITION / TRUNCATE are permitted while
+                    // the table is in TABLET_RESHARD). Its publish will never be retried again, so drop
+                    // any failure reason it left behind instead of reporting a failure that can no
+                    // longer recover -- note this skip also leaves allPartitionFinished alone, so the
+                    // job goes on to finish.
+                    reshardingPhysicalPartition.setPublishFailureReason(null);
                     continue;
                 }
 
@@ -516,13 +522,7 @@ public class MergeTabletJob extends TabletReshardJob {
         item.setParallel_tablets(getParallelTablets());
         item.setCreated_time(createdTimeMs / 1000);
         item.setFinished_time(finishedTimeMs / 1000);
-        if (errorMessage != null) {
-            item.setError_message(errorMessage);
-        } else {
-            String publishFailureReason = anyPublishFailureReason();
-            item.setError_message(publishFailureReason == null
-                    ? "" : "publish version failed (retrying): " + publishFailureReason);
-        }
+        item.setError_message(reportedErrorMessage());
         return item;
     }
 

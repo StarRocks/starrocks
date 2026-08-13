@@ -83,6 +83,26 @@ public abstract class TabletReshardJob implements Writable {
     // showing an empty ERROR_MESSAGE.
     protected abstract String anyPublishFailureReason();
 
+    // ERROR_MESSAGE for information_schema.tablet_reshard_jobs: a terminal error always wins, and
+    // otherwise the reason of a publish the job is still retrying.
+    //
+    // Only RUNNING retries a publish, so the reason is reported only in that state. That gate is what
+    // keeps a reason from outliving the retry it describes: a partition can be dropped mid-job (DROP
+    // PARTITION / TRUNCATE are permitted while the table is in TABLET_RESHARD), after which the
+    // publish loop skips it and no publish result can clear its reason. runRunningJob() clears it on
+    // that skip, but the gate also covers any future early-return added to the loop -- otherwise a
+    // finished job would keep advertising a failure that already stopped being retried.
+    protected String reportedErrorMessage() {
+        if (errorMessage != null) {
+            return errorMessage;
+        }
+        if (jobState != JobState.RUNNING) {
+            return "";
+        }
+        String publishFailureReason = anyPublishFailureReason();
+        return publishFailureReason == null ? "" : "publish version failed (retrying): " + publishFailureReason;
+    }
+
     // The warehouse this job should run its compute work (shard creation + publish) in. Set by the
     // pre-split caller to the triggering load's warehouse; null for an online split / merge (and for a
     // job journaled before this field existed), which then fall back to the background warehouse.
