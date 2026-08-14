@@ -160,7 +160,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### col_name
 
-通常、`__op` または `__row` で始まる名前の列を作成することはできません。これらの名前形式は StarRocks で特別な目的のために予約されており、そのような列を作成すると未定義の動作が発生する可能性があります。そのような列を作成する必要がある場合は、FE 動的パラメータ [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) を `TRUE` に設定してください。
+通常、`__op` または `__row` で始まる名前の列を作成することはできません。これらの名前形式は StarRocks で特別な目的のために予約されており、そのような列を作成すると未定義の動作が発生する可能性があります。そのような列を作成する必要がある場合は、FE 動的パラメータ [`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) を `TRUE` に設定してください。
 
 ### col_type
 

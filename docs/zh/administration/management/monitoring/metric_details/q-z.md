@@ -13,7 +13,7 @@ description: "Alphabetical q - z"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [共享数据仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../monitoring.md)。
 
 :::
 
@@ -425,7 +425,7 @@ description: "Alphabetical q - z"
 
 所有事务指标共享以下标签：
 
-- `type`：按加载作业源类型（例如，`all`、`stream_load`、`routine_load`）对事务进行分类。这允许监控整体事务性能和特定加载类型的性能。报告组可以通过FE参数配置[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`：按加载作业源类型（例如，`all`、`stream_load`、`routine_load`）对事务进行分类。这允许监控整体事务性能和特定加载类型的性能。报告组可以通过FE参数配置[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`：指示报告的FE节点是否为Leader。只有Leader FE (`is_leader="true"`) 报告实际指标值。Follower将具有`is_leader="false"`并报告无数据。
 
 ## `starrocks_fe_query_resource_group`

@@ -161,7 +161,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### col_name
 
-请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊用途，创建此类列可能会导致未定义的行为。如果您确实需要创建此类列，请将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
+请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊用途，创建此类列可能会导致未定义的行为。如果您确实需要创建此类列，请将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 ### col_type
 

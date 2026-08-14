@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
 keywords: ['compaction']

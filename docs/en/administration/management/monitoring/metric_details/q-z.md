@@ -13,7 +13,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../Monitor_and_Alert.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
 
 :::
 
@@ -423,7 +423,7 @@ Each metric includes the following outputs:
 - **`<metric_name>_count`**: The total number of transactions recorded for this phase, for example, `starrocks_fe_txn_total_latency_ms_count`.
 
 All transaction metrics share the following labels:
-- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups).
+- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups).
 - `is_leader`: Indicates whether the reporting FE node is the Leader. Only the Leader FE (`is_leader="true"`) reports actual metric values. Followers will have `is_leader="false"` and report no data.
 
 ## `starrocks_fe_query_resource_group`
