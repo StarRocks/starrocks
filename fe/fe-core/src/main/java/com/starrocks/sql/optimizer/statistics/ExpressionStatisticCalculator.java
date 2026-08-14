@@ -47,14 +47,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.math.BigInteger;
 import java.time.DateTimeException;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
-import java.time.zone.ZoneOffsetTransition;
-import java.time.zone.ZoneRules;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1056,54 +1053,10 @@ public class ExpressionStatisticCalculator {
 
         }
 
-        private OptionalDouble convertTzDateTime(double dateTimeStat, ConstantOperator fromTz, ConstantOperator toTz) {
-            try {
-                ConstantOperator input = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) dateTimeStat));
-                ConstantOperator converted = ScalarOperatorFunctions.convert_tz(input, fromTz, toTz);
-                return OptionalDouble.of(Utils.getLongFromDateTime(converted.getDatetime()));
-            } catch (Exception e) {
-                return OptionalDouble.empty();
-            }
-        }
-
-        /**
-         * convert_tz is only a constant wall-clock shift while both zones keep the same UTC offset over
-         * the whole input range. Around a DST transition the mapping is not monotonic in wall-clock space,
-         * e.g. UTC 00:30 and 01:30 both map to Europe/Berlin 02:30 on 2024-10-27 while 00:59 maps to 02:59,
-         * so converting only the endpoints would under-range the result.
-         */
-        private boolean hasTimezoneOffsetDrift(double minValue, double maxValue,
-                                               ConstantOperator fromTz, ConstantOperator toTz) {
-            try {
-                ZoneId from = ZoneId.of(fromTz.getVarchar());
-                ZoneId to = ZoneId.of(toTz.getVarchar());
-                Instant minInstant = Utils.getDatetimeFromLong((long) minValue).atZone(from).toInstant();
-                Instant maxInstant = Utils.getDatetimeFromLong((long) maxValue).atZone(from).toInstant();
-                Instant start = minInstant.isAfter(maxInstant) ? maxInstant : minInstant;
-                Instant end = minInstant.isAfter(maxInstant) ? minInstant : maxInstant;
-                return hasOffsetTransition(from, start, end) || hasOffsetTransition(to, start, end);
-            } catch (DateTimeException e) {
-                // Invalid zone id or out-of-range temporal value: keep the widened range.
-                return true;
-            }
-        }
-
-        private boolean hasOffsetTransition(ZoneId zone, Instant start, Instant end) {
-            ZoneRules rules = zone.getRules();
-            if (!rules.getOffset(start).equals(rules.getOffset(end))) {
-                return true;
-            }
-            ZoneOffsetTransition next = rules.nextTransition(start);
-            return next != null && !next.getInstant().isAfter(end);
-        }
-
         private ColumnStatistic calcConvertTzStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
-            // Timezone offsets differ by at most 26 hours
-            // (see ExtractRangePredicateFromScalarApplyRule).
             ColumnStatistic childStat = inputs.get(0);
             ColumnStatistic fromTzStat = inputs.get(1);
             ColumnStatistic toTzStat = inputs.get(2);
-            final double maxOffset = 26.0 * 3600.0;
 
             final double distinctValues = Math.min(rowCount,
                     childStat.getDistinctValuesCount()
@@ -1115,17 +1068,19 @@ public class ExpressionStatisticCalculator {
                     * (1.0 - fromTzStat.getNullsFraction())
                     * (1.0 - toTzStat.getNullsFraction());
 
-            double minValue = childStat.getMinValue() - maxOffset;
-            double maxValue = childStat.getMaxValue() + maxOffset;
+            double minValue = childStat.getMinValue() - ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+            double maxValue = childStat.getMaxValue() + ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
 
             Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
             Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
             if (fromTz.isPresent() && toTz.isPresent()
                     && !childStat.hasNaNValue() && !childStat.isInfiniteRange()
-                    && !hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),
+                    && !ConvertTzStatisticUtils.hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),
                             fromTz.get(), toTz.get())) {
-                OptionalDouble convertedMin = convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
-                OptionalDouble convertedMax = convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
+                OptionalDouble convertedMin =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
+                OptionalDouble convertedMax =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
                 if (convertedMin.isPresent() && convertedMax.isPresent()) {
                     minValue = Math.min(convertedMin.getAsDouble(), convertedMax.getAsDouble());
                     maxValue = Math.max(convertedMin.getAsDouble(), convertedMax.getAsDouble());
@@ -1138,8 +1093,8 @@ public class ExpressionStatisticCalculator {
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(callOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
-                    .setHistogram(transformHistogramForConvertTz(callOperator, childStat, minValue, maxValue)
-                            .orElse(null))
+                    .setHistogram(ConvertTzStatisticUtils.transformHistogram(
+                            callOperator, childStat, minValue, maxValue, rowCount).orElse(null))
                     .build();
         }
 
@@ -1556,65 +1511,6 @@ public class ExpressionStatisticCalculator {
             } else {
                 return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
             }
-        }
-
-        private Optional<Histogram> transformHistogramForConvertTz(CallOperator callOperator,
-                                                                  ColumnStatistic childStats,
-                                                                  double minValue, double maxValue) {
-            Histogram hist = childStats == null ? null : childStats.getHistogram();
-            if (hist == null || hist.getMCV().isEmpty()) {
-                return Optional.empty();
-            }
-
-            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
-            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
-            if (fromTz.isEmpty() || toTz.isEmpty()) {
-                return Optional.empty();
-            }
-
-            final Type resultType = callOperator.getType();
-            Map<String, Long> newMcv = new HashMap<>();
-            for (Map.Entry<String, Long> entry : hist.getMCV().entrySet()) {
-                Optional<ConstantOperator> parsedKey =
-                        ConstantOperator.createVarchar(entry.getKey()).castTo(resultType);
-                if (parsedKey.isEmpty() || parsedKey.get().isNull()) {
-                    return Optional.empty();
-                }
-
-                ConstantOperator converted;
-                try {
-                    converted = ScalarOperatorFunctions.convert_tz(parsedKey.get(), fromTz.get(), toTz.get());
-                } catch (Exception e) {
-                    return Optional.empty();
-                }
-
-                Optional<ConstantOperator> keyString = converted.castTo(VarcharType.VARCHAR);
-                if (keyString.isEmpty()) {
-                    return Optional.empty();
-                }
-                newMcv.merge(keyString.get().getVarchar(), entry.getValue(), Long::sum);
-            }
-
-            // Exact per-key MCV transform; keep one covering bucket for the non-MCV mass
-            // (same idea as HistogramStatisticsCollectJob.buildCollectSingleBucket in stats collection).
-            return Optional.of(buildSingleBucketHistogram(minValue, maxValue, rowCount, newMcv));
-        }
-
-        /**
-         * Build an MCV histogram with a single covering bucket for the remaining non-MCV rows.
-         * Mirrors the stats-collection fallback that stores one bucket over [min, max] with
-         * count = totalRows - sum(MCV) when a full multi-bucket histogram is unavailable.
-         */
-        private Histogram buildSingleBucketHistogram(double minValue, double maxValue,
-                                                     double totalRows, Map<String, Long> mcv) {
-            if (Double.isInfinite(minValue) || Double.isInfinite(maxValue)
-                    || Double.isNaN(minValue) || Double.isNaN(maxValue)) {
-                return new Histogram(Collections.emptyList(), mcv);
-            }
-            long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
-            long nonMcvRows = Math.max(0L, Math.round(totalRows) - mcvRows);
-            List<Bucket> buckets = List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L));
-            return new Histogram(buckets, mcv);
         }
 
         /**
