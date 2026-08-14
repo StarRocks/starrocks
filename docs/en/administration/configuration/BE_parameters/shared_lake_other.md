@@ -191,7 +191,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a prepared-physical-split lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
+- Description: Whether a Prepared Physical Split Lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
 - Introduced in: v4.2
 
 ### lake_prepared_split_max_splitted_scan_rows
@@ -200,7 +200,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the prepared-physical-split lake scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
+- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the Prepared Physical Split Lake Scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
 - Introduced in: v4.2
 
 ### lake_put_txn_log_timeout_guard_ms
