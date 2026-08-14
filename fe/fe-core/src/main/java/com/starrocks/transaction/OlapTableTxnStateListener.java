@@ -152,8 +152,6 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             }
         }
 
-        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
-
         // update write failed backend/replica
         // use for selection of primary replica for replicated storage
         for (TabletFailInfo failedTablet : failedTablets) {
@@ -253,6 +251,10 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 }
             }
         }
+
+        // Reported only once this commit is going through, so that a commit rejected above is not
+        // recorded as having dropped rows.
+        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
     }
 
     @Override

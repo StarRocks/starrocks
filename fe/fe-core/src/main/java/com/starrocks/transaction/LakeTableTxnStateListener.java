@@ -140,8 +140,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
-        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
-
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -166,6 +164,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
 
         checkShadowIndexesLoaded(txnState);
+
+        // Reported only once this commit is going through, so that a commit rejected above is not
+        // recorded as having dropped rows.
+        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
     }
 
     /**
