@@ -16,6 +16,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -36,6 +37,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
@@ -146,6 +148,24 @@ public class InsertOverwriteJobRunnerTest {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assertions.assertFalse(runner.isFinished());
+    }
+
+    @Test
+    public void testDynamicOverwritePreSplitRunsAfterTransactionIsAssigned() {
+        InsertStmt insertStmt = Mockito.mock(InsertStmt.class);
+        ConnectContext context = Mockito.mock(ConnectContext.class);
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                101L, insertStmt, 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        job.setTxnId(42L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, executor);
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitDynamicOverwriteTempPartitions();
+
+            hook.verify(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                    insertStmt, context, 42L));
+        }
     }
 
     @Test

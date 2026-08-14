@@ -143,6 +143,41 @@ public class PreSplitFlowTest {
     }
 
     @Test
+    public void dynamicOverwriteRoutesThroughTemporaryPartitionFlow() {
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.groupTemporary(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong(), any(), eq(42L)))
+                    .thenReturn(List.of(mock(PartitionSamples.class)));
+            coordinator.when(() -> TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
+                            any(), any(), anyList(), anyInt(), any(), any(), any(), eq(42L)))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+            PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                    () -> false, mock(ConnectContext.class), 42L);
+
+            grouper.verify(() -> PartitionSampleGrouper.groupTemporary(
+                    any(SampleSet.class), eq(table), any(ConnectContext.class),
+                    eq(7L), anyLong(), any(), eq(42L)), times(1));
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
+                    eq(database), eq(table), anyList(), anyInt(), any(), any(), any(), eq(42L)), times(1));
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
     public void dispatchSkipsManuallyPartitioned() {
         // Partitioned + supportedAutomaticPartition() returns false (manual list/range
         // partitions) -> the hoisted automatic-partition gate skips before either submit.
