@@ -1,0 +1,71 @@
+-- name: test_set_operation_by_row_serialization @system @sequential
+
+-- EXCEPT/INTERSECT serialize a chunk's key columns into a fixed-stride buffer sized
+-- max_one_row_size * chunk_size, so one very wide row prices the whole chunk: an
+-- ARRAY<ARRAY<BIGINT>> holding 5M sub-arrays serializes to ~70MB and 70MB * 4096 asked the
+-- MemPool for 512GB on a chunk that held a single row. Past INT32_MAX the operators now
+-- serialize row by row into a single-row buffer instead.
+--
+-- Reaching that bound with real data takes half a megabyte per row, which is too heavy for a
+-- regression case, so the failpoints take the branch on ordinary data. What has to hold is that
+-- both serializations produce the same keys: one query can take both paths, because a chunk
+-- holding a wide value goes by rows while the narrow chunks around it stay vectorized.
+
+CREATE TABLE `s1` (
+  `c1` int NULL,
+  `c2` varchar(64) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE `s2` (
+  `c1` int NULL,
+  `c2` varchar(64) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Nulls and an empty string are the values whose serialized layout differs between the two
+-- paths (a nullable column writes its own null byte, a non-nullable one gets a false byte
+-- prepended), so they are the ones that would expose a mismatch.
+insert into s1 values (1, 'a'), (2, ''), (3, null), (4, 'dd'), (null, 'e');
+insert into s2 values (1, 'a'), (3, null), (5, 'ff');
+
+-- Baseline: the vectorized path.
+select * from (select c1, c2 from s1 intersect select c1, c2 from s2) t order by c1, c2;
+select * from (select c1, c2 from s1 except select c1, c2 from s2) t order by c1, c2;
+
+admin enable failpoint 'intersect_hash_set_force_by_rows';
+admin enable failpoint 'except_hash_set_force_by_rows';
+
+-- Same queries, serialized one row at a time. The results must be identical.
+select * from (select c1, c2 from s1 intersect select c1, c2 from s2) t order by c1, c2;
+select * from (select c1, c2 from s1 except select c1, c2 from s2) t order by c1, c2;
+
+-- INTERSECT over three inputs exercises refine_intersect_row's by-rows variant, which walks
+-- the hash set with hit_times rather than building it.
+select * from (select c1, c2 from s1 intersect select c1, c2 from s2 intersect select c1, c2 from s1) t order by c1, c2;
+
+-- A chunk larger than one row: the single-row buffer is rewritten for every row, so a stale
+-- pointer would show up here as lost or duplicated keys.
+insert into s1 select generate_series, concat('v', generate_series) from table(generate_series(10, 5000));
+insert into s2 select generate_series, concat('v', generate_series) from table(generate_series(10, 5000));
+select count(*) from (select c1, c2 from s1 intersect select c1, c2 from s2) t;
+select count(*) from (select c1, c2 from s1 except select c1, c2 from s2) t;
+
+admin disable failpoint 'intersect_hash_set_force_by_rows';
+admin disable failpoint 'except_hash_set_force_by_rows';
+
+-- And the vectorized path still agrees on the same, now larger, data.
+select count(*) from (select c1, c2 from s1 intersect select c1, c2 from s2) t;
+select count(*) from (select c1, c2 from s1 except select c1, c2 from s2) t;
+
+drop table s1;
+drop table s2;
+
+CLEANUP {
+  admin disable failpoint 'intersect_hash_set_force_by_rows';
+  admin disable failpoint 'except_hash_set_force_by_rows';
+} END CLEANUP
