@@ -466,8 +466,21 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
             return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
         }
     }
-    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
-        request.__set_partial_update(true);
+    // Same contract as /api/{db}/{tbl}/_stream_load: case-INSENSITIVE, and an unparseable value is
+    // REJECTED rather than quietly treated as false. The previous byte-exact == "true" meant a header
+    // of `partial_update:TRUE` (or `True`) silently degraded the load to a FULL upsert, which writes
+    // NULL over every column the `columns` header did not list. That is silent data loss, and this is
+    // the endpoint where it is hardest to notice: the load still reports Success, and the damage is
+    // only visible on a later read of the columns the caller never intended to touch.
+    if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
+        const std::string& partial_update = http_req->header(HTTP_PARTIAL_UPDATE);
+        if (boost::iequals(partial_update, "true")) {
+            request.__set_partial_update(true);
+        } else if (boost::iequals(partial_update, "false")) {
+            request.__set_partial_update(false);
+        } else {
+            return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
+        }
     } else {
         request.__set_partial_update(false);
     }
@@ -481,6 +494,17 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
             request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
         } else if (boost::iequals(partial_update_mode, "auto")) {
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
+            // Same wiring as /api/{db}/{tbl}/_stream_load, under the same gate. Without it, `auto` on
+            // this endpoint left flexible_partial_update unset, so FE built a HOMOGENEOUS plan and a
+            // heterogeneous JSON body (each row declaring a different column subset) was applied as a
+            // union update -- NULL over every column a row did not declare. That is precisely the
+            // failure the explicit `flexible` rejection below exists to prevent, leaking back in
+            // through the `auto` token. This endpoint reaches FE through the SAME streamLoadPut RPC as
+            // the regular one, so the flexible plan is built identically here.
+            if (request.__isset.partial_update && request.partial_update &&
+                request.formatType == TFileFormatType::FORMAT_JSON) {
+                request.__set_flexible_partial_update(true);
+            }
         } else if (boost::iequals(partial_update_mode, "column")) {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
         } else if (boost::iequals(partial_update_mode, "flexible") ||
