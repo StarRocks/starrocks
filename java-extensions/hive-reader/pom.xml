@@ -23,15 +23,6 @@
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
-=======
-            <groupId>com.starrocks</groupId>
-            <artifactId>hadoop-ext</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-
-        <dependency>
->>>>>>> bd54ed664b ([BugFix] stop shipping test-scope jars in java-extensions reader libs (#77752))
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-mapreduce-client-core</artifactId>
         </dependency>

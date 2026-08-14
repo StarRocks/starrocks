@@ -22,15 +22,6 @@
             <artifactId>jni-connector</artifactId>
         </dependency>
 
-<<<<<<< HEAD
-=======
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>hadoop-ext</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-
->>>>>>> bd54ed664b ([BugFix] stop shipping test-scope jars in java-extensions reader libs (#77752))
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
