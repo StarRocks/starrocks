@@ -1657,12 +1657,11 @@ TEST_F(JsonFunctionsTest, const_nested_array_to_json) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     auto inner_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto outer_elements = NullableColumn::create(
-            ArrayColumn::create(std::move(inner_elements), UInt32Column::create()), NullColumn::create());
+    auto outer_elements = NullableColumn::create(ArrayColumn::create(std::move(inner_elements), UInt32Column::create()),
+                                                 NullColumn::create());
     auto outer_arrays = ArrayColumn::create(std::move(outer_elements), UInt32Column::create());
-    outer_arrays->append_datum(
-            DatumArray{Datum(DatumArray{Datum(int32_t(1)), Datum(), Datum(int32_t(3))}), Datum(),
-                       Datum(DatumArray{Datum(int32_t(4)), Datum(int32_t(5))})});
+    outer_arrays->append_datum(DatumArray{Datum(DatumArray{Datum(int32_t(1)), Datum(), Datum(int32_t(3))}), Datum(),
+                                          Datum(DatumArray{Datum(int32_t(4)), Datum(int32_t(5))})});
 
     Columns input_columns{ConstColumn::create(std::move(outer_arrays), 3)};
     auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
@@ -1685,10 +1684,9 @@ TEST_F(JsonFunctionsTest, const_multi_dimensional_array_to_json) {
     auto outer_elements = NullableColumn::create(
             ArrayColumn::create(std::move(middle_elements), UInt32Column::create()), NullColumn::create());
     auto arrays = ArrayColumn::create(std::move(outer_elements), UInt32Column::create());
-    arrays->append_datum(DatumArray{
-            Datum(DatumArray{Datum(DatumArray{Datum(int32_t(1)), Datum(int32_t(2))}),
-                              Datum(DatumArray{Datum(int32_t(3))})}),
-            Datum(DatumArray{Datum(DatumArray{})})});
+    arrays->append_datum(DatumArray{Datum(DatumArray{Datum(DatumArray{Datum(int32_t(1)), Datum(int32_t(2))}),
+                                                     Datum(DatumArray{Datum(int32_t(3))})}),
+                                    Datum(DatumArray{Datum(DatumArray{})})});
 
     Columns input_columns{ConstColumn::create(std::move(arrays), 2)};
     auto maybe_res = JsonFunctions::to_json(ctx.get(), input_columns);
