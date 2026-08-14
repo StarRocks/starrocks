@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
@@ -25,15 +26,18 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.mv.IcebergTablePartitionHandler;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -626,6 +630,83 @@ public class MaterializedViewAnalyzerTest {
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("partition evolution"));
         }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergTableWithPartitionEvolutionAllowedByConfig() throws Exception {
+        // With the new switch on, and since the mocked evolution table has no data (currentSnapshot() is null,
+        // so isCurrentSnapshotAllOnCurrentSpec() returns true), creating a partitioned MV on top of the
+        // partition-evolved iceberg table should succeed.
+        boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
+        Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
+        String partitionedMvName = "iceberg_evolution_partitioned_mv_allowed";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('month', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Table mv = starRocksAssert.getTable("test", partitionedMvName);
+            Assertions.assertTrue(mv instanceof MaterializedView);
+            starRocksAssert.dropMaterializedView(partitionedMvName);
+        } finally {
+            Config.enable_mv_on_iceberg_table_with_partition_evolution = originalConfig;
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergTableIncompatibleTransformEvenWhenAllowed() throws Exception {
+        // Even with the switch on, the MV's partition expression must still match the base iceberg table's
+        // *current* partition transform. The mocked evolution table's current default spec is month("ts"),
+        // so a MV with `date_trunc('day', ts)` must still be rejected. This is the exact protection that
+        // MVRefreshProcessor also applies at refresh time via checkPartitionTransformCompatibleWithSpec:
+        // even if all live manifests are on the current spec, an incompatible transform still fails fast.
+        boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
+        Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
+        String partitionedMvName = "iceberg_evolution_partitioned_mv_incompat";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + partitionedMvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('day', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Assertions.fail("Should fail because MV partition expr (day) is not compatible with base table "
+                    + "current spec transform (month)");
+        } catch (Exception e) {
+            String msg = e.getMessage() == null ? "" : e.getMessage();
+            Assertions.assertTrue(msg.contains("must be the same with base table partition transform")
+                            || msg.toUpperCase().contains("MONTH"),
+                    "Unexpected error message: " + msg);
+        } finally {
+            Config.enable_mv_on_iceberg_table_with_partition_evolution = originalConfig;
+        }
+    }
+
+    @Test
+    public void testIcebergPartitionTransformCheckRejectsMissingCurrentSpecField() {
+        IcebergTable table = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(starRocksAssert.getCtx(), MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME,
+                        MockIcebergMetadata.MOCKED_PARTITIONED_TRANSFORMS_DB_NAME,
+                        MockIcebergMetadata.MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
+        SlotRef missingCurrentSpecSlot = new SlotRef(null, "data");
+
+        SemanticException exception = Assertions.assertThrows(SemanticException.class, () ->
+                IcebergTablePartitionHandler.checkPartitionTransformCompatibleWithSpec(
+                        table, missingCurrentSpecSlot, missingCurrentSpecSlot));
+        Assertions.assertTrue(exception.getMessage().contains("is not found in current partition spec"),
+                "Unexpected error message: " + exception.getMessage());
     }
 
     @Test

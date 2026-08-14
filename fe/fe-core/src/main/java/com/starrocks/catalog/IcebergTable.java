@@ -68,12 +68,14 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -279,6 +281,33 @@ public class IcebergTable extends Table {
     public boolean hasPartitionTransformedEvolution() {
         return (!isV2Format() && getReadSpec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
                 (isV2Format() && getReadSpec().specId() > 0);
+    }
+
+    public boolean isCurrentSnapshotAllOnCurrentSpec() {
+        org.apache.iceberg.Table t = getNativeTable();
+        if (t.specs().size() <= 1) {
+            return true;
+        }
+
+        Snapshot snapshot = t.currentSnapshot();
+        if (snapshot == null) {
+            return true;
+        }
+
+        int currentSpecId = t.spec().specId();
+        try {
+            for (ManifestFile manifest : snapshot.allManifests(t.io())) {
+                if (manifest.partitionSpecId() != currentSpecId) {
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Failed to check manifests for iceberg table {}, fall back to strict partition-evolution check",
+                    getName(), e);
+            return false;
+        }
     }
 
     public boolean isV2Format() {
