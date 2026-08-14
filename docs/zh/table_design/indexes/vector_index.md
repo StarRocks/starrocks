@@ -116,6 +116,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 - **描述**: 向量索引的度量类型（测量函数）。有效值：
   - `l2_distance`: 欧氏距离。值越小，相似度越高。
   - `cosine_similarity`: 余弦相似度。值越大，相似度越高。
+  - `inner_product`: 内积。值越大，相似度越高。与余弦相似度不同，内积保留向量模长。精确计算使用 `inner_product`，向量索引 top-k 或范围查询使用 `approx_inner_product`。
 
 ##### is_vector_normed
 
@@ -168,7 +169,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 
 - **默认值**: 8
 - **必需**: 否（仅在 `quantizer = pq` 时允许；其他场景下不允许设置）。
-- **描述**: HNSW 特定参数（仅 PQ 量化器）。每个 PQ 子量化器的位数。必须在 4–16 之间。
+- **描述**: HNSW 特定参数（仅 PQ 量化器）。每个 PQ 子量化器的位数。有效值为 `4` 和 `8`。
 
 ##### nbits
 
@@ -276,18 +277,21 @@ LIMIT 10
     - `<vector_index_distance_func>`的函数名要求：
       - 如果`metric_type`是`l2_distance`，函数名必须是`approx_l2_distance`。
       - 如果`metric_type`是`cosine_similarity`，函数名必须是`approx_cosine_similarity`。
+      - 如果`metric_type`是`inner_product`，函数名必须是`approx_inner_product`。
     - `<vector_index_distance_func>`的参数要求：
       - `constant_array`必须是一个与向量索引`dim`匹配的常量`ARRAY<FLOAT>`。
       - `vector_column`必须是与向量索引对应的列。
   - ORDER方向要求：
     - 如果`metric_type`是`l2_distance`，顺序必须是`ASC`。
     - 如果`metric_type`是`cosine_similarity`，顺序必须是`DESC`。
+    - 如果`metric_type`是`inner_product`，顺序必须是`DESC`。
   - 必须有`LIMIT N`子句。
 - **谓词要求：**
   - 所有谓词必须是`<vector_index_distance_func>`表达式，通过`AND`和比较运算符（`>`或`<`）组合。比较运算符的方向必须与`ASC`/`DESC`顺序一致。具体来说：
   - 要求1：
     - 如果`metric_type`是`l2_distance`：`col_ref <= constant`。
     - 如果`metric_type`是`cosine_similarity`：`col_ref >= constant`。
+    - 如果`metric_type`是`inner_product`：`col_ref >= constant`，其中常量可以为负数。
     - 这里，`col_ref`指的是`<vector_index_distance_func>(vector_column, constant_array)`的结果，可以转换为`FLOAT`或`DOUBLE`类型，例如：
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`
