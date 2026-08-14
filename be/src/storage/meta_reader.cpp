@@ -24,7 +24,12 @@
 #include "column/datum.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
+<<<<<<< HEAD
 #include "runtime/global_dict/config.h"
+=======
+#include "fs/fs_factory.h"
+#include "storage/extends_column_utils.h"
+>>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759))
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -224,13 +229,23 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
         const TabletColumn& column, std::string* filename, FileEncryptionInfo* encryption_info,
         ColumnAccessPath* path) {
     // build column iter from delta column group
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(storage_column_uid(column)));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
         if (encryption_info != nullptr && dcg_segment->encryption_info()) {
             *encryption_info = *dcg_segment->encryption_info();
+        }
+        if (column.is_extended()) {
+            // Same as SegmentIterator::_new_dcg_column_iterator: an extended column has no reader of
+            // its own in the .cols segment, it must be rebuilt from the root JSON column.
+            //
+            // This site must stay in step with the scan path. The global dictionary for a JSON string
+            // subfield is collected here, through a [_META_] scan; if the scan read the .cols overlay
+            // while dictionary collection still read the base segment, the value the scan returns
+            // would be absent from the dictionary and the query would fail to decode it.
+            return dcg_segment->new_column_iterator_or_default(column, path);
         }
         return dcg_segment->new_column_iterator(column, path);
     }
