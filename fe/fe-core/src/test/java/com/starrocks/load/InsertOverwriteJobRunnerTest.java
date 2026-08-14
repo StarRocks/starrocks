@@ -41,6 +41,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
+import java.util.List;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -179,11 +180,14 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
                 job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
 
-        OlapTable table = Mockito.mock(OlapTable.class);
-        Mockito.when(table.getTempPartitions()).thenReturn(Lists.newArrayList(
+        // Build the partition mocks before opening the outer when(), otherwise Mockito sees a
+        // nested stubbing and fails with UnfinishedStubbing.
+        List<Partition> tempPartitions = Lists.newArrayList(
                 mockPartitionNamed("txn42_p20260101"),
                 mockPartitionNamed("txn7_p20260101"),
-                mockPartitionNamed("p20260101")));
+                mockPartitionNamed("p20260101"));
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getTempPartitions()).thenReturn(tempPartitions);
 
         runner.dropUnusedDynamicOverwriteTempPartitions(table);
 
@@ -218,10 +222,11 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
                 job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
 
-        OlapTable table = Mockito.mock(OlapTable.class);
-        Mockito.when(table.getTempPartitions()).thenReturn(Lists.newArrayList(
+        List<Partition> tempPartitions = Lists.newArrayList(
                 mockPartitionNamed("txn4242_p20260101"),
-                mockPartitionNamed("txn4243_p20260101")));
+                mockPartitionNamed("txn4243_p20260101"));
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getTempPartitions()).thenReturn(tempPartitions);
 
         Assertions.assertEquals(Lists.newArrayList("txn4242_p20260101"),
                 runner.getDynamicOverwriteTempPartitions(table));
