@@ -60,6 +60,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #ifndef __APPLE__
+#include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif
 #include "storage/lake/tablet_manager.h"
@@ -686,23 +687,32 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_pk_tablet_with_clucene_gin_i
     ASSERT_EQ(tablet->data_dir(), dest_store);
     ASSERT_EQ(tablet->updates()->max_version(), 2);
 
-    std::set<std::string> destination_dirs;
     std::set<std::string> destination_files;
-    ASSERT_OK(fs::list_dirs_files(tablet->schema_hash_path(), &destination_dirs, &destination_files));
+    ASSERT_OK(fs::list_dirs_files(tablet->schema_hash_path(), nullptr, &destination_files));
     ASSERT_TRUE(std::none_of(destination_files.begin(), destination_files.end(),
                              [](const std::string& file) { return CLucenePlugin::is_index_files(file); }));
 
-    size_t index_directory_count = 0;
-    for (const auto& directory : destination_dirs) {
-        if (!directory.ends_with(".ivt")) {
-            continue;
+    std::vector<RowsetSharedPtr> applied_rowsets;
+    ASSERT_OK(tablet->updates()->get_applied_rowsets(2, &applied_rowsets));
+    ASSERT_FALSE(applied_rowsets.empty());
+
+    size_t active_index_directory_count = 0;
+    for (const auto& rowset : applied_rowsets) {
+        for (int segment_id = 0; segment_id < rowset->num_segments(); ++segment_id) {
+            for (const auto& index : *tablet->tablet_schema()->indexes()) {
+                if (index.index_type() != GIN) {
+                    continue;
+                }
+                const auto index_directory = IndexDescriptor::inverted_index_file_path(
+                        tablet->schema_hash_path(), rowset->rowset_id().to_string(), segment_id, index.index_id());
+                std::set<std::string> index_files;
+                ASSERT_OK(fs::list_dirs_files(index_directory, nullptr, &index_files));
+                ASSERT_FALSE(index_files.empty()) << index_directory;
+                ++active_index_directory_count;
+            }
         }
-        std::set<std::string> index_files;
-        ASSERT_OK(fs::list_dirs_files(tablet->schema_hash_path() + "/" + directory, nullptr, &index_files));
-        ASSERT_FALSE(index_files.empty()) << directory;
-        ++index_directory_count;
     }
-    ASSERT_GT(index_directory_count, 0);
+    ASSERT_GT(active_index_directory_count, 0);
 }
 #endif
 
