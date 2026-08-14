@@ -64,7 +64,7 @@ public class LicenseMgr {
     private final String rsaKeyEncoded;
     private static final byte RSA_XOR_KEY = 0x3F;
 
-    private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 7; // 7 days
+    private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 30; // 30 days
     private static final long LICENSE_TIP_INTERVAL_MS = 1000L * 3600 * 24 * 30; // 30 days
     private static final long SCALE_OUT_LICENSE_FREE_INTERVAL_MS = 1000L * 3600 * 24 * 7; // 7 days
 
