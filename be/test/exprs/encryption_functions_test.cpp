@@ -917,6 +917,7 @@ TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
     columns.emplace_back(plain);
     columns.emplace_back(key_column);
     columns.emplace_back(radix_column);
+    ctx->set_constant_columns(columns);
 
     ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
