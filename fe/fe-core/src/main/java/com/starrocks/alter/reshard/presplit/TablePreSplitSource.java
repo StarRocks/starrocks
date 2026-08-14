@@ -131,7 +131,8 @@ final class TablePreSplitSource implements InsertPreSplitSource {
      * DISTINCT and no GROUP BY / HAVING / ORDER BY / LIMIT. A WHERE clause is
      * allowed (gated separately). Expressions in the explicit list are checked
      * later by {@link InsertSelectSourceColumns}: only target columns needed for
-     * partitioning and range distribution must be direct source-column refs.
+     * partitioning and range distribution must be direct source-column refs, and
+     * an expression may reference nothing beyond the resolved source relation.
      */
     private static boolean hasSupportedProjectionShape(SelectRelation selectRelation) {
         SelectList selectList = selectRelation.getSelectList();
