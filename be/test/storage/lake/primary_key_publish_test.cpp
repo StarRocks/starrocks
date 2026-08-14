@@ -858,7 +858,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_detects_corruption) {
     }
 
     auto st = publish_single_version(tablet_id, 3, delete_txn).status();
-    ASSERT_TRUE(st.is_corruption()) << st;
+    // TEST_publish_single_version re-wraps every publish failure as InternalError with the original
+    // status stringified into the message, so the Corruption code does not survive to here -- match
+    // on the message instead.
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("del file crc32c mismatch") != std::string::npos) << st;
     // Publish did not commit: no version 3 metadata was produced.
     auto meta_v3 = _tablet_mgr->get_tablet_metadata(tablet_id, 3);
     EXPECT_TRUE(meta_v3.status().is_not_found()) << meta_v3.status();
