@@ -534,7 +534,7 @@ CSV ファイルからデータのストリーミング読み取りを構築し�
 
 ### 主キーテーブルにデータをロードする
 
-このセクションでは、StarRocks 主キーテーブルにデータをロードして部分更新や条件付き更新を実現する方法を示します。これらの機能の詳細な紹介については、[Change data through loading](../../Load_to_Primary_Key_tables.md) を参照してください。これらの例では Spark SQL を使用します。
+このセクションでは、StarRocks 主キーテーブルにデータをロードして部分更新や条件付き更新を実現する方法を示します。これらの機能の詳細な紹介については、[Change data through loading](../Load_to_Primary_Key_tables.md) を参照してください。これらの例では Spark SQL を使用します。
 
 #### 準備
 
