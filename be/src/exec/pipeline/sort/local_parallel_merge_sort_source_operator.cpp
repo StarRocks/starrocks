@@ -57,6 +57,11 @@ bool LocalParallelMergeSortSourceOperator::has_output() const {
     if (_is_finished) {
         return false;
     }
+    // An order-by expression that failed on a merge worker is latched on the merger; the stage gates
+    // below never observe it, so report ready and let pull_chunk() propagate it.
+    if (_merger->has_eval_error()) {
+        return true;
+    }
     if (_merger->is_current_stage_finished(_merge_parallel_id, false)) {
         return false;
     }
@@ -73,7 +78,11 @@ bool LocalParallelMergeSortSourceOperator::is_finished() const {
 StatusOr<ChunkPtr> LocalParallelMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     // Propagate the spiller task error that made has_output() report ready, before pulling from the merger.
     RETURN_IF_ERROR(_sort_context->spiller_task_status());
+    // The merge workers latch an order-by evaluation failure on the merger; check it before driving
+    // it further, and again afterwards for a failure latched by this very call.
+    RETURN_IF_ERROR(_merger->status());
     ChunkPtr chunk = _merger->try_get_next(_merge_parallel_id);
+    RETURN_IF_ERROR(_merger->status());
 
     if (_merger->is_finished()) {
         _is_finished = true;

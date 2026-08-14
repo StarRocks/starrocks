@@ -196,7 +196,7 @@ public:
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
-    virtual void eval_runtime_bloom_filters(Chunk* chunk);
+    virtual Status eval_runtime_bloom_filters(Chunk* chunk);
 
     // Pseudo plan_node_id for final sink, such as result_sink, table_sink
     static const int32_t s_pseudo_plan_node_id_for_final_sink;

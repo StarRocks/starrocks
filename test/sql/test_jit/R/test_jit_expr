@@ -397,3 +397,7 @@ select count(*) from t where int0 = dict_mapping("dict", int0, "col_4", true);
 -- result:
 0
 -- !result
+select dict_mapping("dict", nint0, "col_4") + 1 from t order by 1;
+-- result:
+[REGEX].*invalid parameter : get NULL paramenter.*
+-- !result

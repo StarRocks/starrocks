@@ -297,15 +297,18 @@ public:
     }
 };
 
-SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs)
-        : chunk(ichunk), range(0, ichunk->num_rows()) {
+StatusOr<SortedRun> SortedRun::create(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs) {
     DCHECK(ichunk);
+    SortedRun run;
+    run.chunk = ichunk;
+    run.range = {0, ichunk->num_rows()};
     if (!ichunk->is_empty()) {
         for (auto& expr : *exprs) {
-            auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), ichunk.get());
-            orderby.push_back(column);
+            ASSIGN_OR_RETURN(auto column, expr->evaluate(ichunk.get()));
+            run.orderby.push_back(std::move(column));
         }
     }
+    return run;
 }
 
 void SortedRun::reset() {
@@ -547,7 +550,8 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     }
 
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
-        output->chunks.emplace_back(ChunkPtr(chunk.release()), sort_exprs);
+        ASSIGN_OR_RETURN(auto run, SortedRun::create(ChunkPtr(chunk.release()), sort_exprs));
+        output->chunks.emplace_back(std::move(run));
         return Status::OK();
     };
     return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer);

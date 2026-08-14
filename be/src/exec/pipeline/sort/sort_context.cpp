@@ -94,7 +94,7 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
 
     while (_required_rows > 0 && !_merger.is_eos()) {
         if (_current_chunk.empty()) {
-            auto chunk = _merger.try_get_next();
+            ASSIGN_OR_RETURN(auto chunk, _merger.try_get_next());
             // Input cursor maye short circuit
             if (!chunk) {
                 if (_merger.is_eos()) {
