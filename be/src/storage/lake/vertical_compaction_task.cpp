@@ -322,8 +322,7 @@ Status VerticalCompactionTask::compact_column_group(
     // PK columns, so only it filters; the value groups replay the selection stream instead.
     std::optional<PrimaryKeyRangeFilter> pk_range_filter;
     if (is_key && selection_buffer != nullptr) {
-        ASSIGN_OR_RETURN(pk_range_filter,
-                         PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
+        ASSIGN_OR_RETURN(pk_range_filter, PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
     }
 
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index

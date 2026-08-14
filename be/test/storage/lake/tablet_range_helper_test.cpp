@@ -250,7 +250,8 @@ TEST(TabletRangeHelperTest, test_primary_key_range_filter_with_separate_sort_key
     EXPECT_EQ(0, filter2[0]);
     EXPECT_EQ(1, filter2[1]);
 
-    ASSIGN_OR_ABORT(auto empty, pk_filter.build(*ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 0)));
+    ASSIGN_OR_ABORT(auto empty,
+                    pk_filter.build(*ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 0)));
     EXPECT_TRUE(empty.empty());
 }
 

@@ -72,7 +72,6 @@ public:
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);
 
-
     static StatusOr<TabletRangePB> convert_t_range_to_pb_range(const TTabletRange& t_range);
 
     // Check that a single tablet range is well-formed: closed-open semantics
@@ -118,7 +117,6 @@ public:
     static Status validate_range_transition(const TabletMetadataPB& old_meta, const TabletSchema& new_schema,
                                             const TabletRangePB& new_range);
 };
-
 
 // Row selection over a tablet's PK-space half-open range. This is intentionally a row filter rather
 // than a segment seek: a tablet with ORDER BY != PK has segments ordered by the sort key, so its PK

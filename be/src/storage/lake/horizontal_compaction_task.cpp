@@ -137,8 +137,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // Built once: only the encode-and-compare depends on the chunk.
     std::optional<PrimaryKeyRangeFilter> pk_range_filter;
     if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
-        ASSIGN_OR_RETURN(pk_range_filter,
-                         PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
+        ASSIGN_OR_RETURN(pk_range_filter, PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
     }
 
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
