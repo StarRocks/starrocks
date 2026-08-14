@@ -9,10 +9,9 @@ name: CD SCAN PENDING (ON MERGE)
 # a trimmed v1 (BUILD + auto-merge only, no notification hook), so the kick lives here.
 #
 # pull_request_target:closed fires on every PR close; the job `if` restricts it to a
-# merged reverse-sync PR. It keys on the executor's head-branch signature
-# `<base>-cd-sync-pr-<N>` (set unconditionally by repo-sync.yml and NOT altered by the
-# model-2 scrub, unlike the `cd-sync` label/title marker) so it fires whether or not
-# scrub is active.
+# merged reverse-sync PR via the `sync` label. On StarRocks only the reverse sync opens
+# `sync`-labeled PRs (the forward SR->CD sync opens them on CelerData), and the executor
+# keeps the `sync` label after desensitization — so the label is a sufficient discriminator.
 
 on:
   pull_request_target:
@@ -27,7 +26,7 @@ jobs:
     if: >
       github.repository == 'StarRocks/starrocks' &&
       github.event.pull_request.merged == true &&
-      contains(github.head_ref, '-cd-sync-pr-')
+      contains(github.event.pull_request.labels.*.name, 'sync')
     steps:
       - name: dispatch cd-scan-pending
         env:
