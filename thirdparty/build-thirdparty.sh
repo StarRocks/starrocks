@@ -1431,6 +1431,40 @@ build_libdivide() {
     cp libdivide.h $TP_INSTALL_DIR/include/
 }
 
+build_libunistring() {
+    check_if_source_exist $LIBUNISTRING_SOURCE
+    cd $TP_SOURCE_DIR/$LIBUNISTRING_SOURCE
+    ./configure --prefix=${TP_INSTALL_DIR} --disable-shared
+    make -j$PARALLEL
+    make install
+}
+
+build_gmp() {
+    check_if_source_exist $GMP_SOURCE
+    cd $TP_SOURCE_DIR/$GMP_SOURCE
+    export CFLAGS="-fPIC"
+    ./configure --enable-static --disable-shared --with-pic --prefix=${TP_INSTALL_DIR}
+    make -j$PARALLEL
+    make install
+}
+
+build_libfpe() {
+    check_if_source_exist $LIBFPE_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
+    cd $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
+
+    export C_INCLUDE_PATH=$TP_INSTALL_DIR/include
+    export LIBRARY_PATH=$TP_INSTALL_DIR/lib
+    export LD_LIBRARY_PATH=$TP_INSTALL_DIR/lib
+
+    $CMAKE_CMD -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
+        -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
+        -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ..
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1461,6 +1495,17 @@ export CPPFLAGS=$GLOBAL_CPPFLAGS
 export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
 
+
+# If TP_BUILD_TARGETS is set, only build the selected targets. Used by build.sh
+# to incrementally add newly introduced libraries on top of a prebuilt thirdparty.
+if [[ -n "${TP_BUILD_TARGETS}" ]]; then
+    echo "Only building selected thirdparty targets: ${TP_BUILD_TARGETS}"
+    for tp_target in ${TP_BUILD_TARGETS}; do
+        build_${tp_target}
+    done
+    echo "Finished building selected thirdparty targets"
+    exit 0
+fi
 
 build_libevent
 build_zlib
@@ -1530,6 +1575,9 @@ build_icu
 build_libxml2
 build_azure
 build_libdivide
+build_libunistring
+build_gmp
+build_libfpe
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

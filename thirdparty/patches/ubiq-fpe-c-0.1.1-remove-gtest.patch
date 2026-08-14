@@ -1,0 +1,18 @@
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -1,5 +1,4 @@
+ add_subdirectory(lib)
+-add_subdirectory(test)
+ 
+ function(strip_target TARGET)
+   set(CMAKE_STRIP_COMMAND /usr/bin/strip)
+@@ -61,3 +60,9 @@
+     ubiqfpe-static
+     crypto gmp unistring)
+ endif()
++
++# Install rules: ubiq-fpe-c upstream ships no install() targets, which makes
++# `make install` fail. Install the static library and public headers into the
++# thirdparty prefix so the StarRocks BE can link against them.
++install(TARGETS ubiqfpe-static ARCHIVE DESTINATION lib)
++install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/ubiq DESTINATION include)
