@@ -65,6 +65,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
@@ -623,6 +624,21 @@ public class InsertPreSplitHookTableTest {
 
             Assertions.assertNull(fixture.prepareScanContext(),
                     "a temporary-table source must skip pre-split (ROOT sampler cannot see it)");
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookDispatchesWithTransactionId() throws Exception {
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
         }
     }
 

@@ -131,6 +131,28 @@ final class PreSplitFlow {
 
     static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
                                       LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context, -1L);
+    }
+
+    /**
+     * Samples a dynamic overwrite before its write starts, pre-creates the predicted
+     * transaction-scoped temporary partitions, and splits those temporary partitions.
+     */
+    static void runDynamicOverwriteFlow(Database database, OlapTable table, Prepared prepared,
+                                        LoadKind loadKind, BooleanSupplier shouldAbort,
+                                        ConnectContext context, long overwriteTransactionId) {
+        if (!table.getPartitionInfo().isPartitioned()
+                || !Boolean.TRUE.equals(table.supportedAutomaticPartition())
+                || overwriteTransactionId <= 0) {
+            return;
+        }
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
+                overwriteTransactionId);
+    }
+
+    private static void runMultiPartitionFlow(
+            Database database, OlapTable table, Prepared prepared, LoadKind loadKind,
+            BooleanSupplier shouldAbort, ConnectContext context, long overwriteTransactionId) {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         // Try the meta tier first (row-group footer statistics, no data scan), mirroring the
         // single-partition flow's meta-tier-first routing; fall back to the exact data tier for
@@ -149,15 +171,23 @@ final class PreSplitFlow {
         // partition whose currently-resolved rollup set differs, and the coordinator re-checks the
         // same set immediately before planning each partition.
         Set<Long> sampledSecondaryIndexMetaIds = new HashSet<>(samples.getSecondaryIndexMetaIds());
-        List<PartitionSamples> groups = PartitionSampleGrouper.group(
-                samples, table, context, database.getId(), prepared.estimatedBytes(),
-                sampledSecondaryIndexMetaIds);
+        List<PartitionSamples> groups = overwriteTransactionId > 0
+                ? PartitionSampleGrouper.groupTemporary(
+                        samples, table, context, database.getId(), prepared.estimatedBytes(),
+                        sampledSecondaryIndexMetaIds, overwriteTransactionId)
+                : PartitionSampleGrouper.group(
+                        samples, table, context, database.getId(), prepared.estimatedBytes(),
+                        sampledSecondaryIndexMetaIds);
         if (groups.isEmpty()) {
             return;
         }
-        PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
-                sampledSecondaryIndexMetaIds);
+        PreSplitOutcome outcome = overwriteTransactionId > 0
+                ? TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
+                        database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
+                        sampledSecondaryIndexMetaIds, overwriteTransactionId)
+                : TabletPreSplitCoordinator.submitForPartitionsCombined(
+                        database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
+                        sampledSecondaryIndexMetaIds);
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {

@@ -59,6 +59,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -329,11 +330,12 @@ public class SplitTabletJob extends TabletReshardJob {
         // 1. Cancel previous in-flight compactions on the resharded partitions so cleaning does not wait
         //    for slow compaction, then wait for the rest. Compactions on partitions this job does not
         //    reshard are neither cancelled nor waited on (see CompactionScheduler#cancelPreviousCompactions).
-        Set<Long> ignoredCompactionTxnIds = GlobalStateMgr.getCurrentState().getCompactionMgr()
-                .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet());
+        Set<Long> ignoredTransactionIds = new HashSet<>(getCleanupExcludedTransactionIds());
+        ignoredTransactionIds.addAll(GlobalStateMgr.getCurrentState().getCompactionMgr()
+                .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet()));
         try {
             if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
-                    endTransactionId, dbId, List.of(tableId), ignoredCompactionTxnIds)) {
+                    endTransactionId, dbId, List.of(tableId), ignoredTransactionIds)) {
                 return;
             }
         } catch (AnalysisException e) { // Db is dropped, ignore exception

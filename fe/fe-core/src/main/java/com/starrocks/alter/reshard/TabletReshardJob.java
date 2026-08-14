@@ -28,7 +28,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /*
  * TabletReshardJob is for tablet splitting and merging.
@@ -82,6 +84,12 @@ public abstract class TabletReshardJob implements Writable {
     @SerializedName(value = "warehouseId")
     protected Long warehouseId;
 
+    // Transactions that were opened only to reserve identifiers/metadata for the operation that
+    // requested this reshard. They have not started writing and therefore must not make CLEANING
+    // wait on the caller that is synchronously waiting for this job. Persisted for leader replay.
+    @SerializedName(value = "cleanupExcludedTransactionIds")
+    protected Set<Long> cleanupExcludedTransactionIds;
+
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -106,6 +114,21 @@ public abstract class TabletReshardJob implements Writable {
      */
     public void setWarehouseId(long warehouseId) {
         this.warehouseId = warehouseId;
+    }
+
+    /**
+     * Exclude a known-not-yet-writing transaction from this job's cleanup watermark wait.
+     * Callers must set this before the job is admitted and journaled.
+     */
+    public void addCleanupExcludedTransactionId(long transactionId) {
+        if (cleanupExcludedTransactionIds == null) {
+            cleanupExcludedTransactionIds = new HashSet<>();
+        }
+        cleanupExcludedTransactionIds.add(transactionId);
+    }
+
+    protected Set<Long> getCleanupExcludedTransactionIds() {
+        return cleanupExcludedTransactionIds == null ? Set.of() : cleanupExcludedTransactionIds;
     }
 
     /**
