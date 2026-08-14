@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
 public class LicenseMgrTest {
     private static final String SYSTEM_ID = "2f1102e0-7fc6-47fc-9f3e-c4e7e9862c18";
     private static final String AES_KEY = "x8wj$62bzp^!Kj95";
-    private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 7; // 7 days
+    private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 30; // 30 days
     private static final long SCALE_OUT_LICENSE_FREE_INTERVAL_MS = 1000L * 3600 * 24 * 7; // 7 days
     private static final String LICENSE_ENCRYPTED_KEY_FOR_TEST = "c2wPS3NsDnxtalt1a1Z9bmlqdXJsanJYbA9pZXNsD0tzbA90a2" +
             "pTdW5UU05uagp8ZQ1LR154S09tRVMMcnp1fWpqaXhuanlvbg95bXB6eXFsalN8bg1bc24PeW1tankNZg0GbmkNVElxa2l7cQ5uSVtTV" +
