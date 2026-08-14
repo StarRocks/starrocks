@@ -247,6 +247,9 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // in the txn-log apply path (OSS read of txn_log, broken segment, ...),
 // which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
+// Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
+// sstables too), so the cost of that merge can be measured against the same data.
+DEFINE_FAIL_POINT(lake_parent_alias_force_sstable_merge);
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
@@ -756,6 +759,10 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             merging_info.add_old_tablet_ids(child_id);
         }
 
+        bool force_sstable_merge = false;
+        FAIL_POINT_TRIGGER_EXECUTE(lake_parent_alias_force_sstable_merge, { force_sstable_merge = true; });
+        const int64_t merge_begin_us = butil::gettimeofday_us();
+
         MutableTabletMetadataPtr parent_meta;
         if (child_metas.size() == 1) {
             // An untouched sibling is represented by an IdenticalTablet in the new index. Its
@@ -763,9 +770,16 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             parent_meta = std::make_shared<TabletMetadata>(*child_metas.front());
             parent_meta->set_id(parent_info.parent_tablet_id());
         } else {
-            ASSIGN_OR_RETURN(parent_meta, lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version,
-                                                             txn_info, /*skip_sstable_merge=*/true));
+            ASSIGN_OR_RETURN(parent_meta,
+                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info,
+                                                /*skip_sstable_merge=*/!force_sstable_merge));
         }
+        // This runs on the publish critical path once per parent per version, so keep its cost
+        // visible: it is what wedged loads before the sstable merge was dropped from it.
+        const int64_t merge_cost_us = butil::gettimeofday_us() - merge_begin_us;
+        LOG(INFO) << "build parent tablet alias, parent=" << parent_info.parent_tablet_id()
+                  << " children=" << child_metas.size() << " version=" << new_version
+                  << " sstable_merge=" << (force_sstable_merge ? "on" : "off") << " cost=" << merge_cost_us << "us";
         // The parent is a read alias, never the owner of child files. Mark every
         // inherited reference shared so retiring the parent cannot delete a file
         // that remains live in a child. Its merged delvec is reclaimed through the
