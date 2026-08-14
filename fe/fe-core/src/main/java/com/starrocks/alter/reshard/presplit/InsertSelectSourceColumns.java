@@ -14,13 +14,16 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.base.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.Subquery;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,8 +37,8 @@ import java.util.Set;
  * name) for directly mapped outputs of a parsed
  * {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}. The sampler uses
  * the map to project any index's sort key (base or rollup) and the partition columns by their
- * source-table column names. Non-key target columns may be arbitrary expressions and are omitted
- * from the map.
+ * source-table column names. Non-key target columns may be expressions over the source relation
+ * and are omitted from the map.
  *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
@@ -123,9 +126,14 @@ final class InsertSelectSourceColumns {
                     if (outputName == null) {
                         outputName = slotRef.getColName();
                     }
-                } else if (byName && outputName == null) {
-                    // The target position of an expression is unknown for BY NAME without an alias.
-                    return null;
+                } else {
+                    if (byName && outputName == null) {
+                        // The target position of an expression is unknown for BY NAME without an alias.
+                        return null;
+                    }
+                    if (!referencesOnlySource(item.getExpr(), sourceColumnMap, normalizedSourceName, sourceAlias)) {
+                        return null;
+                    }
                 }
                 outputs.add(new String[] {outputName, sourceName});
             }
@@ -164,6 +172,51 @@ final class InsertSelectSourceColumns {
             return null;
         }
         return Map.copyOf(targetToSource);
+    }
+
+    /**
+     * Returns {@code true} when every reference inside a non-{@link SlotRef} projection resolves to
+     * the source relation the caller already resolved and authorized.
+     *
+     * <p>The hook runs pre-analysis, so nothing the analyzer would have rejected has been rejected
+     * yet when the reshard is submitted. Every SELECT item used to be a bare source column, which
+     * made that safe implicitly; now that expressions are admitted, the same invariant is enforced
+     * explicitly -- no subquery of any shape, and every slot names a visible source column with the
+     * source's own qualifier (or none). Otherwise a projection over an unauthorized table or an
+     * unknown column would reshard the target on behalf of a statement that never runs.
+     *
+     * <p>Function calls themselves stay allowed: the sampler never evaluates a non-key projection,
+     * it only projects the mapped source columns, so the expression's own semantics cannot skew the
+     * sampled row set.
+     */
+    private static boolean referencesOnlySource(
+            Expr expr, Map<String, String> sourceColumnMap,
+            TableName normalizedSourceName, String sourceAlias) {
+        List<Expr> rejected = new ArrayList<>();
+        expr.collectAll((Predicate<Expr>) e -> isForeignReference(
+                e, sourceColumnMap, normalizedSourceName, sourceAlias), rejected);
+        return rejected.isEmpty();
+    }
+
+    private static boolean isForeignReference(
+            Expr expr, Map<String, String> sourceColumnMap,
+            TableName normalizedSourceName, String sourceAlias) {
+        // Any subquery shape (scalar, IN-subquery, EXISTS holds its Subquery as a child) reads
+        // relations the hook never resolved or authorized.
+        if (expr instanceof Subquery) {
+            return true;
+        }
+        if (expr instanceof SlotRef slot) {
+            if (slot.getTblName() != null
+                    && !matchesSource(slot.getTblName(), normalizedSourceName, sourceAlias)) {
+                return true;
+            }
+            // A null column name (e.g. a struct-subfield slot) is not resolvable against the
+            // source schema here, so treat it as foreign rather than guessing.
+            return slot.getColName() == null
+                    || !sourceColumnMap.containsKey(slot.getColName().toLowerCase());
+        }
+        return false;
     }
 
     private static Set<String> targetNames(List<Column> targetCols) {
