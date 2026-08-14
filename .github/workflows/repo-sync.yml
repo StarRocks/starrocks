@@ -1,10 +1,13 @@
 name: Repo Sync
 run-name: Repo Sync(#${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
 
-# Reverse sync executor: cherry-pick a CelerData open-source PR's commit onto
-# StarRocks main and open a "(cd-sync #N)" PR. Mirror of celerdata-enterprise's
-# repo-sync.yml (repo-sync-main job) with direction reversed (source=CelerData,
-# target=StarRocks). Dispatched by elastic-service/lib/sync_cd_to_sr.py.
+# Reverse sync executor: cherry-pick a CelerData open-source PR's commit onto the
+# StarRocks branch of the SAME name (main / branch-4.1 / branch-4.0 / …) and open a
+# "(cd-sync #N)" PR. Full mirror of celerdata-enterprise's forward repo-sync.yml with
+# direction reversed (source=CelerData, target=StarRocks); like the forward, it handles
+# BOTH main->main AND branch->branch (BRANCH input drives it), so StarRocks release
+# branches receive shared-line fixes directly instead of relying on self-backport.
+# Dispatched by the CD-side reverse trigger (sync-cd-to-sr.yml -> reverse_sync_decide.sh).
 # (Only the workflow file/display name drops "cd". The "(cd-sync #N)" title suffix,
 #  the `cd-sync` label and the `-cd-sync-` branch prefix are functional reverse-direction
 #  markers the rest of the reverse pipeline is built around, so they are kept verbatim.)
@@ -35,17 +38,6 @@ on:
         required: true
         type: string
         default: 'CelerData/celerdata-enterprise'
-      BACKPORT_BRANCHES:
-        # Comma-separated SR release lines the source fix should also reach
-        # (e.g. "4.1,4.0"), computed by the CD-side decision hub
-        # (ci-tool reverse_sync_decide.sh: affected ∩ SR-shared-lines). Passed
-        # through to create_sync_repo.sh, which ticks the matching version
-        # checkboxes in the SR PR body so pr-checker converts them to labels and
-        # the static backport matrix fans the fix out. Empty = no self-backport.
-        description: 'SR backport lines to tick (comma-separated, e.g. 4.1,4.0)'
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: write
@@ -75,10 +67,12 @@ jobs:
           git pull || true
           ./lib/get_pr_info.sh
 
-  cd-repo-sync-main:
-    name: CD Repo Sync - main
+  cd-repo-sync:
+    name: Repo Sync
     runs-on: [self-hosted, sync, ubuntu]
-    if: inputs.BRANCH == 'main'
+    # Handles main AND branch-X.Y (BRANCH input drives every branch reference below),
+    # mirroring the forward executor. No BRANCH gate: the CD-side trigger only dispatches
+    # for branches StarRocks actually has (main / branch-4.1 / branch-4.0).
     needs: pr-info
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
@@ -170,9 +164,6 @@ jobs:
           # (official template, all sections) via the file get_pr_info.py wrote in the
           # pr-info job, plus any conflict info run_cherry_pick.sh prepended to it.
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
-          # SR release lines to self-backport to (from the CD decision hub).
-          # create_sync_repo.sh ticks the matching version checkboxes in the body.
-          BACKPORT_BRANCHES: ${{ inputs.BACKPORT_BRANCHES }}
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
         run: |
@@ -191,10 +182,6 @@ jobs:
           HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
-          # Tick the checkboxes on the pending PR at creation too: they persist on the
-          # PR object, so the pending->released re-dispatch (which re-runs this executor
-          # for ORDERING only and does not carry BACKPORT_BRANCHES) needn't re-tick.
-          BACKPORT_BRANCHES: ${{ inputs.BACKPORT_BRANCHES }}
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
         run: |
