@@ -353,22 +353,13 @@ public class MaterializedViewAnalyzer {
         }
         // Only for a range distribution this CREATE selects: RANGE has no SQL syntax, so an explicit desc
         // means a reconstructed DDL, and rejecting one would leave an existing mv unable to reactivate.
-        if (statement.getDistributionDesc() == null && AnalyzerUtils.isEnableRangeDistribution(context)) {
+        boolean enableRangeDistribution = Config.enable_range_distribution
+                || (context != null && context.getSessionVariable().isEnableRangeDistribution());
+        if (statement.getDistributionDesc() == null && enableRangeDistribution) {
             throw new SemanticException("ORDER BY is not supported on a range-distributed incremental "
                     + "materialized view. Add DISTRIBUTED BY HASH(...) to sort by the ORDER BY columns, "
                     + "or remove ORDER BY.");
         }
-    }
-
-    /**
-     * Whether an incremental mv ends up range-distributed: RANGE has no SQL syntax, so it is either
-     * selected for an omitted clause or injected by internal DDL reconstruction.
-     */
-    private static boolean usesRangeDistribution(CreateMaterializedViewStatement statement,
-                                                 boolean enableRangeDistribution) {
-        DistributionDesc distributionDesc = statement.getDistributionDesc();
-        return distributionDesc instanceof RangeDistributionDesc
-                || (distributionDesc == null && enableRangeDistribution);
     }
 
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -1745,15 +1736,6 @@ public class MaterializedViewAnalyzer {
             if (!isGeneratedByIncrementalMV) {
                 return distributionDesc;
             }
-<<<<<<< HEAD
-=======
-            // RANGE must not be normalized back to HASH.
-            if (usesRangeDistribution(statement, enableRangeDistribution)) {
-                RangeDistributionDesc result = new RangeDistributionDesc();
-                statement.setDistributionDesc(result);
-                return result;
-            }
->>>>>>> 636d501a58 ([BugFix] ORDER BY on an incremental MV widened its primary key instead of sorting (#77680))
             // if the mv is primary key, we use hash distribution with all key columns.
             List<String> keyColNames = statement.getMvColumnItems()
                     .stream()

@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -23,6 +24,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -37,18 +39,14 @@ import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-<<<<<<< HEAD
-=======
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
->>>>>>> 636d501a58 ([BugFix] ORDER BY on an incremental MV widened its primary key instead of sorting (#77680))
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -715,170 +713,10 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         QueryStatement qs = stmt.getQueryStatement();
         Analyzer.analyze(qs, connectContext);
 
-<<<<<<< HEAD
         IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
         Optional<IVMAnalyzer.IVMAnalyzeResult> result =
                 analyzer.rewrite(MaterializedView.RefreshMode.PCT);
         assertFalse(result.isPresent(), "PCT mode must short-circuit before trial runs");
-=======
-        CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
-        assertEquals(0, pctTrialInvocationCount, "PCT CREATE analysis must not invoke the IVM trial");
-    }
-
-    @Test
-    public void testIncrementalDistributionSelectionAndNormalization() throws Exception {
-        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
-        try {
-            connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            String rangeDdl = incrementalMvDdl("mv_ivm_range", "", "");
-            CreateMaterializedViewStatement rangeStmt = analyzeMvDdl(rangeDdl);
-            assertTrue(rangeStmt.getDistributionDesc() instanceof RangeDistributionDesc);
-            assertTrue(IvmTrialRewriter.buildMockMv(rangeStmt).getDefaultDistributionInfo()
-                    instanceof RangeDistributionInfo);
-            starRocksAssert.withMaterializedView(rangeDdl, () -> assertTrue(
-                    getMv("test", "mv_ivm_range").getDefaultDistributionInfo() instanceof RangeDistributionInfo));
-
-            connectContext.getSessionVariable().setEnableRangeDistribution(false);
-            CreateMaterializedViewStatement fallbackStmt = analyzeMvDdl(
-                    incrementalMvDdl("mv_ivm_hash_fallback", ""));
-            assertNormalizedHash(fallbackStmt, 0);
-
-            for (boolean rangeEnabled : List.of(true, false)) {
-                connectContext.getSessionVariable().setEnableRangeDistribution(rangeEnabled);
-                String suffix = rangeEnabled ? "enabled" : "disabled";
-                CreateMaterializedViewStatement hashStmt = analyzeMvDdl(incrementalMvDdl(
-                        "mv_ivm_hash_" + suffix, "DISTRIBUTED BY HASH(id) BUCKETS 7 "));
-                assertNormalizedHash(hashStmt, 7);
-
-                CreateMaterializedViewStatement randomStmt = analyzeMvDdl(incrementalMvDdl(
-                        "mv_ivm_random_" + suffix, "DISTRIBUTED BY RANDOM BUCKETS 11 "));
-                assertNormalizedHash(randomStmt, 11);
-
-                if (rangeEnabled) {
-                    starRocksAssert.withMaterializedView(incrementalMvDdl(
-                                    "mv_ivm_hash_catalog", "DISTRIBUTED BY HASH(id) BUCKETS 7 "),
-                            () -> assertCatalogHash("mv_ivm_hash_catalog", hashStmt, 7));
-                }
-            }
-        } finally {
-            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
-        }
-    }
-
-    @Test
-    public void testInternalAutoUsesRangeAndUnsupportedFallsBackToPct() throws Exception {
-        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
-        connectContext.getSessionVariable().setEnableRangeDistribution(true);
-        try {
-            autoTrialInvocationCount = 0;
-            new MockUp<IVMAnalyzer>() {
-                @Mock
-                public static MaterializedView.RefreshMode getRefreshMode(CreateMaterializedViewStatement statement) {
-                    return MaterializedView.RefreshMode.AUTO;
-                }
-            };
-            new MockUp<IvmTrialRewriter>() {
-                @Mock
-                public static void runTrial(com.starrocks.qe.ConnectContext context,
-                                            CreateMaterializedViewStatement stmt,
-                                            QueryStatement rewrittenQuery) {
-                    autoTrialInvocationCount++;
-                    throw new AssertionError("AUTO CREATE analysis must not invoke the IVM trial");
-                }
-            };
-            CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", "", ""));
-            assertEquals(MaterializedView.RefreshMode.AUTO, supported.getCurrentRefreshMode());
-            assertTrue(supported.getDistributionDesc() instanceof RangeDistributionDesc);
-            assertEquals(0, autoTrialInvocationCount, "supported AUTO must not invoke the IVM trial");
-
-            String unsupportedDdl = "CREATE MATERIALIZED VIEW mv_auto_unsupported "
-                    + "REFRESH DEFERRED MANUAL AS SELECT id, COUNT(DISTINCT c1) "
-                    + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
-            CreateMaterializedViewStatement unsupported = analyzeMvDdl(unsupportedDdl);
-            assertEquals(MaterializedView.RefreshMode.PCT, unsupported.getCurrentRefreshMode());
-            assertEquals(0, autoTrialInvocationCount, "AUTO-to-PCT fallback must not invoke the IVM trial");
-        } finally {
-            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
-        }
-    }
-
-    @Test
-    public void testTrialMockMatchesReorderedTargetAndAlignsHeterogeneousStates() throws Exception {
-        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
-        connectContext.getSessionVariable().setEnableRangeDistribution(true);
-        try {
-            // The reorder comes from the storage-filled __ROW_ID__ being moved to the front of a
-            // non-aggregate mv's schema; an aggregate mv projects its __ROW_ID__ first and keeps query order.
-            String ddl = "CREATE MATERIALIZED VIEW mv_trial_reordered "
-                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
-                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
-                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
-            CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-            MaterializedView mockMv = IvmTrialRewriter.buildMockMv(stmt);
-            assertEquals(schemaFingerprint(stmt.getMvColumnItems()), schemaFingerprint(mockMv.getBaseSchema()));
-
-            // A range-distributed mv carries no ORDER BY of its own.
-            CreateMaterializedViewStatement aggStmt = analyzeMvDdl(
-                    incrementalMvDdl("mv_trial_agg_states", "", ""));
-            MaterializedView aggMockMv = IvmTrialRewriter.buildMockMv(aggStmt);
-            assertEquals(schemaFingerprint(aggStmt.getMvColumnItems()),
-                    schemaFingerprint(aggMockMv.getBaseSchema()));
-            assertEquals(RangeDistributionInfo.class, aggMockMv.getDefaultDistributionInfo().getClass());
-
-            ColumnRefFactory factory = new ColumnRefFactory();
-            List<ColumnRefOperator> queryOutputs = stmt.getQueryStatement().getQueryRelation().getScope()
-                    .getRelationFields().getAllFields().stream()
-                    .map(field -> factory.create(field.getName(), field.getType(), field.isNullable()))
-                    .collect(Collectors.toList());
-            List<ColumnRefOperator> aligned = IvmTrialRewriter.alignInsertOutputColumns(
-                    stmt, queryOutputs, factory);
-            assertEquals(stmt.getMvColumnItems().size(), aligned.size());
-            List<Integer> indices = stmt.getQueryOutputIndices();
-            for (int queryIndex = 0; queryIndex < queryOutputs.size(); queryIndex++) {
-                assertSame(queryOutputs.get(queryIndex), aligned.get(indices.get(queryIndex)));
-            }
-            for (int i = 0; i < aligned.size(); i++) {
-                if (!indices.contains(i)) {
-                    assertEquals(stmt.getMvColumnItems().get(i).getType(), aligned.get(i).getType());
-                }
-            }
-        } finally {
-            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
-        }
-    }
-
-    @Test
-    public void testAlterActivePreservesPersistedRangeWithSelectionDisabled() throws Exception {
-        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
-        try {
-            connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            String ddl = incrementalMvDdl("mv_active_range", "", "");
-            starRocksAssert.withMaterializedView(ddl, () -> {
-                MaterializedView mv = getMv("test", "mv_active_range");
-                assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
-                connectContext.getSessionVariable().setEnableRangeDistribution(false);
-                activationTrialObserved = false;
-                new MockUp<IvmTrialRewriter>() {
-                    @Mock
-                    public static void runTrial(com.starrocks.qe.ConnectContext context,
-                                                CreateMaterializedViewStatement stmt,
-                                                QueryStatement rewrittenQuery) {
-                        assertTrue(stmt.getDistributionDesc() instanceof RangeDistributionDesc);
-                        assertTrue(IvmTrialRewriter.buildMockMv(stmt).getDefaultDistributionInfo()
-                                instanceof RangeDistributionInfo);
-                        activationTrialObserved = true;
-                    }
-                };
-                assertActiveRoundTripKeepsSchema("mv_active_range");
-                assertTrue(activationTrialObserved,
-                        "activation-time analysis must invoke the post-normalization trial");
-                assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
-            });
-        } finally {
-            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
-        }
->>>>>>> 636d501a58 ([BugFix] ORDER BY on an incremental MV widened its primary key instead of sorting (#77680))
     }
 
     // ── whitelist test helpers ───────────────────────────────────────────────
@@ -1411,8 +1249,6 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         return (CreateMaterializedViewStatement) stmt;
     }
 
-<<<<<<< HEAD
-=======
     private static CreateMaterializedViewStatement analyzeMvDdl(String ddl) {
         CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
         Analyzer.analyze(stmt, connectContext);
@@ -1435,31 +1271,4 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
     }
 
-    private static List<String> targetKeyNames(CreateMaterializedViewStatement stmt) {
-        return stmt.getMvColumnItems().stream().filter(Column::isKey).map(Column::getName)
-                .collect(Collectors.toList());
-    }
-
-    private static void assertNormalizedHash(CreateMaterializedViewStatement stmt, int buckets) {
-        assertTrue(stmt.getDistributionDesc() instanceof HashDistributionDesc);
-        HashDistributionDesc distribution = (HashDistributionDesc) stmt.getDistributionDesc();
-        assertEquals(buckets, distribution.getBuckets());
-        assertEquals(targetKeyNames(stmt), distribution.getDistributionColumnNames());
-        MaterializedView mockMv = IvmTrialRewriter.buildMockMv(stmt);
-        assertTrue(mockMv.getDefaultDistributionInfo() instanceof HashDistributionInfo);
-        HashDistributionInfo mockDistribution = (HashDistributionInfo) mockMv.getDefaultDistributionInfo();
-        assertEquals(buckets, mockDistribution.getBucketNum());
-        assertEquals(targetKeyNames(stmt), mockDistribution.getDistributionColumns().stream()
-                .map(id -> id.getId()).collect(Collectors.toList()));
-    }
-
-    private void assertCatalogHash(String mvName, CreateMaterializedViewStatement stmt, int buckets) {
-        HashDistributionInfo distribution = (HashDistributionInfo) getMv(
-                "test", mvName).getDefaultDistributionInfo();
-        assertEquals(buckets, distribution.getBucketNum());
-        assertEquals(targetKeyNames(stmt), distribution.getDistributionColumns().stream()
-                .map(id -> id.getId()).collect(Collectors.toList()));
-    }
-
->>>>>>> 636d501a58 ([BugFix] ORDER BY on an incremental MV widened its primary key instead of sorting (#77680))
 }
