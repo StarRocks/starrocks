@@ -298,9 +298,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
 
     // spill components
-    // TODO: avoid create spill channel when when disable spill
-
-    auto workgroup = context->fragment_context()->workgroup();
+    // TODO: avoid creating spill channel when spill is disabled
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
 
     // spill process operator
