@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 description: Kafka ルーチン ロード with 共有データ storage
 displayed_sidebar: docs
 ---
@@ -739,6 +740,6 @@ Kafka のブローカー接続情報。形式は `<kafka_broker_name_or_ip>:<bro
 
 [StarRocks Architecture](../introduction/Architecture.md)
 
-このラボで使用されたサンプルは非常にシンプルです。Routine Load には多くのオプションと機能があります。[詳細はこちら](../loading/RoutineLoad.md).
+このラボで使用されたサンプルは非常にシンプルです。Routine Load には多くのオプションと機能があります。[詳細はこちら](../loading/kafka/RoutineLoad.md).
 
 [JSONPath](https://goessner.net/articles/JsonPath/)

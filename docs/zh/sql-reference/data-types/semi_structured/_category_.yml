@@ -3,4 +3,5 @@ label: '半结构化类型'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: semi_structured

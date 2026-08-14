@@ -69,7 +69,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 | LIST                                                         | JSON 数组型          |
 | UNION、TIMESTAMP 等其他类型                                  | 暂未支持             |
 
-- 方式四：通过 [Routine Load](../../../loading/Loading_intro.md) 持续消费 Kafka 中的 JSON 格式数据，并导入至 StarRocks 中。
+- 方式四：通过 [Routine Load](../../../loading/loading_introduction/loading_introduction.mdx) 持续消费 Kafka 中的 JSON 格式数据，并导入至 StarRocks 中。
 
 ### 查询和处理 JSON 类型的数据
 
