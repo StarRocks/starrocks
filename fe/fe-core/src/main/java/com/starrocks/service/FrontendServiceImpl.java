@@ -83,6 +83,7 @@ import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
+import com.starrocks.catalog.system.information.RunningTransactionsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
@@ -281,6 +282,8 @@ import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetRoutineLoadJobsResult;
+import com.starrocks.thrift.TGetRunningTxnsParams;
+import com.starrocks.thrift.TGetRunningTxnsResult;
 import com.starrocks.thrift.TGetStreamLoadsResult;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -3280,6 +3283,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetLoadsResult getLoads(TGetLoadsParams request) throws TException {
         LOG.debug("Recieve getLoads: {}", request);
         return LoadsSystemTable.query(request);
+    }
+
+    @Override
+    public TGetRunningTxnsResult getRunningTransactions(TGetRunningTxnsParams request) throws TException {
+        LOG.debug("Receive getRunningTransactions: {}", request);
+        ConnectContext context = new ConnectContext();
+        if (request.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, request.getCurrent_user_ident());
+        }
+        return RunningTransactionsSystemTable.query(request, context);
     }
 
     @Override

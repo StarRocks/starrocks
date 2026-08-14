@@ -170,6 +170,13 @@ Status SchemaHelper::get_loads(const SchemaScannerState& state, const TGetLoadsP
     });
 }
 
+Status SchemaHelper::get_running_transactions(const SchemaScannerState& state, const TGetRunningTxnsParams& var_params,
+                                              TGetRunningTxnsResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getRunningTransactions(*var_result, var_params);
+    });
+}
+
 Status SchemaHelper::get_tracking_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                         TGetTrackingLoadsResult* var_result) {
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
