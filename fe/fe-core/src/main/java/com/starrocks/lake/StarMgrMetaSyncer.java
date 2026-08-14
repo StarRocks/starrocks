@@ -18,8 +18,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -606,7 +608,18 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     if (redundantGroupToShards.get(groupId) != null) {
                         starmgrShardIdsSet = redundantGroupToShards.get(groupId);
                     } else {
-                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                        List<Long> starmgrShardIds;
+                        try {
+                            starmgrShardIds = starOSAgent.listShard(groupId);
+                        } catch (DdlException e) {
+                            if (isShardGroupNotExist(e) && table.getPhysicalPartition(physicalPartition.getId()) == null) {
+                                LOG.debug("skip syncing removed partition {} shard group {}, because it has been removed " +
+                                                "from StarMgr",
+                                        physicalPartition.getParentId(), groupId);
+                                continue;
+                            }
+                            throw e;
+                        }
                         starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
                     }
 
@@ -660,6 +673,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             SHARD_DELETE_COUNTER.increase((long) shardToDelete.size());
         }
         return !shardToDelete.isEmpty();
+    }
+
+    private boolean isShardGroupNotExist(DdlException e) {
+        return e.getCause() instanceof StarClientException
+                && ((StarClientException) e.getCause()).getCode() == StatusCode.NOT_EXIST;
     }
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
