@@ -401,6 +401,12 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitTable(TableRelation tableRelation, Scope scope) {
+            if (tableRelation.isCacheStatsQuery()) {
+                // The cache-stats scope contains only the virtual metadata columns,
+                // so generated-column expressions referencing real base-table
+                // columns cannot be analyzed against it.
+                return null;
+            }
             Table table = tableRelation.getTable();
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {

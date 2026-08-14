@@ -16,7 +16,19 @@ package com.starrocks.planner;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -24,6 +36,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 public class CacheStatsScanTest {
 
@@ -55,6 +69,14 @@ public class CacheStatsScanTest {
                 "  PARTITION p2 VALUES [('2024-02-01'), ('2024-03-01'))\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+
+        starRocksAssert.withTable("CREATE TABLE lake_gen_t0 (\n" +
+                "  k1 bigint,\n" +
+                "  k2 bigint,\n" +
+                "  k3 bigint AS k1 + k2\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3");
     }
 
     private String getFragmentPlan(String sql) throws Exception {
@@ -116,5 +138,48 @@ public class CacheStatsScanTest {
         boolean hasCacheStatsScanNode = execPlan.getScanNodes().stream()
                 .anyMatch(n -> n instanceof CacheStatsScanNode);
         Assertions.assertTrue(hasCacheStatsScanNode);
+    }
+
+    @Test
+    public void testCacheStatsScanWithGeneratedColumn() throws Exception {
+        String sql = "SELECT * FROM lake_gen_t0 [_CACHE_STATS_]";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("CacheStatsScan"), plan);
+    }
+
+    @Test
+    public void testCacheStatsScanBypassesSecurityPolicyRewrite() throws Exception {
+        Expr rowAccessExpr = SqlParser.parseSqlToExpr("k1 > 0", SqlModeHelper.MODE_DEFAULT);
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), Mockito.any()))
+                    .thenReturn(rowAccessExpr);
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getColumnMaskingPolicy(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(null);
+
+            // Sanity check: the same mocked row-access policy still rewrites an
+            // ordinary query, so the bypass below is not a false positive.
+            QueryStatement normalStmt = analyzeWithPolicyRewrite("SELECT * FROM lake_t0");
+            Assertions.assertTrue(
+                    ((SelectRelation) normalStmt.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+
+            QueryStatement cacheStatsStmt = analyzeWithPolicyRewrite("SELECT * FROM lake_t0 [_CACHE_STATS_]");
+            Assertions.assertTrue(
+                    ((SelectRelation) cacheStatsStmt.getQueryRelation()).getRelation() instanceof TableRelation);
+        }
+    }
+
+    private QueryStatement analyzeWithPolicyRewrite(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(stmt);
+        Analyzer.analyze(stmt, connectContext);
+        return (QueryStatement) stmt;
     }
 }
