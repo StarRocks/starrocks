@@ -471,6 +471,14 @@ StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh be
   - When modifying a materialized view from `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
 - Materialized views with `refresh_mode` set to `INCREMENTAL` do not support specifying partition refresh. An exception is thrown if you attempt a partition refresh.
 
+#### Sort Key
+
+A materialized view whose `refresh_mode` is `INCREMENTAL` is a Primary Key table keyed by an internal row-id column, so `ORDER BY` defines a sort key of its own instead of becoming part of the primary key.
+
+- On a hash- or random-distributed materialized view, the sort key is the `ORDER BY` columns.
+- On a range-distributed materialized view, `ORDER BY` is not supported: the sort key defines the tablet boundaries and must equal the primary key, which is a column you cannot name. Add `DISTRIBUTED BY HASH(...)` if you need a sort key.
+- If you omit `ORDER BY`, the materialized view is sorted by its primary key.
+
 #### Supported Incremental Operators
 
 Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed, the refresh of materialized views whose `refresh_mode` is set to `INCREMENTAL` will fail.
