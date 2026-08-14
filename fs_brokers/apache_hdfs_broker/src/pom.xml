@@ -54,6 +54,7 @@ under the License.
         <io.netty.version>4.1.136.Final</io.netty.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
     <profiles>
@@ -125,6 +126,22 @@ under the License.
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcutil-jdk18on</artifactId>
                 <version>${bouncycastle.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-reactive</artifactId>
+                <version>${httpcore5.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
