@@ -361,6 +361,7 @@ PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
     ```
 
   </TabItem>
+
   </Tabs>
 
 ##### 动态分区
@@ -446,6 +447,7 @@ PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
     ```
 
   </TabItem>
+
   </Tabs>
 
 - **分区列为数值类型**
@@ -509,6 +511,7 @@ PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
     ```
 
   </TabItem>
+
   </Tabs>
 
 - **三个特定时间函数作为分区列（自 3.3.0 起支持）**
@@ -563,6 +566,7 @@ PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
     ```
 
   </TabItem>
+
   </Tabs>
 
 #### List 分区（自 v3.1）
@@ -625,7 +629,7 @@ SHOW PARTITIONS FROM site_access;
 
 - 仅支持明细表。
 - 不支持指定 [Colocation Group](../../using_starrocks/Colocate_join.md)。
-- 不支持 [Spark Load](../../loading/SparkLoad.md)。
+- 不支持 [Spark Load](../../loading/spark/SparkLoad.md)。
 
 如下建表示例中，没有使用 `DISTRIBUTED BY xxx` 语句，即表示默认由 StarRocks 使用随机分桶，并且由 StarRocks 自动设置分桶数量。
 
@@ -813,6 +817,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   ```
 
   </TabItem>
+
   </Tabs>
 
 - 手动设置
@@ -854,6 +859,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ```
 
     </TabItem>
+
     </Tabs>
 
 #### 建表后
@@ -912,6 +918,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ```
 
     </TabItem>
+
     </Tabs>
 
 - 手动设置
@@ -960,6 +967,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   ```
 
   </TabItem>
+
   </Tabs>
 
 #### 查看分桶数量

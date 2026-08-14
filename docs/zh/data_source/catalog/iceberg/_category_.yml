@@ -1,0 +1,7 @@
+position: 40
+label: 'Iceberg catalog'
+collapsible: true
+collapsed: true
+link:
+  id: iceberg
+  type: doc

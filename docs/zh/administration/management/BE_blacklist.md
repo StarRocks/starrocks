@@ -72,7 +72,7 @@ SHOW BACKEND BLACKLIST;
 
 当某个 BE 节点断连，或查询因某个 BE 节点超时而失败时，FE 节点会将该 BE 节点添加到 BE 黑名单中。FE 节点将不断评估黑名单中 BE 节点的连接状态，统计其在一定时间内连接失败的次数。只有当该 BE 节点的连接失败次数低于预先指定的阈值时，StarRocks 才会将其从黑名单中移除。
 
-您可以使用以下 [FE 配置项](./FE_configuration.md)来配置 BE 黑名单的自动管理：
+您可以使用以下 [FE 配置项](../configuration/FE_parameters/FE_parameters.md)来配置 BE 黑名单的自动管理：
 
 - `black_host_history_sec`：黑名单中 BE 节点连接失败记录的保留时长。
 - `black_host_connect_failures_within_time`：黑名单中的 BE 节点允许连接失败的上限。

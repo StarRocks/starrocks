@@ -72,7 +72,7 @@ The following fields are returned:
 
 Each time a BE node loses connection to the FE node, or a query fails due to timeout on a BE node, the FE node adds the BE node to its the BE Blacklist. The FE node will constantly assess the connectivity of the BE node in the blacklist by counting its connection failures within a certain duration of time. StarRocks will remove a blacklisted BE node only if the number of its connection failures is below a pre-specified threshold.
 
-You can configure the automatic management of the BE Blacklist using the following [FE configurations](./FE_configuration.md):
+You can configure the automatic management of the BE Blacklist using the following [FE configurations](../configuration/FE_parameters/FE_parameters.md):
 
 - `black_host_history_sec`: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist.
 - `black_host_connect_failures_within_time`: The threshold of connection failures allowed for a blacklisted BE node.

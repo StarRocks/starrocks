@@ -54,7 +54,7 @@ Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中�
 
 ### 为 v4.0 前版本启用
 
-1. 修改 BE 配置：`enable_json_flat`，在 v4.0 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/management/BE_configuration.md#configure-be-parameters)。
+1. 修改 BE 配置：`enable_json_flat`，在 v4.0 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/configuration/BE_parameters/BE_parameters.md#configure-be-parameters)。
 2. 启用FE分区裁剪功能：
 
    ```SQL
@@ -158,11 +158,11 @@ SET cbo_json_v2_dict_opt = true;
 
 ### BE 配置
 
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+- [json_flat_null_factor](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/configuration/BE_parameters/BE_parameters.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/configuration/BE_parameters/BE_parameters.md#enable_lazy_dynamic_flat_json)
 
 ## 功能限制
 
