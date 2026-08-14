@@ -23,6 +23,7 @@ public class GlobalLateMaterializeCTEJoinTest extends PlanTestBase {
 
     private static double savedCteReuseRatio;
     private static boolean savedLateMaterialization;
+    private static boolean savedCostBased;
 
     @BeforeAll
     public static void createFixture() throws Exception {
@@ -41,16 +42,19 @@ public class GlobalLateMaterializeCTEJoinTest extends PlanTestBase {
 
         savedCteReuseRatio = connectContext.getSessionVariable().getCboCTERuseRatio();
         savedLateMaterialization = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        savedCostBased = connectContext.getSessionVariable().isEnableGlobalLateMaterializationCostBased();
         // The defect needs a materialized CTE (not an inlined one) and global late materialization,
         // both of which PlanTestBase turns off for every other test in this package.
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(false);
     }
 
     @AfterAll
     public static void restoreSession() {
         connectContext.getSessionVariable().setCboCTERuseRatio(savedCteReuseRatio);
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(savedLateMaterialization);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(savedCostBased);
     }
 
     /**
@@ -71,5 +75,21 @@ public class GlobalLateMaterializeCTEJoinTest extends PlanTestBase {
                 + "order by a.k1 limit 14";
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("NESTLOOP JOIN"), plan);
+    }
+
+    /**
+     * A CTE consumer carries its own predicate, and nothing told late materialization that the
+     * predicate's column has to exist by the time the consumer runs. The column stayed deferred and
+     * the fragment builder then could not turn the predicate's column ref into an expression:
+     * "Cannot convert ColumnRefOperator to Expr". The requirement has to reach the producer, in
+     * producer column ids, because a consumer has no child of its own to fetch from.
+     */
+    @Test
+    public void testCteConsumerPredicateOnLateMaterializedColumn() throws Exception {
+        String sql = "with c as (select k1, v1, v2, v3 from lm_t), "
+                + "d as (select count(*) as n from c where v2 = 'x') "
+                + "select a.k1, a.v1, d.n from c a cross join d order by a.k1 limit 5";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("MultiCastDataSinks") || plan.contains("CTE"), plan);
     }
 }

@@ -725,6 +725,28 @@ public class GlobalLateMaterializationRewriter {
                 }
             }
 
+            // A consumer evaluates its own predicate, so those columns have to exist by the time it
+            // runs. Nothing registered that: the deferred column stayed deferred and the predicate
+            // was left reading a column no slot backed, which surfaced far downstream in the
+            // fragment builder as "Cannot convert ColumnRefOperator to Expr".
+            //
+            // The requirement has to be recorded against the PRODUCER, in producer column ids: a
+            // consumer has no child to fetch from, and only the producer's scan can decide to read
+            // the column early. Its context is where the producer's deferred set lives; the tables
+            // that carry fetch positions are shared with this one.
+            final CollectorContext produceContext = context.cteCtxMap.get(cteId);
+            final ColumnRefSet consumerUsedColumns = consumeOperator.getUsedColumns();
+            if (produceContext != null && !consumerUsedColumns.isEmpty()) {
+                final ColumnRefSet producerSideColumns = new ColumnRefSet();
+                alias.forEach((consumerCol, producerCol) -> {
+                    if (consumerUsedColumns.contains(consumerCol)) {
+                        producerSideColumns.union(producerCol);
+                    }
+                });
+                recordMaterializedBefore(producerSideColumns, (PhysicalOperator) produce.getOp(),
+                        produceContext);
+            }
+
             return null;
         }
     }
