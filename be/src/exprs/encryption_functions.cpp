@@ -467,7 +467,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -555,7 +555,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
