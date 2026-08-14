@@ -784,8 +784,11 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
-    if (lake_io_opts.hold_segments && !_held_segments.empty()) {
-        return _held_segments;
+    if (lake_io_opts.hold_segments) {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (!_held_segments.empty()) {
+            return _held_segments;
+        }
     }
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
@@ -797,7 +800,10 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         segments.emplace_back(std::move(ls.segment));
     }
     if (lake_io_opts.hold_segments) {
-        _held_segments = segments;
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (_held_segments.empty()) {
+            _held_segments = segments;
+        }
     }
     return segments;
 }
