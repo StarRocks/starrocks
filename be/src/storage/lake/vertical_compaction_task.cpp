@@ -318,6 +318,14 @@ Status VerticalCompactionTask::compact_column_group(
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
+    // Built once: only the encode-and-compare depends on the chunk. Only the key group carries the
+    // PK columns, so only it filters; the value groups replay the selection stream instead.
+    std::optional<PrimaryKeyRangeFilter> pk_range_filter;
+    if (is_key && selection_buffer != nullptr) {
+        ASSIGN_OR_RETURN(pk_range_filter,
+                         PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
+    }
+
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
@@ -373,8 +381,7 @@ Status VerticalCompactionTask::compact_column_group(
                         size_t chunk_index = static_cast<size_t>(std::distance(column_group.begin(), it));
                         pk_chunk.append_column(chunk->get_column_by_index(chunk_index), static_cast<SlotId>(pk_column));
                     }
-                    ASSIGN_OR_RETURN(filter, TabletRangeHelper::create_primary_key_range_filter(
-                                                     _tablet.metadata()->range(), _tablet_schema, pk_chunk));
+                    ASSIGN_OR_RETURN(filter, pk_range_filter->build(pk_chunk));
                 }
                 if (source_masks->size() != filter.size()) {
                     return Status::InternalError(

@@ -229,12 +229,29 @@ TEST(TabletRangeHelperTest, test_primary_key_range_filter_with_separate_sort_key
         chunk->get_column_by_index(2)->append_datum(Datum(100));
     }
 
-    ASSIGN_OR_ABORT(auto filter, TabletRangeHelper::create_primary_key_range_filter(range, tablet_schema, *chunk));
+    ASSIGN_OR_ABORT(auto pk_filter, PrimaryKeyRangeFilter::create(range, tablet_schema));
+    ASSIGN_OR_ABORT(auto filter, pk_filter.build(*chunk));
     ASSERT_EQ(4, filter.size());
     EXPECT_EQ(0, filter[0]);
     EXPECT_EQ(1, filter[1]);
     EXPECT_EQ(1, filter[2]);
     EXPECT_EQ(0, filter[3]);
+
+    // The same instance is reused chunk after chunk during a compaction: a second call must not be
+    // polluted by the encoded keys of the first.
+    auto chunk2 = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 2);
+    for (const auto& [c0, c1] : std::vector<std::pair<int32_t, int32_t>>{{0, 0}, {2, 5}}) {
+        chunk2->get_column_by_index(0)->append_datum(Datum(c0));
+        chunk2->get_column_by_index(1)->append_datum(Datum(c1));
+        chunk2->get_column_by_index(2)->append_datum(Datum(100));
+    }
+    ASSIGN_OR_ABORT(auto filter2, pk_filter.build(*chunk2));
+    ASSERT_EQ(2, filter2.size());
+    EXPECT_EQ(0, filter2[0]);
+    EXPECT_EQ(1, filter2[1]);
+
+    ASSIGN_OR_ABORT(auto empty, pk_filter.build(*ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 0)));
+    EXPECT_TRUE(empty.empty());
 }
 
 // NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).
