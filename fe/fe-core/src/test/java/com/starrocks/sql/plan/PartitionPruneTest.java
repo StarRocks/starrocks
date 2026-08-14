@@ -419,6 +419,48 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testRangeExprPruneSkipsNonMonotonicExpr() throws Exception {
+        // The partition expression maps a varchar onto a bigint through substr() and a cast, and neither
+        // step preserves the string order: '99845' sorts after '998425506019' while its partition value
+        // (845) is far below the constant's (8425506019). Mapping a range predicate onto the partition
+        // expression would prune p1 away and the rows in it would go silently missing, so a range
+        // predicate must not prune at all here.
+        starRocksAssert.withTable("CREATE TABLE `t_bill_detail` (\n" +
+                "    `bill_code` varchar(200) NOT NULL DEFAULT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`bill_code`)\n" +
+                "PARTITION BY RANGE(cast(substr(bill_code, 3, 11) as bigint))\n" +
+                "(\n" +
+                "    PARTITION p1 VALUES [(\"0\"), (\"5000000\")),\n" +
+                "    PARTITION p2 VALUES [(\"20000000\"), (\"3021712368984\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        starRocksAssert.query("select count(*) from t_bill_detail where bill_code > '998425506019' ")
+                .explainContains("partitions=2/2");
+        starRocksAssert.query("select count(*) from t_bill_detail where bill_code <= '998425506019' ")
+                .explainContains("partitions=2/2");
+        // equality maps soundly through any function -- a = c implies f(a) = f(c) -- and still prunes
+        starRocksAssert.query("select count(*) from t_bill_detail where bill_code = '9984517' ")
+                .explainContains("partitions=1/2");
+
+        // a monotonic partition expression keeps pruning range predicates
+        starRocksAssert.withTable("CREATE TABLE `t_daily_range` (\n" +
+                "    `dt` datetime NOT NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select count(*) from t_daily_range where dt >= '2025-04-29 00:00:00' ")
+                .explainContains("partitions=1/2");
+    }
+
+    @Test
     public void testMinMaxPrune_Check() throws Exception {
         starRocksAssert.withTable("create table t5_dup " +
                 "(c1 datetime NOT NULL, c2 int) " +
