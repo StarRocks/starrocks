@@ -8673,11 +8673,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
     // ctx[0] keeps its original offset (0); no stacking.
     EXPECT_EQ(0, sst_a->rssid_offset());
 
-    // Recover ctx[1].rssid_offset from the rowset mapping. Here ctx[1]'s input rowset
-    // ids already sit above ctx[0]'s next_rowset_id, so compute_rssid_offset clamps the
-    // shift to 0 (it never shifts down) and the accumulation is 3 + 0. Deriving the
-    // offset from the output rather than hard-coding it keeps the accumulation assertion
-    // meaningful regardless of the clamp.
+    // Recover ctx[1].rssid_offset from the rowset mapping. Here ctx[1]'s complete
+    // carried rowset-id space starts at 5, above ctx[0]'s next_rowset_id, so
+    // compute_rssid_offset returns a negative shift. Deriving the offset from the
+    // output rather than hard-coding it keeps the accumulation assertion meaningful.
     bool found_ctx1 = false;
     int32_t ctx1_offset = 0;
     for (const auto& rs : merged->rowsets()) {
@@ -8777,37 +8776,181 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_hot_sibling_id_space_does_not_
         by_id[rowset.id()] = &rowset;
     }
 
-    // The hot tablet's shift clamps to 0, so its ids pass through untouched. Leaving them in
-    // place is collision-free precisely because they all sit above the cold tablet's ceiling.
+    // The complete carried floor is origin_rowset_id 766, so the hot tablet receives
+    // offset 12 - 766 = -754. Its live rowsets remain above every projected dead
+    // reference while the complete projected space starts at the cold tablet's ceiling.
     ASSERT_TRUE(by_id.count(11)) << "cold sibling's rowset must keep id 11";
-    ASSERT_TRUE(by_id.count(798)) << "hot sibling's rowsets must keep their ids";
-    ASSERT_TRUE(by_id.count(803));
-    ASSERT_TRUE(by_id.count(860));
+    ASSERT_TRUE(by_id.count(44)) << "hot sibling's rowsets must use the complete carried floor";
+    ASSERT_TRUE(by_id.count(49));
+    ASSERT_TRUE(by_id.count(106));
 
-    // The two dead-reference fields are shifted by the same offset as the live ids, so with a
-    // zero shift they survive verbatim -- and, critically, non-negative.
-    const auto* compaction_output = by_id[803];
-    EXPECT_EQ(797u, compaction_output->max_compact_input_rowset_id());
+    // The two dead-reference fields are shifted by the same offset as the live ids.
+    // The minimum reference lands exactly at base.next_rowset_id instead of below zero.
+    const auto* compaction_output = by_id[49];
+    EXPECT_EQ(43u, compaction_output->max_compact_input_rowset_id());
     ASSERT_EQ(1, compaction_output->del_files_size());
-    EXPECT_EQ(766u, compaction_output->del_files(0).origin_rowset_id());
+    EXPECT_EQ(12u, compaction_output->del_files(0).origin_rowset_id());
 
-    // Dead references carried by the hot sibling must not be shifted into the COLD sibling's
-    // live id space. Under the old -786 shift, rowset 803's max_compact_input_rowset_id (797)
-    // landed exactly on 11 -- the cold sibling's live rowset -- which misleads the rowset
-    // ordering in LakePrimaryKeyRecover::sort_rowsets. (The cold sibling's own rowset 11
-    // legitimately references itself, so only the hot sibling's rowsets are checked here.)
+    // Every value carried by the hot sibling must stay above the cold sibling's live
+    // rowset id. Under the old live-only floor, max_compact_input_rowset_id 797
+    // landed exactly on 11 and origin_rowset_id 766 underflowed to -20.
     for (const auto& rowset : merged->rowsets()) {
-        if (rowset.id() < 798) continue; // cold sibling's rowset
-        EXPECT_NE(11u, rowset.max_compact_input_rowset_id())
-                << "hot sibling's compaction input ref collided with the cold sibling's live rowset id";
+        if (rowset.id() == 11) continue; // cold sibling's rowset
+        EXPECT_GT(rowset.id(), 11u);
+        EXPECT_GT(rowset.max_compact_input_rowset_id(), 11u);
         for (const auto& del_file : rowset.del_files()) {
-            EXPECT_NE(11u, del_file.origin_rowset_id())
-                    << "hot sibling's del file origin collided with the cold sibling's live rowset id";
+            EXPECT_GT(del_file.origin_rowset_id(), 11u);
         }
     }
 
     // Future writes must not reuse an occupied id.
-    EXPECT_GE(merged->next_rowset_id(), 861u);
+    EXPECT_EQ(107u, merged->next_rowset_id());
+}
+
+// A later input's compacted-away reference can numerically equal an earlier
+// input's live rowset id. The reference must be included in the source floor so
+// the two unrelated identifiers remain disjoint in the merged namespace.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dead_reference_does_not_collide_with_earlier_live_rowset) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t earlier_tablet = next_id();
+    const int64_t later_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(earlier_tablet);
+    prepare_tablet_dirs(later_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto earlier_meta = std::make_shared<TabletMetadataPB>();
+    earlier_meta->set_id(earlier_tablet);
+    earlier_meta->set_version(base_version);
+    earlier_meta->set_next_rowset_id(767);
+    set_primary_key_schema(earlier_meta.get(), 1001);
+    add_rowset(earlier_meta.get(), /*rowset_id=*/766, /*max_compact_input_rowset_id=*/765,
+               /*del_origin_rowset_id=*/766);
+
+    auto later_meta = std::make_shared<TabletMetadataPB>();
+    later_meta->set_id(later_tablet);
+    later_meta->set_version(base_version);
+    later_meta->set_next_rowset_id(804);
+    set_primary_key_schema(later_meta.get(), 1001);
+    add_rowset(later_meta.get(), /*rowset_id=*/798, /*max_compact_input_rowset_id=*/797,
+               /*del_origin_rowset_id=*/798);
+    add_rowset(later_meta.get(), /*rowset_id=*/803, /*max_compact_input_rowset_id=*/765,
+               /*del_origin_rowset_id=*/766);
+
+    ASSERT_OK(put_tablet_metadata(earlier_meta));
+    ASSERT_OK(put_tablet_metadata(later_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(earlier_tablet);
+    merging_tablet.add_old_tablet_ids(later_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    std::map<uint32_t, const RowsetMetadataPB*> by_id;
+    for (const auto& rowset : merged->rowsets()) {
+        by_id[rowset.id()] = &rowset;
+    }
+
+    ASSERT_TRUE(by_id.count(766)) << "the earlier input's live rowset keeps id 766";
+    ASSERT_TRUE(by_id.count(800)) << "the later input shifts by 767 - 765 = 2";
+    ASSERT_TRUE(by_id.count(805));
+
+    const auto* later_compaction_output = by_id[805];
+    ASSERT_EQ(1, later_compaction_output->del_files_size());
+    EXPECT_EQ(768u, later_compaction_output->del_files(0).origin_rowset_id())
+            << "the later input's dead reference must not alias the earlier live rowset";
+    EXPECT_EQ(767u, later_compaction_output->max_compact_input_rowset_id())
+            << "the later input's compaction watermark must also stay above the earlier live rowset";
+    EXPECT_EQ(806u, merged->next_rowset_id());
+}
+
+// A same-UID sibling copy is discarded by merge_rowsets, so its historical
+// references must not lower the later input's floor. Otherwise an ancient
+// reference on the discarded copy can force a positive lift that overflows a
+// high-ID rowset that is actually emitted.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_lower_rssid_floor) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t earlier_tablet = next_id();
+    const int64_t later_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(earlier_tablet);
+    prepare_tablet_dirs(later_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto earlier_meta = std::make_shared<TabletMetadataPB>();
+    earlier_meta->set_id(earlier_tablet);
+    earlier_meta->set_version(base_version);
+    constexpr uint32_t kBaseRowsetId = std::numeric_limits<uint32_t>::max() - 101;
+    constexpr uint32_t kBaseNextRowsetId = kBaseRowsetId + 1;
+    earlier_meta->set_next_rowset_id(kBaseNextRowsetId);
+    set_primary_key_schema(earlier_meta.get(), 1001);
+    auto* canonical = add_rowset(earlier_meta.get(), /*rowset_id=*/kBaseRowsetId,
+                                 /*max_compact_input_rowset_id=*/0, /*del_origin_rowset_id=*/0);
+
+    auto later_meta = std::make_shared<TabletMetadataPB>();
+    later_meta->set_id(later_tablet);
+    later_meta->set_version(base_version);
+    later_meta->set_next_rowset_id(std::numeric_limits<uint32_t>::max());
+    set_primary_key_schema(later_meta.get(), 1001);
+    auto* duplicate = add_rowset(later_meta.get(), /*rowset_id=*/kBaseRowsetId,
+                                 /*max_compact_input_rowset_id=*/0, /*del_origin_rowset_id=*/0);
+    duplicate->mutable_uid()->CopyFrom(canonical->uid());
+
+    constexpr uint32_t kHighRowsetId = std::numeric_limits<uint32_t>::max() - 1;
+    add_rowset(later_meta.get(), /*rowset_id=*/kHighRowsetId,
+               /*max_compact_input_rowset_id=*/kHighRowsetId,
+               /*del_origin_rowset_id=*/kHighRowsetId);
+
+    ASSERT_OK(put_tablet_metadata(earlier_meta));
+    ASSERT_OK(put_tablet_metadata(later_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(earlier_tablet);
+    merging_tablet.add_old_tablet_ids(later_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    ASSERT_EQ(2, merged->rowsets_size()) << "the same-UID sibling copy must be deduplicated";
+    std::map<uint32_t, const RowsetMetadataPB*> by_id;
+    for (const auto& rowset : merged->rowsets()) {
+        by_id[rowset.id()] = &rowset;
+    }
+    ASSERT_TRUE(by_id.count(kBaseRowsetId));
+    ASSERT_TRUE(by_id.count(kBaseNextRowsetId))
+            << "the emitted high-ID rowset must map from its own floor, not the discarded copy's reference";
+    EXPECT_EQ(kBaseNextRowsetId + 1, merged->next_rowset_id());
 }
 
 // Merge of two PK parents that both have cloud-native persistent index enabled.

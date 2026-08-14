@@ -166,6 +166,7 @@ public:
     }
 
     bool has_next_rowset() const { return _current_rowset_index < _metadata->rowsets_size(); }
+    int current_rowset_index() const { return _current_rowset_index; }
     const RowsetMetadataPB& current_rowset() const { return _metadata->rowsets(_current_rowset_index); }
     void advance_rowset() { ++_current_rowset_index; }
 
@@ -243,41 +244,6 @@ void union_delvec(DelVector* target, DelVector& source, int64_t version) {
     target->init(version, all_dels.data(), all_dels.size());
 }
 
-// Shift that lifts |append_metadata|'s rowset id space above |base_metadata|'s watermark, so the
-// two can be concatenated without colliding. Derived from the LIVE rowsets' minimum id, which is
-// the lowest id add_rowset will map through TabletMergeContext::map_rssid... almost: add_rowset
-// also maps two fields that reference rowsets which no longer exist, and therefore sit BELOW that
-// minimum -- max_compact_input_rowset_id (the compaction inputs, erased by apply_opcompaction) and
-// del_files[].origin_rowset_id (the input rowset a compaction-inherited del file came from).
-//
-// Clamped at 0 so the shift is never negative. A negative shift is otherwise reachable whenever the
-// merge inputs' id spaces have diverged -- writes into a range-distributed table are range-routed,
-// so a hot range burns through rowset ids while a cold sibling stays low, and merging them asks for
-// a large downward shift of the hot tablet. Under such a shift the two dead-reference fields above
-// map below zero and map_rssid fails the whole publish with "Segment id overflow during tablet
-// merge"; the FE then retries that publish forever and the table is left permanently unwritable.
-//
-// Declining to shift down is collision-free by construction: the caller only reaches the negative
-// case when min_id already exceeds the cumulative ceiling, i.e. when every one of this metadata's
-// rowset ids is already strictly above every id projected from an earlier merge input. The cost is
-// a sparser id space in the merged output (next_rowset_id inherits the max of the inputs instead of
-// being repacked), which update_next_rowset_id recomputes and which the uint32 id space absorbs.
-//
-// Deliberately NOT fixed by folding the dead references into the min_id scan: that keeps the tight
-// packing but only holds for the fields enumerated here, so a future field referencing an older
-// rssid would silently reintroduce the failure. A non-negative shift can never map any uint32 rssid
-// below zero, whatever the field.
-int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata, const TabletMetadataPB& append_metadata) {
-    uint32_t min_id = std::numeric_limits<uint32_t>::max();
-    for (const auto& rowset : append_metadata.rowsets()) {
-        min_id = std::min(min_id, rowset.id());
-    }
-    if (min_id == std::numeric_limits<uint32_t>::max()) {
-        return 0;
-    }
-    return std::max<int64_t>(0, static_cast<int64_t>(base_metadata.next_rowset_id()) - min_id);
-}
-
 // Duplicate detection for merge: two rowsets are the same logical rowset across
 // split siblings iff they carry the same global uid. The uid is minted once at
 // rowset creation and carried verbatim by CopyFrom across SPLIT and cross-publish,
@@ -287,6 +253,151 @@ int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata, const Tablet
 // and never aliases. A rowset without a valid uid is never treated as a duplicate.
 bool is_duplicate_rowset(const RowsetMetadataPB& a, const RowsetMetadataPB& b) {
     return tablet_reshard_helper::same_rowset_uid(a, b);
+}
+
+struct RowsetEmissionDecision {
+    int canonical_index = -1;
+    bool emit = false;
+    bool non_pk_skip_dedup_fired = false;
+};
+
+using RowsetEmissionPlan = std::vector<std::vector<RowsetEmissionDecision>>;
+
+struct PlannedCanonicalRowset {
+    const RowsetMetadataPB* rowset = nullptr;
+    TabletRangePB range;
+    int output_index = -1;
+};
+
+// Plan the exact rowsets merge_rowsets will emit in (version, old-tablet-index)
+// order. This is the single source of truth for duplicate decisions: offset
+// preparation uses it to ignore discarded sibling copies, and merge_rowsets
+// uses the recorded canonical index instead of recomputing dedup independently.
+StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<TabletMergeContext>& merge_contexts) {
+    RowsetEmissionPlan plan(merge_contexts.size());
+    std::vector<int> current_indices(merge_contexts.size(), 0);
+    for (size_t i = 0; i < merge_contexts.size(); ++i) {
+        plan[i].resize(merge_contexts[i].metadata()->rowsets_size());
+    }
+
+    const bool is_pk = is_primary_key(*merge_contexts.front().metadata());
+    int64_t current_version = -1;
+    int next_output_index = 0;
+    std::vector<PlannedCanonicalRowset> canonicals;
+
+    for (;;) {
+        int source_index = -1;
+        int64_t min_version = std::numeric_limits<int64_t>::max();
+        for (int i = 0; i < static_cast<int>(merge_contexts.size()); ++i) {
+            if (current_indices[i] >= merge_contexts[i].metadata()->rowsets_size()) continue;
+            const int64_t version = merge_contexts[i].metadata()->rowsets(current_indices[i]).version();
+            if (version < min_version) {
+                min_version = version;
+                source_index = i;
+            }
+        }
+        if (source_index < 0) break;
+
+        const int rowset_index = current_indices[source_index]++;
+        const auto& source_metadata = *merge_contexts[source_index].metadata();
+        const auto& rowset = source_metadata.rowsets(rowset_index);
+        if (rowset.version() != current_version) {
+            current_version = rowset.version();
+            canonicals.clear();
+        }
+
+        // Search the current version's canonical rowsets. Delete predicates dedup
+        // by version, normal rowsets by uid; non-PK same-uid siblings dedup only
+        // when their ranges are contiguous, so the canonical range cannot span a
+        // gap left by a compacted sibling.
+        int canonical_plan_index = -1;
+        bool non_pk_skip_dedup_fired = false;
+        for (int i = 0; i < static_cast<int>(canonicals.size()); ++i) {
+            if (rowset.has_delete_predicate()) {
+                if (canonicals[i].rowset->has_delete_predicate()) {
+                    canonical_plan_index = i;
+                    break;
+                }
+                continue;
+            }
+            if (!is_duplicate_rowset(rowset, *canonicals[i].rowset)) continue;
+
+            const auto& incoming_range =
+                    tablet_reshard_helper::effective_old_tablet_local_range(rowset, source_metadata);
+            if (is_pk || tablet_reshard_helper::ranges_are_contiguous(canonicals[i].range, incoming_range)) {
+                canonical_plan_index = i;
+                if (!is_pk) {
+                    ASSIGN_OR_RETURN(canonicals[i].range,
+                                     tablet_reshard_helper::union_range(canonicals[i].range, incoming_range));
+                }
+                break;
+            }
+            non_pk_skip_dedup_fired = true;
+        }
+
+        auto& decision = plan[source_index][rowset_index];
+        if (canonical_plan_index >= 0) {
+            decision.canonical_index = canonicals[canonical_plan_index].output_index;
+            continue;
+        }
+
+        decision.emit = true;
+        decision.canonical_index = next_output_index++;
+        decision.non_pk_skip_dedup_fired = non_pk_skip_dedup_fired;
+        PlannedCanonicalRowset canonical;
+        canonical.rowset = &rowset;
+        canonical.output_index = decision.canonical_index;
+        RowsetMetadataPB canonical_copy;
+        canonical_copy.CopyFrom(rowset);
+        RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&canonical_copy, source_metadata.range()));
+        canonical.range.CopyFrom(canonical_copy.range());
+        canonicals.emplace_back(std::move(canonical));
+    }
+
+    return plan;
+}
+
+// Shift that lifts the rowset-id space that |append_index| will actually emit
+// above |base_metadata|'s watermark, so the two can be concatenated without
+// collisions.
+//
+// The floor includes every rowset id or rowset-id reference that add_rowset()
+// carries into the merged metadata:
+//   * rowset.id
+//   * max_compact_input_rowset_id
+//   * del_files[].origin_rowset_id
+//
+// The latter two can sit below the minimum live rowset id because their referenced
+// compaction inputs have already been erased from rowsets(). Computing the shift from
+// live ids alone can therefore map a dead reference below zero, or into an earlier
+// input's live id space. Conversely, references from a same-UID sibling copy that
+// merge_rowsets will discard must not lower the floor: they are not carried into the
+// output and can make a high-ID surviving rowset overflow after an unnecessary lift.
+//
+// Using the emitted-rowset floor maps the smallest carried value to
+// base_metadata.next_rowset_id(), keeps all carried references disjoint from earlier
+// inputs, and preserves their relative ordering under the same uniform shift.
+int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata,
+                             const std::vector<TabletMergeContext>& merge_contexts,
+                             const RowsetEmissionPlan& emission_plan, size_t append_index) {
+    uint32_t min_carried_id = std::numeric_limits<uint32_t>::max();
+    const auto& append_metadata = *merge_contexts[append_index].metadata();
+    for (int rowset_index = 0; rowset_index < append_metadata.rowsets_size(); ++rowset_index) {
+        if (!emission_plan[append_index][rowset_index].emit) continue;
+
+        const auto& rowset = append_metadata.rowsets(rowset_index);
+        min_carried_id = std::min(min_carried_id, rowset.id());
+        if (rowset.has_max_compact_input_rowset_id()) {
+            min_carried_id = std::min(min_carried_id, rowset.max_compact_input_rowset_id());
+        }
+        for (const auto& del_file : rowset.del_files()) {
+            min_carried_id = std::min(min_carried_id, del_file.origin_rowset_id());
+        }
+    }
+    if (min_carried_id == std::numeric_limits<uint32_t>::max()) {
+        return 0;
+    }
+    return static_cast<int64_t>(base_metadata.next_rowset_id()) - min_carried_id;
 }
 
 Status add_rowset(TabletMergeContext& ctx, const RowsetMetadataPB& rowset, TabletMetadataPB* new_metadata) {
@@ -463,12 +574,8 @@ Status update_canonical(RowsetMetadataPB* canonical_rowset, const TabletRangePB&
     return Status::OK();
 }
 
-Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata,
-                     CanonicalContribMap* canonical_contribs) {
-    const bool is_pk = is_primary_key(*new_metadata);
-    int version_start_index = 0;
-    int64_t current_version = -1;
-
+Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, const RowsetEmissionPlan& emission_plan,
+                     TabletMetadataPB* new_metadata, CanonicalContribMap* canonical_contribs) {
     for (;;) {
         // Find old tablet with minimum (version, old_tablet_index).
         // Forward iteration with strict < ensures the smallest old_tablet_index wins on ties.
@@ -484,6 +591,7 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
         }
         if (min_old_tablet_index < 0) break;
 
+        const int source_rowset_index = merge_contexts[min_old_tablet_index].current_rowset_index();
         const auto& rowset = merge_contexts[min_old_tablet_index].current_rowset();
         const auto& ctx_meta = *merge_contexts[min_old_tablet_index].metadata();
 
@@ -503,62 +611,30 @@ Status merge_rowsets(std::vector<TabletMergeContext>& merge_contexts, TabletMeta
                                 rowset.version()));
         }
 
-        // Version change: update version_start_index
-        if (rowset.version() != current_version) {
-            current_version = rowset.version();
-            version_start_index = new_metadata->rowsets_size();
-        }
-
-        // Search [version_start_index, end) for a dedup candidate. The window is a
-        // single version (the k-way merge above feeds rowsets in version order). Decision:
-        //   - Delete-predicate rowsets dedup by VERSION, not uid: a version is one
-        //     transaction carrying one predicate, so two same-version predicates from
-        //     different merged siblings are the same logical delete. A normal post-split
-        //     DELETE runs Tablet::delete_data independently per sibling tablet and mints
-        //     an independent uid each time, so keying on uid would wrongly retain one
-        //     copy per sibling; the pre-uid merge deduped these by version. (The uid is
-        //     still required by the invariant above -- it just isn't the predicate
-        //     dedup key.)
-        //   - Shared-segment / shared-del_file dups (the only case is_duplicate_rowset
-        //     returns true on): PK always dedups; non-PK dedups only when ranges are
-        //     contiguous so that the convex-hull range stored on the canonical does not
-        //     span a gap left by a compacted sibling.
-        int canonical_index = -1;
-        bool non_pk_skip_dedup_fired = false;
-        for (int i = version_start_index; i < new_metadata->rowsets_size(); ++i) {
-            if (rowset.has_delete_predicate()) {
-                if (new_metadata->rowsets(i).has_delete_predicate()) {
-                    canonical_index = i;
-                    break;
-                }
-                continue;
-            }
-            if (!is_duplicate_rowset(rowset, new_metadata->rowsets(i))) continue;
-
-            if (is_pk) {
-                canonical_index = i;
-                break;
-            }
-            const auto& candidate_range = new_metadata->rowsets(i).range();
-            const auto& incoming_range = tablet_reshard_helper::effective_old_tablet_local_range(rowset, ctx_meta);
-            if (tablet_reshard_helper::ranges_are_contiguous(candidate_range, incoming_range)) {
-                canonical_index = i;
-                break;
-            }
-            // Non-PK + non-contiguous: keep scanning. If no other candidate
-            // matches, fall through to add_rowset and treat as a separate
-            // shared rowset — each retains its own contiguous range.
-            non_pk_skip_dedup_fired = true;
-        }
-        if (canonical_index < 0 && non_pk_skip_dedup_fired) {
+        const auto& decision = emission_plan[min_old_tablet_index][source_rowset_index];
+        if (decision.emit && decision.non_pk_skip_dedup_fired) {
             // At least one is_duplicate_rowset hit was rejected due to
             // non-contiguous ranges and no later candidate accepted it →
             // the rowset is added as a sibling of an existing shared rowset.
             g_tablet_merge_non_pk_skip_dedup_total << 1;
         }
+        if (decision.emit && decision.canonical_index != new_metadata->rowsets_size()) {
+            return Status::InternalError(fmt::format(
+                    "tablet merge rowset emission plan is out of sequence: old_tablet_index={} rowset_index={} "
+                    "planned_index={} actual_index={}",
+                    min_old_tablet_index, source_rowset_index, decision.canonical_index, new_metadata->rowsets_size()));
+        }
+        if (!decision.emit &&
+            (decision.canonical_index < 0 || decision.canonical_index >= new_metadata->rowsets_size())) {
+            return Status::InternalError(fmt::format(
+                    "tablet merge rowset emission plan has invalid canonical index: old_tablet_index={} "
+                    "rowset_index={} canonical_index={} output_size={}",
+                    min_old_tablet_index, source_rowset_index, decision.canonical_index, new_metadata->rowsets_size()));
+        }
 
-        if (canonical_index >= 0) {
+        if (!decision.emit) {
             // Duplicate: skip output
+            const int canonical_index = decision.canonical_index;
             const auto& canonical = new_metadata->rowsets(canonical_index);
             // Same-uid siblings legitimately carry different segment lists when split
             // pruned them to disjoint subsets (whether shared=false per-segment pruning
@@ -2643,11 +2719,12 @@ void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<Pe
 // reference, clamped to the uint32_t key space the per-ctx
 // disagreement-key vector indexes by. Both bounds are inclusive.
 //
-// The signed arithmetic matters because |source_rssid_offset| is the
-// sstable's OWN stored rssid_offset, which can be negative in metadata
-// written before compute_rssid_offset was clamped to a non-negative
-// shift. Casting a negative low to uint32_t directly would wrap to a
-// huge value and silently miss in-range disagreement keys.
+// The signed arithmetic matters because both the sstable's own stored
+// rssid_offset and the merge context's offset can be negative. The latter
+// is safe because compute_rssid_offset derives it from the minimum of every
+// carried rowset id/reference, but casting a negative intermediate bound to
+// uint32_t would still wrap to a huge value and silently miss in-range
+// disagreement keys.
 struct ClampedLiftedRange {
     uint32_t lower = 0;
     uint32_t upper = 0;
@@ -2993,6 +3070,8 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // build task never skips another source's unbuilt rowsets (see the helper for the invariant).
     reconcile_vector_index_built_version(merge_contexts, new_tablet_metadata.get());
 
+    ASSIGN_OR_RETURN(auto rowset_emission_plan, build_rowset_emission_plan(merge_contexts));
+
     // Phase 1: Prepare rssid offsets and merged range. For each ctx[i],
     // set new_tablet_metadata.next_rowset_id to the watermark of all
     // earlier ctxs[0..i-1]'s projected rowset ids; compute_rssid_offset
@@ -3002,7 +3081,9 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
         const uint32_t cumulative_ceiling = compute_cumulative_rowset_id_ceiling(
                 merge_contexts, /*upper_exclusive=*/i, merge_contexts.front().metadata()->next_rowset_id());
         new_tablet_metadata->set_next_rowset_id(cumulative_ceiling);
-        merge_contexts[i].set_rssid_offset(compute_rssid_offset(*new_tablet_metadata, *merge_contexts[i].metadata()));
+        const int64_t rssid_offset =
+                compute_rssid_offset(*new_tablet_metadata, merge_contexts, rowset_emission_plan, i);
+        merge_contexts[i].set_rssid_offset(rssid_offset);
     }
 
     // Merge tablet-level range via union_range
@@ -3018,7 +3099,8 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // old tablets' old-tablet-local ranges; consumed by the PK fail-fast coverage
     // check below and by gap-delvec synthesis.
     CanonicalContribMap canonical_contribs;
-    RETURN_IF_ERROR(merge_rowsets(merge_contexts, new_tablet_metadata.get(), &canonical_contribs));
+    RETURN_IF_ERROR(
+            merge_rowsets(merge_contexts, rowset_emission_plan, new_tablet_metadata.get(), &canonical_contribs));
 
     // Phase 2.5: Merge schemas (must run before gap synthesis + merge_dcg_meta,
     // which need historical_schemas to locate rebuild schemas for shared-segment
