@@ -131,7 +131,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             if (GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()) {
                 Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
                 if (tabletStats != null && !tabletStats.isEmpty()) {
-                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, versionTime);
+                    refreshTabletStatsAndMarkReshardCandidate(partition, tabletStats, db, version, versionTime);
                 }
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
@@ -171,7 +171,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      * statistics collector samples from LakeTablet.getFuzzyRowCount(), not from this map.
      */
     private void refreshTabletStatsAndMarkReshardCandidate(PhysicalPartition partition,
-            Map<Long, TabletStatPB> tabletStats, Database db, long versionTime) {
+            Map<Long, TabletStatPB> tabletStats, Database db, long version, long versionTime) {
         List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
         long maxTabletSize = 0L;
         // Walk only the tablets this publish actually reported, not every tablet in the partition: this
@@ -191,7 +191,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             TabletStatPB tabletStat = entry.getValue();
             long dataSize = tabletStat.dataSize != null ? tabletStat.dataSize : 0L;
             lakeTablet.setDataSize(dataSize);
-            lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L);
+            // These stats came back with the publish of exactly this version.
+            lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
             lakeTablet.setDataSizeUpdateTime(versionTime);
             maxTabletSize = Math.max(maxTabletSize, dataSize);
         }
