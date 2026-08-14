@@ -3345,17 +3345,10 @@ public class PlanFragmentBuilder {
             }
 
             ExecGroup execGroup = execGroups.newExecGroup();
-<<<<<<< HEAD
-            // TODO(by satanson): only all children of Set operator are colocate branch, we turn on execGroup.
-            //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
-            //  query hanging forever.
-            boolean canExecGroup = true;
             if (optExpr.getOp() instanceof PhysicalUnionOperator) {
                 setOperationFragment.mergeQueryGlobalDicts(
                         ((PhysicalUnionOperator) optExpr.getOp()).getGlobalDicts());
             }
-=======
->>>>>>> 0a8bc95645 ([BugFix] Keep Set operators out of colocate exec groups to avoid a hang (backport #77025) (#77062))
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
