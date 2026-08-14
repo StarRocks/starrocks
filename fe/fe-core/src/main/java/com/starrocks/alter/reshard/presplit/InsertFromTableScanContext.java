@@ -32,7 +32,7 @@ import java.util.Objects;
 public record InsertFromTableScanContext(
         OlapTable sourceTable,
         String sourceFromSql,                       // "`db`.`tbl` `alias`" or "`db`.`tbl`"
-        Map<String, String> targetToSourceColumnNames,   // lower-cased target name -> source column name
+        Map<String, String> targetToSourceColumnNames,   // directly mapped lower-cased target name -> source name
         String wherePredicateSql,                   // nullable
         ComputeResource computeResource) implements ScanContext {
 
