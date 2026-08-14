@@ -144,7 +144,7 @@ public abstract class MVPCTRefreshPartitioner {
                 .filter(mvListPartitionMap::containsKey)
                 .map(name -> Pair.create(name, mvListPartitionMap.get(name)))
                 .collect(Collectors.toMap(x -> x.first, x -> x.second));
-        filterPartitionsByTTL(validToRefreshPartitions, true);
+        filterPartitionsByTTL(validToRefreshPartitions, false);
         return validToRefreshPartitions.keySet();
     }
 

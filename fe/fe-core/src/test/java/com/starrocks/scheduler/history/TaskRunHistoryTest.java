@@ -108,7 +108,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1' " +
-                        "ORDER BY create_time DESC LIMIT 10000");
+                        "ORDER BY create_time DESC LIMIT 10000", anyInt);
             }
         };
         params.setDb("d1");
@@ -118,7 +118,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_state = 'SUCCESS'" +
-                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         params.setDb(null);
@@ -129,7 +129,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 't1'" +
-                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         params.setDb(null);
@@ -141,7 +141,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_run_id = 'q1'" +
-                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         params.setDb(null);
@@ -156,7 +156,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_name IN ('t1','t2')");
+                        "task_name IN ('t1','t2')", anyInt);
             }
         };
         history.lookupByTaskNames(dbName, taskNames);
@@ -167,7 +167,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_run_id = 'q1' LIMIT 100");
+                        "task_run_id = 'q1' LIMIT 100", anyInt);
             }
         };
         history.lookup(params);
@@ -426,7 +426,7 @@ public class TaskRunHistoryTest {
         Collections.shuffle(taskRuns);
         new MockUp<SimpleExecutor>() {
             @Mock
-            public List<TResultBatch> executeDQL(String sql) {
+            public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
                 TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
                 record.data = taskRuns;
                 String json = GsonUtils.GSON.toJson(record);
@@ -469,7 +469,7 @@ public class TaskRunHistoryTest {
 
         new MockUp<SimpleExecutor>() {
             @Mock
-            public List<TResultBatch> executeDQL(String sql) {
+            public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
                 TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
                 record.data = taskRuns;
                 String json = GsonUtils.GSON.toJson(record);
@@ -502,7 +502,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 't1'' OR ''1''=''1'" +
-                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         TGetTasksParams params = new TGetTasksParams();
@@ -514,7 +514,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_run_id = 'q1'' UNION SELECT 1 -- '" +
-                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         TGetTasksParams params2 = new TGetTasksParams();
@@ -525,7 +525,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_name IN ('a'',''b')");
+                        "task_name IN ('a'',''b')", anyInt);
             }
         };
         history.lookupByTaskNames("", Set.of("a','b"));
@@ -537,7 +537,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 'x\\\\' AND  task_run_id = ' UNION SELECT 1 -- '" +
-                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         TGetTasksParams params3 = new TGetTasksParams();

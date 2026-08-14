@@ -626,7 +626,10 @@ public class MetaFunctions {
         String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
                 returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
         try {
-            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+            // lookup_string is folded in the optimizer during the outer query's planning; bound the
+            // internal point-lookup by the outer query's remaining query_timeout (not the 1h default).
+            int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
+            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql, Math.max(1, remaining));
             return deserializeLookupResult(result);
         } catch (Throwable e) {
             final String notFoundMessage = "query failed if record not exist in dict table";

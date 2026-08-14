@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 ---
 
@@ -8,11 +9,11 @@ displayed_sidebar: docs
 
 外部テーブル機能は、特定の特殊な使用ケースを除き推奨されなくなり、将来のリリースで廃止される可能性があります。一般的なシナリオで外部データソースからのデータを管理およびクエリするには、[External Catalog](./catalog/catalog_overview.md) の使用が推奨されます。
 
-- v3.0以降、Hive、Iceberg、Hudiからデータをクエリするには、catalogを使用することを推奨します。詳細は [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) を参照してください。
+- v3.0以降、Hive、Iceberg、Hudiからデータをクエリするには、catalogを使用することを推奨します。詳細は [Hive catalog](./catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg.md)、[Hudi catalog](./catalog/hudi_catalog.md) を参照してください。
 
-- v3.1以降、MySQLとPostgreSQLからデータをクエリするには [JDBC catalog](../data_source/catalog/jdbc_catalog.md) を、Elasticsearchからデータをクエリするには [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) を使用することを推奨します。
+- v3.1以降、MySQLとPostgreSQLからデータをクエリするには [JDBC catalog](./catalog/jdbc_catalog.md) を、Elasticsearchからデータをクエリするには [Elasticsearch catalog](./catalog/elasticsearch_catalog.md) を使用することを推奨します。
 
-- v3.2.9 および v3.3.1 以降では、Oracle および SQL Server からデータをクエリするには [JDBC カタログ](../data_source/catalog/jdbc_catalog.md) の使用を推奨します。
+- v3.2.9 および v3.3.1 以降では、Oracle および SQL Server からデータをクエリするには [JDBC カタログ](./catalog/jdbc_catalog.md) の使用を推奨します。
 
 - 外部テーブル機能は、StarRocksにデータをロードするために設計されており、外部システムに対して通常の操作として効率的なクエリを実行するためのものではありません。より効率的な解決策は、データをStarRocksにロードすることです。
 
@@ -20,7 +21,7 @@ displayed_sidebar: docs
 
 StarRocksは、外部テーブルを使用して他のデータソースにアクセスすることをサポートしています。外部テーブルは、他のデータソースに保存されているデータテーブルに基づいて作成されます。StarRocksはデータテーブルのメタデータのみを保存します。外部テーブルを使用して、他のデータソースのデータを直接クエリすることができます。現在、 StarRocks 外部テーブル以外の外部テーブルはすべて非推奨です。**別の StarRocks クラスタから現在の StarRocks クラスタにデータを書き込むことしかできません。そこからのデータの読み出しはできません。StarRocks 以外のデータソースについては、これらのデータソースからのデータの読み取りのみが可能です。**
 
-v2.5以降、StarRocksは外部データソースのホットデータクエリを高速化するData Cache機能を提供しています。詳細は [Data Cache](data_cache.md) を参照してください。
+v2.5以降、StarRocksは外部データソースのホットデータクエリを高速化するData Cache機能を提供しています。詳細は [Data Cache](./data_cache/data_cache.md) を参照してください。
 
 ## StarRocks外部テーブル
 

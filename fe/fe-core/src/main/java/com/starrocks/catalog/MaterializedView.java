@@ -644,6 +644,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+
+        // Assign unique ids for columns
+        initUniqueId();
     }
 
     // Used for sync mv
@@ -2716,6 +2719,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 outputColumns.add(schema.get(index));
             }
             return outputColumns;
+        }
+    }
+
+    /**
+     * To support fast schema evolution, we need to init unique id for each column in base schema.
+     */
+    public void initUniqueId() {
+        List<Column> baseSchema = getBaseSchema();
+        if (baseSchema != null && !baseSchema.isEmpty()
+                && baseSchema.get(0).getUniqueId() == Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+            for (Column column : baseSchema) {
+                column.setUniqueId(incAndGetMaxColUniqueId());
+            }
         }
     }
 }
