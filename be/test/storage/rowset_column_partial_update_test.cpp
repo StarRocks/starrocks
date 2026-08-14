@@ -2256,6 +2256,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
     // prove nothing.
     SegmentSharedPtr overlaid_segment;
     uint32_t overlaid_rowsetid = 0;
+    size_t overlaid_segment_idx = 0;
     auto rowset_map = tablet->updates()->get_rowset_map();
     ASSERT_TRUE(rowset_map != nullptr);
     for (const auto& [rowset_id, rs] : *rowset_map) {
@@ -2274,6 +2275,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
             if (!dcgs.empty()) {
                 overlaid_segment = rs->segments()[seg];
                 overlaid_rowsetid = rowset_id;
+                overlaid_segment_idx = seg;
                 break;
             }
         }
@@ -2296,7 +2298,9 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
     SegmentMetaCollectOptions options;
     options.is_primary_keys = true;
     options.tablet_id = tablet->tablet_id();
-    options.segment_id = 0;
+    // Must match the segment the collecter was constructed from: init() derives the delta column
+    // group key as pk_rowsetid + segment_id.
+    options.segment_id = overlaid_segment_idx;
     options.version = version;
     options.pk_rowsetid = overlaid_rowsetid;
     options.dcg_loader = dcg_loader;
