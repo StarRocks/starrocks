@@ -78,6 +78,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TRunningTxnInfo;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
@@ -619,6 +620,55 @@ public class DatabaseTransactionMgrTest {
             masterDbTransMgr.finishTransaction(txn.getTransactionId(), null, 0);
         }
         assertEquals(0, masterDbTransMgr.getCommittedTxnNum());
+    }
+
+    @Test
+    public void getRunningTransactionsTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // The extraction returns one row per running (non-final) transaction; it must at least cover every
+        // committed transaction seeded by setUp().
+        List<TRunningTxnInfo> rows = masterDbTransMgr.getRunningTransactions();
+        int committedCount = masterDbTransMgr.getCommittedTxnList().size();
+        Assertions.assertTrue(committedCount > 0);
+
+        long committedRows = rows.stream().filter(r -> "COMMITTED".equals(r.getState())).count();
+        assertEquals(committedCount, committedRows);
+
+        // Every row carries this db's id and a label. For a COMMITTED row, PENDING_PUBLISH_MS must be derived
+        // from a real commit time, never the -1 sentinel: the hazard amendment 2 guards is observing COMMITTED
+        // with commitTime == -1, which would yield now-(-1) (an age of ~55,000 years). So assert commit_time_ms
+        // is positive and the age is bounded by how long ago that commit actually was. A non-committed row's
+        // age is exactly 0.
+        long assertNow = System.currentTimeMillis();
+        for (TRunningTxnInfo row : rows) {
+            assertEquals(GlobalStateMgrTestUtil.testDbId1, row.getDatabase_id());
+            assertNotNull(row.getLabel());
+            Assertions.assertTrue(row.getPending_publish_ms() >= 0);
+            if ("COMMITTED".equals(row.getState())) {
+                Assertions.assertTrue(row.getCommit_time_ms() > 0, "committed row must have a real commit time");
+                Assertions.assertTrue(row.getPending_publish_ms() <= assertNow - row.getCommit_time_ms() + 5000L,
+                        "pending-publish age must track commit time, not the -1 sentinel");
+            } else {
+                assertEquals(0L, row.getPending_publish_ms());
+            }
+        }
+
+        // The global manager aggregates the same rows; filtering by this db id yields the db's rows, and an
+        // unknown db id yields nothing.
+        assertEquals(rows.size(), masterTransMgr.getRunningTransactions(GlobalStateMgrTestUtil.testDbId1).size());
+        Assertions.assertTrue(masterTransMgr.getRunningTransactions(-1L).isEmpty());
+        Assertions.assertTrue(
+                masterTransMgr.getRunningTransactions(null).size() >= rows.size());
+
+        // Once every committed transaction becomes visible it leaves the running set, so no COMMITTED rows remain.
+        for (TransactionState txn : masterDbTransMgr.getCommittedTxnList()) {
+            masterDbTransMgr.finishTransaction(txn.getTransactionId(), null, 0);
+        }
+        long committedAfter = masterDbTransMgr.getRunningTransactions().stream()
+                .filter(r -> "COMMITTED".equals(r.getState())).count();
+        assertEquals(0L, committedAfter);
     }
 
     @Test

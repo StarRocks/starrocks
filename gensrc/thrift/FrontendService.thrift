@@ -697,6 +697,46 @@ struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
 }
 
+struct TGetRunningTxnsParams {
+    1: optional string db
+    2: optional i64 txn_id // reserved; TXN_ID is BIGINT so it is not pushed down (applied as a residual filter)
+    3: optional string label
+    4: optional Types.TUserIdentity current_user_ident // querying user; the FE filters rows by db privilege
+}
+
+// One currently running (non-final) transaction (load, routine-load, lake-compaction, etc.). All *_ms
+// fields are UTC epoch milliseconds (<= 0 renders as NULL DATETIME on the BE scanner side).
+struct TRunningTxnInfo {
+    1: optional i64 txn_id
+    2: optional i64 global_txn_id
+    3: optional string label
+    4: optional i64 database_id
+    5: optional string database_name
+    6: optional string table_ids
+    7: optional string table_names
+    8: optional string state
+    9: optional string coordinator
+    10: optional string source_type
+    11: optional i64 warehouse_id
+    12: optional i64 prepare_time_ms
+    13: optional i64 prepared_time_ms
+    14: optional i64 commit_time_ms
+    15: optional i64 publish_time_ms
+    16: optional i64 finish_time_ms
+    17: optional i64 pending_publish_ms
+    18: optional i64 timeout_ms
+    19: optional i64 prepared_timeout_ms
+    20: optional i64 error_replica_num
+    21: optional string reason
+    22: optional string error_msg
+    23: optional bool is_no_op_publish
+    24: optional string no_op_publish_reason
+}
+
+struct TGetRunningTxnsResult {
+    1: optional list<TRunningTxnInfo> txns
+}
+
 struct TRoutineLoadJobInfo {
     1: optional i64 id
     2: optional string name
@@ -2516,6 +2556,7 @@ service FrontendService {
     TGetKeysResponse getKeys(1:TGetKeysRequest params);
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
+    TGetRunningTxnsResult getRunningTransactions(1:TGetRunningTxnsParams params)
     TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)
     TGetRoutineLoadJobsResult getRoutineLoadJobs(1:TGetLoadsParams params)
     TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)

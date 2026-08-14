@@ -29,6 +29,7 @@ import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.catalog.system.information.PipesSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
+import com.starrocks.catalog.system.information.RunningTransactionsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
 import com.starrocks.catalog.system.information.TabletReshardJobsTable;
@@ -84,6 +85,7 @@ public class SystemTable extends Table {
                     .add(PartitionsMetaSystemTable.NAME)
                     .add(PipesSystemTable.NAME)
                     .add(RoutineLoadJobsSystemTable.NAME)
+                    .add(RunningTransactionsSystemTable.NAME)
                     .add(StreamLoadsSystemTable.NAME)
                     .add(TablesConfigSystemTable.NAME)
                     .add(TabletReshardJobsTable.NAME)
