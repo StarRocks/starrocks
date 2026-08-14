@@ -267,9 +267,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         est_input_bytes += rowset->data_size_after_deletion();
         est_segments += rowset->num_segments();
     }
-    const int64_t read_buffer_size = CompactionUtils::get_read_buffer_size(
-            est_input_bytes, est_segments, _tablet_schema->num_columns(),
-            config::lake_compaction_stream_buffer_size_bytes);
+    const int64_t read_buffer_size =
+            CompactionUtils::get_read_buffer_size(est_input_bytes, est_segments, _tablet_schema->num_columns(),
+                                                  config::lake_compaction_stream_buffer_size_bytes);
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
