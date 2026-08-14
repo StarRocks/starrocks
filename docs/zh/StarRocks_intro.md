@@ -1,6 +1,8 @@
 ---
+sidebar_position: 1
 displayed_sidebar: docs
 description: "StarRocks 是新一代高性能分析型数据仓库，支持实时、多维、高并发的数据分析。"
+slug: introduction/StarRocks_intro
 ---
 
 # StarRocks
