@@ -225,7 +225,7 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.QUANTIZER.name(), "bogus");
                 }}, KeysType.DUP_KEYS));
 
-        // StarRocks accepts only the deployable PQ code widths 4 and 8.
+        // NBITS_PQ range (single-field) is enforced via the enum's check().
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
@@ -237,9 +237,9 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
                     put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
                     put(IndexParamsKey.M_PQ.name(), "16");
-                    put(IndexParamsKey.NBITS_PQ.name(), "16");
+                    put(IndexParamsKey.NBITS_PQ.name(), "2");
                 }}, KeysType.DUP_KEYS),
-                "Value of `NBITS_PQ` must be 4 or 8");
+                "Value of `NBITS_PQ` must be in [4, 16]");
     }
 
     @Test
@@ -248,7 +248,7 @@ public class VectorIndexTest extends PlanTestBase {
         // already covered by testQuantizerPropertyRegistration.
         Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
 
-        // PQ happy path: m_pq divides dim, nbits_pq in range.
+        // PQ happy path: preserve the previously accepted upper bound for compatibility.
         Assertions.assertDoesNotThrow(
                 () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
@@ -259,7 +259,7 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
                     put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
                     put(IndexParamsKey.M_PQ.name(), "16");
-                    put(IndexParamsKey.NBITS_PQ.name(), "8");
+                    put(IndexParamsKey.NBITS_PQ.name(), "16");
                 }}, KeysType.DUP_KEYS));
 
         // Inner product is supported by every HNSW storage type, including PQ.

@@ -469,7 +469,7 @@ TEST_F(VectorIndexWriterTest, hnsw_pq_cosine_end_to_end) {
     check_hnsw_quantized_cosine_end_to_end("pq", 2000);
 }
 
-TEST_F(VectorIndexWriterTest, hnsw_pq_rejects_unsupported_nbits) {
+TEST_F(VectorIndexWriterTest, hnsw_pq_accepts_16_bits) {
     auto tablet_index = prepare_tablet_index();
     tablet_index->add_common_properties("index_type", "hnsw");
     tablet_index->add_common_properties("dim", "8");
@@ -497,9 +497,7 @@ TEST_F(VectorIndexWriterTest, hnsw_pq_rejects_unsupported_nbits) {
     offsets->append(8);
     auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
 
-    auto status = writer->append(*array_column);
-    ASSERT_TRUE(status.is_invalid_argument()) << status.to_string();
-    EXPECT_NE(status.message().find("nbits_pq must be 4 or 8"), std::string_view::npos);
+    ASSERT_OK(writer->append(*array_column));
 }
 
 TEST_F(VectorIndexWriterTest, hnsw_pq_end_to_end) {

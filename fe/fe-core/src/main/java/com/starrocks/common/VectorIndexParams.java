@@ -197,14 +197,14 @@ public class VectorIndexParams {
             }
         },
 
-        // Bits per PQ sub-quantizer code supported by StarRocks. Default 8.
+        // Bits per PQ sub-quantizer code. faiss supports [4, 16]; default 8.
         NBITS_PQ(VectorIndexType.HNSW) {
             @Override
             public void check(String value) {
                 try {
                     int num = Integer.parseInt(value);
-                    if (num != 4 && num != 8) {
-                        throw new SemanticException("Value of `NBITS_PQ` must be 4 or 8");
+                    if (num < 4 || num > 16) {
+                        throw new SemanticException("Value of `NBITS_PQ` must be in [4, 16]");
                     }
                 } catch (NumberFormatException e) {
                     throw new SemanticException("Value of `NBITS_PQ` must be an integer");

@@ -169,7 +169,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 
 - **Default**: 8
 - **Required**: No (only allowed when `quantizer = pq`; rejected otherwise).
-- **Description**: HNSW-specific parameter (PQ quantizer only). Bits per PQ sub-quantizer. Valid values are `4` and `8`.
+- **Description**: HNSW-specific parameter (PQ quantizer only). Bits per PQ sub-quantizer. Must be in the range 4–16.
 
 ##### nbits
 

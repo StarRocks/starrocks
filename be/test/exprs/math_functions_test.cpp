@@ -2021,6 +2021,84 @@ TEST_F(VecMathFunctionsTest, innerProduct) {
     ASSERT_FLOAT_EQ(res[1], 5.0f);
 }
 
+TEST_F(VecMathFunctionsTest, innerProductConstColumns) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        auto base = ConstColumn::create(build_float_array_column({{2, 3}}), 2);
+        auto target = build_float_array_column({{4, 5}, {1, -1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_TRUE(result.ok());
+        auto* data = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+        EXPECT_FLOAT_EQ(data[0], 23.0f);
+        EXPECT_FLOAT_EQ(data[1], -1.0f);
+    }
+
+    {
+        auto base = build_float_array_column({{4, 5}, {1, -1}});
+        auto target = ConstColumn::create(build_float_array_column({{2, 3}}), 2);
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_TRUE(result.ok());
+        auto* data = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+        EXPECT_FLOAT_EQ(data[0], 23.0f);
+        EXPECT_FLOAT_EQ(data[1], -1.0f);
+    }
+}
+
+TEST_F(VecMathFunctionsTest, innerProductInvalidArguments) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        auto base = build_float_array_column({{1, 2}});
+        auto target = build_float_array_column({{1, 2}, {3, 4}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays. base array size is 1 and target array size is 2.");
+    }
+
+    {
+        auto base = NullableColumn::create(build_float_array_column({{1}}), NullColumn::create(1, 1));
+        auto target = build_float_array_column({{1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(), "inner_product does not support null values. base array has null value.");
+    }
+
+    {
+        auto elements = NullableColumn::create(FloatColumn::create(), NullColumn::create());
+        elements->append_nulls(1);
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(1);
+        auto base = ArrayColumn::create(std::move(elements), std::move(offsets));
+        auto target = build_float_array_column({{1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(), "inner_product does not support null values");
+    }
+
+    {
+        auto base = ConstColumn::create(build_float_array_column({{1, 2}}), 2);
+        auto target = build_float_array_column({{1, 2, 3}, {4, 5, 6}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays in each row. base array dimension size is 2, target "
+                  "array dimension size is 3.");
+    }
+
+    {
+        auto base = build_float_array_column({{1, 2, 3}, {4, 5, 6}});
+        auto target = ConstColumn::create(build_float_array_column({{1, 2}}), 2);
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays in each row. base array dimension size is 3, target "
+                  "array dimension size is 2.");
+    }
+}
+
 TEST_F(VecMathFunctionsTest, innerProductDiffersFromCosineForUnnormalizedVectors) {
     auto base_col = build_float_array_column({{2, 0}});
     auto target_col = build_float_array_column({{3, 0}});
