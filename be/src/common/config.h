@@ -2279,6 +2279,14 @@ CONF_Int32(compaction_parallel_merge_init_threads, "16");
 // extra chunk per input per added slot. Only takes effect when the merge prefill pool is
 // available; 1 keeps the original behavior.
 CONF_mInt32(compaction_merge_child_buffers, "1");
+// Compaction holds the loaded Segment objects of its input rowsets for the whole task instead of
+// relying on the metadata cache to keep them. Vertical compaction reads the same rowsets once per
+// column group; when the metadata cache cannot hold them all (small limit, or crowded out by many
+// tablets), every pass reloads and reparses every segment. That rebuild is CPU-bound, proportional
+// to the column count, and measured 14-17x slower on a 1000-column table -- and under concurrent
+// load it ballooned task memory until the task could not finish at all. Holding the segments costs
+// the same memory the metadata cache would have used for them, scoped to the task lifetime.
+CONF_mBool(lake_compaction_hold_input_segments, "true");
 
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");

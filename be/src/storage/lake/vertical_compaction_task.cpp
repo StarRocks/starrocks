@@ -205,8 +205,9 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = true};
+                                   .buffer_size = read_buffer_size(),
+                                   .fill_metadata_cache = true,
+                                   .hold_segments = config::lake_compaction_hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
@@ -272,7 +273,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = read_buffer_size(),
+                                  .hold_segments = config::lake_compaction_hold_input_segments};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and
@@ -386,6 +388,14 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         RETURN_IF_ERROR(mask_buffer->flush());
     }
     return Status::OK();
+}
+
+int64_t VerticalCompactionTask::read_buffer_size() const {
+    // read_segment_count is the actual segment count; _total_input_segs collapses a
+    // non-overlapping rowset to 1 and would under-count the streams that get opened.
+    return CompactionUtils::get_read_buffer_size(_total_data_size, _context->stats->read_segment_count,
+                                                 _tablet_schema->num_columns(),
+                                                 config::lake_compaction_stream_buffer_size_bytes);
 }
 
 void VerticalCompactionTask::move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const {
