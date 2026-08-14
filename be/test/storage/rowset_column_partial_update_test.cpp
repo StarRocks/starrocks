@@ -2109,28 +2109,15 @@ static RowsetSharedPtr create_json_partial_rowset(const TabletSharedPtr& tablet,
 // .createLinearPath + setExtended on the FE side).
 static ColumnAccessPathPtr make_extended_json_path(const std::string& root_column, const std::string& field,
                                                    const TypeDescriptor& value_type) {
-    TColumnAccessPath tleaf;
-    tleaf.__set_type(TAccessPathType::FIELD);
-    tleaf.__set_from_predicate(false);
-    tleaf.__set_extended(false);
-    tleaf.__set_type_desc(value_type.to_thrift());
-
-    TColumnAccessPath troot;
-    troot.__set_type(TAccessPathType::ROOT);
-    troot.__set_from_predicate(false);
-    troot.__set_extended(true);
-    troot.__set_type_desc(value_type.to_thrift());
-    troot.__set_children({tleaf});
-
-    std::vector<std::string> resolved = {root_column, field};
-    size_t resolve_index = 0;
-    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> {
-        CHECK_LT(resolve_index, resolved.size());
-        return resolved[resolve_index++];
-    };
-    auto res = ColumnAccessPath::create(troot, resolver);
-    CHECK(res.ok()) << res.status();
-    return std::move(res).value();
+    // branch-4.1's ColumnAccessPath::create(TColumnAccessPath, ...) resolves node names by evaluating
+    // an expression, which the FE supplies but a unit test cannot easily build. Assemble the same tree
+    // directly instead: a ROOT node named after the JSON column with one FIELD child per subfield, and
+    // `extended` plus the subfield value type set on the root (what extend_schema_by_access_paths reads).
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, root_column, 0));
+    ColumnAccessPath::insert_json_path(root.get(), value_type.type, field);
+    root->set_extended(true);
+    root->set_value_type(value_type);
+    return root;
 }
 
 // Reads the tablet through the JSONV2-extended schema, exactly as OlapChunkSource does, and checks

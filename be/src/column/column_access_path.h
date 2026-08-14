@@ -79,11 +79,13 @@ public:
     bool is_from_predicate() const { return _from_predicate; }
 
     bool is_extended() const { return _extended; }
+    void set_extended(bool extended) { _extended = extended; }
 
     const std::string& absolute_path() const { return _absolute_path; }
 
     // flat json use this to get the type of the path
     const TypeDescriptor& value_type() const { return _value_type; }
+    void set_value_type(const TypeDescriptor& value_type) { _value_type = value_type; }
 
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
