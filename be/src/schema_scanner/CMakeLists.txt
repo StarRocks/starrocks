@@ -52,6 +52,7 @@ set(SCHEMA_SCANNER_FILES
     schema_pipes.cpp
     schema_recyclebin_catalogs.cpp
     schema_routine_load_jobs_scanner.cpp
+    schema_running_transactions_scanner.cpp
     schema_schema_privileges_scanner.cpp
     schema_schemata_scanner.cpp
     schema_statistics_scanner.cpp

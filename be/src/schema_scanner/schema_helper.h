@@ -83,6 +83,9 @@ public:
     static Status get_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                             TGetLoadsResult* var_result);
 
+    static Status get_running_transactions(const SchemaScannerState& state, const TGetRunningTxnsParams& var_params,
+                                           TGetRunningTxnsResult* var_result);
+
     static Status get_tracking_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                      TGetTrackingLoadsResult* var_result);
 
