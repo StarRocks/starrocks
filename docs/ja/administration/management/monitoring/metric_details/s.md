@@ -207,11 +207,35 @@ description: "Alphabetical s"
 - タイプ: 瞬間値
 - 説明: 各メモリプールに割り当てられたリソースグループの数。
 
+## `starrocks_be_pipe_connector_scan_expected_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 外部テーブル用 Scan エグゼキューターが現在実行すべきワーカースレッド数で、すべてのリソースグループの合計です。設定変更やリソースグループの変更が即座に反映されるため、`starrocks_be_pipe_connector_scan_worker_threads` と比較することで定員を満たしているかを判断できます。
+
+## `starrocks_be_pipe_connector_scan_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 外部テーブル用 Scan エグゼキューターで実際に生存しているワーカースレッド数で、すべてのリソースグループの合計です。`starrocks_be_pipe_connector_scan_expected_worker_threads` を下回る場合、ワーカーが失われたまま補充されておらず、設定値より少ない Scan タスクしか消費できていないことを意味します。上回るのは正常かつ一時的で、縮小されたエグゼキューターのワーカーは次に起こされたときに初めて終了するためです。
+
 ## `starrocks_be_pipe_prepare_pool_queue_len`
 
 - 単位: カウント
 - タイプ: 瞬間値
 - 説明: パイプライン準備スレッドプールタスクキューの長さの瞬間値。
+
+## `starrocks_be_pipe_scan_expected_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 内部テーブル用 Scan エグゼキューターが現在実行すべきワーカースレッド数で、すべてのリソースグループの合計です。設定変更やリソースグループの変更が即座に反映されるため、`starrocks_be_pipe_scan_worker_threads` と比較することで定員を満たしているかを判断できます。
+
+## `starrocks_be_pipe_scan_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 内部テーブル用 Scan エグゼキューターで実際に生存しているワーカースレッド数で、すべてのリソースグループの合計です。`starrocks_be_pipe_scan_expected_worker_threads` を下回る場合、ワーカーが失われたまま補充されておらず、設定値より少ない Scan タスクしか消費できていないことを意味します。上回るのは正常かつ一時的で、縮小されたエグゼキューターのワーカーは次に起こされたときに初めて終了するためです。
 
 ## `starrocks_be_priority_exec_state_report_active_threads`
 
@@ -359,7 +383,7 @@ description: "Alphabetical s"
 
 すべてのトランザクションメトリクスは以下のラベルを共有します。
 
-- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`: 報告元のFEノードがリーダーであるかどうかを示します。リーダーFE (`is_leader="true"`) のみが実際のメトリクス値を報告します。フォロワーは `is_leader="false"` となり、データは報告しません。
 
 ## `starrocks_fe_query_resource_group`

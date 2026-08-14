@@ -18,6 +18,7 @@
 #include <ios>
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -199,6 +200,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
 
+    // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
+    // index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(analytic_node.analytic_functions[i].nodes[0].fn);
+    }
+
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
     _should_set_partition_size = false;
@@ -346,6 +354,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
+    // Fails prepare after the aggregate FunctionContexts have been created, so that the analytor is
+    // destroyed (and closed) in a half-prepared state.
+    FAIL_POINT_TRIGGER_EXECUTE(analytor_prepare_failed,
+                               { return Status::InternalError("injected failure in Analytor::prepare"); });
+
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
@@ -422,11 +435,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
     if (_range_end_boundary.expr_ctx != nullptr) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_range_end_boundary.expr_ctx, state));
-    }
-
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
     return _prepare_processing_mode(state, runtime_profile);
@@ -1670,4 +1678,7 @@ AnalytorPtr AnalytorFactory::create(int i) {
     }
     return _analytors[i];
 }
+
+DEFINE_FAIL_POINT(analytor_prepare_failed);
+
 } // namespace starrocks

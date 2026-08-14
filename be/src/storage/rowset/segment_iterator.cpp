@@ -15,7 +15,6 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
-#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -25,6 +24,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
@@ -58,7 +58,6 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
-#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
@@ -76,6 +75,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -383,7 +383,6 @@ private:
 
 #ifdef WITH_TENANN
         tenann::PrimitiveSeqView query_view;
-        std::shared_ptr<tenann::IndexMeta> index_meta;
 #endif
 
         std::shared_ptr<VectorIndexReader> ann_reader;
@@ -1253,38 +1252,27 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
     if (!_vector_index_ctx) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta, query_params))
-    _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-    // create_from_file backfills vi_file->size on the cold path; init_searcher reuses it.
-    auto create_st = VectorIndexReaderFactory::create_from_file(vi_file, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, _opts.stats);
-    // .vi file not found — caller will set up brute-force fallback
-    if (create_st.is_not_found()) {
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache == nullptr) {
+        return Status::InternalError("StorageEnv vector index cache is not initialized");
+    }
+    DCHECK(_opts.stats != nullptr);
+
+    VectorIndexReaderFactory factory(*vector_index_cache);
+    VectorIndexReaderInitOptions options{
+            .segment_num_rows = static_cast<size_t>(_segment->num_rows()),
+            .query_k = static_cast<int>(_vector_index_ctx->k),
+            .refine_distance = _vector_index_ctx->refine_distance,
+            .stats = *_opts.stats,
+    };
+    ASSIGN_OR_RETURN(auto result, factory.create_and_init(*vi_file, tablet_index_meta, query_params, options));
+    if (result.state == VectorIndexReaderInitResult::kFallback) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
     }
-    RETURN_IF_ERROR(create_st);
-    // Enable per-segment adaptive ef_search. query_params carries a user-explicit
-    // efSearch iff the user set one via query hint / session var; that disables
-    // adaptive scaling so user intent is honored. FE preserves the user-typed key
-    // casing for ann_params (e.g. "efsearch", "Efsearch", "EFSEARCH" are all
-    // valid), so the check must be case-insensitive.
-    bool user_set_ef = false;
-    for (const auto& entry : query_params) {
-        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
-            user_set_ef = true;
-            break;
-        }
-    }
-    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), *vi_file,
-                                                                 static_cast<size_t>(_segment->num_rows()),
-                                                                 _vector_index_ctx->k, user_set_ef, _opts.stats);
-    // empty ann reader — caller will set up brute-force fallback
-    if (status.is_not_supported()) {
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-    return status;
+    DCHECK(result.reader != nullptr);
+    _vector_index_ctx->ann_reader = std::move(result.reader);
+    return Status::OK();
 #else
     return Status::OK();
 #endif
@@ -1521,7 +1509,7 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     // Count gate: a filtered HNSW search can under-return on scattered survivors (graph reachability).
     // If it returned fewer than the bitmap could supply, rescan the candidates exactly. Top-k only --
     // under a radius, returning fewer rows is legitimate.
-    if (pre_narrowed && _vector_index_ctx->vector_range < 0) {
+    if (pre_narrowed && _vector_index_ctx->vector_range < 0 && config::enable_vector_index_topk_underfill_fallback) {
         const size_t found = id2distance_map.size();
         const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched_cardinality));
         if (found < want) {
@@ -2090,6 +2078,12 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     return Status::OK();
 }
 
+// Fakes the "a global dictionary exists for the column, but this segment has no usable local
+// dictionary" state, which is otherwise reachable only through a real dictionary inconsistency
+// (a rewritten/compacted segment whose pages are not all dict-encoded). That state is what puts
+// `_switch_context` on its force-encode path.
+DEFINE_FAIL_POINT(segment_iterator_force_global_dict_encode);
+
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
@@ -2123,9 +2117,12 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
             }
 
+            bool all_page_dict_encoded = _column_iterators[cid]->all_page_dict_encoded();
+            FAIL_POINT_TRIGGER_EXECUTE(segment_iterator_force_global_dict_encode, { all_page_dict_encoded = false; });
+
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());
-                _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
+                _column_decoders[cid].set_all_page_dict_encoded(all_page_dict_encoded);
                 if (_opts.global_dictmaps->count(cid)) {
                     _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
                     _column_decoders[cid].check_global_dict();
@@ -2133,7 +2130,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             }
 
             // turn off low cardinality if not all data pages are dict-encoded.
-            _predicate_need_rewrite[cid] &= _column_iterators[cid]->all_page_dict_encoded();
+            _predicate_need_rewrite[cid] &= all_page_dict_encoded;
         }
     }
     VLOG(2) << fmt::format("init_column_iterators schema={}", schema.to_string());
@@ -3613,13 +3610,20 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
         // Rebuilding final_chunk schema. filter_unused_columns will prune out useless columns in encode_schema
         Schema final_chunk_schema;
         DCHECK_GE(_encoded_schema.num_fields(), output_schema().num_fields());
+        // `output_schema()` is a subsequence of `_encoded_schema`, so the cursor into it must stop as
+        // soon as the last output field has been matched: any encoded field left over is a column
+        // pruned by filter_unused_columns, and continuing would index the output schema one past its
+        // end. `Schema::field()` only DCHECKs the index, so a RELEASE binary would dereference the
+        // out-of-bounds slot -- a null one faults at address 0.
+        const size_t num_output_fields = output_schema().num_fields();
         size_t output_schema_idx = 0;
-        for (size_t i = 0; i < _encoded_schema.num_fields(); ++i) {
+        for (size_t i = 0; i < _encoded_schema.num_fields() && output_schema_idx < num_output_fields; ++i) {
             if (_encoded_schema.field(i)->id() == output_schema().field(output_schema_idx)->id()) {
                 final_chunk_schema.append(_encoded_schema.field(i));
                 output_schema_idx++;
             }
         }
+        DCHECK_EQ(num_output_fields, final_chunk_schema.num_fields());
         ASSIGN_OR_RETURN(to->_final_chunk,
                          RuntimeChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
@@ -4670,10 +4674,9 @@ Status SegmentIterator::_apply_inverted_index() {
     // ---------------------------------------------------------
     if (!erased_preds.empty()) {
         erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
-        const auto& new_cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
 
         for (const auto& cid : erased_pred_col_ids) {
-            if (!new_cid_to_predicates.contains(cid)) {
+            if (!remaining_predicates_require_column(_opts.pred_tree, cid)) {
                 // predicate for pred->column_id() has been total erased by
                 // inverted index filtering.These columns may can be pruned.
                 _inverted_index_ctx->prune_cols_candidate_by_inverted_index.insert(cid);

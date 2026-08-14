@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -793,7 +794,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
         try {
             connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            String rangeDdl = incrementalMvDdl("mv_ivm_range", "");
+            String rangeDdl = incrementalMvDdl("mv_ivm_range", "", "");
             CreateMaterializedViewStatement rangeStmt = analyzeMvDdl(rangeDdl);
             assertTrue(rangeStmt.getDistributionDesc() instanceof RangeDistributionDesc);
             assertTrue(IvmTrialRewriter.buildMockMv(rangeStmt).getDefaultDistributionInfo()
@@ -849,7 +850,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     throw new AssertionError("AUTO CREATE analysis must not invoke the IVM trial");
                 }
             };
-            CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", ""));
+            CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", "", ""));
             assertEquals(MaterializedView.RefreshMode.AUTO, supported.getCurrentRefreshMode());
             assertTrue(supported.getDistributionDesc() instanceof RangeDistributionDesc);
             assertEquals(0, autoTrialInvocationCount, "supported AUTO must not invoke the IVM trial");
@@ -870,15 +871,23 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
         connectContext.getSessionVariable().setEnableRangeDistribution(true);
         try {
+            // The reorder comes from the storage-filled __ROW_ID__ being moved to the front of a
+            // non-aggregate mv's schema; an aggregate mv projects its __ROW_ID__ first and keeps query order.
             String ddl = "CREATE MATERIALIZED VIEW mv_trial_reordered "
-                    + "REFRESH DEFERRED MANUAL ORDER BY (id) "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
                     + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
-                    + "AS SELECT AVG(c1) AS av, id, SUM(c2) AS sm "
-                    + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
             CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
             MaterializedView mockMv = IvmTrialRewriter.buildMockMv(stmt);
             assertEquals(schemaFingerprint(stmt.getMvColumnItems()), schemaFingerprint(mockMv.getBaseSchema()));
-            assertEquals(RangeDistributionInfo.class, mockMv.getDefaultDistributionInfo().getClass());
+
+            // A range-distributed mv carries no ORDER BY of its own.
+            CreateMaterializedViewStatement aggStmt = analyzeMvDdl(
+                    incrementalMvDdl("mv_trial_agg_states", "", ""));
+            MaterializedView aggMockMv = IvmTrialRewriter.buildMockMv(aggStmt);
+            assertEquals(schemaFingerprint(aggStmt.getMvColumnItems()),
+                    schemaFingerprint(aggMockMv.getBaseSchema()));
+            assertEquals(RangeDistributionInfo.class, aggMockMv.getDefaultDistributionInfo().getClass());
 
             ColumnRefFactory factory = new ColumnRefFactory();
             List<ColumnRefOperator> queryOutputs = stmt.getQueryStatement().getQueryRelation().getScope()
@@ -907,7 +916,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
         try {
             connectContext.getSessionVariable().setEnableRangeDistribution(true);
-            String ddl = incrementalMvDdl("mv_active_range", "");
+            String ddl = incrementalMvDdl("mv_active_range", "", "");
             starRocksAssert.withMaterializedView(ddl, () -> {
                 MaterializedView mv = getMv("test", "mv_active_range");
                 assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
@@ -1305,6 +1314,154 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID), "rewritten query must project __ROW_ID__, got: " + sql);
     }
 
+    /**
+     * An incremental mv is keyed by {@code __ROW_ID__} alone, so its {@code ORDER BY} becomes a sort key of
+     * its own instead of widening the primary key.
+     */
+    @Test
+    public void testIncrementalSortKeyIsIndependentOfPrimaryKey() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
+        try {
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+
+            // Aggregate (QUERY_COMPUTED) and non-aggregate (AUTO_INCREMENT) mvs both keep __ROW_ID__ as the
+            // only key column, and both carry ORDER BY (id) as a sort key.
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_sort_key_agg",
+                    "DISTRIBUTED BY HASH(id) BUCKETS 3 "), () -> assertIndependentSortKey("mv_sort_key_agg", "id"));
+
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_nonagg "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id) "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        assertIndependentSortKey("mv_sort_key_nonagg", "id");
+                        assertActiveRoundTripKeepsSchema("mv_sort_key_nonagg");
+                    });
+
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_absent "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_absent");
+                        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
+                        assertNull(sortKeyIdxes(mv), "an mv sorted by its key columns needs no sort key");
+                        // The reconstructed DDL must not name the internal row id as an ORDER BY the user
+                        // never wrote -- re-analysing it has to reproduce this same layout.
+                        assertFalse(mv.getMaterializedViewDdlStmt(false).contains("ORDER BY"),
+                                "got: " + mv.getMaterializedViewDdlStmt(false));
+                        assertActiveRoundTripKeepsSchema("mv_sort_key_absent");
+                    });
+
+            // Two fixed-length sort columns: both fit the short-key budget, so a count of 1 means the index
+            // was sized from the key columns instead.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_multi "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id, c1) "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, c1, SUM(c2) AS sm FROM `iceberg0`.`unpartitioned_db`.`t_numeric` "
+                    + "GROUP BY id, c1",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_multi");
+                        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
+                        assertEquals(2, sortKeyIdxes(mv).size());
+                        assertEquals(sortKeyIdxes(mv).size(),
+                                mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getShortKeyColumnCount(),
+                                "the short-key index must cover every fixed-length sort key column");
+                    });
+
+            // RANDOM is normalised to a hash distribution over the key columns, which happens after the
+            // layout is resolved -- the ORDER BY still becomes a sort key of its own.
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_sort_key_random",
+                    "DISTRIBUTED BY RANDOM BUCKETS 3 "),
+                    () -> assertIndependentSortKey("mv_sort_key_random", "id"));
+
+            // The other row-id strategy: __ROW_ID__ is appended to the schema rather than projected first.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_nonagg_multi "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id, date) "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_nonagg_multi");
+                        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
+                        assertEquals(List.of("id", "date"), sortKeyIdxes(mv).stream()
+                                .map(idx -> mv.getBaseSchema().get(idx).getName()).collect(Collectors.toList()));
+                        assertEquals(2, mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getShortKeyColumnCount());
+                    });
+
+            // The independent branch has to validate the sort key columns itself: without that, an unknown
+            // one would only surface later as an internal assertion while resolving positions.
+            SemanticException unknown = assertThrows(SemanticException.class,
+                    () -> analyzeMvDdl(incrementalMvDdl("mv_sort_key_unknown",
+                            "DISTRIBUTED BY HASH(id) BUCKETS 3 ", "ORDER BY (no_such_column) ")),
+                    "an unknown sort key column must be rejected");
+            assertTrue(unknown.getMessage().contains("Sort key not exists")
+                            || unknown.getMessage().contains("no_such_column"),
+                    "got: " + unknown.getMessage());
+
+            // A non-incremental mv is a duplicate-key table: its sort key IS its key columns.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_pct "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id) "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_pct");
+                        assertEquals(List.of("id"), keyColumnNames(mv));
+                        assertNull(sortKeyIdxes(mv));
+                    });
+
+            connectContext.getSessionVariable().setEnableRangeDistribution(true);
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> analyzeMvDdl(incrementalMvDdl("mv_sort_key_range", "")),
+                    "a range-distributed incremental mv must reject ORDER BY");
+            assertTrue(e.getMessage().contains("ORDER BY is not supported on a range-distributed"),
+                    "got: " + e.getMessage());
+
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_range_no_order", "", ""), () -> {
+                MaterializedView mv = getMv("test", "mv_range_no_order");
+                assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
+                assertNull(sortKeyIdxes(mv));
+            });
+
+            // Set the desc by hand the way AlterJobMgr does before re-analysing a stored DDL.
+            CreateMaterializedViewStatement reanalyzed = parseMvDdl(incrementalMvDdl("mv_range_legacy", ""));
+            reanalyzed.setDistributionDesc(new RangeDistributionDesc());
+            Analyzer.analyze(reanalyzed, connectContext);
+            assertTrue(reanalyzed.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // A repeated sort key column would persist duplicate positions into the index meta.
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            SemanticException duplicate = assertThrows(SemanticException.class,
+                    () -> analyzeMvDdl(incrementalMvDdl("mv_sort_key_dup",
+                            "DISTRIBUTED BY HASH(id) BUCKETS 3 ", "ORDER BY (id, id) ")),
+                    "a repeated sort key column must be rejected");
+            assertTrue(duplicate.getMessage().contains("Duplicate sort key column"),
+                    "got: " + duplicate.getMessage());
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
+        }
+    }
+
+    private void assertIndependentSortKey(String mvName, String sortKeyColumn) {
+        MaterializedView mv = getMv("test", mvName);
+        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv),
+                "__ROW_ID__ must be the only key column");
+        assertEquals(0, mv.getBaseSchema().indexOf(mv.getColumn(IvmOpUtils.COLUMN_ROW_ID)),
+                "the key column must lead the schema");
+
+        List<Integer> sortKeyIdxes = sortKeyIdxes(mv);
+        assertNotNull(sortKeyIdxes, "ORDER BY must be stored as a sort key of its own");
+        assertEquals(List.of(sortKeyColumn), sortKeyIdxes.stream()
+                .map(idx -> mv.getBaseSchema().get(idx).getName()).collect(Collectors.toList()));
+    }
+
+    private static List<String> keyColumnNames(MaterializedView mv) {
+        return mv.getBaseSchema().stream().filter(Column::isKey).map(Column::getName)
+                .collect(Collectors.toList());
+    }
+
+    private static List<Integer> sortKeyIdxes(MaterializedView mv) {
+        return mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getSortKeyIdxes();
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     /**
@@ -1327,8 +1484,16 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     private static String incrementalMvDdl(String name, String distributionClause) {
+        return incrementalMvDdl(name, distributionClause, "ORDER BY (id) ");
+    }
+
+    /**
+     * An omitted distribution clause selects range distribution when {@code enable_range_distribution} is on,
+     * and a range-distributed incremental mv rejects {@code ORDER BY}, so those callers pass none.
+     */
+    private static String incrementalMvDdl(String name, String distributionClause, String orderByClause) {
         return "CREATE MATERIALIZED VIEW " + name + " " + distributionClause
-                + "REFRESH DEFERRED MANUAL ORDER BY (id) "
+                + "REFRESH DEFERRED MANUAL " + orderByClause
                 + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
                 + "AS SELECT SUM(c2) AS sm, id, c1, AVG(c2) AS av "
                 + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";

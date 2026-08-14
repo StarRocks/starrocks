@@ -247,6 +247,9 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | SubmitTaskTime | タスクの送信にかかった時間。 |
 | PeakIOTasks | IOタスクのピーク数。 |
 | PeakScanTaskQueueSize | IOタスクキューのピークサイズ。 |
+| RuntimeFilterEvalTime | Parquetリーダー内でデコード済みの行に対してJoin Runtime Filterを評価するのにかかった時間。 |
+| RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
+| RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
 
 ### エクスチェンジオペレーター
 

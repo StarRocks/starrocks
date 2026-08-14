@@ -1264,6 +1264,9 @@ public class DatabaseTransactionMgr {
         try {
             transactionState.writeLock();
             try {
+                // Fold in the stats the BEs reported through their publish tasks before snapshotting,
+                // so the finishing thread is the only writer of the commit infos (see issue #77595).
+                transactionState.applyPublishTaskTabletStats();
                 copiedState = new TransactionState(transactionState);
                 boolean hasError = false;
                 Set<Long> droppedTableIds = Sets.newHashSet();
@@ -2400,6 +2403,9 @@ public class DatabaseTransactionMgr {
         try {
             transactionState.writeLock();
             try {
+                // See the sibling call in finishTransaction(): merge the publish tasks' reported stats
+                // here, under the txn write lock, so nothing mutates the commit infos while we copy.
+                transactionState.applyPublishTaskTabletStats();
                 copiedState = new TransactionState(transactionState);
 
                 finishSpan.addEvent("txnmgr_lock");

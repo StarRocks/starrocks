@@ -254,6 +254,8 @@ private:
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                       LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
+    Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
+                      RowsetUpdateState& state, LakePrimaryIndex& index, DeletesMap* new_deletes);
 
     // Performs condition-based merge update using parallel chunk-level execution for segments
     // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values

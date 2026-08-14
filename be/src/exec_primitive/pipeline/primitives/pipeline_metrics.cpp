@@ -14,6 +14,7 @@
 
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 
+#include <algorithm>
 #include <numeric>
 #include <utility>
 
@@ -76,12 +77,45 @@ IntCounter* QueryTypeTimeMetric::counter(TQueryType::type query_type) {
 // Metrics.
 // ------------------------------------------------------------------------------------
 
+void ScanThreadPoolMetrics::register_all_metrics(MetricRegistry* registry, const std::string& prefix) {
+    registry->register_metric(prefix + "expected_worker_threads", &expected_worker_threads);
+    registry->register_metric(prefix + "worker_threads", &worker_threads);
+    registry->register_hook(prefix + "threadpool_metrics", [this] { _update(); });
+}
+
+void ScanThreadPoolMetrics::monitor(const void* key, Sampler sampler) {
+    std::lock_guard guard(_mutex);
+    _samplers.emplace_back(key, std::move(sampler));
+}
+
+void ScanThreadPoolMetrics::unmonitor(const void* key) {
+    std::lock_guard guard(_mutex);
+    auto it = std::find_if(_samplers.begin(), _samplers.end(), [key](const auto& e) { return e.first == key; });
+    if (it != _samplers.end()) {
+        _samplers.erase(it);
+    }
+}
+
+void ScanThreadPoolMetrics::_update() {
+    std::lock_guard guard(_mutex);
+    uint64_t total_expected = 0;
+    uint64_t total_alive = 0;
+    for (const auto& [_, sampler] : _samplers) {
+        const Sample sample = sampler();
+        total_expected += sample.expected_threads;
+        total_alive += sample.alive_threads;
+    }
+    expected_worker_threads.set_value(total_expected);
+    worker_threads.set_value(total_alive);
+}
+
 void ScanExecutorMetrics::register_all_metrics(MetricRegistry* registry, const std::string& prefix) {
     const std::string base_name = "pipe_" + prefix + "_";
     execution_time.register_metrics(registry, base_name + "execution_time");
     registry->register_metric(base_name + "finished_tasks", &finished_tasks);
     registry->register_metric(base_name + "running_tasks", &running_tasks);
     registry->register_metric(base_name + "pending_tasks", &pending_tasks);
+    thread_pool.register_all_metrics(registry, base_name);
 }
 
 void ThreadPoolMetrics::register_all_metrics(MetricRegistry* registry, const std::string& prefix) {

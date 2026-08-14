@@ -1005,6 +1005,12 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
         for (const auto& f : op.dels_meta()) {
             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
         }
+        // delete pre-built tombstone sstables (empty name = del file had no sstable)
+        for (const auto& f : op.del_ssts()) {
+            if (!f.name().empty()) {
+                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
+            }
+        }
     }
     if (log.has_op_compaction()) {
         const auto& op = log.op_compaction();

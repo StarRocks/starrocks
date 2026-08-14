@@ -1201,7 +1201,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
                 if (!tabletStats.isEmpty()) {
-                    partitionCommitInfo.getTabletStats().putAll(tabletStats);
+                    partitionCommitInfo.putAllTabletStats(tabletStats);
                 }
             }
             return true;
