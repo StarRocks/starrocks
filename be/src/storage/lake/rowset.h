@@ -328,6 +328,12 @@ private:
     // default is 0 means every segment will be used.
     // only used for compaction
     size_t _compaction_segment_limit;
+    // Guards _held_segments: the column-group pass loop is single-threaded, but range-split
+    // parallel compaction may share one Rowset instance across subtasks.
+    std::mutex _held_segments_mutex;
+    // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
+    // Rowset instance, which for compaction is the whole task.
+    std::vector<SegmentPtr> _held_segments;
     // Segment range for large rowset split compaction.
     // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
     // Default is 0, meaning all segments are used.

@@ -81,7 +81,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // when the column data below is not.
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                  .fill_metadata_cache = true};
+                                  .fill_metadata_cache = true,
+                                  .hold_segments = config::lake_compaction_hold_input_segments};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction. TabletReader requires
@@ -263,7 +264,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // (TabletManager::load_segment always probes the metacache but only inserts when asked).
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = true};
+                                   .fill_metadata_cache = true,
+                                   .hold_segments = config::lake_compaction_hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
