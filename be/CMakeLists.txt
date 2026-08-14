@@ -192,6 +192,7 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_GLIBC_COMPAT "Build starrocks_be with the glibc compatibility shim, so it runs on hosts with an older glibc than the build image's" OFF)
 option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
 option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
@@ -577,11 +578,23 @@ set(STARROCKS_LINK_LIBS
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
-    Storage
-    # Connectors depend on the format libs and thirdparty archives below; keep ahead.
+    # Concrete data sinks are PRIVATE dependencies of Exec. Keep them in the
+    # main link list ahead of connectors, Storage, format, and thirdparty
+    # provider archives so one-pass static linkers see their unresolved
+    # references first.
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkDictionaryCache
+    DataSinkTablet
+    DataSinkFile
+    # ConnectorLake depends on Storage, while connectors also depend on the
+    # format libs and thirdparty archives below; keep them ahead of those
+    # dependencies.
     ${WL_START_GROUP}
     ${DIRECT_CONNECTOR_LINK_LIBS}
     ${WL_END_GROUP}
+    Storage
     # The concrete format libraries must be linked ahead of the thirdparty
     # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
     # the Formats aggregate lets CMake append its concrete members after that
@@ -918,10 +931,12 @@ set (TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+# Several benches assert with gtest macros, so benchmarks need gtest just like tests do.
 set (BENCH_LINK_LIBS
     ${STARROCKS_LINK_LIBS}
     ${WL_START_GROUP}
     ${DIRECT_CONNECTOR_LINK_LIBS}
+    gtest
     ${WL_END_GROUP}
 )
 
@@ -1013,6 +1028,7 @@ add_subdirectory(${SRC_DIR}/exec_primitive)
 add_subdirectory(${SRC_DIR}/connector_primitive)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/module)
+add_subdirectory(${SRC_DIR}/data_sink)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/schema_scanner)
 add_subdirectory(${SRC_DIR}/exprs)

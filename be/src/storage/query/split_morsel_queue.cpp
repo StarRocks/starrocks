@@ -15,13 +15,20 @@
 #include "storage/query/split_morsel_queue.h"
 
 #include <algorithm>
+#include <iterator>
+#include <limits>
 #include <memory>
+#include <optional>
 
+#include "common/config_lake_fwd.h"
 #include "storage/chunk_helper.h"
+#include "storage/full_sort_key_codec.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/query/split_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowset.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
@@ -34,8 +41,10 @@ namespace {
 
 class SplitMorselQueueBuilderBase : public MorselQueueBuilder {
 public:
-    SplitMorselQueueBuilderBase(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
+    SplitMorselQueueBuilderBase(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows,
+                                bool has_more_scan_ranges = false)
             : _morsels(std::move(morsels)),
+              _has_more_scan_ranges(has_more_scan_ranges),
               _degree_of_parallelism(degree_of_parallelism),
               _splitted_scan_rows(splitted_scan_rows) {}
     ~SplitMorselQueueBuilderBase() override = default;
@@ -107,6 +116,120 @@ protected:
         return queue;
     }
 };
+
+class LakePreparedPhysicalSplitMorselQueueBuilder final : public SplitMorselQueueBuilderBase {
+public:
+    LakePreparedPhysicalSplitMorselQueueBuilder(Morsels&& morsels, bool has_more_scan_ranges,
+                                                size_t degree_of_parallelism, int64_t splitted_scan_rows)
+            : SplitMorselQueueBuilderBase(std::move(morsels), degree_of_parallelism, splitted_scan_rows,
+                                          has_more_scan_ranges) {}
+    ~LakePreparedPhysicalSplitMorselQueueBuilder() override = default;
+
+    bool can_uniform_distribute() const override { return true; }
+
+    StatusOr<MorselQueuePtr> build_from_morsels(Morsels&& morsels) const override {
+        return build_split_queue(std::move(morsels));
+    }
+
+protected:
+    StatusOr<MorselQueuePtr> build_split_queue(Morsels&& morsels) const override {
+        MorselQueuePtr queue = std::make_unique<LakePreparedPhysicalSplitMorselQueue>(
+                std::move(morsels), has_more_scan_ranges(), splitted_scan_rows(), max_degree_of_parallelism());
+        apply_flags(queue.get());
+        return queue;
+    }
+};
+
+// A segment's short-key-index encoding "signature": the encoding version plus the ordered sort-key
+// column unique-ids and their logical types. Two segments encode byte-compatible index keys iff their
+// signatures are equal. CHAR declared width is intentionally excluded: CHAR is variable-length in the
+// full sort key codec, so a width-only difference does not change the encoded bytes.
+struct SegmentEncodingSignature {
+    bool is_full_key = false;
+    std::vector<int32_t> sort_key_uids;
+    std::vector<int32_t> sort_key_types;
+
+    bool operator==(const SegmentEncodingSignature& rhs) const {
+        return is_full_key == rhs.is_full_key && sort_key_uids == rhs.sort_key_uids &&
+               sort_key_types == rhs.sort_key_types;
+    }
+    bool operator!=(const SegmentEncodingSignature& rhs) const { return !(*this == rhs); }
+};
+
+enum class TabletEncodingDecision { UNIFORM_LEGACY, UNIFORM_FULL_KEY, MIXED };
+
+// Decide, up front and BEFORE any merged SegmentGroup binary search, whether every nonempty segment
+// that will receive the logical-split boundaries shares one short-key-index encoding. The raw index
+// boundaries built from the source group are applied to EVERY scanned segment of the tablet, so a
+// single mismatched byte comparison is already wrong; hence the check spans all rowsets/segments, not
+// just the source group. Returns MIXED on any disagreement, in which case the tablet must not be split.
+//
+// The full-key boundaries are NOT encoded with the segments' (possibly historical) schema: they are
+// encoded with the CURRENT |tablet_schema| via ChunkHelper::get_full_sort_key_schema (see
+// LogicalSplitMorselQueue::_init_tablet), then compared byte-for-byte against every segment's raw index.
+// Under metadata-only fast schema evolution the current schema can diverge from the schema the segments
+// were written with while the segments stay uniformly full-key: e.g. a sort-key type change INT->BIGINT
+// widens the encoded key and shifts every bracket (dropped rows), and an unencodable change INT->DOUBLE
+// has no registered key coder and would crash the boundary encode. So, on a uniform full-key tablet, the
+// current sort-key signature must ALSO equal the segments' signature AND be full-key encodable; if either
+// fails, report MIXED so the tablet takes the unsplit fallback.
+StatusOr<TabletEncodingDecision> decide_tablet_encoding(const TabletSchemaCSPtr& tablet_schema,
+                                                        const std::vector<BaseRowsetSharedPtr>& rowsets) {
+    std::optional<SegmentEncodingSignature> ref;
+    for (const auto& rowset : rowsets) {
+        RETURN_IF_ERROR(rowset->load());
+        for (const auto& segment : rowset->get_non_null_segments()) {
+            if (segment == nullptr || segment->num_rows() == 0) {
+                continue;
+            }
+            RETURN_IF_ERROR(segment->load_index());
+
+            SegmentEncodingSignature sig;
+            // Read gate: full-key only when the read config is on AND the full page is present, loads,
+            // and validates (encoding/geometry/arity/byte-monotone order). Read off, or a
+            // corrupt/misordered full page, degrades this segment to legacy here -> UNIFORM_LEGACY
+            // morsels (go-forward rollback / data-safe fallback). A true return also publishes the
+            // full decoder, which _create_segment_group then binds into the SegmentGroup.
+            sig.is_full_key = segment->use_full_sort_key_index();
+            const auto& segment_schema = segment->tablet_schema();
+            for (auto idx : segment_schema.sort_key_idxes()) {
+                const auto& column = segment_schema.column(idx);
+                sig.sort_key_uids.push_back(static_cast<int32_t>(column.unique_id()));
+                sig.sort_key_types.push_back(static_cast<int32_t>(column.type()));
+            }
+
+            if (!ref.has_value()) {
+                ref = std::move(sig);
+            } else if (ref.value() != sig) {
+                return TabletEncodingDecision::MIXED;
+            }
+        }
+    }
+
+    if (!ref.has_value()) {
+        // No nonempty segment will receive the boundaries; the tablet is effectively empty and the
+        // caller skips it. The value is irrelevant, so report legacy (the unchanged path).
+        return TabletEncodingDecision::UNIFORM_LEGACY;
+    }
+    if (!ref->is_full_key) {
+        return TabletEncodingDecision::UNIFORM_LEGACY;
+    }
+
+    // Uniform full-key segments. The boundaries are encoded with the CURRENT tablet schema, so it must
+    // match the segments' signature and be full-key encodable; otherwise fall back to unsplit (MIXED).
+    SegmentEncodingSignature current_sig;
+    current_sig.is_full_key = true;
+    for (auto idx : tablet_schema->sort_key_idxes()) {
+        const auto& column = tablet_schema->column(idx);
+        current_sig.sort_key_uids.push_back(static_cast<int32_t>(column.unique_id()));
+        current_sig.sort_key_types.push_back(static_cast<int32_t>(column.type()));
+    }
+    if (current_sig != ref.value() ||
+        !is_full_sort_key_encodable(*tablet_schema->schema(), tablet_schema->sort_key_idxes())) {
+        return TabletEncodingDecision::MIXED;
+    }
+    return TabletEncodingDecision::UNIFORM_FULL_KEY;
+}
 
 } // namespace
 
@@ -223,41 +346,6 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     return morsel;
 }
 
-rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    uint32_t start_block_id;
-    auto start_iter = segment->lower_bound(index_key);
-    if (start_iter.valid()) {
-        // Because previous block may contain this key, so we should set rowid to
-        // last block's first row.
-        start_block_id = start_iter.ordinal();
-        if (start_block_id > 0) {
-            start_block_id--;
-        }
-    } else {
-        // When we don't find a valid index item, which means all short key is
-        // smaller than input key, this means that this key may exist in the last
-        // row block. so we set the rowid to first row of last row block.
-        start_block_id = segment->last_block();
-    }
-
-    return start_block_id * segment->num_rows_per_block();
-}
-
-rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower,
-                                                       rowid_t end) const {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-
-    auto end_iter = segment->upper_bound(index_key);
-    if (end_iter.valid()) {
-        end = end_iter.ordinal() * segment->num_rows_per_block();
-    }
-
-    return end;
-}
-
 BaseRowset* PhysicalSplitMorselQueue::_cur_rowset() {
     // Boundary check to prevent out-of-bounds access when tablet has no rowsets
     if (_tablet_idx >= _tablet_rowsets.size()) {
@@ -367,6 +455,11 @@ Status PhysicalSplitMorselQueue::_init_segment() {
             return Status::OK();
         }
         RETURN_IF_ERROR(rowset->load());
+        // Prime the segment list so a transient load failure fails the query here instead of
+        // leaving the split iterator with a null _range that later crashes has_more(). Unlike
+        // get_segments(), get_segments_checked() surfaces the real load status (issue #75203).
+        auto segments_or = rowset->get_segments_checked();
+        RETURN_IF_ERROR(segments_or.status());
     }
 
     _num_segment_rest_rows = 0;
@@ -383,21 +476,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         _segment_scan_range.add(Range<>(0, segment->num_rows()));
     } else {
         RETURN_IF_ERROR(segment->load_index());
-        for (const auto& range : _tablet_seek_ranges) {
-            rowid_t lower_rowid = 0;
-            rowid_t upper_rowid = segment->num_rows();
-
-            if (!range.upper().empty()) {
-                upper_rowid =
-                        _upper_bound_ordinal(segment, range.upper(), !range.inclusive_upper(), segment->num_rows());
-            }
-            if (!range.lower().empty() && upper_rowid > 0) {
-                lower_rowid = _lower_bound_ordinal(segment, range.lower(), range.inclusive_lower());
-            }
-            if (lower_rowid <= upper_rowid) {
-                _segment_scan_range.add(Range{lower_rowid, upper_rowid});
-            }
-        }
+        ASSIGN_OR_RETURN(_segment_scan_range, block_aligned_rowid_range_from_seek_ranges(segment, _tablet_seek_ranges));
     }
 
     _segment_range_iter = _segment_scan_range.new_iterator();
@@ -446,14 +525,30 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     }
 
     // When it hasn't initialized any tablet,
-    // or the current tablet doesn't contain any segment,
+    // or the current tablet doesn't contain any segment (and is not a pending mixed-encoding tablet),
     // or all the key ranges of the current tablet has been finished,
     // we should pick up the next tablet and init it.
-    while (!_has_init_any_tablet || _segment_group == nullptr || _cur_tablet_finished()) {
+    while (!_has_init_any_tablet || (_segment_group == nullptr && !_tablet_unsplit) || _cur_tablet_finished()) {
         if (!_next_tablet()) {
             return nullptr;
         }
         RETURN_IF_ERROR(_init_tablet());
+    }
+
+    // Mixed-encoding tablet: the raw index boundaries cannot be applied consistently across its
+    // segments, so it cannot be logically split. Emit exactly ONE ordinary ScanMorsel (no
+    // ShortKeyRangesOption, so the normal per-segment SeekTuple key ranges stay active), account for
+    // the single split, and advance past this tablet on the next try_get.
+    if (_tablet_unsplit) {
+        auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
+        auto morsel = std::make_unique<ScanMorsel>(scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()));
+        morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
+        _inc_split(true);
+        // Clear the flag so the next try_get's loop condition advances to the next tablet; no other
+        // morsel is produced for this tablet.
+        _tablet_unsplit = false;
+        _is_first_split_of_tablet = false;
+        return morsel;
     }
 
     // Take sub key ranges from each key range, until the number of taken blocks is greater than
@@ -567,7 +662,10 @@ bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const
     // Empty short key of start ShortKeyOption means it is the first splitted key range,
     // so use start original short key to compare.
     if (lower->tuple_key != nullptr) {
-        lower_key_payload = lower->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+        lower_key_payload =
+                _use_full_sort_key
+                        ? lower->tuple_key->full_sort_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER)
+                        : lower->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
         lower_key = Slice(lower_key_payload);
     } else if (!lower->short_key.empty()) {
         lower_key = lower->short_key;
@@ -580,7 +678,10 @@ bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const
     // Empty short key of end ShortKeyOption means it is the last splitted key range,
     // so use end original short key to compare.
     if (upper->tuple_key != nullptr) {
-        upper_key_payload = upper->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
+        upper_key_payload =
+                _use_full_sort_key
+                        ? upper->tuple_key->full_sort_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER)
+                        : upper->tuple_key->short_key_encode(_short_key_schema->num_fields(), KEY_MINIMAL_MARKER);
         upper_key = Slice(upper_key_payload);
     } else if (!upper->short_key.empty()) {
         upper_key = upper->short_key;
@@ -594,36 +695,52 @@ bool LogicalSplitMorselQueue::_valid_range(const ShortKeyOptionPtr& lower, const
 }
 
 ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_lower() const {
+    ShortKeyOptionPtr option;
     // If it is the first splitted key range, the start point is the original start key.
     if (_next_lower_block_iter == _block_ranges_per_seek_range[_range_idx].first) {
         if (_tablet_seek_ranges.empty()) {
-            return std::make_unique<ShortKeyOption>();
+            option = std::make_unique<ShortKeyOption>();
         } else {
-            return std::make_unique<ShortKeyOption>(&_tablet_seek_ranges[_range_idx].lower(),
-                                                    _tablet_seek_ranges[_range_idx].inclusive_lower());
+            option = std::make_unique<ShortKeyOption>(&_tablet_seek_ranges[_range_idx].lower(),
+                                                      _tablet_seek_ranges[_range_idx].inclusive_lower());
         }
     } else {
         Slice short_key = *_next_lower_block_iter;
-        return std::make_unique<ShortKeyOption>(_short_key_schema, short_key, true);
+        option = std::make_unique<ShortKeyOption>(_short_key_schema, short_key, true);
     }
+    _pin_encoding(option.get());
+    return option;
 }
 
 ShortKeyOptionPtr LogicalSplitMorselQueue::_create_range_upper() const {
+    ShortKeyOptionPtr option;
     // If it is the last splitted key range, the end point is the original end key.
     if (_next_lower_block_iter == _block_ranges_per_seek_range[_range_idx].second) {
         if (_tablet_seek_ranges.empty()) {
-            return std::make_unique<ShortKeyOption>();
+            option = std::make_unique<ShortKeyOption>();
         } else {
-            return std::make_unique<ShortKeyOption>(&_tablet_seek_ranges[_range_idx].upper(),
-                                                    _tablet_seek_ranges[_range_idx].inclusive_upper());
+            option = std::make_unique<ShortKeyOption>(&_tablet_seek_ranges[_range_idx].upper(),
+                                                      _tablet_seek_ranges[_range_idx].inclusive_upper());
         }
     } else {
         Slice short_key = *_next_lower_block_iter;
-        return std::make_unique<ShortKeyOption>(_short_key_schema, short_key, false);
+        option = std::make_unique<ShortKeyOption>(_short_key_schema, short_key, false);
     }
+    _pin_encoding(option.get());
+    return option;
+}
+
+void LogicalSplitMorselQueue::_pin_encoding(ShortKeyOption* option) const {
+    // Pin the index type of the raw boundary bytes onto the option, so the Slice-overload consumer
+    // decodes them with the same scheme the producer used, independent of any later read-config flip.
+    option->use_full_sort_key = _use_full_sort_key;
 }
 
 bool LogicalSplitMorselQueue::_cur_tablet_finished() const {
+    // A mixed-encoding tablet still owes its single unsplit morsel, so it is not finished yet.
+    if (_tablet_unsplit) {
+        return false;
+    }
     return _range_idx >= _block_ranges_per_seek_range.size();
 }
 
@@ -674,9 +791,15 @@ StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(BaseRow
 
     for (const auto& segment : segments) {
         RETURN_IF_ERROR(segment->load_index());
+        if (_use_full_sort_key && !segment->ensure_full_sort_key_index_usable()) {
+            // decide_tablet_encoding only pins UNIFORM_FULL_KEY after every scanned segment reported a
+            // usable full page, so this should not happen; if it does, fail rather than build the group
+            // over a legacy decoder that would misread the full-key boundaries.
+            return Status::InternalError("full sort key index page is unexpectedly unusable for logical split");
+        }
     }
 
-    return std::make_unique<SegmentGroup>(std::move(segments));
+    return std::make_unique<SegmentGroup>(std::move(segments), _use_full_sort_key);
 }
 
 bool LogicalSplitMorselQueue::_next_tablet() {
@@ -693,6 +816,8 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     _largest_rowset = nullptr;
     _segment_group = nullptr;
     _short_key_schema = nullptr;
+    _use_full_sort_key = false;
+    _tablet_unsplit = false;
     _block_ranges_per_seek_range.clear();
     _num_rest_blocks_per_seek_range.clear();
     _range_idx = 0;
@@ -720,10 +845,26 @@ Status LogicalSplitMorselQueue::_init_tablet() {
         return Status::OK();
     }
 
+    // Decide the per-tablet short-key-index encoding across EVERY nonempty segment that will receive
+    // the boundaries, BEFORE any merged SegmentGroup binary search. A mixed tablet cannot be logically
+    // split: fall back to a single unsplit morsel (handled in try_get). A mismatched raw byte
+    // comparison would silently drop rows, so this must never be approximated.
+    ASSIGN_OR_RETURN(auto encoding, decide_tablet_encoding(_tablet_schema, _tablet_rowsets[_tablet_idx]));
+    if (encoding == TabletEncodingDecision::MIXED) {
+        _tablet_unsplit = true;
+        LOG(INFO) << "LogicalSplitMorselQueue: tablet " << _tablets[_tablet_idx]->tablet_id()
+                  << " mixes short key index encodings across segments; falling back to an unsplit scan "
+                     "for this tablet.";
+        return Status::OK();
+    }
+    _use_full_sort_key = encoding == TabletEncodingDecision::UNIFORM_FULL_KEY;
+
     RETURN_IF_ERROR(_largest_rowset->load());
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
-    _short_key_schema = std::make_shared<Schema>(ChunkHelper::get_short_key_schema(_tablet_schema));
+    _short_key_schema = _use_full_sort_key
+                                ? std::make_shared<Schema>(ChunkHelper::get_full_sort_key_schema(_tablet_schema))
+                                : std::make_shared<Schema>(ChunkHelper::get_short_key_schema(_tablet_schema));
     const auto tablet_num_rows = std::max<int64_t>({1, static_cast<int64_t>(_tablets[_tablet_idx]->num_rows()),
                                                     _largest_rowset->num_rows(), _segment_group->num_rows()});
     _sample_splitted_scan_blocks = _splitted_scan_rows * _segment_group->num_blocks() / tablet_num_rows;
@@ -758,8 +899,10 @@ Status LogicalSplitMorselQueue::_init_tablet() {
 }
 
 ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_lower_bound_ordinal(const SeekTuple& key, bool lower) const {
-    std::string index_key =
-            key.short_key_encode(_segment_group->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    const uint8_t marker = lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER;
+    std::string index_key = _use_full_sort_key
+                                    ? key.full_sort_key_encode(_segment_group->num_sort_key_columns(), marker)
+                                    : key.short_key_encode(_segment_group->num_short_keys(), marker);
 
     auto start_iter = _segment_group->lower_bound(index_key);
     if (start_iter.valid()) {
@@ -779,8 +922,10 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_lower_bound_ordinal(const S
 }
 
 ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const SeekTuple& key, bool lower) const {
-    std::string index_key =
-            key.short_key_encode(_segment_group->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    const uint8_t marker = lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER;
+    std::string index_key = _use_full_sort_key
+                                    ? key.full_sort_key_encode(_segment_group->num_sort_key_columns(), marker)
+                                    : key.short_key_encode(_segment_group->num_short_keys(), marker);
 
     auto end_iter = _segment_group->upper_bound(index_key);
     return end_iter;
@@ -788,6 +933,219 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const S
 
 bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     return _has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished();
+}
+
+LakePreparedPhysicalSplitMorselQueue::LakePreparedPhysicalSplitMorselQueue(Morsels&& morsels, bool has_more_scan_ranges,
+                                                                           int64_t splitted_scan_rows,
+                                                                           size_t degree_of_parallelism)
+        : _splitted_scan_rows(splitted_scan_rows),
+          _degree_of_parallelism(degree_of_parallelism > 0 ? degree_of_parallelism : morsels.size()) {
+    (void)append_morsels(std::move(morsels));
+    _num_morsels = _size.load(std::memory_order_relaxed);
+    _has_more_scan_ranges = has_more_scan_ranges;
+}
+
+bool LakePreparedPhysicalSplitMorselQueue::empty() const {
+    std::lock_guard<std::mutex> guard(_mutex);
+    return _unget_morsel == nullptr && _queue.empty() && !has_pre_refinement_candidate_locked();
+}
+
+StatusOr<bool> LakePreparedPhysicalSplitMorselQueue::ready_for_next() const {
+    std::lock_guard<std::mutex> guard(_mutex);
+    if (_unget_morsel != nullptr || !_queue.empty()) {
+        return true;
+    }
+    if (has_pre_refinement_candidate_locked()) {
+        return true;
+    }
+    return false;
+}
+
+StatusOr<MorselPtr> LakePreparedPhysicalSplitMorselQueue::try_get() {
+    std::lock_guard<std::mutex> guard(_mutex);
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
+    if (!_queue.empty()) {
+        _size -= 1;
+        MorselPtr morsel = std::move(_queue.front());
+        _queue.pop_front();
+        enter_ticket(down_cast<ScanMorsel*>(morsel.get()));
+        return std::move(morsel);
+    }
+    return allocate_pre_refinement_coarse_split_locked();
+}
+
+void LakePreparedPhysicalSplitMorselQueue::unget(MorselPtr&& morsel) {
+    std::lock_guard<std::mutex> guard(_mutex);
+    _unget_morsel = std::move(morsel);
+}
+
+Status LakePreparedPhysicalSplitMorselQueue::append_morsels(Morsels&& morsels) {
+    std::lock_guard<std::mutex> guard(_mutex);
+    _size += morsels.size();
+    for (const auto& morsel : morsels) {
+        enqueue_pre_refinement_candidate_from_initial_coarse_locked(down_cast<ScanMorsel*>(morsel.get()));
+    }
+    _queue.insert(_queue.begin(), std::make_move_iterator(morsels.begin()), std::make_move_iterator(morsels.end()));
+    return Status::OK();
+}
+
+std::vector<TInternalScanRange*> LakePreparedPhysicalSplitMorselQueue::prepare_olap_scan_ranges() const {
+    std::lock_guard<std::mutex> guard(_mutex);
+    std::vector<TInternalScanRange*> scan_ranges;
+    scan_ranges.reserve(_queue.size());
+    for (const auto& morsel : _queue) {
+        scan_ranges.emplace_back(morsel->get_olap_scan_range());
+    }
+    return scan_ranges;
+}
+
+void LakePreparedPhysicalSplitMorselQueue::enter_ticket(ScanMorsel* morsel) {
+    if (_ticket_checker != nullptr && morsel->has_owner_id() && !morsel->is_ticket_checker_entered()) {
+        morsel->set_ticket_checker_entered(true);
+        _ticket_checker->enter(morsel->owner_id(), morsel->is_last_split());
+    }
+}
+
+LakePreparedPhysicalSplitMorselQueue::PreRefinementCandidateState
+LakePreparedPhysicalSplitMorselQueue::pre_refinement_candidate_state(const PreRefinementCandidate& candidate) const {
+    if (candidate.prepared_tablet_read_state == nullptr || candidate.prepared_segment_read_state == nullptr ||
+        candidate.rowset_index >= candidate.prepared_tablet_read_state->rowsets.size() ||
+        candidate.rowset_index >= candidate.prepared_tablet_read_state->rowset_segments.size() ||
+        candidate.segment_index >=
+                candidate.prepared_tablet_read_state->rowset_segments[candidate.rowset_index].size()) {
+        return PreRefinementCandidateState::DEAD;
+    }
+
+    const auto& rowset = candidate.prepared_tablet_read_state->rowsets[candidate.rowset_index];
+    const auto& segment =
+            candidate.prepared_tablet_read_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
+    if (rowset == nullptr || segment == nullptr) {
+        return PreRefinementCandidateState::DEAD;
+    }
+
+    const auto& segment_state = candidate.prepared_segment_read_state;
+    std::lock_guard<std::mutex> range_guard(segment_state->coarse_range_lock);
+    if (segment_state->coarse_split_allocation_closed || !segment_state->coarse_scan_range_iter.has_more()) {
+        return PreRefinementCandidateState::DEAD;
+    }
+    return PreRefinementCandidateState::LIVE;
+}
+
+bool LakePreparedPhysicalSplitMorselQueue::has_pre_refinement_candidate_locked() const {
+    while (!_pre_refinement_candidates.empty()) {
+        if (pre_refinement_candidate_state(_pre_refinement_candidates.front()) == PreRefinementCandidateState::LIVE) {
+            return true;
+        }
+        _pre_refinement_candidates.pop();
+    }
+    return false;
+}
+
+void LakePreparedPhysicalSplitMorselQueue::enqueue_pre_refinement_candidate_from_initial_coarse_locked(
+        ScanMorsel* morsel) {
+    // Sole functional switch for the pre-refinement path: when disabled, never register a candidate.
+    // With the candidate queue kept empty, has_pre_refinement_candidate_locked() / allocate / try_get /
+    // empty / ready_for_next all short-circuit naturally, so no other interface needs a guard.
+    if (!config::enable_lake_prepared_split_pre_refinement) {
+        return;
+    }
+    if (morsel == nullptr) {
+        return;
+    }
+    const auto* split_context = dynamic_cast<const LakeSplitContext*>(morsel->get_split_context());
+    if (split_context == nullptr ||
+        split_context->rowid_range_source != LakeSplitContext::RowidRangeSource::INITIAL_COARSE ||
+        split_context->prepared_tablet_read_state == nullptr || split_context->prepared_segment_read_state == nullptr) {
+        return;
+    }
+
+    PreRefinementCandidate candidate;
+    candidate.plan_node_id = morsel->get_plan_node_id();
+    candidate.scan_range = *morsel->get_scan_range();
+    candidate.prepared_tablet_read_state = split_context->prepared_tablet_read_state;
+    candidate.prepared_segment_read_state = split_context->prepared_segment_read_state;
+    candidate.rowset_index = split_context->rowset_index;
+    candidate.segment_index = split_context->segment_index;
+    if (pre_refinement_candidate_state(candidate) != PreRefinementCandidateState::LIVE) {
+        return;
+    }
+    _pre_refinement_candidates.push(std::move(candidate));
+}
+
+StatusOr<MorselPtr> LakePreparedPhysicalSplitMorselQueue::allocate_pre_refinement_coarse_split_locked() {
+    while (!_pre_refinement_candidates.empty()) {
+        auto candidate = std::move(_pre_refinement_candidates.front());
+        _pre_refinement_candidates.pop();
+        auto& tablet_state = candidate.prepared_tablet_read_state;
+        auto& segment_state = candidate.prepared_segment_read_state;
+        if (tablet_state == nullptr || segment_state == nullptr ||
+            candidate.rowset_index >= tablet_state->rowsets.size() ||
+            candidate.rowset_index >= tablet_state->rowset_segments.size() ||
+            candidate.segment_index >= tablet_state->rowset_segments[candidate.rowset_index].size()) {
+            continue;
+        }
+        auto& rowset = tablet_state->rowsets[candidate.rowset_index];
+        auto& segment = tablet_state->rowset_segments[candidate.rowset_index][candidate.segment_index];
+        if (rowset == nullptr || segment == nullptr) {
+            continue;
+        }
+
+        auto rowid_range = std::make_shared<RowidRangeOption>();
+        bool candidate_still_live = false;
+        {
+            std::lock_guard<std::mutex> range_guard(segment_state->coarse_range_lock);
+            if (segment_state->coarse_split_allocation_closed || !segment_state->coarse_scan_range_iter.has_more()) {
+                continue;
+            }
+
+            const auto rows_per_split = _splitted_scan_rows > 0 ? static_cast<size_t>(_splitted_scan_rows)
+                                                                : std::numeric_limits<size_t>::max();
+            size_t num_taken_rows = 0;
+            while (segment_state->coarse_scan_range_iter.has_more() && num_taken_rows < rows_per_split) {
+                const size_t remaining_rows = segment_state->coarse_scan_range_iter.remaining_rows();
+                size_t rows_to_take = std::min(rows_per_split - num_taken_rows, remaining_rows);
+                if (remaining_rows > rows_to_take && remaining_rows - rows_to_take < rows_per_split) {
+                    rows_to_take = remaining_rows;
+                }
+
+                SparseRange<> taken_range;
+                segment_state->coarse_scan_range_iter.next_range(rows_to_take, &taken_range);
+                if (taken_range.span_size() == 0) {
+                    break;
+                }
+                const bool is_first_split_of_segment = segment_state->allocated_coarse_ranges.span_size() == 0;
+                segment_state->allocated_coarse_ranges |= taken_range;
+                num_taken_rows += taken_range.span_size();
+                rowid_range->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(taken_range)),
+                                 is_first_split_of_segment);
+            }
+            candidate_still_live =
+                    !segment_state->coarse_split_allocation_closed && segment_state->coarse_scan_range_iter.has_more();
+        }
+
+        if (rowid_range->rowid_range_per_segment_per_rowset.empty()) {
+            continue;
+        }
+
+        auto split_context = std::make_unique<LakeSplitContext>();
+        split_context->rowid_range = std::move(rowid_range);
+        split_context->rowid_range_source = LakeSplitContext::RowidRangeSource::PRE_REFINEMENT_COARSE;
+        split_context->prepared_tablet_read_state = candidate.prepared_tablet_read_state;
+        split_context->prepared_segment_read_state = candidate.prepared_segment_read_state;
+        split_context->rowset_index = candidate.rowset_index;
+        split_context->segment_index = candidate.segment_index;
+
+        auto morsel = std::make_unique<ScanMorsel>(candidate.plan_node_id, candidate.scan_range);
+        morsel->set_split_context(std::move(split_context));
+        enter_ticket(morsel.get());
+        if (candidate_still_live) {
+            _pre_refinement_candidates.push(std::move(candidate));
+        }
+        return std::move(morsel);
+    }
+    return nullptr;
 }
 
 MorselQueueBuilderPtr make_physical_split_morsel_queue_builder(Morsels&& morsels, int64_t degree_of_parallelism,
@@ -800,6 +1158,15 @@ MorselQueueBuilderPtr make_logical_split_morsel_queue_builder(Morsels&& morsels,
                                                               int64_t splitted_scan_rows) {
     return std::make_unique<LogicalSplitMorselQueueBuilder>(std::move(morsels), degree_of_parallelism,
                                                             splitted_scan_rows);
+}
+
+MorselQueueBuilderPtr make_lake_prepared_physical_split_morsel_queue_builder(Morsels&& morsels,
+                                                                             bool has_more_scan_ranges,
+                                                                             size_t max_degree_of_parallelism,
+                                                                             int64_t splitted_scan_rows) {
+    const size_t degree_of_parallelism = max_degree_of_parallelism > 0 ? max_degree_of_parallelism : morsels.size();
+    return std::make_unique<LakePreparedPhysicalSplitMorselQueueBuilder>(std::move(morsels), has_more_scan_ranges,
+                                                                         degree_of_parallelism, splitted_scan_rows);
 }
 
 } // namespace starrocks::pipeline

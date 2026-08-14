@@ -161,7 +161,7 @@ v3.1.4 以降、StarRocks 共有データクラスタで作成された主キー
 
 :::note
 
-共有データクラスタでは、主キーテーブルはクラウドネイティブ永続性インデックス（`persistent_index_type = CLOUD_NATIVE`）のみをサポートするようになりました。テーブルの作成または変更時に `persistent_index_type` を `LOCAL` に設定することはサポートされなくなりました。既に `LOCAL` 永続性インデックスを使用しているテーブルには影響しません。
+共有データクラスタでは、主キーテーブルはクラウドネイティブ永続性インデックス（`persistent_index_type = CLOUD_NATIVE`）のみをサポートするようになりました。テーブルの作成または変更時に `persistent_index_type` を `LOCAL` に設定することはサポートされなくなりました。以前 `LOCAL`（またはインメモリ）永続性インデックスで作成された既存のテーブルは、自動的にクラウドネイティブ永続性インデックスにアップグレードされます。
 
 :::
 
@@ -213,7 +213,7 @@ v3.0 以降、主キーテーブルはソートキーを主キーから分離し
 
 ## その他
 
-- 作成したテーブルにデータをロードするには、[ロードの概要](../../loading/Loading_intro.md)を参照して適切なロードオプションを選択できます。
+- 作成したテーブルにデータをロードするには、[ロードの概要](../../loading/loading_introduction/loading_introduction.mdx)を参照して適切なロードオプションを選択できます。
 - 主キーテーブルのデータを変更する必要がある場合は、[ロードを通じてデータを変更](../../loading/Load_to_Primary_Key_tables.md)するか、DML（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、および [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）を使用できます。
 - クエリアクセラレーションをさらに進めたい場合は、[クエリアクセラレーション](../../using_starrocks/async_mv/Materialized_view.md)を参照してください。
 - テーブルスキーマを変更する必要がある場合は、[ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)を参照してください。

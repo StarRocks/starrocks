@@ -94,6 +94,15 @@ protected:
     using Int32RF = ComposedRuntimeBloomFilter<TYPE_INT>;
 
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
+    StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id, int32_t filter_id);
+
+    // Wires runtime filter predicates the way HdfsScanner::_build_scanner_context does.
+    // No ScanConjunctsManager is needed: a predicate only needs its descriptor and the
+    // probe slot id, since ConnectorPredicateParser::column_id() returns the slot id.
+    void _setup_rf_predicates(HdfsScannerContext* ctx,
+                              const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes);
+    // Reads the reader to exhaustion, returning every value of the first INT column.
+    StatusOr<std::vector<int32_t>> _read_all_int_col0(const std::shared_ptr<FileReader>& file_reader);
 
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
     DataCacheOptions _mock_datacache_options();
@@ -348,7 +357,6 @@ protected:
     std::string _filter_row_group_path_3 =
             "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_update_rf.parquet";
 
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
@@ -389,8 +397,36 @@ protected:
 };
 
 StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id) {
+    return gen_runtime_filter_desc(slot_id, 1);
+}
+
+void FileReaderTest::_setup_rf_predicates(HdfsScannerContext* ctx,
+                                          const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes) {
+    ctx->predicates.runtime_filter_preds = RuntimeFilterPredicates(0 /*driver_sequence*/);
+    for (const auto& [desc, slot_id] : probes) {
+        ctx->predicates.runtime_filter_preds.add_predicate(_pool.add(new RuntimeFilterPredicate(desc, slot_id)));
+    }
+    ctx->format_scan_context.runtime_filter_preds = &ctx->predicates.runtime_filter_preds;
+    ctx->format_scan_context.driver_sequence = 0;
+}
+
+StatusOr<std::vector<int32_t>> FileReaderTest::_read_all_int_col0(const std::shared_ptr<FileReader>& file_reader) {
+    std::vector<int32_t> values;
+    while (true) {
+        auto chunk = _create_int_chunk();
+        Status st = file_reader->get_next(&chunk);
+        if (st.is_end_of_file()) break;
+        RETURN_IF_ERROR(st);
+        const Column* col = ColumnHelper::get_data_column(chunk->get_column_by_index(0).get());
+        const auto& data = down_cast<const Int32Column*>(col)->get_data();
+        values.insert(values.end(), data.begin(), data.end());
+    }
+    return values;
+}
+
+StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id, int32_t filter_id) {
     TRuntimeFilterDescription tRuntimeFilterDescription;
-    tRuntimeFilterDescription.__set_filter_id(1);
+    tRuntimeFilterDescription.__set_filter_id(filter_id);
     tRuntimeFilterDescription.__set_has_remote_targets(false);
     tRuntimeFilterDescription.__set_build_plan_node_id(1);
     tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
@@ -3856,6 +3892,144 @@ TEST_F(FileReaderTest, update_rf_and_filter_row_group) {
     chunk->reset();
     auto st = file_reader->get_next(&chunk);
     ASSERT_TRUE(st.is_end_of_file());
+}
+
+// ── Join runtime filter row-level pushdown (GroupReader stage 4.1) ──────────
+//
+// _filter_row_group_path_1 holds 2 row groups of 3 rows: col1 = 1..6, col2 = 11..66.
+// Every filter below spans [1,6], so row group statistics can never prune anything --
+// whatever rows disappear were dropped by the row-level probe, which is the point.
+
+// Probe column carries a conjunct entry, so it is classified active and the probe reads
+// it straight out of active_chunk.
+TEST_F(FileReaderTest, runtime_filter_pushdown_on_active_column) {
+    const SlotId slot_id = 0;
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    auto* rf = _pool.add(new Int32RF());
+    rf->get_membership_filter()->init(10);
+    rf->insert(1);
+    rf->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+    rf_desc->set_runtime_filter(rf);
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc, slot_id}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    // min/max spans the whole file: neither row group is pruned by statistics.
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+
+    // g_hdfs_stats is shared by every test in this file, so compare deltas.
+    const int64_t input_before = g_hdfs_stats.rf_cond_input_rows;
+    const int64_t output_before = g_hdfs_stats.rf_cond_output_rows;
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({1, 6}), values);
+    EXPECT_EQ(6, g_hdfs_stats.rf_cond_input_rows - input_before);
+    EXPECT_EQ(2, g_hdfs_stats.rf_cond_output_rows - output_before);
+}
+
+// Probe column has no conjunct, so classify_columns() leaves it lazy. The probe must
+// pull it on demand via materialize_slot(), and stage 5 must still emit correct values
+// for it through the _slot_cache triggered path.
+TEST_F(FileReaderTest, runtime_filter_pushdown_on_lazy_column) {
+    const SlotId probe_slot = 0; // col1: runtime filter target, no conjunct -> lazy
+    const SlotId other_slot = 1; // col2: carries the conjunct entry -> active
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    auto* rf = _pool.add(new Int32RF());
+    rf->get_membership_filter()->init(10);
+    rf->insert(1);
+    rf->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc, gen_runtime_filter_desc(probe_slot));
+    rf_desc->set_runtime_filter(rf);
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[other_slot],
+                                           _rf_probe_collector, tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc, probe_slot}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    ASSERT_EQ(file_reader->row_group_size(), 2);
+
+    const int64_t lazy_reads_before = g_hdfs_stats.parquet_lazy_read_count;
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({1, 6}), values);
+    // Proves the probe really went through materialize_slot() rather than finding the
+    // column already in active_chunk -- without this the test would also pass if col1
+    // had been classified active.
+    EXPECT_GT(g_hdfs_stats.parquet_lazy_read_count, lazy_reads_before);
+}
+
+// Nothing has arrived: any_filter_ready() must short-circuit before any column is
+// materialized, and every row must still be emitted.
+TEST_F(FileReaderTest, runtime_filter_pushdown_filter_not_arrived) {
+    const SlotId slot_id = 0;
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    // Descriptor registered but set_runtime_filter() never called.
+    ASSIGN_OR_ABORT(auto* rf_desc, gen_runtime_filter_desc(slot_id));
+    _rf_probe_collector->add_descriptor(rf_desc);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc, slot_id}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({1, 2, 3, 4, 5, 6}), values);
+}
+
+// Two filters probing the same column. The probe chunk keys columns by id and rejects
+// duplicates, so the column must be collected once even though both predicates run.
+TEST_F(FileReaderTest, runtime_filter_pushdown_two_filters_same_column) {
+    const SlotId slot_id = 0;
+    // Slot ids must match _create_int_chunk(), which keys columns positionally.
+    Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
+    auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
+
+    auto* rf1 = _pool.add(new Int32RF());
+    rf1->get_membership_filter()->init(10);
+    rf1->insert(1);
+    rf1->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc1, gen_runtime_filter_desc(slot_id, 1));
+    rf_desc1->set_runtime_filter(rf1);
+    _rf_probe_collector->add_descriptor(rf_desc1);
+
+    // Overlaps rf1 on 6 only, so the two together must keep exactly {6}.
+    auto* rf2 = _pool.add(new Int32RF());
+    rf2->get_membership_filter()->init(10);
+    rf2->insert(3);
+    rf2->insert(6);
+    ASSIGN_OR_ABORT(auto* rf_desc2, gen_runtime_filter_desc(slot_id, 2));
+    rf_desc2->set_runtime_filter(rf2);
+    _rf_probe_collector->add_descriptor(rf_desc2);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
+    _setup_rf_predicates(ctx, {{rf_desc1, slot_id}, {rf_desc2, slot_id}});
+
+    auto file_reader = _create_file_reader(_filter_row_group_path_1);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    ASSIGN_OR_ABORT(auto values, _read_all_int_col0(file_reader));
+    EXPECT_EQ(std::vector<int32_t>({6}), values);
 }
 
 TEST_F(FileReaderTest, filter_page_index_with_rf_has_null) {

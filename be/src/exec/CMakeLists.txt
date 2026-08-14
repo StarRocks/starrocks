@@ -236,9 +236,6 @@ set(EXEC_NON_PIPELINE_FILES
     select_node.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
-    write_combined_txn_log.cpp
-    local_file_writer.cpp
-    plain_text_builder.cpp
     agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
@@ -275,7 +272,6 @@ set(EXEC_NON_PIPELINE_FILES
     except_hash_set.cpp
     except_node.cpp
     parquet_writer.cpp
-    parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
     enforce_unique_row_locator_node.cpp
@@ -291,38 +287,13 @@ set(EXEC_NON_PIPELINE_FILES
     connector_scan_node.cpp
 )
 
-set(EXEC_DATA_SINK_FILES
-    data_sinks/arrow_result_writer.cpp
-    data_sinks/blackhole_table_sink.cpp
-    data_sinks/buffer_control_result_writer.cpp
-    data_sinks/customized_result_writer.cpp
+set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/data_sink_factory.cpp
     data_sinks/data_sink_pipeline.cpp
-    data_sinks/data_stream_sender.cpp
-    data_sinks/dictionary_cache_sink.cpp
-    data_sinks/export_sink.cpp
-    data_sinks/file_result_writer.cpp
-    data_sinks/hive_table_sink.cpp
-    data_sinks/http_result_writer.cpp
-    data_sinks/iceberg_table_sink.cpp
-    data_sinks/memory_scratch_sink.cpp
-    data_sinks/metadata_result_writer.cpp
-    data_sinks/multi_cast_data_stream_sink.cpp
-    data_sinks/multi_olap_table_sink.cpp
-    data_sinks/mysql_result_writer.cpp
-    data_sinks/mysql_table_sink.cpp
-    data_sinks/mysql_table_writer.cpp
-    data_sinks/range_router.cpp
-    data_sinks/range_tablet_sink_sender.cpp
-    data_sinks/result_sink.cpp
-    data_sinks/schema_table_sink.cpp
-    data_sinks/statistic_result_writer.cpp
-    data_sinks/table_function_table_sink.cpp
-    data_sinks/tablet_sink.cpp
-    data_sinks/tablet_sink_colocate_sender.cpp
-    data_sinks/tablet_sink_index_channel.cpp
-    data_sinks/tablet_sink_sender.cpp
-    data_sinks/variable_result_writer.cpp
+    data_sinks/pipeline_sink_builder.cpp
+    data_sinks/hive_table_sink_pipeline_builder.cpp
+    data_sinks/table_function_table_sink_pipeline_builder.cpp
+    data_sinks/iceberg_table_sink_pipeline_builder.cpp
 )
 
 set(EXEC_RUNTIME_COMPAT_FILES
@@ -330,12 +301,6 @@ set(EXEC_RUNTIME_COMPAT_FILES
     exec_env.cpp
     pipeline/pipeline_fragment_reporter.cpp
     runtime_compat/runtime_state_helper.cpp
-    stream_load/transaction_mgr.cpp
-    stream_load/stream_load_executor.cpp
-    batch_write/isomorphic_batch_write.cpp
-    batch_write/batch_write_mgr.cpp
-    batch_write/batch_write_util.cpp
-    batch_write/txn_state_cache.cpp
     runtime_filter_compat/runtime_filter_merger.cpp
     runtime_filter_compat/runtime_filter_port.cpp
     runtime_filter_compat/runtime_filter_rpc.cpp
@@ -404,7 +369,7 @@ target_link_libraries(ExecRuntime PUBLIC
 
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
-    ${EXEC_DATA_SINK_FILES}
+    ${EXEC_DATA_SINK_COMPAT_FILES}
     ${EXEC_RUNTIME_COMPAT_FILES}
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
@@ -412,4 +377,18 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
+target_link_libraries(Exec PRIVATE
+    DataSinkFile
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkDictionaryCache
+    DataSinkTablet
+    Formats
+    Platform
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+)

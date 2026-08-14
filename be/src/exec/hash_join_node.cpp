@@ -218,7 +218,6 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
-    auto workgroup = context->fragment_context()->workgroup();
     auto build_side_spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
@@ -229,7 +228,7 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
     HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
-                          _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
+                          _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->record_desc(), child(0)->record_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
                           _output_slots, _output_slots, context->degree_of_parallelism(), _distribution_mode,
                           _enable_late_materialization, _enable_partition_hash_join, _is_skew_join, _common_expr_ctxs,

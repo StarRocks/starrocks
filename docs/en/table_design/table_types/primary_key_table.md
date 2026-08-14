@@ -160,7 +160,7 @@ Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters suppo
 
 :::note
 
-In shared-data clusters, Primary Key tables now support only the cloud-native persistent index (`persistent_index_type = CLOUD_NATIVE`). Setting `persistent_index_type` to `LOCAL` is no longer supported when you create or alter a table. Existing tables that use a `LOCAL` persistent index are not affected.
+In shared-data clusters, Primary Key tables now support only the cloud-native persistent index (`persistent_index_type = CLOUD_NATIVE`). Setting `persistent_index_type` to `LOCAL` is no longer supported when you create or alter a table. Existing tables that were created with a `LOCAL` (or in-memory) persistent index are automatically upgraded to the cloud-native persistent index.
 
 :::
 
@@ -212,7 +212,7 @@ During data loading, the data is stored after being sorted according to the sort
 
 ## What's more
 
-- To load data into the table created, you can refer to [Loading overview](../../loading/Loading_intro.md) to choose an appropriate load options.
+- To load data into the table created, you can refer to [Loading overview](../../loading/loading_introduction/loading_introduction.mdx) to choose an appropriate load options.
 - If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md), [UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)).
 - If you want to further accelerate queries, you can refer to [Query Acceleration](../../using_starrocks/async_mv/Materialized_view.md).
 - If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).

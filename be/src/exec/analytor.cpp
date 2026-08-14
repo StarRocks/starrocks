@@ -18,6 +18,7 @@
 #include <ios>
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -66,16 +67,8 @@ Analytor::~Analytor() {
     }
 }
 
-Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                   const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
-        : _tnode(tnode),
-          _child_row_desc(child_row_desc),
-          _result_tuple_desc(result_tuple_desc),
-          _use_hash_based_partition(use_hash_based_partition) {
-    if (tnode.analytic_node.__isset.buffered_tuple_id) {
-        _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
-    }
-
+Analytor::Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
+        : _tnode(tnode), _result_tuple_desc(result_tuple_desc), _use_hash_based_partition(use_hash_based_partition) {
     if (!config::pipeline_analytic_enable_streaming_process) {
         _need_partition_materializing = true;
     }
@@ -206,6 +199,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
+
+    // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
+    // index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(analytic_node.analytic_functions[i].nodes[0].fn);
+    }
 
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
@@ -354,6 +354,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
+    // Fails prepare after the aggregate FunctionContexts have been created, so that the analytor is
+    // destroyed (and closed) in a half-prepared state.
+    FAIL_POINT_TRIGGER_EXECUTE(analytor_prepare_failed,
+                               { return Status::InternalError("injected failure in Analytor::prepare"); });
+
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
@@ -419,28 +424,17 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
-    if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
-        vector<TTupleId> tuple_ids;
-        tuple_ids.push_back(_child_row_desc.tuple_descriptors()[0]->id());
-        tuple_ids.push_back(_buffered_tuple_id);
-        RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
-        if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
-        }
-        if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
-        }
+    if (!_partition_ctxs.empty()) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
+    }
+    if (!_order_ctxs.empty()) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
     }
     if (_range_start_boundary.expr_ctx != nullptr) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_range_start_boundary.expr_ctx, state));
     }
     if (_range_end_boundary.expr_ctx != nullptr) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_range_end_boundary.expr_ctx, state));
-    }
-
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
     return _prepare_processing_mode(state, runtime_profile);
@@ -857,9 +851,13 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
             return;
         }
     } else if (_use_removable_cumulative_process || !_is_unbounded_preceding) {
-        // Both cumulative process or sliding process need to access position around range.start
+        // Both cumulative process or sliding process need to access position around range.start.
+        // For a frame starting at a FOLLOWING offset, range.start runs ahead of the current row, so the
+        // current row position is the one that must be kept, otherwise it would be removed along with the
+        // rows before it and turn negative.
         const auto frame = _get_frame_for_rows();
-        if (_get_global_position(frame.start - 1) <= remove_end_position) {
+        const int64_t referenced_position = std::min(_current_row_position, frame.start - 1);
+        if (_get_global_position(referenced_position) <= remove_end_position) {
             return;
         }
     } else {
@@ -1676,9 +1674,11 @@ void Analytor::_set_partition_size_for_function() {
 
 AnalytorPtr AnalytorFactory::create(int i) {
     if (!_analytors[i]) {
-        _analytors[i] =
-                std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc, _use_hash_based_partition);
+        _analytors[i] = std::make_shared<Analytor>(_tnode, _result_tuple_desc, _use_hash_based_partition);
     }
     return _analytors[i];
 }
+
+DEFINE_FAIL_POINT(analytor_prepare_failed);
+
 } // namespace starrocks

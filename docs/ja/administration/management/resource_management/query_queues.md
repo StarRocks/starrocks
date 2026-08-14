@@ -12,8 +12,8 @@ v2.5 から、StarRocks はクエリキューをサポートしています。�
 
 クエリキューには 2 つのバージョンがあります。
 
-- **Query Queue v1**: クエリの同時実行数、BE のメモリ使用率、および BE の CPU 使用率に基づいてキューイングをトリガーします。このトピックの既存のクエリキュー設定と動作は v1 に属します。v3.1.4 以降、v1 はリソースグループレベルでのクエリキュー設定をサポートしています。
-- **Query Queue v2**: v3.3 以降でサポートされています。v2 は各 Query が消費する BE リソースを見積もり、BE リソースを論理 slot として表現し、各 Query が必要とする slot 数に基づいてキューイングとスケジューリングを行います。
+- [**Query Queue v1**](#query-queue-v1): クエリの同時実行数、BE のメモリ使用率、および BE の CPU 使用率に基づいてキューイングをトリガーします。このトピックの既存のクエリキュー設定と動作は v1 に属します。v3.1.4 以降、v1 はリソースグループレベルでのクエリキュー設定をサポートしています。
+- [**Query Queue v2**](#query-queue-v2): v3.3 以降でサポートされています。v2 は各 Query が消費する BE リソースを見積もり、BE リソースを論理 slot として表現し、各 Query が必要とする slot 数に基づいてキューイングとスケジューリングを行います。
 
 ## Query Queue v1
 
@@ -74,13 +74,10 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 :::note
 
-これら 3 つのしきい値パラメータは Query Queue v1 にのみ適用されます。Query Queue v2 を有効にすると、`query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit`、および `query_queue_cpu_used_permille_limit` によるキューイングのトリガーはサポートされません。
+- Query Queue v2 を有効にすると、`query_queue_mem_used_pct_limit` および `query_queue_cpu_used_permille_limit` によるキューイングのトリガーはサポートされません。
+- デフォルトでは、BE は 1 秒間隔でリソース使用状況を FE に報告します。この間隔は、BE の設定項目 `report_resource_usage_interval_ms` を設定することで変更できます。
 
 :::
-
-> **NOTE**
->
-> デフォルトでは、BE は 1 秒間隔でリソース使用状況を FE に報告します。この間隔は、BE の設定項目 `report_resource_usage_interval_ms` を設定することで変更できます。
 
 #### リソースグループレベルのクエリキューのリソースしきい値を指定する
 
@@ -128,7 +125,7 @@ v3.1.4 以降、リソースグループを作成する際に、個別の同時�
 
 ## Query Queue v2
 
-v3.3 以降、StarRocks は Query Queue v2 をサポートしています。v2 は、クエリの同時実行数、BE のメモリ使用率、または BE の CPU 使用率の固定しきい値に基づいてキューイングをトリガーしません。代わりに、各 Query が必要とする BE リソースを見積もり、論理 slot に基づいてキューイングとスケジューリングを行います。
+v3.3 以降、StarRocks は Query Queue v2 をサポートしています。v2 は、クエリの同時実行数、BE のメモリ使用率、または BE の CPU 使用率の固定しきい値に基づいてキューイングをトリガーしません。代わりに、各 Query が必要とする BE リソースを見積もり、論理 slot に基づいてキューイングとスケジューリングを行います。利用可能なスロットが不足している場合、クエリは十分なスロットが解放されるまでキューで待機します。
 
 ### Query Queue v2 を設定する
 
@@ -138,25 +135,135 @@ Query Queue v2 は FE 設定項目で有効化および調整します。`enable
 | -------- | ---------- | ---- |
 | `enable_query_queue_v2` | `false` (v3.3 から v4.0)<br />`true` (v4.1 以降) | Query Queue v2 を有効にするかどうか。`true` に設定すると、StarRocks は v2 の slot ベースのクエリスケジューリングメカニズムを使用します。 |
 | `query_queue_v2_concurrency_level` | `4` | Query Queue v2 がクラスタ全体の slot 総数を計算するときに使用する論理同時実行レベル。値が大きいほど、システムが受け入れられる Query が増えます。これは相対的な調整パラメータです。 |
+| `query_queue_v2_concurrency_level` | `4` | Query Queue V2 がクラスター全体のスロット数を計算する際に使用する論理的な同時実行レベルです。この値を大きくすると、より多くのクエリを同時に受け入れられるようになります。この値は相対的なチューニングパラメータです。 |
+| `query_queue_slots_estimator_strategy` | `PBE` | キューイングされたクエリに対して使用するスロット推定方式を指定します。有効な値は `PBE`（Parallelism-Based、デフォルト）、`MBE`（Memory-Based Estimation）、`CBE`（CPU-Based Estimation）です。PBE は、スキャン並列度に基づいて必要なスロット数を推定し、その上限をワーカー数とします。OLAP テーブルでは、プルーニング後に残ったスキャンレンジ数を使用して推定するため、ごく小規模なクエリのみがワーカー数未満のスロット数になります。Connector や外部テーブルのスキャンは、単一スロットのクエリではなく、ワーカー数と同じ並列度を持つスキャンとして扱われます。MBE は、クエリのメモリコストを `query_queue_v2_mem_bytes_per_slot` で割ってスロット数を推定します。CBE は、実行プランの CPU コストを `query_queue_v2_cpu_costs_per_slot` で割ってスロット数を推定します。MBE および CBE で算出されたスロット数は、さらに `number_of_workers * max(1, pipeline_dop / 2)` を上限として制限されます。従来の `MAX` および `MIN` も前方互換性のため引き続き指定できますが、いずれもデフォルトの推定方式として扱われます。それ以外の値を指定した場合は、設定の検証時に拒否されます。 |
+| `query_queue_v2_schedule_strategy` | `SWRR` | Query Queue V2 が待機中のクエリを実行順に並べる際のスケジューリングポリシーを指定します。指定可能な値（大文字・小文字は区別されません）は、`SWRR`（Smooth Weighted Round Robin、デフォルト）と `SJF`（Short Job First + Aging）です。`SWRR` は、重み付けを考慮した公平なスケジューリングを行うため、混在したワークロードに適しています。`SJF` は、短時間で終了するクエリを優先しつつ、エージングによってスターベーションを防止します。認識できない値を指定した場合はエラーがログに記録され、デフォルトのスケジューリングポリシーが使用されます。この設定は Query Queue V2 が有効な場合にのみ有効であり、`query_queue_v2_concurrency_level` などの V2 の容量設定と組み合わせて動作します。 |
+| `query_queue_v2_mem_bytes_per_slot` | `0` | メモリベース推定方式（MBE）で使用する、1 スロットあたりのメモリ目標値です。`query_queue_slots_estimator_strategy` が `MBE` の場合、総スロット数はウェアハウス全体のメモリ予算から算出され、各クエリのスロット数はクエリ全体のメモリコストをこの値で割って推定されます。その後、`number_of_workers * max(1, pipeline_dop / 2)` を上限として制限されます。この値が 0 以下の場合、Query Queue V2 はワーカーあたりの平均コアメモリ容量を使用します。 |
+| `query_queue_v2_cpu_costs_per_slot` | `1000000000` | CPU ベース推定方式（CBE）で使用する、1 スロットあたりの CPU コストしきい値です。スケジューラは `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` によって必要スロット数を算出し、その結果を `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` の範囲に制限します。この値が 0 以下の場合は `1` として扱われます。この値を大きくすると、各クエリに割り当てられるスロット数が減少し、同時実行性が高くなります。逆に値を小さくすると、各クエリがより多くのスロットを使用するため、同時実行性は低くなります。 |
+| `query_queue_concurrency_limit` | `0` | BE ごとの同時実行クエリ数の上限を指定します。この設定は `0` より大きい値を指定した場合のみ有効です。`0` を指定すると、同時実行数に制限はありません。 |
 
 :::note
 
-`query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit`、および `query_queue_cpu_used_permille_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 を有効にすると、これらのパラメータは有効になりません。
+`query_queue_mem_used_pct_limit` および `query_queue_cpu_used_permille_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 を有効にすると、これらのパラメータは有効になりません。
 
 :::
 
-### リソース slot
+### リソース Slot
 
-Query Queue v2 は BE リソースを論理 slot として表現します。
+Query Queue v2 は BE リソースを論理 Slot として表現します。
 
-- **クラスタ全体の slot 総数**: StarRocks はクラスタ全体に対して論理的な slot 総数を設定します。この総数は BE 数と BE CPU Core 数に正の相関があり、`query_queue_v2_concurrency_level` の影響も受けます。
-- **Query が必要とする slot 数**: StarRocks は各 Query が必要とする slot 数を見積もります。見積もりは、統計情報、クエリの複雑度、Fragment 数、複雑なオペレーターの入力および出力データ量の推定、DOP などに基づきます。
+- **クラスタ全体の Slot 総数**: StarRocks はクラスタ全体に対して論理的な Slot 総数を設定します。この総数は BE 数と BE CPU Core 数に正の相関があり、`query_queue_v2_concurrency_level` の影響も受けます。
+- **Query が必要とする Slot 数**: StarRocks は各 Query が必要とする Slot 数を見積もります。見積もりは、統計情報、クエリの複雑度、Fragment 数、複雑なオペレーターの入力および出力データ量の推定、DOP などに基づきます。
 
 ### キューイングロジック
 
-ある Query が必要とする slot 数が現在の残り slot 数を超える場合、その Query はキューで待機します。Query Queue v2 は、必要な slot 数が少ない Query を優先的に満たすことで、小さいクエリが先にリソースを取得できるようにし、大きいクエリがキューの先頭に長時間とどまって後続の小さいクエリをブロックするヘッドオブラインブロッキング (Head-of-line blocking) を避けます。
+ある Query が必要とする Slot 数が現在の残り Slot 数を超える場合、その Query はキューで待機します。Query Queue v2 は、必要な Slot 数が少ない Query を優先的に満たすことで、小さいクエリが先にリソースを取得できるようにし、大きいクエリがキューの先頭に長時間とどまって後続の小さいクエリをブロックするヘッドオブラインブロッキング (Head-of-line blocking) を避けます。
 
-キューイングロジック全体は FE 上で完了します。これには、クラスタ全体の slot 総数の設定、Query が必要とする slot 数の見積もり、およびどの Query の slot 要求を優先的に満たすかの決定が含まれます。Query Queue v2 は、BE の実際のリソース使用状況に基づいてスケジューリングを行いません。
+キューイングロジック全体は FE 上で完了します。これには、クラスタ全体の Slot 総数の設定、Query が必要とする Slot 数の見積もり、およびどの Query の Slot 要求を優先的に満たすかの決定が含まれます。Query Queue v2 は、BE の実際のリソース使用状況に基づいてスケジューリングを行いません。
+
+### 推定方式を選択する
+
+#### PBE
+
+Parallel-Based Estimation（PBE）は、次のようなワークロードに適しています。
+
+- 一般的なレポートクエリ
+- ポイントルックアップと大規模クエリが混在するワークロード
+- コストモデルの詳細を意識せず運用したいユーザー
+- シンプルで予測しやすいキューイング動作を重視する DBA
+
+PBE を使用すると、次のような動作が期待できます。
+
+- プルーニング後のスキャン対象が少ないポイントルックアップや小規模クエリは、より少ないスロットを使用します。
+- 広範囲をスキャンするクエリは、より多くのスロットを使用します。
+- ピーク時でも、小規模クエリは実行リソースを確保しやすくなります。
+
+以下の例では、PBE を推定方式として設定します。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "PBE");
+```
+
+#### MBE
+
+Memory-Based Estimation（MBE）は、大規模 JOIN、大規模集約、高カーディナリティ集約など、メモリ負荷が高いワークロードに適しています。
+
+以下の例では、MBE を推定方式として設定し、各スロットに 2 GB のメモリを割り当てます。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "MBE");
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_mem_bytes_per_slot" = "2147483648");
+```
+
+MBE では、クエリ全体のメモリコストをこの値で割ってクエリごとのスロット数を算出し、ウェアハウス全体のメモリ予算をこの値で割って総スロット数を算出します。
+
+MBE のチューニングでは、次の点を参考にしてください。
+
+**症状: メモリは相変わらずすぐにいっぱいになってしまう**
+
+- **調整**: `query_queue_v2_concurrency_level` を小さくします。
+- **効果**: MBE が使用する総メモリ予算を直接減らします。
+
+**症状: キューが長すぎるが、BEメモリにはまだ空きがある**
+
+- **調整**: `query_queue_v2_concurrency_level` を大きくします。
+- **効果**: MBE が使用する総メモリ予算を直接増やします。
+
+**症状: `max_slots` の値が非常に小さく、整数の丸め誤差が目立つ**
+
+- **調整**: `query_queue_v2_mem_bytes_per_slot` を小さくします。
+- **効果**: メモリスロットの粒度が細かくなり、整数丸めによる誤差を軽減できます。
+
+#### CBE
+
+CPU-Based Estimation（CBE）は、CPU 集約型の SQL、複雑な式を含むクエリ、スキャン後の CPU 処理負荷が高いワークロードに適しています。
+
+以下の例では、CBE を推定方式として設定し、各スロットの CPU コストしきい値を `1000000000` に設定します。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "CBE");
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_cpu_costs_per_slot" = "1000000000");
+```
+
+**症状: CPU が頻繁にフル稼働状態になる**
+
+- **調整**: `query_queue_v2_cpu_costs_per_slot` を小さくします。
+- **効果**: 同じ CPU コストに対してより多くのスロットを割り当てるため、同時実行性が抑えられます。
+
+**症状: クエリの待ち行列は目立って長くなっているが、CPU にはまだ余裕がある**
+
+- **調整**: `query_queue_v2_cpu_costs_per_slot` を大きくします。
+- **効果**: 同じ CPU コストに対して必要スロット数が減るため、同時実行性が高くなります。
+
+### 同時実行容量を調整する
+
+全体の同時実行性のみを調整したい場合は、PBE、MBE、CBE を切り替える前に、まず総スロット容量を調整してください。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
+```
+
+推奨される調整手順は次のとおりです。
+
+1. まずデフォルト値 `4` を使用します。
+2. `remain_slots`、`max_slots`、`query_pending_length`、CPU 使用率、メモリ使用率、およびクエリレイテンシを監視します。
+3. リソースに余裕があるにもかかわらず待機クエリが多い場合は、`query_queue_v2_concurrency_level` を段階的に増やします。
+4. リソースが頻繁に飽和する、またはクエリ間のリソース競合が大きい場合は、`query_queue_v2_concurrency_level` を段階的に減らします。
+5. 一度に変更する値は 10%～25% 程度に留め、次の調整を行う前に少なくとも 1 回の業務ピーク時間帯の挙動を確認してください。
+
+**チューニングの優先順位**: まず `query_queue_v2_concurrency_level` を使用して全体の容量を調整してください。その後、必要に応じて MBE や PBE への切り替えを検討します。初期段階では複数のパラメータを同時に変更しないでください。どのパラメータが効果をもたらしたのか判断しにくくなります。
+
+#### フォールバック同時実行数上限
+
+`query_queue_concurrency_limit` はフォールバックとして機能する同時実行数の上限であり、PBE、MBE、および CBE のすべてに適用されます。Query Queue V2 は、まず現在の推定方式でクエリに必要なスロット数を算出し、十分なスロットがあるかを確認します。その後、現在実行中のクエリ数が `query_queue_concurrency_limit` に達しているかを確認します。
+
+デフォルト値 `0` は無制限を意味します。実行中のクエリ数に絶対的な上限を設けたい場合にのみ設定してください。
+
+```SQL
+ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
+```
+
+まず `query_queue_v2_concurrency_level` を使用してリソース容量を調整してください。`query_queue_concurrency_limit` は、同時に実行できるクエリ数を明示的に制限する必要がある場合にのみ使用してください。
 
 ## Monitor query queues
 
@@ -194,7 +301,7 @@ FE の監査ログファイル **fe.audit.log** を確認できます。フィ�
 
 ### Monitoring metrics
 
-[Monitor and Alert](../monitoring/Monitor_and_Alert.md) 機能を使用して、StarRocks のクエリキューのメトリクスを取得できます。次の FE メトリクスは、各 FE ノードの統計データから導出されます。
+[Monitor and Alert](../monitoring/monitoring.md) 機能を使用して、StarRocks のクエリキューのメトリクスを取得できます。次の FE メトリクスは、各 FE ノードの統計データから導出されます。
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |

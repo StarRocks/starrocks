@@ -47,17 +47,22 @@ Status TenAnnIndexBuilderProxy::init() {
         return Status::InvalidArgument("metric_type is needed because it's a critical common param");
     }
 
+    // Build-time cache fill is opt-in (enable_vector_index_cache_on_build, default off):
+    // the cache is sized for the query working set, so loads and compactions would
+    // otherwise evict indexes queries are using; TenANNReader::init_searcher fills it on
+    // demand instead. No index-type carve-out -- IVF-PQ honours the opt-in too, its
+    // inverted lists then staying resident until eviction. The null check is a guard, not
+    // policy: tenann's WriteIndex throws on a missing cache, failing the build outright.
+    auto* index_cache = tenann::GetGlobalIndexCache();
+    const bool write_index_cache = config::enable_vector_index_cache_on_build && index_cache != nullptr;
+
     auto meta_copy = meta;
-    if (meta.index_type() == tenann::IndexType::kFaissIvfPq && config::enable_vector_index_block_cache) {
-        meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = false;
-    } else {
-        meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = true;
-    }
+    meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = write_index_cache;
 
     try {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
-        _index_builder->index_writer()->SetIndexCache(tenann::GetGlobalIndexCache());
+        _index_builder->index_writer()->SetIndexCache(index_cache);
         // Bound the per-builder row buffer (no-op for builders that don't buffer).
         // Tunable via BE config vector_index_build_flush_threshold_rows; lower it
         // when BE memory is tight, set 0 to disable intermediate flushing.

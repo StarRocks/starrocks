@@ -40,6 +40,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -327,5 +328,80 @@ public class RangeColocateScanDispatchTest {
                         table.getBaseIndexMetaId(), Map.of()));
         Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
                 "actual: " + exception.getMessage());
+    }
+
+    // ---- OlapScanNode.fillTabletId2BucketSeq: the position-fallback fill policy over this dispatch,
+    //      shared by OlapScanNode.computeTabletInfo + PlanFragmentBuilder ----
+
+    @Test
+    public void testFillTabletId2BucketSeqNullDispatchUsesPositionBased() {
+        // dispatch == null (HASH or range non-colocate): position-based fill, keyed by scan order.
+        MaterializedIndex index = new MaterializedIndex(50L);
+        List<Long> allTabletIds = Arrays.asList(101L, 202L, 303L);
+        Map<Long, Integer> target = new HashMap<>();
+
+        OlapScanNode.fillTabletId2BucketSeq(null, index, allTabletIds, target);
+
+        Assertions.assertEquals(Map.of(101L, 0, 202L, 1, 303L, 2), target);
+    }
+
+    @Test
+    public void testFillTabletId2BucketSeqAlignedUsesDispatchMap() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_facade_fill_aligned (k1 int, k2 int)\n"
+                        + "order by(k1, k2)\n"
+                        + "properties('replication_num' = '1', 'colocate_with' = 'rg_facade_fill_aligned:k1');");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_facade_fill_aligned");
+        MaterializedIndex index = baseIndexOf(table);
+
+        RangeColocateScanDispatch dispatch =
+                Objects.requireNonNull(RangeColocateScanDispatch.forTable(table));
+        Map<Long, Integer> aligned = dispatch.computeBucketSeq(index);
+        Assertions.assertNotNull(aligned, "precondition: group must be aligned");
+
+        // Aligned range colocate: the facade uses the dispatch mapping verbatim.
+        Map<Long, Integer> target = new HashMap<>();
+        OlapScanNode.fillTabletId2BucketSeq(
+                dispatch, index, index.getTabletIdsInOrder(), target);
+
+        Assertions.assertEquals(aligned, target);
+    }
+
+    @Test
+    public void testFillTabletId2BucketSeqUnalignedFallsBackToPositionBased() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_facade_fill_unaligned (k1 int, k2 int)\n"
+                        + "order by(k1, k2)\n"
+                        + "properties('replication_num' = '1', 'colocate_with' = 'rg_facade_fill_unaligned:k1');");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_facade_fill_unaligned");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long groupId = colocateTableIndex.getGroup(table.getId()).grpId;
+
+        // Inject 3 ranges without re-aligning the single base tablet that still covers
+        // Range.all() -> computeBucketSeq returns null (transiently unaligned, spanning-tablet state).
+        colocateTableIndex.getColocateRangeMgr().setColocateRanges(groupId, Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 9001L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 9002L),
+                new ColocateRange(Range.ge(makeTuple(200)), 9003L)));
+
+        RangeColocateScanDispatch dispatch =
+                Objects.requireNonNull(RangeColocateScanDispatch.forTable(table));
+        MaterializedIndex index = baseIndexOf(table);
+        Assertions.assertNull(dispatch.computeBucketSeq(index), "precondition: group must be unaligned");
+
+        // Unaligned range colocate: the facade falls back to position-based bucketSeq.
+        List<Long> allTabletIds = index.getTabletIdsInOrder();
+        Map<Long, Integer> target = new HashMap<>();
+        OlapScanNode.fillTabletId2BucketSeq(dispatch, index, allTabletIds, target);
+
+        Map<Long, Integer> expected = new HashMap<>();
+        for (int i = 0; i < allTabletIds.size(); i++) {
+            expected.put(allTabletIds.get(i), i);
+        }
+        Assertions.assertEquals(expected, target);
     }
 }

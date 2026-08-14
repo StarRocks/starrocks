@@ -16,11 +16,14 @@
 
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <set>
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
@@ -30,6 +33,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/extends_column_utils.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -42,9 +46,12 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/empty_iterator.h"
 #include "storage_primitive/union_iterator.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
@@ -214,6 +221,119 @@ public:
                 CHECK_OK(writer->flush_chunk(*chunk));
             }
         }
+        RowsetSharedPtr partial_rowset = *writer->build();
+        partial_rowset->set_schema(tablet->tablet_schema());
+
+        return partial_rowset;
+    }
+
+    TabletSharedPtr create_tablet_with_gin_index(int64_t tablet_id, int32_t schema_hash,
+                                                 const std::string& imp_lib = "builtin") {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::VARCHAR;
+        k3.column_type.__set_len(255);
+        request.tablet_schema.columns.push_back(k3);
+
+        TOlapTableIndex gin_index;
+        gin_index.__set_index_id(1);
+        gin_index.__set_index_name("gin_v2");
+        gin_index.__set_columns({"v2"});
+        gin_index.__set_index_type(TIndexType::GIN);
+        gin_index.__set_common_properties({{"imp_lib", imp_lib}});
+        gin_index.__set_index_properties({{"parser", "none"}});
+        request.tablet_schema.__set_indexes({gin_index});
+
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        _tablets.push_back(tablet);
+        return tablet;
+    }
+
+    RowsetSharedPtr create_str_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                      const std::function<std::string(int64_t)>& str_func) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+            std::string v = str_func(key);
+            cols[2]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    }
+
+    RowsetSharedPtr create_partial_str_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                              const std::function<std::string(int64_t)>& str_func,
+                                              std::vector<int32_t>& column_indexes,
+                                              const std::shared_ptr<TabletSchema>& partial_schema,
+                                              PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.full_tablet_schema = tablet->tablet_schema();
+        writer_context.is_partial_update = true;
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        writer_context.partial_update_mode = mode;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(partial_schema);
+
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        for (int64_t key : keys) {
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(key));
+            std::string v = str_func(key);
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(Slice(v)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
         partial_rowset->set_schema(tablet->tablet_schema());
 
@@ -1263,6 +1383,58 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
     final_check(tablet, rowsets);
 }
 
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_source_chunk_limit_counts_source_bytes) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(2 * N);
+    std::vector<int64_t> partial_keys(N);
+    for (int i = 0; i < 2 * N; i++) {
+        keys[i] = i;
+        if (i % 2 == 0) {
+            partial_keys[i / 2] = i;
+        }
+    }
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(12);
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(tablet, keys));
+    }
+    std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+    for (int i = 0; i < 2; i++) {
+        std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
+        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        rowsets.emplace_back(create_partial_rowset(tablet, partial_keys, column_indexes, v1_func, v2_func,
+                                                   partial_schemas[i], 1, PartialUpdateMode::COLUMN_UPDATE_MODE, true));
+    }
+
+    int64_t old_vector_chunk_size = config::vector_chunk_size;
+    int64_t old_limit = config::partial_update_memory_limit_per_worker;
+    config::vector_chunk_size = 10;
+    // Sized so that only the source half of the bound can reach it. The accumulator holds 2 * N
+    // rows and the old bound was rows * upt_memory_usage_per_row, which for this schema stays well
+    // under this budget for the whole segment -- so before the fix the segment was never split and
+    // the budget was, in effect, not applied at all. Adding the accumulator's own bytes_usage()
+    // takes the sum past it partway through, so the segment now arrives in several containers and
+    // the rowid bookkeeping across those boundaries is what this checks.
+    config::partial_update_memory_limit_per_worker = 4096;
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    ASSERT_TRUE(check_tablet(tablet, version, 2 * N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        if (k1 % 2 == 0) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        } else {
+            return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+        }
+    }));
+    config::vector_chunk_size = old_vector_chunk_size;
+    config::partial_update_memory_limit_per_worker = old_limit;
+    final_check(tablet, rowsets);
+}
+
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_fast_schema_evolution) {
     config::enable_light_pk_compaction_publish = false;
     const int N = 100;
@@ -1674,6 +1846,489 @@ TEST_P(RowsetColumnPartialUpdateTest, test_meta_reader_with_multiple_dcg_columns
     // 3. DCG file access with encryption (lines 262-269)
     auto status = collecter.open();
     // Success or failure is okay - we're testing code coverage
+}
+
+// Count rows matching `v2 == value` through a TabletReader scan, optionally letting the
+// GIN inverted index prune rows. Also re-checks every returned row against the predicate,
+// which catches the erased-predicate-without-recheck failure mode.
+static StatusOr<int64_t> count_rows_with_str_eq(const TabletSharedPtr& tablet, int64_t version, ColumnId cid,
+                                                const std::string& value, bool enable_gin_filter) {
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
+    RETURN_IF_ERROR(reader.prepare());
+    TabletReaderParams params;
+    params.enable_gin_filter = enable_gin_filter;
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), cid, Slice(value)));
+    PredicateAndNode and_node;
+    and_node.add_child(PredicateColumnNode(pred.get()));
+    params.pred_tree = PredicateTree::create(std::move(and_node));
+    std::vector<ChunkIteratorPtr> seg_iters;
+    RETURN_IF_ERROR(reader.get_segment_iterators(params, &seg_iters));
+    int64_t rows = 0;
+    for (auto& iter : seg_iters) {
+        // Chunk column order follows the iterator's output schema, which is not necessarily
+        // keyed by ColumnId; resolve the value column's position by matching the field id.
+        const Schema& out_schema = iter->schema();
+        int value_pos = -1;
+        for (size_t i = 0; i < out_schema.num_fields(); i++) {
+            if (out_schema.field(i)->id() == cid) {
+                value_pos = static_cast<int>(i);
+                break;
+            }
+        }
+        if (value_pos < 0) {
+            return Status::InternalError("value column not present in scan output schema");
+        }
+        auto chunk = ChunkFactory::new_chunk(out_schema, 100);
+        while (true) {
+            chunk->reset();
+            auto st = iter->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(st);
+            for (int r = 0; r < chunk->num_rows(); r++) {
+                if (chunk->columns()[value_pos]->get(r).get_slice().to_string() != value) {
+                    return Status::InternalError("returned row does not match the predicate");
+                }
+            }
+            rows += chunk->num_rows();
+        }
+        iter->close();
+    }
+    return rows;
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_gin_index_check) {
+    // Column-mode partial update rewrites a column into a DCG (.cols) file while the base
+    // segment's inverted index still reflects pre-update values. The reader must serve the
+    // GIN index from the DCG segment, or GIN-filtered queries silently return wrong rows.
+    const int N = 100;
+    auto tablet = create_tablet_with_gin_index(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.emplace_back(create_str_rowset(tablet, keys, [](int64_t k) { return "old_" + std::to_string(k); }));
+    commit_rowsets(tablet, rowsets, version);
+
+    // GIN-accelerated read against the base segment works.
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_5", true).value());
+
+    // Column-mode partial update: v2 = "new_<pk>" for the first half of the keys.
+    std::vector<int64_t> update_keys(keys.begin(), keys.begin() + N / 2);
+    std::vector<int32_t> column_indexes = {0, 2};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_partial_str_rowset(
+            tablet, update_keys, [](int64_t k) { return "new_" + std::to_string(k); }, column_indexes, partial_schema);
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    for (bool gin_filter : {true, false}) {
+        // An updated row must be found by its new value ...
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "new_5", gin_filter).value());
+        // ... and must no longer be found by its old value.
+        ASSERT_EQ(0, count_rows_with_str_eq(tablet, version, 2, "old_5", gin_filter).value());
+        // Rows the update did not touch keep working.
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
+    }
+}
+
+#ifndef __APPLE__
+// CLucene (the shared-nothing default implementation) is not produced for DCG .cols files.
+// After a column-mode partial update on the indexed column, the base segment's CLucene index
+// is stale, so no index is served for the updated column: ordinary predicates must fall back
+// to evaluating on the fresh data and still return correct results. This exercises the
+// write-side skip (segment_writer.cpp) and the read-side CLucene branch (segment_iterator.cpp).
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_clucene_gin_index_check) {
+    const int N = 100;
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.emplace_back(create_str_rowset(tablet, keys, [](int64_t k) { return "old_" + std::to_string(k); }));
+    commit_rowsets(tablet, rowsets, version);
+
+    // Base-segment CLucene index accelerates the pre-update read.
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_5", true).value());
+
+    // Column-mode partial update: v2 = "new_<pk>" for the first half of the keys.
+    std::vector<int64_t> update_keys(keys.begin(), keys.begin() + N / 2);
+    std::vector<int32_t> column_indexes = {0, 2};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_partial_str_rowset(
+            tablet, update_keys, [](int64_t k) { return "new_" + std::to_string(k); }, column_indexes, partial_schema);
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    for (bool gin_filter : {true, false}) {
+        // Updated rows resolve to the fresh value; the stale CLucene index is not consulted.
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "new_5", gin_filter).value());
+        ASSERT_EQ(0, count_rows_with_str_eq(tablet, version, 2, "old_5", gin_filter).value());
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
+    }
+}
+#endif
+
+// ------------------------------------------------------------------------------------------------
+// JSON subfield read through an extended column, after a column-mode partial update.
+//
+// The JSONV2 path rewrite (session variable cbo_json_v2_rewrite, on by default) replaces
+// get_json_int(j, '$.x') with a read of an *extended* column: a synthetic subfield column that owns
+// no storage, carries a synthetic unique id, and points back at its root JSON column through
+// ExtendedColumnInfo. A column-mode partial update writes the new value of `j` into a .cols delta
+// column group keyed by the ROOT column's unique id, so the read must resolve the group through the
+// root id. Resolving it through the extended column's own (synthetic) id matches nothing, and the
+// subfield is then served from the base segment -- silently returning the value the update replaced.
+// ------------------------------------------------------------------------------------------------
+
+// `tag` is constant within a rowset, so the flattened `y` sub-column is dictionary-encoded -- which is
+// what makes the [_META_] dictionary-collection path below reachable.
+static std::string make_json(int64_t x, const std::string& tag) {
+    return R"({"x": )" + std::to_string(x) + R"(, "y": ")" + tag + R"("})";
+}
+
+static TabletSharedPtr create_json_tablet(std::vector<TabletSharedPtr>* tablets, int64_t tablet_id,
+                                          int32_t schema_hash) {
+    TCreateTabletReq request;
+    request.tablet_id = tablet_id;
+    request.__set_version(1);
+    request.__set_version_hash(0);
+    request.tablet_schema.schema_hash = schema_hash;
+    request.tablet_schema.short_key_column_count = 1;
+    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+    TColumn pk;
+    pk.column_name = "pk";
+    pk.__set_is_key(true);
+    pk.column_type.type = TPrimitiveType::BIGINT;
+    request.tablet_schema.columns.push_back(pk);
+
+    TColumn j;
+    j.column_name = "j";
+    j.__set_is_key(false);
+    j.__set_is_allow_null(true);
+    j.column_type.type = TPrimitiveType::JSON;
+    request.tablet_schema.columns.push_back(j);
+
+    TColumn v;
+    v.column_name = "v";
+    v.__set_is_key(false);
+    v.column_type.type = TPrimitiveType::INT;
+    request.tablet_schema.columns.push_back(v);
+
+    auto st = StorageEngine::instance()->create_tablet(request);
+    CHECK(st.ok()) << st.to_string();
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    tablets->push_back(tablet);
+    return tablet;
+}
+
+// Fills a writer context that is common to the full and the partial-update rowset below.
+static RowsetWriterContext json_writer_context(const TabletSharedPtr& tablet) {
+    RowsetWriterContext writer_context;
+    writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.tablet_id = tablet->tablet_id();
+    writer_context.tablet_schema_hash = tablet->schema_hash();
+    writer_context.partition_id = 0;
+    writer_context.rowset_path_prefix = tablet->schema_hash_path();
+    writer_context.rowset_state = COMMITTED;
+    writer_context.version.first = 0;
+    writer_context.version.second = 0;
+    writer_context.segments_overlap = NONOVERLAPPING;
+    return writer_context;
+}
+
+// Writes one row per key: (pk, {"x": x_of(pk)}, pk).
+static RowsetSharedPtr create_json_rowset(const TabletSharedPtr& tablet, const std::vector<int64_t>& keys,
+                                          const std::function<int64_t(int64_t)>& x_of, const std::string& tag) {
+    RowsetWriterContext writer_context = json_writer_context(tablet);
+    writer_context.tablet_schema = tablet->tablet_schema();
+    std::unique_ptr<RowsetWriter> writer;
+    CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
+
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+    auto cols = chunk->columns();
+    // JsonColumn::append_datum keeps only a view of the JsonValue until the chunk copies it, so the
+    // values have to stay alive until flush_chunk.
+    std::vector<JsonValue> json_values;
+    json_values.reserve(keys.size());
+    for (int64_t key : keys) {
+        json_values.emplace_back(JsonValue::parse(make_json(x_of(key), tag)).value());
+    }
+    for (size_t i = 0; i < keys.size(); i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(&json_values[i]));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)keys[i]));
+    }
+    CHECK_OK(writer->flush_chunk(*chunk));
+    return *writer->build();
+}
+
+// Column-mode partial update carrying only (pk, j), which lands as a .cols delta column group.
+static RowsetSharedPtr create_json_partial_rowset(const TabletSharedPtr& tablet, const std::vector<int64_t>& keys,
+                                                  const std::function<int64_t(int64_t)>& x_of,
+                                                  const std::shared_ptr<TabletSchema>& partial_schema,
+                                                  const std::vector<int32_t>& column_indexes, const std::string& tag) {
+    RowsetWriterContext writer_context = json_writer_context(tablet);
+    writer_context.tablet_schema = partial_schema;
+    writer_context.referenced_column_ids = column_indexes;
+    writer_context.full_tablet_schema = tablet->tablet_schema();
+    writer_context.is_partial_update = true;
+    writer_context.partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE;
+    std::unique_ptr<RowsetWriter> writer;
+    CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
+
+    auto schema = ChunkHelper::convert_schema(partial_schema);
+    auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+    auto cols = chunk->columns();
+    std::vector<JsonValue> json_values;
+    json_values.reserve(keys.size());
+    for (int64_t key : keys) {
+        json_values.emplace_back(JsonValue::parse(make_json(x_of(key), tag)).value());
+    }
+    for (size_t i = 0; i < keys.size(); i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(&json_values[i]));
+    }
+    CHECK_OK(writer->flush_chunk(*chunk));
+
+    RowsetSharedPtr partial_rowset = *writer->build();
+    partial_rowset->set_schema(tablet->tablet_schema());
+    return partial_rowset;
+}
+
+// Builds the access path the FE emits for get_json_int(j, '$.x'): a ROOT node named after the JSON
+// column with one FIELD child per subfield, with `extended` set on the root (ColumnAccessPath
+// .createLinearPath + setExtended on the FE side).
+static ColumnAccessPathPtr make_extended_json_path(const std::string& root_column, const std::string& field,
+                                                   const TypeDescriptor& value_type) {
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_from_predicate(false);
+    tleaf.__set_extended(false);
+    tleaf.__set_type_desc(value_type.to_thrift());
+
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_from_predicate(false);
+    troot.__set_extended(true);
+    troot.__set_type_desc(value_type.to_thrift());
+    troot.__set_children({tleaf});
+
+    std::vector<std::string> resolved = {root_column, field};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> {
+        CHECK_LT(resolve_index, resolved.size());
+        return resolved[resolve_index++];
+    };
+    auto res = ColumnAccessPath::create(troot, resolver);
+    CHECK(res.ok()) << res.status();
+    return std::move(res).value();
+}
+
+// Reads the tablet through the JSONV2-extended schema, exactly as OlapChunkSource does, and checks
+// the subfield column against `expected_x`. Also re-checks the whole JSON column, which reads the
+// overlay through the root column's own unique id and was therefore never affected.
+static void check_json_subfield(const TabletSharedPtr& tablet, int64_t version, size_t expected_rows,
+                                const std::function<int64_t(int64_t)>& expected_x, const std::string& expected_tag) {
+    std::vector<ColumnAccessPathPtr> paths;
+    // The extended TabletColumn keeps a raw pointer to this path, so it has to outlive the read.
+    paths.emplace_back(make_extended_json_path("j", "x", TypeDescriptor(TYPE_BIGINT)));
+    ASSERT_EQ("j.x", paths[0]->linear_path());
+    ASSERT_TRUE(paths[0]->is_extended());
+
+    // Same seed as next_uniq_id(): above every real column id, so the synthetic id cannot collide.
+    ASSIGN_OR_ABORT(auto extended_schema,
+                    extend_schema_by_access_paths(tablet->tablet_schema(),
+                                                  std::numeric_limits<int32_t>::max() - 1000000, paths));
+    ASSERT_EQ(tablet->tablet_schema()->num_columns() + 1, extended_schema->num_columns());
+    const size_t subfield_cid = extended_schema->num_columns() - 1;
+    ASSERT_TRUE(extended_schema->column(subfield_cid).is_extended());
+
+    Schema schema = ChunkHelper::convert_schema(extended_schema);
+    TabletReader reader(tablet, Version(0, version), extended_schema, schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    ASSERT_TRUE(iter != nullptr);
+
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+    size_t rows = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t r = 0; r < chunk->num_rows(); r++) {
+            const int64_t pk = chunk->columns()[0]->get(r).get_int64();
+            JsonValue expected_json = JsonValue::parse(make_json(expected_x(pk), expected_tag)).value();
+            ASSERT_FALSE(chunk->columns()[1]->is_null(r)) << "pk=" << pk;
+            EXPECT_EQ(expected_json, *chunk->columns()[1]->get(r).get_json()) << "pk=" << pk;
+            ASSERT_FALSE(chunk->columns()[subfield_cid]->is_null(r)) << "pk=" << pk;
+            EXPECT_EQ(expected_x(pk), chunk->columns()[subfield_cid]->get(r).get_int64()) << "pk=" << pk;
+        }
+        rows += chunk->num_rows();
+        chunk->reset();
+    }
+    ASSERT_EQ(expected_rows, rows);
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_read_through_extended_column) {
+    const int N = 100;
+    auto tablet = create_json_tablet(&_tablets, rand(), rand());
+    auto base_x = [](int64_t pk) { return pk; };
+    auto updated_x = [](int64_t pk) { return pk + 1000; };
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{create_json_rowset(tablet, keys, base_x, "old")};
+    commit_rowsets(tablet, rowsets, version);
+    check_json_subfield(tablet, version, N, base_x, "old");
+
+    // Column-mode partial update of the JSON column only.
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset =
+            create_json_partial_rowset(tablet, keys, updated_x, partial_schema, column_indexes, "new");
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    // The update must have landed as a delta column group rather than a rewrite, otherwise the read
+    // below would exercise nothing.
+    ASSERT_GT(StorageEngine::instance()->update_manager()->get_delta_column_group_file_size_by_tablet_id(
+                      tablet->tablet_id()),
+              0);
+
+    check_json_subfield(tablet, version, N, updated_x, "new");
+}
+
+// The global dictionary for a JSON string subfield is collected by a [_META_] scan through
+// SegmentMetaCollecter, which resolves delta column groups with the same code the scan path uses. If
+// dictionary collection kept reading the base segment while the scan reads the .cols overlay, the value
+// the scan returns would be absent from the dictionary. This drives that collecter directly.
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overlay) {
+    const int N = 100;
+    auto tablet = create_json_tablet(&_tablets, rand(), rand());
+    auto x_of = [](int64_t pk) { return pk; };
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{create_json_rowset(tablet, keys, x_of, "old")};
+    commit_rowsets(tablet, rowsets, version);
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset =
+            create_json_partial_rowset(tablet, keys, x_of, partial_schema, column_indexes, "new");
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // The extended column for get_json_string(j, '$.y').
+    std::vector<ColumnAccessPathPtr> paths;
+    paths.emplace_back(make_extended_json_path("j", "y", TypeDescriptor::create_varchar_type(255)));
+    ASSIGN_OR_ABORT(auto extended_schema,
+                    extend_schema_by_access_paths(tablet->tablet_schema(),
+                                                  std::numeric_limits<int32_t>::max() - 1000000, paths));
+    const size_t subfield_cid = extended_schema->num_columns() - 1;
+    ASSERT_EQ(TYPE_VARCHAR, extended_schema->column(subfield_cid).type());
+
+    auto dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
+
+    // Find the segment that actually carries an overlay -- collecting from a segment without one would
+    // prove nothing.
+    SegmentSharedPtr overlaid_segment;
+    uint32_t overlaid_rowsetid = 0;
+    size_t overlaid_segment_idx = 0;
+    auto rowset_map = tablet->updates()->get_rowset_map();
+    ASSERT_TRUE(rowset_map != nullptr);
+    for (const auto& [rowset_id, rs] : *rowset_map) {
+        if (rs == nullptr) {
+            continue;
+        }
+        // For a primary-key tablet the delta column group is keyed by the rowset-map key (the rssid
+        // base) plus the segment index -- the same arithmetic SegmentMetaCollecter::init() does.
+        ASSERT_OK(rs->load());
+        for (size_t seg = 0; seg < rs->segments().size(); seg++) {
+            DeltaColumnGroupList dcgs;
+            TabletSegmentId tsid;
+            tsid.tablet_id = tablet->tablet_id();
+            tsid.segment_id = rowset_id + seg;
+            ASSERT_OK(dcg_loader->load(tsid, version, &dcgs));
+            if (!dcgs.empty()) {
+                overlaid_segment = rs->segments()[seg];
+                overlaid_rowsetid = rowset_id;
+                overlaid_segment_idx = seg;
+                break;
+            }
+        }
+        if (overlaid_segment != nullptr) {
+            break;
+        }
+    }
+    ASSERT_TRUE(overlaid_segment != nullptr) << "no segment carries a delta column group";
+
+    SegmentMetaCollecter collecter(overlaid_segment);
+    SegmentMetaCollecterParams params;
+    params.fields.emplace_back(META_DICT_MERGE);
+    params.field_type.emplace_back(LogicalType::TYPE_VARCHAR);
+    params.cids.emplace_back(subfield_cid);
+    params.read_page.emplace_back(true);
+    params.tablet_schema = extended_schema;
+    params.low_cardinality_threshold = 256;
+    params.use_page_cache = false;
+
+    SegmentMetaCollectOptions options;
+    options.is_primary_keys = true;
+    options.tablet_id = tablet->tablet_id();
+    // Must match the segment the collecter was constructed from: init() derives the delta column
+    // group key as pk_rowsetid + segment_id.
+    options.segment_id = overlaid_segment_idx;
+    options.version = version;
+    options.pk_rowsetid = overlaid_rowsetid;
+    options.dcg_loader = dcg_loader;
+
+    ASSERT_OK(collecter.init(&params, options));
+    ASSERT_OK(collecter.open());
+
+    // Non-nullable, matching what MetaReader builds for META_DICT_MERGE: _collect_dict_for_column only
+    // appends to the array's offsets/elements, never to a null column.
+    auto dict_column = ColumnHelper::create_column(
+            TypeDescriptor::create_array_type(TypeDescriptor::create_varchar_type(255)), false);
+    std::vector<Column*> dsts = {dict_column.get()};
+    ASSERT_OK(collecter.collect(&dsts));
+
+    std::set<std::string> words;
+    for (size_t r = 0; r < dict_column->size(); r++) {
+        // Keep the Datum alive: get_array() hands back a reference into it, so iterating
+        // dict_column->get(r).get_array() directly would read a destroyed temporary.
+        auto row = dict_column->get(r);
+        for (const auto& word : row.get_array()) {
+            words.insert(word.get_slice().to_string());
+        }
+    }
+    // Guard against a vacuous pass: if no dictionary was collected at all, the assertions below would
+    // hold for the wrong reason.
+    ASSERT_FALSE(words.empty()) << "no dictionary collected, the check below would be vacuous";
+    EXPECT_TRUE(words.count("new") > 0) << "dictionary is missing the value the scan now returns";
+    EXPECT_TRUE(words.count("old") == 0) << "dictionary still carries the pre-update value";
 }
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,

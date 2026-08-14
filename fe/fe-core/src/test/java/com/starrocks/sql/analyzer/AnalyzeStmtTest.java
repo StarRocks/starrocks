@@ -66,6 +66,9 @@ import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -111,6 +114,24 @@ public class AnalyzeStmtTest {
 
         createTblStmtStr = "create table db.tb2(kk1 int, kk2 json) "
                 + "DUPLICATE KEY(kk1) distributed by hash(kk1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        createTblStmtStr = "create table db.tb_unsupported_histogram("
+                + "k1 int, "
+                + "c_array array<int>, "
+                + "c_struct struct<a int>, "
+                + "c_map map<int, int>, "
+                + "c_json json, "
+                + "c_varbinary varbinary) "
+                + "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        createTblStmtStr = "create table db.tb_metric_histogram("
+                + "k1 int, "
+                + "c_hll hll hll_union, "
+                + "c_bitmap bitmap bitmap_union, "
+                + "c_percentile percentile percentile_union) "
+                + "AGGREGATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
 
         String createStructTableSql = "CREATE TABLE struct_a(\n" +
@@ -203,6 +224,37 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testAnalyzeExternalPredicateColumns() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of(new ExternalColumnUsage("table-hash", table.getCatalogName(),
+                        table.getCatalogDBName(), table.getCatalogTableName(), "c_name",
+                        ColumnUsage.UseCase.PREDICATE));
+            }
+        };
+
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(
+                "analyze sample table hive0.tpch.customer predicate columns");
+        Assertions.assertTrue(analyzeStmt.isExternal());
+        Assertions.assertTrue(analyzeStmt.isSample());
+        Assertions.assertEquals(List.of("c_name"), analyzeStmt.getColumnNames());
+    }
+
+    @Test
+    public void testAnalyzeExternalPredicateColumnsWithoutUsage() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of();
+            }
+        };
+
+        analyzeFail("analyze sample table hive0.tpch.customer predicate columns",
+                "No predicate columns found for external table 'customer'");
+    }
+
+    @Test
     public void testAnalyzeHiveResource() {
         new MockUp<MetaUtils>() {
             @Mock
@@ -238,6 +290,35 @@ public class AnalyzeStmtTest {
         sql = "analyze full table db.tbl partition(`tbl`) with async mode";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assertions.assertTrue(analyzeStmt.isAsync());
+    }
+
+    @Test
+    public void testExternalScanCapProperties() {
+        // Accepted on external tables.
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '1073741824')");
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '2147483648', " +
+                "'scan_files_cap' = '500', 'scan_rows_cap' = '10000000')");
+        // -1 (unlimited) is a legal value.
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_rows_cap' = '-1')");
+
+        // Rejected on internal (OLAP) tables instead of being silently ignored.
+        analyzeFail("analyze full table db.tbl properties('scan_bytes_cap' = '1073741824')",
+                "Property 'scan_bytes_cap' is only supported for external tables");
+        analyzeFail("analyze full table db.tbl properties('scan_files_cap' = '500')",
+                "Property 'scan_files_cap' is only supported for external tables");
+        analyzeFail("analyze full table db.tbl properties('scan_rows_cap' = '10000')",
+                "Property 'scan_rows_cap' is only supported for external tables");
+
+        // Non-long values are rejected up front (same parser the collector uses), so they can't silently fall
+        // back to the config default at collection time.
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = 'abc')",
+                "Property 'scan_bytes_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '1e9')",
+                "Property 'scan_bytes_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_files_cap' = '1.0')",
+                "Property 'scan_files_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_rows_cap' = '99999999999999999999')",
+                "Property 'scan_rows_cap' value must be an integer");
     }
 
     @Test
@@ -526,8 +607,9 @@ public class AnalyzeStmtTest {
                         "db_id, table_id, column_name," +
                         " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as bigint)) as string), " +
-                        "cast(min(cast(min as bigint)) as string), cast(avg(collection_size) as bigint) FROM column_statistics " +
+                        "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                        "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                        "cast(avg(collection_size) as bigint) FROM column_statistics " +
                         "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
                         "GROUP BY db_id, table_id, column_name", table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(table.getId(),
@@ -560,6 +642,30 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("test", dropHistogramStmt.getDbName());
         Assertions.assertEquals("t0", dropHistogramStmt.getTableName());
         Assertions.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
+    }
+
+    @Test
+    public void testHistogramUnsupportedColumnType() {
+        String msg = "Can't create histogram statistics on column type is";
+        // complex types
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_array with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_struct with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_map with 256 buckets", msg);
+        // json type
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_json with 256 buckets", msg);
+        // binary type
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_varbinary with 256 buckets", msg);
+        // only-metric types
+        analyzeFail("analyze table db.tb_metric_histogram update histogram on c_hll with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_metric_histogram update histogram on c_bitmap with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_metric_histogram update histogram on c_percentile with 256 buckets", msg);
+    }
+
+    @Test
+    public void testHistogramAllColumnsSkipsUnsupportedColumnType() {
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(
+                "analyze table db.tb_unsupported_histogram update histogram on all columns");
+        Assertions.assertEquals(List.of("k1"), analyzeStmt.getColumnNames());
     }
 
     @Test
@@ -734,13 +840,13 @@ public class AnalyzeStmtTest {
 
         String pattern = String.format("SELECT cast(10 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                 "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string), " +
+                "cast(max(cast(nullif(max, '') as string)) as string), cast(min(cast(nullif(min, '') as string)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk2\") " +
                 "GROUP BY db_id, table_id, column_name " +
                 "UNION ALL SELECT cast(10 as INT), now(), db_id, table_id, column_name, " +
                 "sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string), " +
+                "cast(max(cast(nullif(max, '') as bigint)) as string), cast(min(cast(nullif(min, '') as bigint)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
                 "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());

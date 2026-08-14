@@ -91,13 +91,24 @@ struct OlapReaderStatistics {
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
+    // Rows a vector (ANN) query skipped from the row-level delete-predicate evaluation because their page's
+    // zone map proved they match no delete predicate (see SegmentIterator::_apply_del_predicate).
+    int64_t rows_del_predicate_zone_map_pruned = 0;
 
     int64_t total_pages_num = 0;
     int64_t cached_pages_num = 0;
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+    int64_t vector_index_load_ns = 0;
     int64_t get_row_ranges_by_vector_index_timer = 0;
+    int64_t vector_index_cache_lookup_ns = 0;
+    int64_t vector_index_file_open_ns = 0;
+    int64_t vector_index_read_file_ns = 0;
+    int64_t vector_index_init_index_ns = 0;
+    int64_t vector_index_searcher_init_ns = 0;
+    int64_t vector_index_cache_hit_count = 0;
+    int64_t vector_index_cache_miss_count = 0;
     int64_t vector_search_timer = 0;
     int64_t process_vector_distance_and_id_timer = 0;
 
@@ -147,6 +158,37 @@ struct OlapReaderStatistics {
     int64_t prefetch_hit_count = 0;
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
+
+    int64_t lake_prepared_rowsets = 0;
+    int64_t lake_prepared_segments = 0;
+    int64_t lake_prepared_scan_rows = 0;
+    int64_t lake_prepared_scan_ranges = 0;
+    int64_t lake_reusable_segment_iter_created = 0;
+    int64_t lake_reusable_segment_iter_reused = 0;
+    // Time (ns) spent in the seed morsel's prepared-scan-range preparation (zonemap/bloom page-filter folding
+    // + seek-range resolution). Only the seed pays this; refined children reuse the published range.
+    int64_t lake_prepared_seed_ns = 0;
+    // Breakdown of the seed prepare above, accumulated from the otherwise-discarded prepare-only
+    // OlapReaderStatistics: where the seed's one-time per-segment prune spends its time / IO.
+    int64_t lake_prepared_seed_io_ns = 0;
+    int64_t lake_prepared_seed_io_count = 0;
+    int64_t lake_prepared_seed_segment_init_ns = 0;
+    int64_t lake_prepared_seed_vector_index_load_ns = 0;
+    int64_t lake_prepared_seed_get_row_ranges_by_vector_index_ns = 0;
+    int64_t lake_prepared_seed_vector_index_cache_lookup_ns = 0;
+    int64_t lake_prepared_seed_vector_index_file_open_ns = 0;
+    int64_t lake_prepared_seed_vector_index_read_file_ns = 0;
+    int64_t lake_prepared_seed_vector_index_init_index_ns = 0;
+    int64_t lake_prepared_seed_vector_index_searcher_init_ns = 0;
+    int64_t lake_prepared_seed_vector_index_cache_hit_count = 0;
+    int64_t lake_prepared_seed_vector_index_cache_miss_count = 0;
+    int64_t lake_prepared_seed_vector_search_ns = 0;
+    int64_t lake_prepared_seed_process_vector_distance_and_id_ns = 0;
+    int64_t lake_prepared_seed_rows_vector_index_filtered = 0;
+    int64_t lake_prepared_seed_zonemap_ns = 0;
+    int64_t lake_prepared_seed_zonemap_filtered_rows = 0;
+    int64_t lake_prepared_seed_bf_ns = 0;
+    int64_t lake_prepared_seed_bf_filtered_rows = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------

@@ -20,6 +20,7 @@ import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -29,16 +30,29 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +67,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LakeRangeRollupJobTest {
@@ -135,6 +151,24 @@ public class LakeRangeRollupJobTest {
             pp.createRollupIndex(idx);
         }
         return table;
+    }
+
+    /**
+     * Inject a NORMAL sibling rollup {@code name} into {@link #table}: register its meta + a NORMAL
+     * {@link MaterializedIndex} in every physical partition (mirrors a rollup already promoted by a
+     * prior finished job). Returns the sibling's meta id.
+     */
+    private long injectNormalSiblingRollup(String name) {
+        long metaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> schema = new ArrayList<>(table.getSchemaByIndexMetaId(baseIndexMetaId).subList(0, 2));
+        table.setIndexMeta(metaId, name, schema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            pp.createRollupIndex(new MaterializedIndex(physId, metaId,
+                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
+        }
+        return metaId;
     }
 
     // ---- Step 1 / Step 4: construction test ---------------------------------
@@ -323,6 +357,118 @@ public class LakeRangeRollupJobTest {
     }
 
     /**
+     * The rollup shadow tablets must be created with a CreateReplicaTask carrying the ROLLUP's OWN tablet
+     * schema (its single-column sort key), NOT the base index's schema (whose sort key is (k1, k2), arity
+     * 2). Without this the compute node lazily materializes the rollup tablet's version-1 metadata from
+     * the base index's shared initial-metadata template and reads the base sort-key arity, which breaks the
+     * reshard/pre-split boundary validation.
+     */
+    @Test
+    public void testCreateShadowTabletMetadataEmitsRollupSchema() throws Exception {
+        // Resolve every rollup shadow tablet to a single alive compute node.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                ComputeNode cn = new ComputeNode(1000L, "127.0.0.1", 9050);
+                cn.setAlive(true);
+                return cn;
+            }
+        };
+
+        // Configure a non-default compression level so the create task must carry it through, not level 0.
+        table.setCompressionLevel(7);
+        // A flat-json config so the create task must carry it through (the per-tablet metadata replaces
+        // the shared base template that would otherwise have supplied it).
+        table.setFlatJsonConfig(new FlatJsonConfig(true, 0.5, 0.5, 100));
+
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Column colK1 = baseSchema.get(0);
+        // Rollup sort key is the single column k1 (arity 1), narrower than the base's (k1, k2) (arity 2).
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK1));
+        // Empty sample -> a single full-range shadow tablet (K=1); enough to assert the emitted schema.
+        job.setSampler(stubSamplerReturning(List.of()));
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        assertNotNull(plan.shadowIndex);
+        assertTrue(plan.shadowIndex.getTablets().size() >= 1);
+
+        MarkedCountDownLatch<Long, Long> latch =
+                new MarkedCountDownLatch<>(plan.shadowIndex.getTablets().size());
+        AgentBatchTask batchTask = job.buildShadowTabletCreateTasks(table, List.of(plan), latch);
+
+        List<AgentTask> tasks = batchTask.getAllTasks();
+        assertEquals(plan.shadowIndex.getTablets().size(), tasks.size(),
+                "one CreateReplicaTask per rollup shadow tablet");
+        List<Integer> baseSortKeyIdxes = table.getIndexMetaByMetaId(baseIndexMetaId).getSortKeyIdxes();
+        assertEquals(2, baseSortKeyIdxes.size(), "base index sort key must be (k1, k2), arity 2");
+
+        for (AgentTask agentTask : tasks) {
+            assertInstanceOf(CreateReplicaTask.class, agentTask);
+            TCreateTabletReq req = ((CreateReplicaTask) agentTask).toThrift();
+            // The emitted tablet schema is the rollup's own: single-column sort key [0], NOT the base's.
+            assertEquals(List.of(0), req.getTablet_schema().getSort_key_idxes(),
+                    "rollup shadow tablet must carry the rollup's own sort-key indexes, not the base's");
+            assertEquals(job.getShadowIndexMetaId(), req.getTablet_schema().getId(),
+                    "tablet schema id must be the rollup shadow index meta id");
+            // Per-tablet version-1 metadata (optimization off) so the base's shared template is not used.
+            assertFalse(req.isEnable_tablet_creation_optimization(),
+                    "tablet-creation optimization must be off so per-tablet metadata is written");
+            // The compute node overwrites the schema's compression level with this request field, so it must
+            // carry the table's configured level (7), not the builder default (0).
+            assertEquals(7, req.getCompression_level(),
+                    "create task must carry the table's configured compression level, not the default");
+            // The per-tablet metadata replaces the shared base template, so it must carry the table's
+            // flat-json config; without it a flat-json-enabled table's shadow tablets lose the derivation.
+            assertTrue(req.isSetFlat_json_config(),
+                    "create task must carry the table's flat-json config");
+            assertTrue(req.getFlat_json_config().isFlat_json_enable(),
+                    "flat-json config must reflect the table's enabled setting");
+        }
+    }
+
+    @Test
+    public void testCreateShadowTabletMetadataSkipsWhenNoShadowTablets() {
+        Column colK1 = table.getSchemaByIndexMetaId(baseIndexMetaId).get(0);
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK1));
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        // A plan whose shadow index was never built contributes no tablets, so the method returns early
+        // without acquiring the database lock or sending any create task.
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        assertNull(plan.shadowIndex);
+        assertDoesNotThrow(() -> job.createShadowTabletMetadata(List.of(plan)));
+    }
+
+    @Test
+    public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
+        // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
+            }
+        };
+
+        Column colK1 = table.getSchemaByIndexMetaId(baseIndexMetaId).get(0);
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK1));
+        // Empty sample -> a single full-range shadow tablet; planning does not resolve per-tablet nodes.
+        job.setSampler(stubSamplerReturning(List.of()));
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        assertNotNull(plan.shadowIndex);
+
+        MarkedCountDownLatch<Long, Long> latch =
+                new MarkedCountDownLatch<>(plan.shadowIndex.getTablets().size());
+        AlterCancelException ex = assertThrows(AlterCancelException.class,
+                () -> job.buildShadowTabletCreateTasks(table, List.of(plan), latch));
+        assertTrue(ex.getMessage().contains("no alive compute node"),
+                "abort message must name the missing compute node, was: " + ex.getMessage());
+    }
+
+    /**
      * Build a fully-configured rollup job, register its shadow index meta on the table, add the rollup
      * shadow MaterializedIndex to each physical partition (via {@code createRollupIndex}), and seed a
      * {@code commitVersion = visibleVersion + 1} in {@code partitionStates} so
@@ -474,6 +620,11 @@ public class LakeRangeRollupJobTest {
         Column colK1 = baseSchema.get(0);
         Column colK2 = baseSchema.get(1);
 
+        // Pre-existing NORMAL sibling rollup r1 — must survive the additive flip/replay of r2.
+        long r1MetaId = injectNormalSiblingRollup("r1");
+        MaterializedIndexMeta r1MetaBefore = table.getIndexMetaByMetaId(r1MetaId);
+        assertNotNull(r1MetaBefore, "sibling r1 meta must exist before replay");
+
         // Build a rollup job with the shadow in SHADOW state and a reserved commitVersion.
         LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(List.of(colK2, colK1));
 
@@ -506,10 +657,69 @@ public class LakeRangeRollupJobTest {
         assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion(),
                 "first replay must advance visibleVersion by one");
 
+        // Sibling r1 untouched by the first replay's flip.
+        assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId),
+                "sibling r1 meta must be untouched (identity) after the first replay");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            assertNotNull(r1Idx, "sibling r1 physical index must remain after first replay");
+            assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(),
+                    "sibling r1 physical index must stay NORMAL after first replay");
+        }
+
         // Second replay: flipNotYetApplied is false -> the flip is skipped, no version double-bump.
         assertDoesNotThrow(() -> inMemory.replay(replayed), "second replay must not throw");
         assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion(),
                 "second replay must not advance visibleVersion again");
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        // Sibling r1 still intact after the idempotent second replay.
+        assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId),
+                "sibling r1 meta must still be intact after the second replay");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            assertNotNull(r1Idx, "sibling r1 physical index must remain after second replay");
+            assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(),
+                    "sibling r1 physical index must stay NORMAL after second replay");
+        }
+    }
+
+    /**
+     * Cancelling a rollup whose SHADOW index is actually installed removes ONLY that rollup's shadow
+     * (meta + per-partition indexes) and leaves a pre-existing NORMAL sibling rollup r1 and the base
+     * untouched. Exercises removeShadowIndexOnCancel's per-meta-id cleanup with a sibling present.
+     */
+    @Test
+    public void testCancelRemovesShadowKeepsSiblingRollup() {
+        // Inject NORMAL sibling r1.
+        long r1MetaId = injectNormalSiblingRollup("r1");
+        MaterializedIndexMeta r1MetaBefore = table.getIndexMetaByMetaId(r1MetaId);
+
+        // Build r2 with its SHADOW index actually installed (meta + per-partition SHADOW indexes).
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(
+                List.of(baseSchema.get(1), baseSchema.get(0)));
+        long r2MetaId = job.getShadowIndexMetaId();
+        assertNotNull(table.getIndexMetaByMetaId(r2MetaId), "r2 shadow meta must be installed before cancel");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            assertNotNull(pp.getLatestIndex(r2MetaId), "r2 shadow physical index must be installed before cancel");
+        }
+
+        // Cancel r2 (drives removeShadowIndexOnCancel under the edit-log applier).
+        assertTrue(job.cancelImpl("test cancel"), "cancel must succeed for an installed SHADOW rollup job");
+
+        // r2 shadow fully removed.
+        assertNull(table.getIndexMetaByMetaId(r2MetaId), "r2 shadow meta must be removed after cancel");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            assertNull(pp.getLatestIndex(r2MetaId), "r2 shadow physical index must be removed after cancel");
+        }
+        // Sibling r1 + base intact.
+        assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId), "sibling r1 meta must survive r2 cancel");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            assertNotNull(r1Idx, "sibling r1 physical index must survive r2 cancel");
+            assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(), "sibling r1 must stay NORMAL");
+        }
+        assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId), "base meta must survive r2 cancel");
     }
 }

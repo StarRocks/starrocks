@@ -40,6 +40,7 @@
 #include "platform/thrift_rpc_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -80,6 +81,10 @@ bool CompactionTaskCallback::allow_partial_success() const {
     }
 }
 
+bool CompactionTaskCallback::skip_write_txnlog() const {
+    return _request->has_skip_write_txnlog() && _request->skip_write_txnlog();
+}
+
 Status CompactionTaskCallback::has_error() const {
     std::lock_guard l(_mtx);
     if (_status.ok()) {
@@ -101,6 +106,36 @@ Status CompactionTaskCallback::has_error() const {
     } else {
         return _status;
     }
+}
+
+// Populate the metacache with a txn log that this node produced but did NOT persist itself.
+//
+// On the aggregate/file-bundling path the compaction txn log is not written to object storage by the
+// compaction worker: it travels back in `CompactResponse.txn_logs` and the aggregator folds every
+// tablet's log into one combined `<txn_id>.logs` object. Without a cache entry the subsequent publish
+// of this tablet has to download that combined object (`load_txn_log()` in transactions.cpp first
+// probes the metacache under the per-tablet txn log path, then falls back to
+// `get_combined_txn_log()`), so every file-bundling compaction pays an extra remote GET at publish
+// time. This mirrors what the file-bundling tablet metadata path already does -- skip the object
+// storage write, but still cache the metadata (`publish_version()` -> `cache_tablet_metadata()`) --
+// and what the load path already does for its own combined txn logs
+// (`DeltaWriterImpl::finish_with_txnlog()` under kDontWriteTxnLog).
+//
+// The raw (non-normalized) log is cached, exactly like `put_txn_log()` caches the caller's log rather
+// than the dual-written copy it serializes: the legacy arrays only exist for on-disk rollback compat
+// and are folded back into the structured fields by `normalize_txn_log_after_load()` on read.
+//
+// Only the complete log for a tablet reaches here. Parallel compaction subtasks carry
+// skip_write_txnlog=true as well, but their partial logs are funneled through
+// `TabletParallelCompactionManager::on_subtask_complete()` and only the merged context is handed to
+// finish_task(), so a partial log can never land in the cache under the tablet's txn log key.
+void CompactionTaskCallback::cache_txn_log(const CompactionTaskContext& context) {
+    if (_scheduler == nullptr) { // unit tests may construct a callback without a scheduler
+        return;
+    }
+    auto* tablet_mgr = _scheduler->_tablet_mgr;
+    tablet_mgr->metacache()->cache_txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id),
+                                           context.txn_log);
 }
 
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
@@ -134,6 +169,18 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         TxnLogPB normalized(*context->txn_log);
         if (auto st = normalize_txn_log_before_save(&normalized); st.ok()) {
             _response->add_txn_logs()->Swap(&normalized);
+            if (context->status.ok()) {
+                // Skip a tablet whose own compaction failed -- publish will never ask for its log.
+                // That is ALL this guard establishes; it does not make the cached log guaranteed
+                // durable. write_combined_txn_log() is gated on the whole AggregateCompactRequest
+                // succeeding (FE pins allow_partial_success to false on this path), so when a
+                // SIBLING tablet fails this log is cached while the combined object is never
+                // written, and the entry then survives until LRU eviction -- abort_txn()'s combined
+                // branch bails out on the NotFound before reaching collect_files_in_log(), the only
+                // place that erases the per-tablet key. Harmless: txn_id is never reused, so no
+                // later publish can read the stale entry.
+                cache_txn_log(*context);
+            }
         } else {
             LOG(WARNING) << "Fail to normalize aggregate-compact txn log: " << st
                          << " tablet_id=" << context->tablet_id;
@@ -144,15 +191,16 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     DCHECK(_request != nullptr);
     _status.update(context->status);
 
-    // For parallel merged context, register it to the scheduler's _contexts list
-    // so that it's visible in list_tasks() until RPC response is sent.
+    // Register a parallel merged context so remove_states() can defer cleanup of
+    // its individual subtask rows until the RPC response is sent. list_tasks()
+    // deliberately hides this aggregation-only context.
     if (context->is_parallel_merged && _scheduler != nullptr) {
         std::lock_guard ctx_lock(_scheduler->_contexts_lock);
         _scheduler->_contexts.Append(context.get());
     }
 
-    // Keep the context for a while until the RPC request is finished processing so that we can see the detailed
-    // and complete progress of the RPC request by calling `CompactionScheduler::list_tasks()`.
+    // Keep the context until the RPC request finishes. Regular contexts remain
+    // visible through list_tasks(); a merged context anchors parallel-state cleanup.
     _contexts.emplace_back(std::move(context));
     //                     ^^^^^^^^^^^^^^^^^ Do NOT touch "context" since here, it has been `move`ed.
 
@@ -400,6 +448,12 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
              node = node->next()) {
             CompactionTaskContext* context = node->value();
+            // A merged parallel context is an RPC aggregation artifact rather than
+            // an executed compaction unit. The individual subtasks are exposed by
+            // TabletParallelCompactionManager::list_tasks().
+            if (context->is_parallel_merged) {
+                continue;
+            }
             auto& info = infos->emplace_back();
             info.txn_id = context->txn_id;
             info.tablet_id = context->tablet_id;
@@ -412,7 +466,8 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
             // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
             info.finish_time = context->finish_time.load(std::memory_order_acquire);
             if (info.runs > 0) {
-                info.profile = context->stats->to_json_stats();
+                const bool profile_final = info.finish_time > 0;
+                info.profile = context->stats_snapshot(!profile_final).to_json_stats(profile_final);
             }
             if (info.finish_time > 0) {
                 info.status = context->status;
@@ -470,9 +525,9 @@ void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<Compac
         context->RemoveFromList();
     }
 
-    // Cleanup parallel compaction states for merged contexts.
-    // This is deferred from on_subtask_complete to ensure parallel compaction tasks
-    // remain visible in list_tasks until RPC response is sent.
+    // Cleanup parallel compaction states for merged contexts. This is deferred
+    // from on_subtask_complete so individual subtask rows remain visible through
+    // list_tasks() until the RPC response is sent.
     if (_parallel_mgr != nullptr) {
         for (auto& context : states) {
             if (context->is_parallel_merged) {
@@ -517,17 +572,33 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
 
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
     const auto start_time = ::time(nullptr);
+    const auto start_time_ns = MonotonicNanos();
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
+    // Each retry is a new execution attempt. The previous attempt has already been
+    // emitted to the slow log, so the context only keeps stats for the latest attempt.
+    if (context->runs.load(std::memory_order_relaxed) > 0) {
+        context->reset_attempt_stats();
+    }
+    context->task_attempt_start_ns.store(start_time_ns, std::memory_order_release);
+
     int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
     context->stats->in_queue_time_sec += in_queue_time_sec;
+    if (context->enqueue_time_ns > 0 && start_time_ns > context->enqueue_time_ns) {
+        context->stats->queue_wait_ns += start_time_ns - context->enqueue_time_ns;
+    }
     context->start_time.store(start_time, std::memory_order_relaxed);
-    context->runs.fetch_add(1, std::memory_order_relaxed);
+    const int attempt = context->runs.fetch_add(1, std::memory_order_relaxed) + 1;
+    context->stats->task_attempt_count = attempt;
+    context->publish_stats_snapshot();
 
     auto status = Status::OK();
+    auto task_prepare_start_ns = MonotonicNanos();
     auto task_or = _tablet_mgr->compact(context.get());
+    context->stats->task_prepare_ns += MonotonicNanos() - task_prepare_start_ns;
+    context->publish_stats_snapshot();
     if (task_or.ok()) {
         auto should_cancel = [&]() { return compaction_should_cancel(context.get()); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
@@ -536,21 +607,38 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
             // CAUTION: we reuse delta writer's memory table flush pool here
             flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
             if (UNLIKELY(flush_pool == nullptr)) {
-                return Status::InternalError("Get memory table flush pool failed");
+                status.update(Status::InternalError("Get memory table flush pool failed"));
             }
         }
-        status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+        if (status.ok()) {
+            auto task_execute_start_ns = MonotonicNanos();
+            context->task_execute_start_ns.store(task_execute_start_ns, std::memory_order_release);
+            status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+            context->stats->task_execute_ns += MonotonicNanos() - task_execute_start_ns;
+            context->task_execute_start_ns.store(0, std::memory_order_release);
+        }
     } else {
         status.update(task_or.status());
     }
+    context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
+    context->task_attempt_start_ns.store(0, std::memory_order_release);
+    context->publish_stats_snapshot();
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
 
+    if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+        LOG(INFO) << "Compaction task attempt finished. tablet_id=" << tablet_id << " version=" << version
+                  << " txn_id=" << txn_id << " attempt=" << attempt << " status=" << status
+                  << " profile=" << context->stats->to_json_stats() << " table_id=" << context->table_id
+                  << " partition_id=" << context->partition_id;
+    }
+
     // Task failure due to memory limitations allows for retries, more threads allow for more retries.
     // If allow partial success, do not retry, task result should be reported to FE as soon as possible.
-    if (!context->callback->allow_partial_success() && status.is_mem_limit_exceeded() &&
-        context->runs.load(std::memory_order_relaxed) < _task_queues.task_queue_size() + 1) {
+    const bool should_retry = !context->callback->allow_partial_success() && status.is_mem_limit_exceeded() &&
+                              attempt < _task_queues.task_queue_size() + 1;
+    if (should_retry) {
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
@@ -580,15 +668,19 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
 void CompactionScheduler::abort_compaction(std::unique_ptr<CompactionTaskContext> context) {
     const auto start_time = ::time(nullptr);
+    const auto start_time_ns = MonotonicNanos();
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
     int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
     context->stats->in_queue_time_sec += in_queue_time_sec;
+    if (context->enqueue_time_ns > 0 && start_time_ns > context->enqueue_time_ns) {
+        context->stats->queue_wait_ns += start_time_ns - context->enqueue_time_ns;
+    }
     context->status = Status::Aborted("Compaction task aborted due to BE/CN shutdown!");
     LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id << " : "
-                 << context->status;
+                 << context->status << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
     // make sure every task can be finished no matter it is succeeded or failed.
     context->callback->finish_task(std::move(context));
 }

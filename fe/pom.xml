@@ -54,6 +54,7 @@ under the License.
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.16.0</parquet.version>
+        <ranger.version>2.8.0</ranger.version>
         <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
@@ -69,8 +70,8 @@ under the License.
         <hikaricp.version>7.0.2</hikaricp.version>
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
-        <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.135.Final</io.netty.version>
+        <grpc.version>1.76.0</grpc.version>
+        <io.netty.version>4.1.136.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -78,9 +79,10 @@ under the License.
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.3.1</paimon.version>
+        <fluss.version>0.9.1-incubating</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.2-rc2</staros.version>
+        <staros.version>4.2-rc3</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
@@ -94,7 +96,8 @@ under the License.
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <bouncycastle.version>1.84</bouncycastle.version>
-        <thrift.version>0.23.0</thrift.version>
+        <thrift.version>0.24.0</thrift.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
     <profiles>
@@ -306,6 +309,24 @@ under the License.
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
                 <version>5.4.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-reactive</artifactId>
+                <version>${httpcore5.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -601,6 +622,14 @@ under the License.
                 <version>3.4.0</version>
             </dependency>
 
+            <!-- xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+                 7 jars that still reference it (commons-compress, clickhouse-jdbc, ...) -->
+            <dependency>
+                <groupId>org.tukaani</groupId>
+                <artifactId>xz</artifactId>
+                <version>1.9</version>
+            </dependency>
+
             <!-- pin okio-jvm to the same version as okio; okhttp 4.10.0 drags in
                  okio-jvm 3.0.0 which is affected by CVE-2023-3635 -->
             <dependency>
@@ -757,6 +786,12 @@ under the License.
                     <exclusion>
                         <groupId>org.eclipse.jetty</groupId>
                         <artifactId>jetty-server</artifactId>
+                    </exclusion>
+                    <!-- avro-ipc ships jquery 1.4.2 (CVE-2011-4969 etc.); only referenced by
+                         avro-mapred's tether feature which is never used -->
+                    <exclusion>
+                        <groupId>org.apache.avro</groupId>
+                        <artifactId>avro-ipc</artifactId>
                     </exclusion>
                     <exclusion>
                         <groupId>org.eclipse.jetty</groupId>
@@ -1214,7 +1249,7 @@ under the License.
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
-                <version>42.7.11</version>
+                <version>42.7.12</version>
             </dependency>
 
             <dependency>
@@ -1345,34 +1380,17 @@ under the License.
                 <version>${odps.version}</version>
             </dependency>
 
+            <!-- Import the gRPC BOM instead of pinning artifacts individually. Individual
+                 <dependency> entries only govern the artifacts they name, so io.grpc artifacts
+                 that arrive transitively are left unmanaged: arrow flight-core brings in
+                 io.grpc:grpc-netty at its own version, which then runs against a grpc-core
+                 pinned here. The BOM covers direct and transitive io.grpc artifacts alike. -->
             <dependency>
                 <groupId>io.grpc</groupId>
-                <artifactId>grpc-api</artifactId>
+                <artifactId>grpc-bom</artifactId>
                 <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-netty-shaded</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-protobuf</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-stub</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-core</artifactId>
-                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <dependency>
@@ -1384,6 +1402,12 @@ under the License.
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-memory-netty</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-compression</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
 
@@ -1455,6 +1479,33 @@ under the License.
                 <groupId>org.apache.paimon</groupId>
                 <artifactId>paimon-oss</artifactId>
                 <version>${paimon.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-client</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-common</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-lake-paimon</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.fluss</groupId>
+                <artifactId>fluss-flink-common</artifactId>
+                <version>${fluss.version}</version>
+            </dependency>
+            <!-- Required by fluss-flink-common, which declares flink-core with provided scope. -->
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-core</artifactId>
+                <version>1.20.1</version>
             </dependency>
 
             <dependency>
@@ -1597,7 +1648,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.ranger</groupId>
                 <artifactId>ranger-plugins-common</artifactId>
-                <version>2.8.0</version>
+                <version>${ranger.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.elasticsearch</groupId>
@@ -1614,6 +1665,38 @@ under the License.
                     <exclusion>
                         <groupId>com.sun.jersey</groupId>
                         <artifactId>jersey-bundle</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-audit-dest-solr -->
+            <!-- Ranger 2.8.0 modularized the audit layer: ranger-plugins-common now only pulls
+                 ranger-audit-core (File destination). The Solr audit destination lives in this
+                 separate module. conf/ranger/ranger-starrocks-audit.xml enables solr audit
+                 (xasecure.audit.solr.is.enabled=true), so SolrAuditDestination must be on the FE
+                 classpath or the audit provider fails to init. solr-solrj (8.11.3) and the heavy
+                 transitive deps (netty/zookeeper/woodstox/jetty) are already excluded upstream in
+                 the dest-solr pom, EXCEPT jetty-client which dest-solr declares directly - it
+                 resolves to the banned 9.4.58 (see the ban-vulnerable-dependencies enforcer rule
+                 below: jetty-client/security/http are CVE-2026-10050 / CVE-2026-2332). Solr audit
+                 uses the Apache HttpClient path (HttpClientUtil / LBHttpSolrClient), not the Jetty
+                 HTTP/2 client, so excluding all of org.eclipse.jetty is runtime-safe. -->
+            <dependency>
+                <groupId>org.apache.ranger</groupId>
+                <artifactId>ranger-audit-dest-solr</artifactId>
+                <version>${ranger.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.elasticsearch</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.elasticsearch.client</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>*</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1694,6 +1777,25 @@ under the License.
                                         <exclude>org.apache.tomcat.embed:*</exclude>
                                         <!-- tencentcloud-sdk below 3.1.1471 drags in EOL okhttp 2.7.5 -->
                                         <exclude>com.tencentcloudapi:*:[,3.1.1471)</exclude>
+                                        <!-- ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's
+                                             unused tether feature references it -->
+                                        <exclude>org.apache.avro:avro-ipc</exclude>
+                                        <exclude>org.apache.avro:avro-ipc-jetty</exclude>
+                                        <!-- CVE-2026-10050 (jetty-client, jetty-security) and
+                                             CVE-2026-2332 (jetty-http): excluded from the hadoop-common /
+                                             hadoop-client edges in fe-core. Those exclusions only hold
+                                             because hadoop-common is the nearest jetty-server path, so a
+                                             later Hadoop bump could silently re-introduce the jars now
+                                             that the trivy waiver is gone - ban them to fail the build
+                                             instead. Restricted to compile/runtime: spark-dpp and hive-udf
+                                             legitimately see them at provided scope (supplied by
+                                             Spark/Hive at runtime, never packaged). -->
+                                        <exclude>org.eclipse.jetty:jetty-client:*:jar:compile</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-client:*:jar:runtime</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-security:*:jar:compile</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-security:*:jar:runtime</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-http:*:jar:compile</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-http:*:jar:runtime</exclude>
                                     </excludes>
                                 </bannedDependencies>
                             </rules>

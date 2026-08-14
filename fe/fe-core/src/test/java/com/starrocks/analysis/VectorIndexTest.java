@@ -18,7 +18,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.IndexParams.IndexParamItem;
-import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
 import com.starrocks.common.VectorIndexParams.IndexParamsKey;
@@ -54,7 +53,6 @@ public class VectorIndexTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        Config.enable_experimental_vector = true;
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +

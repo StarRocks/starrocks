@@ -935,7 +935,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec);
 
-        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // Register loaded indexes so prePrepared() validates the same indexes that were collected,
         // not the latest (which may change due to tablet split).
         TransactionState txnState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
                 .getTransactionState(databaseId, transactionId);
@@ -1150,6 +1150,20 @@ public class ReplicationJob implements GsonPostProcessable {
 
     protected boolean isCrashRecovery() {
         return runningTasks.isEmpty() && finishedTasks.isEmpty() && (taskNum == 0);
+    }
+
+    /**
+     * Drop the leader-session-only task bookkeeping so a re-elected leader in this same process
+     * re-drives the current state exactly like a freshly deserialized job ({@link #isCrashRecovery()}
+     * needs all three empty - leaving any one populated pins the job until the replication
+     * transaction times out, because demotion abandoned the queued agent tasks and their BE finish
+     * reports are dropped at the task-queue lookup). Journal-visible fields (state, transactionId,
+     * ...) are untouched. Called from ReplicationMgr.onStopped() on leader demotion.
+     */
+    protected void resetLeaderSessionTaskState() {
+        runningTasks.clear();
+        finishedTasks.clear();
+        taskNum = 0;
     }
 
     public ReplicationJob copyForPersist() {

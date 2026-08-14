@@ -71,7 +71,6 @@ class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
-class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterPort;
 class RuntimeFilterRegistry;
@@ -587,6 +586,12 @@ public:
     bool enable_collect_table_level_scan_stats() const {
         return _query_options.__isset.enable_collect_table_level_scan_stats &&
                _query_options.enable_collect_table_level_scan_stats;
+    }
+
+    double lake_tablet_internal_parallel_skew_split_ratio() const {
+        return _query_options.__isset.lake_tablet_internal_parallel_skew_split_ratio
+                       ? _query_options.lake_tablet_internal_parallel_skew_split_ratio
+                       : 1.5;
     }
 
     bool enable_wait_dependent_event() const {

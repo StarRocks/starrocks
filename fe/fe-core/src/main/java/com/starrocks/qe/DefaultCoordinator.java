@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -136,6 +137,8 @@ public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
 
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
+    // Cap on how many pending instances are named individually, so a wide fan-out cannot blow up the log.
+    private static final int MAX_LOGGED_UNREPORTED_INSTANCES = 20;
     private static final ExecutorService EXTERNAL_RESOURCE_CLEANUP_EXECUTOR =
             ThreadPoolManager.newDaemonCacheThreadPool(32, 1024, "external-resource-cleanup", false);
 
@@ -156,6 +159,13 @@ public class DefaultCoordinator extends Coordinator {
      * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel(String cancelledMessage)} is called.
      */
     private Status queryStatus = new Status();
+
+    /**
+     * When the query was cancelled, or -1 if it was not.
+     * <p> Bounds how long {@link #join} keeps waiting for instances that have not reported yet, using
+     * {@link SessionVariable#PROFILE_TIMEOUT}.
+     */
+    private volatile long cancelledAtMs = -1;
 
     private PQueryStatistics auditStatistics;
 
@@ -541,6 +551,39 @@ public class DefaultCoordinator extends Coordinator {
 
     public CoordinatorPreprocessor getPrepareInfo() {
         return coordinatorPreprocessor;
+    }
+
+    // Build a single BE-local TExecPlanFragmentParams for the classic synchronous stream load
+    // (Config.enable_pipeline_stream_load). Assign the fragment instance to a worker WITHOUT any
+    // RPC deploy, then materialize its pipeline-correct params (carrying
+    // node_to_per_driver_seq_scan_ranges so the connector scan gets a morsel). The receiving BE
+    // executes the returned params in-process. Stream load builds exactly one fragment
+    // (ScanNode -> OlapTableSink) with one instance.
+    public TExecPlanFragmentParams buildLocalStreamLoadParams() throws StarRocksException {
+        prepareExec();
+        // BE-local execution runs a single fragment in-process. A multi-fragment (shuffle) plan
+        // cannot be executed this way; fail clearly instead of silently running only the root.
+        if (executionDAG.getFragmentsInCreatedOrder().size() > 1) {
+            throw new StarRocksException("pipeline stream load does not support a multi-fragment "
+                    + "(shuffle) plan; keep eliminate_shuffle_load_by_replicated_storage=true or "
+                    + "disable enable_pipeline_stream_load");
+        }
+        // Build and REGISTER the fragment instance exec state in the executionDAG via the Deployer
+        // with needDeploy=false (no RPC deploy), so the BE exec-state/profile report can land at this
+        // coordinator and the load profile surfaces via StreamLoadTask. Then return the single
+        // instance params for BE-local execution.
+        Deployer deployer = new Deployer(connectContext, jobSpec, executionDAG,
+                coordinatorPreprocessor.getCoordAddress(), this::handleErrorExecution, false);
+        deployer.createFragmentExecStates(executionDAG.getFragmentsInCreatedOrder());
+        // The fragment runs in-process on the BE (no FE deploy); mark instances EXECUTING so their
+        // exec-state/profile reports are accepted, enabling load profile collection.
+        executionDAG.getExecutions().forEach(FragmentInstanceExecState::markLocalExecuting);
+        queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
+        var executions = executionDAG.getExecutions();
+        if (executions.isEmpty()) {
+            throw new StarRocksException("stream load fragment has no instance to execute");
+        }
+        return executions.iterator().next().getRequestToDeploy();
     }
 
     public List<PlanFragment> getFragments() {
@@ -1105,6 +1148,9 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        if (!isInternalCancel(cancelReason) && cancelledAtMs < 0) {
+            cancelledAtMs = System.currentTimeMillis();
+        }
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         clearExternalResourcesAsync();
 
@@ -1131,6 +1177,73 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
     }
+
+    /**
+     * Log the fragment instances that have not sent their final report yet, if any.
+     * <p>
+     * An instance is only counted down by a {@code done=true} report, so an instance whose worker stops
+     * finalizing never leaves this set and {@link #join} keeps waiting for it after cancellation. Naming these
+     * instances identifies the affected worker when the cancellation grace period expires.
+     */
+    private void logUnreportedInstances(String context) {
+        try {
+            UnreportedInstanceSummary summary = summarizeUnreportedInstances();
+            if (summary.total() == 0) {
+                return;
+            }
+            LOG.warn("query {} {}, {} instance(s) have not reported yet, pending per worker: {}, first {}: {}",
+                    DebugUtil.printId(jobSpec.getQueryId()), context, summary.total(),
+                    summary.pendingPerWorker(), summary.sample().size(), summary.sample());
+        } catch (Throwable e) {
+            // join() calls this without the coordinator lock, and phased scheduling can add executions
+            // concurrently. Diagnostics must never break the wait they are describing.
+            LOG.warn("failed to summarize unreported instances of query {}",
+                    DebugUtil.printId(jobSpec.getQueryId()), e);
+        }
+    }
+
+    /**
+     * Summarize instances still missing from the profile latch without formatting every instance in a wide
+     * fan-out. Per-worker counts identify the affected nodes, while the formatted sample stays bounded.
+     */
+    @VisibleForTesting
+    public UnreportedInstanceSummary summarizeUnreportedInstances() {
+        List<String> unreportedIds = queryProfile.getUnfinishedInstanceIds();
+        if (unreportedIds.isEmpty()) {
+            return new UnreportedInstanceSummary(0, Collections.emptyMap(), Collections.emptyList());
+        }
+
+        Set<String> unmatchedIds = Sets.newHashSet(unreportedIds);
+        Map<Long, Long> pendingPerWorker = Maps.newTreeMap();
+        List<String> sample = Lists.newArrayListWithCapacity(
+                Math.min(unreportedIds.size(), MAX_LOGGED_UNREPORTED_INSTANCES));
+        for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
+            String instanceId = DebugUtil.printId(execState.getInstanceId());
+            if (!unmatchedIds.remove(instanceId)) {
+                continue;
+            }
+
+            ComputeNode worker = execState.getWorker();
+            String workerId = worker == null ? "not-deployed" : String.valueOf(worker.getId());
+            if (worker != null) {
+                pendingPerWorker.merge(worker.getId(), 1L, Long::sum);
+            }
+            if (sample.size() < MAX_LOGGED_UNREPORTED_INSTANCES) {
+                sample.add(String.format("%s@%s(%s)", instanceId, workerId, execState.getState()));
+            }
+        }
+
+        for (String instanceId : unmatchedIds) {
+            if (sample.size() >= MAX_LOGGED_UNREPORTED_INSTANCES) {
+                break;
+            }
+            sample.add(instanceId + "@not-deployed(UNKNOWN)");
+        }
+        return new UnreportedInstanceSummary(unreportedIds.size(), pendingPerWorker, sample);
+    }
+
+    @VisibleForTesting
+    public record UnreportedInstanceSummary(int total, Map<Long, Long> pendingPerWorker, List<String> sample) {}
 
     @Override
     public void clearExternalResources() {
@@ -1296,8 +1409,11 @@ public class DefaultCoordinator extends Coordinator {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
             if (!status.isSuppressedError()) {
-                LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                        status, DebugUtil.printId(jobSpec.getQueryId()),
+                // The report itself arrived; it is the reported execution that failed. Say so explicitly,
+                // and include done= because only a done=true report retires the instance.
+                LOG.warn("received failed exec state report, status={}, done={}, query_id={}, instance_id={}, " +
+                                "backend_id={}",
+                        status, params.isDone(), DebugUtil.printId(jobSpec.getQueryId()),
                         DebugUtil.printId(params.getFragment_instance_id()),
                         params.getBackend_id());
             }
@@ -1368,13 +1484,7 @@ public class DefaultCoordinator extends Coordinator {
 
         // wait for all backends
         if (jobSpec.isNeedReport()) {
-            int timeout;
-            // connectContext can be null for broker export task coordinator
-            if (connectContext != null) {
-                timeout = connectContext.getSessionVariable().getProfileTimeout();
-            } else {
-                timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
-            }
+            int timeout = getProfileTimeoutSecond();
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
@@ -1438,13 +1548,40 @@ public class DefaultCoordinator extends Coordinator {
     public boolean join(int timeoutS) {
         final long fixedMaxWaitTime = 5;
 
-        long leftTimeoutS = timeoutS;
+        long leftTimeoutMs = timeoutS * 1000L;
         boolean awaitRes = false;
-        while (leftTimeoutS > 0) {
-            long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+        while (leftTimeoutMs > 0) {
+            // Check before blocking, otherwise a profile timeout of 0 would still wait out a whole round.
+            if (profileWaitAfterCancelExpired()) {
+                return true;
+            }
+
+            long waitTimeMs = Math.min(leftTimeoutMs, fixedMaxWaitTime * 1000L);
+            long graceLeftMs = remainingCancelGraceMs();
+            if (graceLeftMs >= 0) {
+                // Never sleep past the end of the grace period. At least 1ms, so this cannot spin.
+                waitTimeMs = Math.max(1, Math.min(waitTimeMs, graceLeftMs));
+            }
+
+            awaitRes = queryProfile.waitForProfileFinished(waitTimeMs, TimeUnit.MILLISECONDS);
             if (awaitRes) {
                 return true;
+            }
+
+            // The wait was interrupted (e.g. a leader-demotion shutdownNow() on the loading/export pool
+            // that runs this coordinator). Stop re-looping so the pool task unwinds promptly instead of
+            // waiting out the remaining query/load timeout; the interrupt flag is preserved for the caller.
+            if (Thread.currentThread().isInterrupted()) {
+                LOG.warn("interrupted while joining, stop waiting for profile after {} seconds",
+                        TimeUnit.MILLISECONDS.toSeconds(timeoutS * 1000L - leftTimeoutMs));
+                return false;
+            }
+
+            leftTimeoutMs -= waitTimeMs;
+
+            if (cancelledAtMs >= 0) {
+                // Recompute the remaining profile timeout after this wait round observes cancellation.
+                continue;
             }
 
             if (!checkBackendState()) {
@@ -1455,14 +1592,60 @@ public class DefaultCoordinator extends Coordinator {
                     && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
                 thriftServerHighLoad = true;
             }
-
-            leftTimeoutS -= waitTime;
         }
 
         if (!awaitRes) {
             LOG.warn("failed to get profile within {} seconds", timeoutS);
         }
         return false;
+    }
+
+    /**
+     * Stop waiting for the still unreported instances once a cancelled query has been given its grace period.
+     * <p>
+     * An instance is only retired from the profile latch by a {@code done=true} report. If its worker stops
+     * finalizing while its heartbeat keeps answering, that report never arrives and neither
+     * {@link CoordinatorMonitor} nor {@link #checkBackendState} declares the worker dead, so the only thing
+     * left bounding the wait is the statement timeout - up to insert_timeout for DML. The query has already
+     * been cancelled at this point and is going to fail either way, so waiting longer only delays the error.
+     *
+     * @return true if the wait was ended here, in which case the query is marked done so the caller reports
+     *         the error that caused the cancel rather than a timeout.
+     */
+    @VisibleForTesting
+    public boolean profileWaitAfterCancelExpired() {
+        long graceLeftMs = remainingCancelGraceMs();
+        if (graceLeftMs != 0) {
+            // -1 means the query was not cancelled, anything positive means the grace period is still open.
+            return false;
+        }
+
+        long waitedMs = System.currentTimeMillis() - cancelledAtMs;
+        logUnreportedInstances(String.format("was cancelled %dms ago; giving up on the remaining profile", waitedMs));
+        // Release the latch so isDone() holds and the caller does not mistake this for a timeout.
+        queryProfile.finishAllInstances(Status.OK);
+        return true;
+    }
+
+    /**
+     * Milliseconds left in the cancellation grace period: -1 if the query was not cancelled, 0 once the
+     * grace period has elapsed. {@link #join} also uses it to avoid sleeping past the deadline.
+     */
+    private long remainingCancelGraceMs() {
+        long cancelledAt = cancelledAtMs;
+        if (cancelledAt < 0) {
+            return -1;
+        }
+        long deadlineMs = cancelledAt + getProfileTimeoutSecond() * 1000L;
+        return Math.max(0, deadlineMs - System.currentTimeMillis());
+    }
+
+    private int getProfileTimeoutSecond() {
+        // connectContext can be null for broker export task coordinator.
+        if (connectContext == null || connectContext.getSessionVariable() == null) {
+            return DEFAULT_PROFILE_TIMEOUT_SECOND;
+        }
+        return connectContext.getSessionVariable().getProfileTimeout();
     }
 
     // build execution profile  from every BE's report

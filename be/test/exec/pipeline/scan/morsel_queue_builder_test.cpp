@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec_primitive/pipeline/scan/dynamic_morsel_queue_builder.h"
 #include "exec_primitive/pipeline/scan/fixed_morsel_queue_builder.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
@@ -213,6 +214,71 @@ TEST_F(MorselQueueBuilderTest, take_morsels_moves_owned_morsels) {
     auto morsels = builder->take_morsels();
     ASSERT_EQ(2, morsels.size());
     ASSERT_EQ(0, builder->num_original_morsels());
+}
+
+// add_split_source_morsels (used by the prepared-split path to deliver refined morsels
+// incrementally) must bump the outstanding-morsel counter and set has_more_from_split(true) on
+// every driver queue; mark_split_source_morsel_finished drains the counter and clears the flag
+// exactly when the last outstanding morsel is consumed. Both are no-ops unless the factory was
+// built with enable_random_append_split_morsel.
+TEST_F(MorselQueueBuilderTest, individual_factory_split_source_morsel_lifecycle) {
+    auto make_queue = [](int n) {
+        return std::move(make_fixed_morsel_queue_builder(make_morsels(n))->build()).value();
+    };
+
+    {
+        std::map<int, MorselQueuePtr> queues;
+        queues.emplace(0, make_queue(1));
+        queues.emplace(1, make_queue(1));
+        IndividualMorselQueueFactory factory(std::move(queues), /*could_local_shuffle=*/false,
+                                             /*enable_random_append_split_morsel=*/true);
+        const int64_t initial = factory._remaining_split_source_morsels.load();
+
+        factory.add_split_source_morsels(3);
+        EXPECT_EQ(initial + 3, factory._remaining_split_source_morsels.load());
+        for (auto& q : factory._queue_per_driver_seq) {
+            EXPECT_TRUE(q->has_more_from_split());
+        }
+
+        // The flag stays true until the very last outstanding morsel is marked finished.
+        const int64_t total = initial + 3;
+        for (int64_t i = 0; i < total - 1; ++i) {
+            ASSERT_TRUE(factory.mark_split_source_morsel_finished().ok());
+            for (auto& q : factory._queue_per_driver_seq) {
+                EXPECT_TRUE(q->has_more_from_split());
+            }
+        }
+        ASSERT_TRUE(factory.mark_split_source_morsel_finished().ok()); // counter hits zero
+        EXPECT_EQ(0, factory._remaining_split_source_morsels.load());
+        for (auto& q : factory._queue_per_driver_seq) {
+            EXPECT_FALSE(q->has_more_from_split());
+        }
+    }
+
+    // Feature disabled -> add is a no-op (counter stays 0, no flag flip).
+    {
+        std::map<int, MorselQueuePtr> queues;
+        queues.emplace(0, make_queue(1));
+        IndividualMorselQueueFactory factory(std::move(queues), /*could_local_shuffle=*/false,
+                                             /*enable_random_append_split_morsel=*/false);
+        factory.add_split_source_morsels(3);
+        EXPECT_EQ(0, factory._remaining_split_source_morsels.load());
+        for (auto& q : factory._queue_per_driver_seq) {
+            EXPECT_FALSE(q->has_more_from_split());
+        }
+    }
+
+    // count <= 0 -> no-op even when enabled.
+    {
+        std::map<int, MorselQueuePtr> queues;
+        queues.emplace(0, make_queue(2));
+        IndividualMorselQueueFactory factory(std::move(queues), /*could_local_shuffle=*/false,
+                                             /*enable_random_append_split_morsel=*/true);
+        const int64_t initial = factory._remaining_split_source_morsels.load();
+        factory.add_split_source_morsels(0);
+        factory.add_split_source_morsels(-5);
+        EXPECT_EQ(initial, factory._remaining_split_source_morsels.load());
+    }
 }
 
 } // namespace starrocks::pipeline

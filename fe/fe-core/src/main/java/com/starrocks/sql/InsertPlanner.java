@@ -123,9 +123,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -281,7 +283,14 @@ public class InsertPlanner {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
-            outputFullSchema = targetTable.getFullSchema();
+            // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
+            // Exclude stale schema-change shadow columns from the sink while retaining derived columns
+            // of normal synchronous materialized views, which are also kept in fullSchema. A completed
+            // OPTIMIZE may also leave same-named generated-column entries in fullSchema, so only emit one
+            // occurrence of each logical column and prefer the committed base-schema definition.
+            outputFullSchema = session.isOptimizeRewrite()
+                    ? getOptimizeOutputFullSchema(targetTable)
+                    : targetTable.getFullSchema();
         }
 
         if (targetTable.isIcebergTable()) {
@@ -361,12 +370,32 @@ public class InsertPlanner {
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             long tableId = targetTable.getId();
+            // A shadow-rewrite INSERT (the internal online rewrite that materializes a range rollup or a
+            // schema-change shadow index) writes ONLY the target write index. Base columns outside that
+            // index's column set are carried in the tuple solely to satisfy the sink's base
+            // distribution/partition plumbing (BE validates their presence); they are never persisted nor
+            // used for range routing (per-index distribution exprs route by the target index's key). Relax
+            // their slot nullability so an omitted NOT-NULL base column that is default-filled with NULL is
+            // not rejected by the BE non-nullable data validation.
+            boolean shadowRewriteSubsetWrite =
+                    insertStmt.isShadowRewrite() && insertStmt.getTargetWriteIndexId() != null;
+            Set<String> shadowRewriteTargetIndexColumns = Collections.emptySet();
+            if (shadowRewriteSubsetWrite) {
+                MaterializedIndexMeta targetIndexMeta =
+                        ((OlapTable) targetTable).getIndexMetaByMetaId(insertStmt.getTargetWriteIndexId());
+                Preconditions.checkState(targetIndexMeta != null && !targetIndexMeta.getSchema().isEmpty(),
+                        "shadow-rewrite target write index %s not found", insertStmt.getTargetWriteIndexId());
+                shadowRewriteTargetIndexColumns = targetIndexMeta.getSchema().stream()
+                        .map(c -> c.getName().toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+            }
             for (Column column : outputFullSchema) {
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
+                boolean nullable = column.isAllowNull() || (shadowRewriteSubsetWrite
+                        && !shadowRewriteTargetIndexColumns.contains(column.getName().toLowerCase(Locale.ROOT)));
+                slotDescriptor.setIsNullable(nullable);
                 if (column.getType().isVarchar() &&
                         IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
                     Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
@@ -566,6 +595,18 @@ public class InsertPlanner {
         }
         throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
                 watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private List<Column> getOptimizeOutputFullSchema(Table targetTable) {
+        List<Column> outputSchema = new ArrayList<>(targetTable.getBaseSchema());
+        Set<String> outputColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        targetTable.getBaseSchema().stream().map(Column::getName).forEach(outputColumnNames::add);
+        for (Column column : targetTable.getFullSchema()) {
+            if (!column.isShadowColumn() && outputColumnNames.add(column.getName())) {
+                outputSchema.add(column);
+            }
+        }
+        return outputSchema;
     }
 
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,

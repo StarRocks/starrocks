@@ -46,6 +46,7 @@ set(STORAGE_FILES
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
+    non_closing_chunk_iterator.cpp
     kv_store.cpp
     local_tablet_reader.cpp
     olap_server.cpp
@@ -158,6 +159,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
     delta_writer.cpp
     memtable.cpp
@@ -186,6 +188,7 @@ set(STORAGE_FILES
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/combined_txn_log_writer.cpp
     lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
@@ -195,6 +198,7 @@ set(STORAGE_FILES
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
+    lake/pk_tablet_unsort_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
@@ -287,7 +291,6 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
-    index/vector/empty_index_reader.cpp
     index/vector/vector_index_cache.cpp
     index/vector/vector_index_cache_metrics.cpp
     index/vector/vector_index_builder_factory.cpp
@@ -321,3 +324,4 @@ ADD_BE_LIB(Storage
 )
 
 target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
+target_link_libraries(Storage PRIVATE Runtime)

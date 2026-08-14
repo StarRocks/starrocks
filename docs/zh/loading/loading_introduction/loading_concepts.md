@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "数据导入基本概念：标签、权限、原子性、数据类型转换、列映射和错误容限。"
 toc_max_heading_level: 4
@@ -32,7 +33,7 @@ StarRocks 支持导入所有数据类型。个别数据类型的导入可能会�
 
 ## 严格模式
 
-严格模式 (Strict Mode) 是导入操作中的一个选配项，其设置会影响 StarRocks 对某些数据的导入行为和最终导入到 StarRocks 中的结果数据。详细内容参见[严格模式](../load_concept/strict_mode.md)文档。
+严格模式 (Strict Mode) 是导入操作中的一个选配项，其设置会影响 StarRocks 对某些数据的导入行为和最终导入到 StarRocks 中的结果数据。详细内容参见[严格模式](../strict_mode.md)文档。
 
 ## 导入模式
 

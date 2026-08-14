@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "curl コマンドを使用してローカルファイルシステムから CSV、JSON、Parquet、ORC 形式でデータをロードする Stream Load の方法。"
 keywords: ['Stream Load']
@@ -23,7 +24,7 @@ CSV データについては、以下の点に注意してください。
 - カンマ（,）、タブ、またはパイプ（|）などの UTF-8 文字列をテキスト区切り文字として使用できます。長さは 50 バイトを超えないようにしてください。
 - Null 値は `\N` を使用して示されます。たとえば、データファイルが 3 つの列で構成されており、そのデータファイルのレコードが最初と 3 番目の列にデータを保持し、2 番目の列にデータがない場合、この状況では 2 番目の列に `\N` を使用して null 値を示す必要があります。つまり、レコードは `a,\N,b` としてコンパイルされる必要があります。`a,,b` は、レコードの 2 番目の列が空の文字列を保持していることを示します。
 
-Stream Load と Broker Load はどちらもデータロード時にデータ変換をサポートし、データロード時に UPSERT および DELETE 操作によるデータ変更をサポートします。詳細については、[Transform data at loading](../loading/Etl_in_loading.md) および [Change data through loading](../loading/Load_to_Primary_Key_tables.md) を参照してください。
+Stream Load と Broker Load はどちらもデータロード時にデータ変換をサポートし、データロード時に UPSERT および DELETE 操作によるデータ変更をサポートします。詳細については、[Transform data at loading](./Etl_in_loading.md) および [Change data through loading](./Load_to_Primary_Key_tables.md) を参照してください。
 
 ## 始める前に
 
@@ -33,7 +34,7 @@ Stream Load と Broker Load はどちらもデータロード時にデータ変�
 
 #### ネットワーク設定の確認
 
-ロードしたいデータが存在するマシンが、StarRocks クラスタの FE および BE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
+ロードしたいデータが存在するマシンが、StarRocks クラスタの FE および BE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
 
 ## Stream Load を介したローカルファイルシステムからのロード
 
@@ -332,7 +333,7 @@ Stream Load では、ロードジョブをキャンセルすることはでき�
 
 このセクションでは、Stream Load 方法を選択した場合に設定する必要があるいくつかのシステムパラメータについて説明します。これらのパラメータ設定は、すべての Stream Load ジョブに適用されます。
 
-- `streaming_load_max_mb`: ロードしたい各データファイルの最大サイズ。デフォルトの最大サイズは 10 GB です。詳細については、[Configure BE or CN dynamic parameters](../administration/management/BE_configuration.md) を参照してください。
+- `streaming_load_max_mb`: ロードしたい各データファイルの最大サイズ。デフォルトの最大サイズは 10 GB です。詳細については、[Configure BE or CN dynamic parameters](../administration/configuration/BE_parameters/BE_parameters.md) を参照してください。
   
   一度に 10 GB を超えるデータをロードしないことをお勧めします。データファイルのサイズが 10 GB を超える場合は、データファイルを 10 GB 未満の小さなファイルに分割し、それらのファイルを一つずつロードすることをお勧めします。10 GB を超えるデータファイルを分割できない場合は、ファイルサイズに基づいてこのパラメータの値を増やすことができます。
 
@@ -348,7 +349,7 @@ Stream Load では、ロードジョブをキャンセルすることはでき�
 
   :::
 
-- `stream_load_default_timeout_second`: 各ロードジョブのタイムアウト期間。デフォルトのタイムアウト期間は 600 秒です。詳細については、[Configure FE dynamic parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) を参照してください。
+- `stream_load_default_timeout_second`: 各ロードジョブのタイムアウト期間。デフォルトのタイムアウト期間は 600 秒です。詳細については、[Configure FE dynamic parameters](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) を参照してください。
   
   作成したロードジョブの多くがタイムアウトする場合は、次の式から得られる計算結果に基づいてこのパラメータの値を増やすことができます。
 

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 description: Delta Lake から直接データをクエリする
 displayed_sidebar: docs
 ---
@@ -30,7 +31,7 @@ Delta Lake クラスターが AWS S3 をストレージとして使用してい�
 
 上記の3つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
 
-詳細については、 [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication) を参照してください。
+詳細については、 [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication) を参照してください。
 
 ### HDFS
 
@@ -152,7 +153,7 @@ Delta Lake データをクエリする前に、Hive メタストアノードの�
 | aws.glue.access_key           | No       | AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.glue.secret_key           | No       | AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS Glue にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
+AWS Glue にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
 
 <DatabricksParams />
 
@@ -202,7 +203,7 @@ Delta Lake クラスターのストレージとして AWS S3 を選択した場�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 ##### S3 互換ストレージシステム
 

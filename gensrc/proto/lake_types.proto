@@ -63,10 +63,20 @@ message PersistentIndexSstablePB {
     optional PUniqueId fileset_id = 12;
     // Offset applied to rssid when reusing sstables across tablets (e.g., tablet merge).
     optional int32 rssid_offset = 13 [default = 0];
+    // The tablet metadata version at which this physical sstable file first
+    // became visible -- i.e. the new version of the publish (or reshard) that
+    // produced it. Stamped once when the file is first persisted and never
+    // changed afterward; CopyFrom inherits it across tablet split/merge so a
+    // shared file keeps its original value. A non-zero value is never
+    // overwritten. 0/unset means unknown -- e.g. a file created before this
+    // field existed stays 0, so consumers such as lake vacuum retention must
+    // treat 0 conservatively.
+    optional int64 generation_version = 14;
 }
 
 message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
+    // sstables are ordered by max_rss_rowid ascending (see
+    // LakePersistentIndex::commit and apply_opcompaction), not by any version.
     repeated PersistentIndexSstablePB sstables = 1;
 }
 
@@ -81,6 +91,11 @@ message FileMetaPB {
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
     optional bytes encryption_meta = 4;
+    // The tablet metadata version at which the file was created. Stamped when the file is moved into
+    // orphan_files so lake vacuum can tell whether the file was live at a snapshot-retained version
+    // without reading that version's tablet metadata. Unset (0) means "creation version unknown" and
+    // is treated conservatively (retained under any covering retain version).
+    optional int64 version = 5;
 }
 
 message DelvecMetadataPB {
@@ -109,10 +124,6 @@ message DeltaColumnGroupVerPB {
 message DeltaColumnGroupMetadataPB {
     // from segment id to delta column group
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
-}
-
-message CdcMetadataPB {
-    // no implementation, only used for placeholder in TabletMetadataPB
 }
 
 // An Index Delta Group (IDG) entry describes a standalone .idx file
@@ -178,6 +189,17 @@ message DelfileWithRowsetId {
     optional bytes encryption_meta = 4;
     // Whether this file shared by multiple tablets
     optional bool shared = 5 [default=false];
+    // The tablet metadata version at which this del file was created. Stamped once at creation and
+    // carried verbatim by CopyFrom when the del file is transferred to a compaction output rowset or
+    // inherited across tablet split/merge, so it reflects the ORIGINAL creation version even after
+    // the containing rowset is re-versioned. Lake vacuum uses it to tell whether the del file was
+    // live at a snapshot-retained version. Unset (0) means "creation version unknown" and is treated
+    // conservatively (retained under any covering retain version).
+    optional int64 version = 6;
+    // Number of delete rows (tombstones) in this del file, recorded at write time. Used by the
+    // cloud-native PK index to account tombstone volume toward the rebuild-rows threshold. Absent
+    // on del files written before this field existed (treated as 0).
+    optional int64 num_rows = 7;
 }
 
 message SegmentMetadataPB {
@@ -192,22 +214,26 @@ message SegmentMetadataPB {
     // IDs of vector indexes that need .vi files for this segment.
     // Only populated when the segment meets the build threshold.
     repeated int64 vector_index_ids = 5;
+    // Deprecated: superseded by the full sort key index. Still written for
+    // legacy/config-off segments; removal deferred to a later version.
     // Equal-row-interval samples of the sort key, NON-DECREASING.
-    // sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
-    // where interval == sort_key_sample_row_interval. Always paired with
-    // a positive sort_key_sample_row_interval. May be empty when num_rows
+    // deprecated_sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
+    // where interval == deprecated_sort_key_sample_row_interval. Always paired with
+    // a positive deprecated_sort_key_sample_row_interval. May be empty when num_rows
     // is not greater than interval (small segments produce no samples
     // because the first sample row is at index `interval`, which only
     // exists for num_rows > interval). Consumed by tablet split and
     // range-split parallel compaction to accurately estimate row
     // distribution for overlapping segments.
-    repeated TuplePB sort_key_samples = 6;
-    // Row interval used to produce sort_key_samples. Set if and only if
-    // sort_key_samples_size() > 0; in that case the value is > 0 and
-    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
+    repeated TuplePB deprecated_sort_key_samples = 6 [json_name = "sort_key_samples"];
+    // Deprecated: superseded by the full sort key index. Still written for
+    // legacy/config-off segments; removal deferred to a later version.
+    // Row interval used to produce deprecated_sort_key_samples. Set if and only if
+    // deprecated_sort_key_samples_size() > 0; in that case the value is > 0 and
+    // deprecated_sort_key_samples.size() * deprecated_sort_key_sample_row_interval < num_rows.
     // Persisted per-segment so a future change to the producer's interval
     // constant cannot break cross-version readers.
-    optional int64 sort_key_sample_row_interval = 7;
+    optional int64 deprecated_sort_key_sample_row_interval = 7 [json_name = "sort_key_sample_row_interval"];
     // File attributes of the segment. These are the canonical home for the
     // per-segment file info that historically lived in the parallel arrays on
     // RowsetMetadataPB (deprecated_segments / deprecated_segment_size /
@@ -336,10 +362,6 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
-
-    // These are just placeholders
-    repeated int64 metadata_ancestors = 50;
-    optional CdcMetadataPB cdc_metadata = 51;
 }
 
 message MetadataUpdateInfoPB {
@@ -350,6 +372,7 @@ message MetadataUpdateInfoPB {
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
+    optional TabletRangePB tablet_range = 7;
 }
 
 message BundleTabletMetadataPB {
@@ -399,6 +422,32 @@ message TxnLogPB {
         // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
         // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
         repeated uint32 del_op_offsets = 21;
+        // Per-incoming-segment delete vector carrying the duplicate-primary-key loser rowids that a
+        // separate-sort-key (ORDER BY != PK) spill+eager-SST load leaves physically in the segment: the
+        // eager PK-index SST points at the winning row, but the losing rows stay in the segment data and
+        // must be masked at publish. Indexed by local segment id, parallel to the incoming segments;
+        // empty (or size 0) for the sort-key==PK path, which has no intra-segment duplicates. A publisher
+        // that does not apply this leaves live duplicate primary keys, so this must be understood
+        // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
+        repeated DelvecDataPB seg_delvecs = 22;
+        // Parallel to `dels_meta` (index by del_id): the tombstone (delete row) count of each del
+        // file, recorded at write time. Carried through to DelfileWithRowsetId.num_rows so the
+        // cloud-native PK index can account tombstone volume toward its rebuild-rows threshold.
+        // If del_num_rows_size() < dels_meta_size(), missing entries are treated as 0.
+        repeated int64 del_num_rows = 23;
+        // Pre-built tombstone sstables for the del files, parallel to `dels_meta` (index by del_id). Built
+        // at import time when the serialized del-file size reaches pk_index_eager_build_threshold_bytes.
+        // When present for a del file, publish ingests it directly to avoid accumulating tombstones in the
+        // persistent-index memtable and causing additional flushes. The deleted keys' rss_rowid is still
+        // reverse-looked-up from the existing index to build the delete vector, and that lookup can run in
+        // parallel in both erase paths. The array, when populated, is the same length as dels_meta; a per-entry
+        // EMPTY FileMetaPB (empty name) means that del file has no tombstone sstable (below the threshold) and
+        // publish falls back to the memtable erase path. A totally empty array (size != dels_meta_size) is the
+        // downgrade-safe default and the behavior for pre-upgrade writers.
+        // del_sst_ranges carries the key range of each tombstone sstable (for tablet split), parallel to
+        // del_ssts.
+        repeated FileMetaPB del_ssts = 24;
+        repeated PersistentIndexSstableRangePB del_sst_ranges = 25;
     }
 
     message OpCompaction {
@@ -512,6 +561,14 @@ message TxnLogPB {
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
         // that FE has already published, kept for idempotent reconciliation.
         repeated TabletIndexPB new_indexes = 3;
+        // New schema id/version allocated by FE for this fast-path ADD INDEX.
+        // apply_add_index stamps these onto the tablet metadata schema so every
+        // by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
+        // SCHEMA_{id} file) misses and picks up the now-indexed schema; without
+        // an id change, data loaded after the index — and compaction output —
+        // would keep reusing the cached pre-index schema and build no index.
+        optional int64 new_schema_id = 4;
+        optional int64 new_schema_version = 5;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied

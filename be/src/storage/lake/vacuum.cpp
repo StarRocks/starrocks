@@ -165,28 +165,6 @@ static bool is_shared_segment(const RowsetMetadataPB& rowset, int index) {
     return segment_meta.has_bundle_file_offset() || segment_meta.shared();
 }
 
-// Delete .vi files for segments in a rowset using segment_metas metadata.
-// A .vi is a per-segment sidecar whose lifetime follows its owning segment. When the
-// segment is shared across split siblings, its .vi must be routed through the
-// refcounting shared-file deleter so it is not deleted while a sibling still references
-// the segment (mirrors the segment routing in collect_garbage_files).
-static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
-                                     const std::string& base_dir, int64_t tablet_id, const RowsetMetadataPB& rowset) {
-    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
-        const auto& segment_meta = rowset.segment_metas(i);
-        const bool shared_file = is_shared_segment(rowset, i);
-        for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id));
-            if (shared_file && shared_file_deleter != nullptr) {
-                RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
-            } else {
-                RETURN_IF_ERROR(deleter->delete_file(vi_path));
-            }
-        }
-    }
-    return Status::OK();
-}
-
 const char* const kDuplicateFilesError =
         "Duplicate files were returned from the remote storage. The most likely cause is an S3 or HDFS API "
         "compatibility issue with your remote storage implementation.";
@@ -323,35 +301,58 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
                                     AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
                                     int64_t* garbage_data_size, const TabletRetainInfo& retain_info) {
     for (const auto& rowset : metadata.compaction_inputs()) {
-        if (retain_info.contains_rowset(rowset.id())) {
-            continue;
-        }
-
-        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
-            const bool shared_file = is_shared_segment(rowset, i);
-            if (shared_file && shared_file_deleter != nullptr) {
-                RETURN_IF_ERROR(
-                        shared_file_deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
-            } else {
-                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
+        // A rowset's segments share the rowset's creation version, so retain them together by
+        // rowset.version(). The one compaction path that would break this equality is lake
+        // partial-segment compaction, which carries OLDER segments forward into a higher-versioned
+        // output rowset, so rowset.version() overstates those carried segments' creation version. That
+        // path is config-gated (enable_lake_compaction_use_partial_segments, off by default), non-PK
+        // only, and being retired in favor of parallel compaction, so it is deliberately not
+        // special-cased here. CAUTION: if it is ever enabled, this can under-retain -- delete a carried
+        // segment that an older retained snapshot still needs -- and the fix is to give those carried
+        // segments their own persisted creation version to key on here instead of rowset.version().
+        if (!retain_info.retained_by_version(rowset.version(), metadata.version())) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment_meta = rowset.segment_metas(i);
+                const bool shared_file = is_shared_segment(rowset, i);
+                if (shared_file && shared_file_deleter != nullptr) {
+                    RETURN_IF_ERROR(shared_file_deleter->delete_file(join_path(base_dir, segment_meta.filename())));
+                } else {
+                    RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment_meta.filename())));
+                }
+                // A .vi is a per-segment sidecar whose lifetime follows its segment: delete it with
+                // the segment, routed the same way (shared segment -> shared-file deleter).
+                for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                    auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id));
+                    if (shared_file && shared_file_deleter != nullptr) {
+                        RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
+                    } else {
+                        RETURN_IF_ERROR(deleter->delete_file(vi_path));
+                    }
+                }
             }
+            // rowset.data_size() is the segment payload; count it toward reclaimed bytes only when the
+            // segments are actually deleted, so deleting only a del file (segments retained under a
+            // snapshot) does not inflate the metric. segment_metas may omit per-file size, so this
+            // stays a rowset-level estimate.
+            *garbage_data_size += rowset.data_size();
         }
-        // Delete associated .vi files using per-segment vector index metadata. A shared
-        // segment's .vi follows the segment, so route it through the shared-file deleter.
-        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, shared_file_deleter, base_dir, metadata.id(), rowset));
 
+        // Del files can carry a version different from their rowset's: a cloud-native PK compaction
+        // transfers older del files onto a higher-versioned output rowset, so retain them per file.
         for (const auto& del_file : rowset.del_files()) {
+            if (retain_info.retained_by_version(del_file.version(), metadata.version())) {
+                continue;
+            }
             if (del_file.shared() && shared_file_deleter != nullptr) {
                 RETURN_IF_ERROR(shared_file_deleter->delete_file(join_path(base_dir, del_file.name())));
             } else {
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
             }
         }
-        *garbage_data_size += rowset.data_size();
     }
 
     for (const auto& file : metadata.orphan_files()) {
-        if (retain_info.contains_file(file.name())) {
+        if (retain_info.retained_by_version(file.version(), metadata.version())) {
             continue;
         }
 
@@ -623,7 +624,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     int64_t max_vacuum_version = 0;
     for (auto& tablet_info : tablet_infos) {
         TabletRetainInfo tablet_retain_info;
-        RETURN_IF_ERROR(tablet_retain_info.init(tablet_info.tablet_id(), retain_versions, tablet_mgr));
+        tablet_retain_info.init(retain_versions);
 
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
@@ -1004,6 +1005,12 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
         for (const auto& f : op.dels_meta()) {
             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
         }
+        // delete pre-built tombstone sstables (empty name = del file had no sstable)
+        for (const auto& f : op.del_ssts()) {
+            if (!f.name().empty()) {
+                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
+            }
+        }
     }
     if (log.has_op_compaction()) {
         const auto& op = log.op_compaction();
@@ -1028,8 +1035,15 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
 }
 
 // TODO: remote list objects requests
+// |is_range_distribution| arrives from FE and is then strengthened, never weakened, by what the dropped
+// tablets' own metadata says. A range-distributed table's tablets share physical data files with the
+// tablets a reshard produced, so this path must not delete their data -- the tablets that inherited those
+// files are still reading them. Reading it off the dropped tablet's metadata is not enough on its own,
+// because a reshard leaves that metadata behind for vacuum to remove, and once it is gone the tablet
+// looks non-range and its still-shared files were deleted. FE reads the table definition, so its answer
+// survives that; an older FE sends nothing and leaves only the metadata-derived answer, as before.
 Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_dir,
-                           const std::vector<int64_t>& tablet_ids) {
+                           const std::vector<int64_t>& tablet_ids, bool is_range_distribution) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
 
@@ -1079,8 +1093,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     AsyncFileDeleter deleter(config::lake_vacuum_min_batch_delete_size);
     // Used to avoid deleting shared files that are shared by multiple tablets.
     AsyncSharedFileDeleter dummy_shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
-
-    bool is_range_distribution = false;
 
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
         if (!is_tablet_metadata(name)) {
@@ -1334,7 +1346,7 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     // not own tablet_ids[0]. Pick a locally-owned tablet id as the root-location anchor
     // so downstream fs ops don't trigger a get-shard-info RPC.
     auto root_dir = tablet_mgr->tablet_root_location(tablet_mgr->pick_local_anchor_tablet_id(tablet_ids));
-    auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids);
+    auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids, request.is_range_distribution());
     st.to_protobuf(response->mutable_status());
 }
 
@@ -1421,35 +1433,52 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
     int64_t total_files = 0;
     int64_t total_bytes = 0;
     const auto now = std::time(nullptr);
-    RETURN_IF_ERROR_WITH_WARN(
-            ignore_not_found(fs->iterate_dir2(segment_root_location,
-                                              [&](DirEntry entry) {
-                                                  total_files++;
-                                                  total_bytes += entry.size.value_or(0);
+    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir2(
+                                      segment_root_location,
+                                      [&](DirEntry entry) {
+                                          total_files++;
+                                          total_bytes += entry.size.value_or(0);
 
-                                                  // should consider segment files, sst, del file, delvector, vector index, idx
-                                                  // NOTE: .idx files are produced by the ADD INDEX fast path (Index
-                                                  // Delta Group). Active .idx files are referenced from
-                                                  // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
-                                                  // MetaFileBuilder::apply_drop_index. Any .idx file that is older
-                                                  // than the expire window and not referenced by any live metadata is
-                                                  // a candidate here and reclaimed by the existing orphan scan logic.
-                                                  if (!is_segment(entry.name) && !is_sst(entry.name) &&
-                                                      !is_delvec(entry.name) && !is_del(entry.name) &&
-                                                      !is_vector_index(entry.name) && !is_idx(entry.name)) {
-                                                      return true;
-                                                  }
-                                                  if (!entry.mtime.has_value()) {
-                                                      LOG(WARNING) << "Fail to get modified time of " << entry.name;
-                                                      return true;
-                                                  }
+                                          // should consider segment files, sst, del file, delvector, vector index, idx, lcrm
+                                          // NOTE: .idx files are produced by the ADD INDEX fast path (Index
+                                          // Delta Group). Active .idx files are referenced from
+                                          // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
+                                          // MetaFileBuilder::apply_drop_index. Any .idx file that is older
+                                          // than the expire window and not referenced by any live metadata is
+                                          // a candidate here and reclaimed by the existing orphan scan logic.
+                                          // NOTE: .lcrm files are the Lake Compaction Rows Mapper files produced
+                                          // by (parallel and serial) PK compaction. They are referenced only from
+                                          // the transaction log (OpCompaction.lcrm_file / OpParallelCompaction
+                                          // subtask/orphan lcrm), never from any live TabletMetadataPB field --
+                                          // on a successful publish they are consumed and deleted by
+                                          // RowsMapperIterator, and superseded ones enter orphan_files. So an
+                                          // .lcrm left behind by an aborted/failed/crashed compaction is
+                                          // referenced by nothing durable and, before this filter included it,
+                                          // could never be reclaimed by any GC path. An in-flight .lcrm is
+                                          // protected here identically to the output segments the same
+                                          // compaction wrote: the production full-vacuum path keeps any file
+                                          // whose txn-id filename prefix is >= min_active_txn_id (see
+                                          // vacuum_orphaned_datafiles, which runs this scan with
+                                          // expired_seconds=0), and the offline datafile_gc tool keeps files
+                                          // within its mtime expire window. So exposing .lcrm here only ever
+                                          // reclaims a truly-orphaned mapper, never a live one.
+                                          if (!is_segment(entry.name) && !is_sst(entry.name) &&
+                                              !is_delvec(entry.name) && !is_del(entry.name) &&
+                                              !is_vector_index(entry.name) && !is_idx(entry.name) &&
+                                              !is_lcrm(entry.name)) {
+                                              return true;
+                                          }
+                                          if (!entry.mtime.has_value()) {
+                                              LOG(WARNING) << "Fail to get modified time of " << entry.name;
+                                              return true;
+                                          }
 
-                                                  if (now >= entry.mtime.value() + expired_seconds) {
-                                                      data_files.emplace(entry.name, entry);
-                                                  }
-                                                  return true;
-                                              })),
-            "Failed to list " + segment_root_location);
+                                          if (now >= entry.mtime.value() + expired_seconds) {
+                                              data_files.emplace(entry.name, entry);
+                                          }
+                                          return true;
+                                      })),
+                              "Failed to list " + segment_root_location);
     LOG(INFO) << segment_root_location << ": Listed all data files, total files: " << total_files
               << ", total bytes: " << total_bytes << ", candidate files: " << data_files.size();
     return data_files;

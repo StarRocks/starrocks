@@ -248,6 +248,9 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | SubmitTaskTime | 任务提交所花费的时间。 |
 | PeakIOTasks | I/O 任务的峰值数量。 |
 | PeakScanTaskQueueSize | I/O 任务队列的峰值大小。 |
+| RuntimeFilterEvalTime | 在 Parquet Reader 内部对已解码数据行求值 Join Runtime Filter 所花费的时间。 |
+| RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
+| RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
 
 ### Exchange Operator
 
@@ -277,7 +280,8 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | BytesPassThrough | 如果目标节点是当前节点，数据将不会通过网络传输，这称为 passthrough 数据。此指标指示此类 passthrough 数据的大小。Passthrough 由 `enable_exchange_pass_through` 控制。 |
 | PassThroughBufferPeakMemoryUsage | PassThrough Buffer 的内存使用峰值。 |
 | CompressTime | 压缩时间。 |
-| CompressedBytes | 压缩数据的大小。 |
+| CompressedInputBytes | 实际送入压缩器的序列化数据（压缩前）的大小。被自适应压缩策略跳过的 chunk 不计入其中。`CompressedInputBytes / CompressedBytes` 即为压缩率，`SerializedBytes - CompressedInputBytes` 即为未被压缩的数据大小。 |
+| CompressedBytes | 压缩数据的大小。仅统计实际被压缩的 chunk。 |
 | OverallThroughput | 吞吐率。 |
 | NetworkTime | 数据包传输所花费的时间（不包括接收后的处理时间）。 |
 | NetworkBandwidth | 估计的网络带宽。 |

@@ -15,6 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
@@ -24,9 +26,10 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Pair;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -35,6 +38,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -309,6 +313,54 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         return partitionIds.size() == allPartitionNum;
     }
 
+    /**
+     * The table's exact row count, or empty when no such thing can be proven right now and the
+     * caller must leave the COUNT(*) to a meta scan -- which reads the real per-segment counts, and
+     * is still far cheaper than a full scan.
+     * <p>
+     * Summed from the tablets, and every one of them must hand back a count that a stat collection
+     * proved was computed from exactly its partition's visible version.
+     * MaterializedIndex.rowCount, which this used to sum, cannot answer that question: it is not
+     * journal-replicated and carries no version of its own -- every FE rebuilds it from its own
+     * TabletStatMgr cycle, and a stat RPC that fails, is skipped, or is answered from a stale
+     * BE-side snapshot silently leaves the previous value in place. The guard that used to stand
+     * here, TabletStatMgr.workTimeIsMustAfter(), only asked whether THIS FE had recently finished a
+     * cycle -- a wall-clock fact advanced unconditionally at the end of every cycle, including one
+     * whose RPCs all failed -- so it vouched for counts that were never refreshed; see StarRocks
+     * issue #72271.
+     * <p>
+     * Nor would it be enough to validate the tablets and then still fold MaterializedIndex.rowCount:
+     * the two are written by different halves of the TabletStatMgr cycle -- replica counts first,
+     * index counts at the very end, after a walk over every table in the cluster -- so a query
+     * landing in between would check one number and fold another. For a table created since the
+     * last walk that other number is 0. Asking each tablet for "your count, if you can prove it
+     * covers version V" keeps the value and its proof inseparable.
+     * <p>
+     * Versions, not timestamps. visibleVersionTime looks like a timestamp but is a label the leader
+     * FE stamps once and replicates; comparing it against a local clock -- a BE's UnixMillis(), or a
+     * follower's System.currentTimeMillis() -- would make correctness depend on clock skew between
+     * machines, silently folding stale counts whenever the other side's clock ran ahead.
+     * <p>
+     * Exactly the visible version, not "at least" it: a count computed from a version the BE has
+     * already published but this FE has not yet made visible counts rows the query must not see.
+     */
+    private static Optional<Long> provenRowCount(OlapTable table) {
+        long total = 0L;
+        for (Partition partition : table.getVisiblePartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long visibleVersion = physicalPartition.getVisibleVersion();
+                for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
+                    long rowCount = tablet.getRowCountAtVersion(visibleVersion);
+                    if (rowCount < 0) {
+                        return Optional.empty();
+                    }
+                    total += rowCount;
+                }
+            }
+        }
+        return Optional.of(total);
+    }
+
     public Optional<OptExpression> tryReplaceByMetaData(OptExpression input,
                                                         OptimizerContext context, ColumnRefFactory factory) {
         if (context.getSessionVariable().getScanOlapPartitionNumLimit() != 0) {
@@ -333,6 +385,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> constantMap = Maps.newHashMap();
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
+        // Walks every tablet, so pay for it once and only when a COUNT is actually there to fold.
+        Supplier<Optional<Long>> provenRowCount = Suppliers.memoize(() -> provenRowCount(table));
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
             CallOperator call = entry.getValue();
             if (call.getFnName().equals(FunctionSet.MAX) || call.getFnName().equals(FunctionSet.MIN)) {
@@ -351,6 +405,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
+                QueryDumpInfo.captureColumnMinMax(context.getConnectContext(), table, c.getName(), minMax.get());
 
                 ConstantOperator mm;
                 if (call.getFnName().equals(FunctionSet.MAX)) {
@@ -361,13 +416,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 Optional<ConstantOperator> re = mm.castTo(call.getType());
                 re.ifPresent(cc -> constantMap.put(entry.getKey(), cc));
             } else if (call.getFnName().equals(FunctionSet.COUNT) && !call.isDistinct()
-                    && call.getUsedColumns().size() <= 1 && GlobalStateMgr.getCurrentState().getTabletStatMgr()
-                    .workTimeIsMustAfter(lastUpdateTime)) {
-                long count = table.getVisiblePartitions().stream()
-                        .flatMap(partition -> partition.getSubPartitions().stream())
-                        .mapToLong(physicalPartition -> physicalPartition.getLatestBaseIndex().getRowCount())
-                        .sum();
-                constantMap.put(entry.getKey(), ConstantOperator.createBigint(count));
+                    && call.getUsedColumns().size() <= 1 && provenRowCount.get().isPresent()) {
+                constantMap.put(entry.getKey(), ConstantOperator.createBigint(provenRowCount.get().get()));
             } else {
                 newAggCalls.put(entry.getKey(), entry.getValue());
             }

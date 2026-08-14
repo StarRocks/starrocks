@@ -201,11 +201,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             (!_has_remain || i != _flat_paths.size() - 1)) {
             // try to use dict encoding for flat json
             opts.meta->set_encoding(EncodingTypePB::DICT_ENCODING);
-            opts.meta->set_compression(_json_meta->compression());
         } else {
             opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
-            opts.meta->set_compression(_json_meta->compression());
         }
+        // Inherit both the codec and its level from the parent JSON column: the level must be carried
+        // along, otherwise the sub-column meta reads back level 0 and ZSTD falls back to its default.
+        opts.meta->set_compression(_json_meta->compression());
+        opts.meta->set_compression_level(_json_meta->compression_level());
 
         if (_flat_types[i] == LogicalType::TYPE_JSON) {
             opts.meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);

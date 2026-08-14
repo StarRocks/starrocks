@@ -1,0 +1,53 @@
+-- name: test_iceberg_bucket_aware_count_distinct
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  id int,
+  grp int
+)
+partition by bucket(id, 8)
+properties ("file_format"="parquet");
+-- result:
+-- !result
+insert into t1
+select a.generate_series, b.generate_series
+from table(generate_series(1, 1000)) a, table(generate_series(1, 200)) b;
+-- result:
+-- !result
+set pipeline_dop = 8;
+-- result:
+-- !result
+set enable_bucket_aware_execution_on_lake = true;
+-- result:
+-- !result
+select count(distinct id) from (select id, grp, count(*) c from t1 group by id, grp) t;
+-- result:
+1000
+-- !result
+set enable_bucket_aware_execution_on_lake = false;
+-- result:
+-- !result
+select count(distinct id) from (select id, grp, count(*) c from t1 group by id, grp) t;
+-- result:
+1000
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

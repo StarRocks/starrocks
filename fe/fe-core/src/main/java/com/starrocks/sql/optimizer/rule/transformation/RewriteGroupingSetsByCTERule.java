@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -114,8 +115,11 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
             cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
 
-            // rewrite agg functions by cte consume output
-            Map<ColumnRefOperator, CallOperator> newAggregations = new HashMap<>();
+            // rewrite agg functions by cte consume output.
+            // must keep the origin aggregations' order: the union node built below aligns each
+            // child's output columns with its own output columns by position, and its output
+            // columns follow the origin aggregations' order.
+            Map<ColumnRefOperator, CallOperator> newAggregations = new LinkedHashMap<>();
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregate.getAggregations().entrySet()) {
                 ColumnRefOperator originAggColRef = kv.getKey();
                 ColumnRefOperator aggColumnRef =

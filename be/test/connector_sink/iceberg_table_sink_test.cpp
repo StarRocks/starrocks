@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "data_sink/external/iceberg_table_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -25,6 +25,7 @@
 #include "common/config_exec_fwd.h"
 #include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
+#include "exec/data_sinks/iceberg_table_sink_pipeline_builder.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
@@ -114,7 +115,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -163,7 +164,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         IcebergTableSink sink(&_pool, exprs);
         pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+        EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -187,7 +188,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         IcebergTableSink sink(&_pool, exprs);
         pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(2, 2)};
 
-        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+        EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -211,7 +212,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         IcebergTableSink sink(&_pool, exprs);
         pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(3, 3)};
 
-        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+        EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -253,8 +254,8 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map) {
     IcebergTableSink sink(&_pool, output_exprs);
 
     // Execute the function
-    ASSERT_OK(sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map,
-                                                          partition_source_column_names));
+    ASSERT_OK(update_iceberg_partition_expr_slot_refs_by_map(partition_expr, column_slot_map,
+                                                             partition_source_column_names));
 
     // Verify the partition expression was updated with correct slot reference
     ASSERT_EQ(partition_expr.size(), 1);
@@ -282,8 +283,8 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_mismatched_s
     IcebergTableSink sink(&_pool, output_exprs);
 
     // Should return error for mismatched sizes
-    auto st =
-            sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map, partition_source_column_names);
+    auto st = update_iceberg_partition_expr_slot_refs_by_map(partition_expr, column_slot_map,
+                                                             partition_source_column_names);
     EXPECT_FALSE(st.ok());
     EXPECT_TRUE(st.message().find("Mismatched partition expression and column name counts") != std::string::npos);
 }
@@ -306,8 +307,8 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot
     IcebergTableSink sink(&_pool, output_exprs);
 
     // Should return error for missing slot reference
-    auto st =
-            sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map, partition_source_column_names);
+    auto st = update_iceberg_partition_expr_slot_refs_by_map(partition_expr, column_slot_map,
+                                                             partition_source_column_names);
     EXPECT_FALSE(st.ok());
     EXPECT_TRUE(st.message().find("Could not find slot reference for partition column: dt") != std::string::npos);
 }
@@ -363,7 +364,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 }
 
 // Test that row lineage columns are appended to column_names and parquet_field_ids
@@ -430,7 +431,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -517,7 +518,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -602,7 +603,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_col
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -696,7 +697,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -783,7 +784,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
 
     // Without the fix this call crashes (SIGSEGV) while building override_tuple_desc.
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -881,7 +882,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(11, 11)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -974,7 +975,7 @@ TEST_F(IcebergTableSinkTest, row_delta_invalid_column_layout) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(12, 12)};
 
-    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    auto status = decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta layout has no data columns"));
 }
@@ -1024,7 +1025,7 @@ TEST_F(IcebergTableSinkTest, row_delta_mixed_requires_data_column_before_op_colu
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(13, 13)};
 
-    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    auto status = decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta layout has no data columns"));
 }
@@ -1078,7 +1079,7 @@ TEST_F(IcebergTableSinkTest, row_delta_routing_column_must_be_tinyint) {
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(14, 14)};
 
-    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    auto status = decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta op column must be TINYINT"));
 }

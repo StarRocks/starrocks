@@ -77,6 +77,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
+import com.starrocks.thrift.TGetPartitionAccessTimesRequest;
+import com.starrocks.thrift.TGetPartitionAccessTimesResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetTableSchemaRequest;
@@ -106,6 +108,7 @@ import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
@@ -857,6 +860,53 @@ public class FrontendServiceImplTest {
 
         TLoadTxnBeginResult result = impl.loadTxnBegin(request);
         Assertions.assertEquals(result.getStatus().getStatus_code(), TStatusCode.OK);
+    }
+
+    @Test
+    public void testLoadTxnRequestsRejectLeaderDemoting() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return false;
+            }
+
+            @Mock
+            public boolean isLeaderDemoting() {
+                return true;
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+        beginRequest.setLabel(UUID.randomUUID().toString());
+        beginRequest.setDb("test");
+        beginRequest.setTbl("site_access_auto");
+        beginRequest.setUser("root");
+        beginRequest.setPasswd("");
+        assertLeaderDemotionRejected(impl.loadTxnBegin(beginRequest).getStatus());
+
+        TLoadTxnCommitRequest commitRequest = new TLoadTxnCommitRequest();
+        commitRequest.setDb("test");
+        commitRequest.setTbl("site_access_auto");
+        commitRequest.setTxnId(1001L);
+        assertLeaderDemotionRejected(impl.loadTxnCommit(commitRequest).getStatus());
+        assertLeaderDemotionRejected(impl.loadTxnPrepare(commitRequest).getStatus());
+
+        TLoadTxnRollbackRequest rollbackRequest = new TLoadTxnRollbackRequest();
+        rollbackRequest.setDb("test");
+        rollbackRequest.setTbl("site_access_auto");
+        rollbackRequest.setTxnId(1001L);
+        assertLeaderDemotionRejected(impl.loadTxnRollback(rollbackRequest).getStatus());
+    }
+
+    private static void assertLeaderDemotionRejected(TStatus status) {
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, status.getStatus_code());
+        Assertions.assertTrue(status.getError_msgs().get(0).contains("leader is demoting"));
     }
 
     @Test
@@ -1813,6 +1863,45 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testStreamLoadPutPipeline() throws Exception {
+        // Cover the pipeline stream load path (Config.enable_pipeline_stream_load + backend_id):
+        // FrontendServiceImpl pipeline branch -> LoadPlanner (syncStreamLoad) -> StreamLoadScanNode
+        // pinned-BE branch -> DefaultCoordinator.buildLocalStreamLoadParams. The mock cluster has
+        // backend 10001, so the scan is pinned to it and a BE-local params blob is materialized.
+        boolean savedFlag = Config.enable_pipeline_stream_load;
+        Config.enable_pipeline_stream_load = true;
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+            beginRequest.setLabel("test_pipeline_label");
+            beginRequest.setDb("test");
+            beginRequest.setTbl("site_access_empty");
+            beginRequest.setUser("root");
+            beginRequest.setPasswd("");
+            TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+            Assertions.assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+
+            TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+            loadRequest.setDb("test");
+            loadRequest.setTbl("site_access_empty");
+            loadRequest.setTxnId(beginResult.getTxnId());
+            loadRequest.setLoadId(new TUniqueId(4, 5));
+            loadRequest.setFileType(TFileType.FILE_STREAM);
+            loadRequest.setUser("root");
+            loadRequest.setColumnSeparator(",");
+            // Pin the scan to the mock backend that "owns the pipe".
+            loadRequest.setBackend_id(10001);
+
+            TStreamLoadPutResult result = impl.streamLoadPut(loadRequest);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertNotNull(result.getParams());
+            Assertions.assertTrue(result.getParams().is_pipeline);
+        } finally {
+            Config.enable_pipeline_stream_load = savedFlag;
+        }
+    }
+
+    @Test
     public void testStreamLoadPutTimeout() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
@@ -2373,4 +2462,52 @@ public class FrontendServiceImplTest {
         // partitions should be empty since the created partition was "dropped" by TTL
         Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
     }
+
+    @Test
+    public void testGetPartitionAccessTimes() throws Exception {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "site_access_auto");
+
+            // Record a query access on every (logical) partition of the table on this (local) FE.
+            List<Long> partitionIds = table.getPartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList());
+            GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
+                    .recordAccess(db.getId(), table.getId(), partitionIds);
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+            // Batch request carrying this table; the handler is lock-free and returns logicalPartitionId -> ms.
+            TGetPartitionAccessTimesRequest request = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef ref = new TPartitionAccessTimeTableRef();
+            ref.setDb_id(db.getId());
+            ref.setTable_id(table.getId());
+            request.setTables(Lists.newArrayList(ref));
+
+            TGetPartitionAccessTimesResponse response = impl.getPartitionAccessTimes(request);
+            Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+            Map<Long, Long> accessTimes = response.getPartition_id_to_access_time_ms();
+            Assertions.assertNotNull(accessTimes);
+            Assertions.assertEquals(partitionIds.size(), accessTimes.size());
+            for (Long pid : partitionIds) {
+                Assertions.assertTrue(accessTimes.getOrDefault(pid, 0L) > 0);
+            }
+
+            // A table absent on this FE (bogus id) must not fail: the lock-free snapshot returns empty.
+            TGetPartitionAccessTimesRequest missingReq = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef missingRef = new TPartitionAccessTimeTableRef();
+            missingRef.setDb_id(db.getId());
+            missingRef.setTable_id(-1L);
+            missingReq.setTables(Lists.newArrayList(missingRef));
+            TGetPartitionAccessTimesResponse missingResp = impl.getPartitionAccessTimes(missingReq);
+            Assertions.assertEquals(TStatusCode.OK, missingResp.getStatus().getStatus_code());
+            Assertions.assertTrue(missingResp.getPartition_id_to_access_time_ms().isEmpty());
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
 }

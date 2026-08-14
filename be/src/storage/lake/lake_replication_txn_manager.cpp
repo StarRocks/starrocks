@@ -17,11 +17,13 @@
 #include <atomic>
 #include <mutex>
 
+#include "base/coding.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "cache/dynamic_cache.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/storage_define.h"
 #include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "compute_env/staros/starlet_filesystem.h"
@@ -34,12 +36,15 @@
 #include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/protobuf_file.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
+#include "storage/utils.h"
 #include "storage_primitive/primary_key_encoding_types.h"
 #include "types/logical_type.h"
 #include "vacuum.h"
@@ -50,6 +55,108 @@ namespace {
 // Parallel copy is disabled when queue depth exceeds num_threads * this factor
 // to avoid adding more pressure to an already saturated pool.
 constexpr int kParallelCopyMaxQueuePerThread = 8;
+
+StatusOr<TabletMetadataPtr> load_source_standalone_tablet_metadata(const std::string& metadata_path,
+                                                                   const std::shared_ptr<FileSystem>& source_fs) {
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, metadata_path));
+    ASSIGN_OR_RETURN(auto content, input_file->read_all());
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    RETURN_IF_ERROR(ProtobufFileWithHeader::load_from_buffer(metadata.get(), content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                             /*allow_plain_protobuf_fallback=*/true));
+    normalize_tablet_metadata_after_load(metadata.get());
+    return metadata;
+}
+
+StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                               const std::string& meta_dir,
+                                                               const std::shared_ptr<FileSystem>& source_fs) {
+    const auto bundle_path = join_path(meta_dir, tablet_metadata_filename(0, version));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, bundle_path));
+    ASSIGN_OR_RETURN(auto file_size, input_file->get_size());
+
+    constexpr size_t kSizeFieldSize = sizeof(uint64_t);
+    if (file_size < kSizeFieldSize) {
+        return Status::Corruption(
+                fmt::format("Source metadata bundle {} is too small: {} bytes", bundle_path, file_size));
+    }
+
+    std::string size_field(kSizeFieldSize, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - kSizeFieldSize, size_field.data(), size_field.size()));
+    const uint64_t raw_bundle_metadata_size = decode_fixed64_le(reinterpret_cast<const uint8_t*>(size_field.data()));
+    const bool checksummed = (raw_bundle_metadata_size & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t bundle_metadata_size = raw_bundle_metadata_size & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    const size_t footer_suffix_size = kSizeFieldSize + (checksummed ? sizeof(uint32_t) : 0);
+    if (file_size < footer_suffix_size || bundle_metadata_size == 0 ||
+        bundle_metadata_size > static_cast<uint64_t>(file_size - footer_suffix_size)) {
+        return Status::Corruption(
+                fmt::format("Invalid source metadata bundle footer in {}, file_size={}, "
+                            "bundle_metadata_size={}",
+                            bundle_path, file_size, bundle_metadata_size));
+    }
+
+    const uint64_t bundle_metadata_offset = file_size - footer_suffix_size - bundle_metadata_size;
+    std::string footer(bundle_metadata_size + footer_suffix_size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(bundle_metadata_offset, footer.data(), footer.size()));
+    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(bundle_path, footer));
+
+    auto page_it = bundle->tablet_meta_pages().find(tablet_id);
+    if (page_it == bundle->tablet_meta_pages().end()) {
+        return Status::NotFound(
+                fmt::format("Tablet {} is absent from source metadata bundle {}", tablet_id, bundle_path));
+    }
+    const uint64_t offset = page_it->second.offset();
+    const uint32_t size = page_it->second.size();
+    if (offset > bundle_metadata_offset || size > bundle_metadata_offset - offset) {
+        return Status::Corruption(fmt::format("Invalid source tablet metadata page in {}, offset={}, size={}",
+                                              bundle_path, offset, size));
+    }
+
+    std::string page(size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(offset, page.data(), page.size()));
+    auto checksum_it = bundle->tablet_meta_page_checksum().find(tablet_id);
+    if (checksum_it != bundle->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, page.data(), page.size()) != checksum_it->second) {
+        return Status::Corruption(
+                fmt::format("Mismatched checksum for tablet {} metadata in {}", tablet_id, bundle_path));
+    }
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (!metadata->ParseFromArray(page.data(), page.size())) {
+        return Status::Corruption(fmt::format("Failed to parse tablet {} metadata from {}", tablet_id, bundle_path));
+    }
+    if (metadata->id() != tablet_id) {
+        return Status::Corruption(fmt::format("Tablet ID mismatch in {}, expected={}, actual={}", bundle_path,
+                                              tablet_id, metadata->id()));
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+
+    auto schema_id_it = bundle->tablet_to_schema().find(tablet_id);
+    if (schema_id_it == bundle->tablet_to_schema().end()) {
+        return Status::Corruption(
+                fmt::format("Schema mapping for tablet {} is absent from {}", tablet_id, bundle_path));
+    }
+    auto schema_it = bundle->schemas().find(schema_id_it->second);
+    if (schema_it == bundle->schemas().end()) {
+        return Status::Corruption(
+                fmt::format("Schema {} for tablet {} is absent from {}", schema_id_it->second, tablet_id, bundle_path));
+    }
+    metadata->mutable_schema()->CopyFrom(schema_it->second);
+    (*metadata->mutable_historical_schemas())[schema_id_it->second].CopyFrom(schema_it->second);
+    force_cloud_native_pk_persistent_index(metadata.get());
+
+    for (const auto& [_, historical_schema_id] : metadata->rowset_to_schema()) {
+        auto historical_schema_it = bundle->schemas().find(historical_schema_id);
+        if (historical_schema_it == bundle->schemas().end()) {
+            return Status::Corruption(fmt::format("Historical schema {} for tablet {} is absent from {}",
+                                                  historical_schema_id, tablet_id, bundle_path));
+        }
+        (*metadata->mutable_historical_schemas())[historical_schema_id].CopyFrom(historical_schema_it->second);
+    }
+    return metadata;
+}
 } // namespace
 
 #ifdef USE_STAROS
@@ -166,7 +273,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::InvalidArgument(
                     fmt::format("Full path must be S3 type (start with 's3://'), got: {}", src_partition_full_path));
         }
-        std::string src_partition_starlet_uri = convert_s3_path_to_starlet_uri(src_partition_full_path, src_tablet_id);
+        std::string src_partition_starlet_uri =
+                convert_s3_path_to_starlet_uri(src_partition_full_path, virtual_tablet_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_partition_starlet_uri", &src_partition_starlet_uri);
 
         // Append metadata and segment directory names
         src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
@@ -188,10 +297,11 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     } else {
         // Non-S3 storage type (OSS/Azure/HDFS/GFS): use RemoteStarletLocationProvider
         // Use normal mode - starlet will use normalize_path to combine sys.root with relative path
-        src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+        src_meta_dir = _remote_location_provider->metadata_root_location(virtual_tablet_id, src_db_id, src_table_id,
                                                                          src_partition_id);
-        src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+        src_data_dir = _remote_location_provider->segment_root_location(virtual_tablet_id, src_db_id, src_table_id,
                                                                         src_partition_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_meta_dir", &src_meta_dir);
 
         LOG(INFO) << "Non-S3 storage: using RemoteStarletLocationProvider, meta_dir: " << src_meta_dir
                   << ", data_dir: " << src_data_dir;
@@ -516,15 +626,17 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
     }
 #endif
 
-    auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
-    auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
-    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
-    if (!src_tablet_meta_or.ok()) {
-        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
-        return src_tablet_meta_or;
+    const auto src_tablet_meta_path = join_path(meta_dir, tablet_metadata_filename(src_tablet_id, version));
+    auto src_tablet_meta = load_source_standalone_tablet_metadata(src_tablet_meta_path, shared_src_fs);
+    if (src_tablet_meta.ok()) {
+        return src_tablet_meta;
     }
-    return src_tablet_meta_or.value();
+    if (!src_tablet_meta.status().is_not_found()) {
+        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta.status();
+        return src_tablet_meta;
+    }
+    return load_source_bundle_tablet_metadata(src_tablet_id, version, meta_dir, shared_src_fs);
 }
 
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_meta_with_fallback(
@@ -658,6 +770,21 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         }
     }
 
+    // Collect UUIDs from idg (.idx) files so a repeated full-snapshot replication reuses the
+    // already-replicated .idx (and its encryption meta) instead of re-copying it.
+    if (target_data_version_tablet_meta->has_idg_meta()) {
+        const auto& idg_meta = target_data_version_tablet_meta->idg_meta();
+        for (const auto& [_, idg_ver_pb] : idg_meta.idgs()) {
+            for (const auto& entry : idg_ver_pb.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                existed_filename_uuids.emplace(extract_uuid_from(entry.index_file()),
+                                               std::make_pair(entry.index_file(), entry.encryption_meta()));
+            }
+        }
+    }
+
     return Status::OK();
 }
 
@@ -685,6 +812,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     new_metadata->mutable_dcg_meta()->mutable_dcgs()->clear();
     new_metadata->mutable_sstable_meta()->Clear();
     new_metadata->mutable_delvec_meta()->Clear();
+    // Drop the target's pre-replication idg_meta. Without this the target's stale
+    // per-segment IDG (.idx) entries would be carried into the replicated metadata:
+    // their rssids no longer match the freshly replicated rowsets (dangling entries),
+    // their .idx files leak (never orphaned/vacuumed since a retained entry still
+    // "references" them), and the source's own indexes would be missing. The source's
+    // idg_meta is rebuilt below, mirroring rowsets/dcg/sstable/delvec.
+    new_metadata->mutable_idg_meta()->Clear();
 
     // deal with segments and dels
     for (const auto& src_rowset_meta : src_tablet_meta->rowsets()) {
@@ -864,6 +998,79 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                             } else {
                                 dcg_ver_pb.add_encryption_metas(existing_encryption_meta);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // deal with idg_meta (per-segment Index Delta Group / .idx sidecar index files,
+    // produced by the lake ADD INDEX fast path: BITMAP / NGRAMBF / bloom_filter_columns).
+    // Mirror the sstable/dcg handling: copy the source IDG metadata, then rewrite each
+    // .idx filename (and encryption meta) and register the file for copy via
+    // determine_final_filename, so the source's fast-path indexes are actually replicated
+    // to the target. The IDG map is keyed by rssid; rowset ids and next_rowset_id are
+    // adopted verbatim from the source above (set_rowset_uid only mints a fresh 128-bit
+    // uid, not the numeric rowset id), so the source's rssid keys stay valid against the
+    // copied rowsets and need no remap. The target's own stale idg_meta was cleared above;
+    // the publish-time applier orphans its now-unreferenced .idx via collect_idg_orphan_files.
+    //
+    // Fast-schema-change caveat: when the source and target tablets assign different column
+    // unique ids to the same logical column, replication remaps the ids embedded in
+    // segment/.cols footers via build_file_converters + column_unique_id_map. The IDG entry
+    // keys (IndexKey.col_unique_id / dropped_keys) AND the col_unique_ids embedded inside the
+    // .idx payload footer -- which IndexFileReader::find(col_unique_id, index_type) and the
+    // scan probe (ScalarColumnIterator matches k.col_unique_id == opts.col_unique_id) look up
+    // by the TARGET id -- are NOT converted here (build_file_converters only rewrites
+    // is_segment()/is_cols() footers). Copying idg_meta + .idx verbatim under a divergent id
+    // space would make the replica either silently ignore the index (target id misses the
+    // source-keyed entry) or, on a unique-id collision, apply an index built for a different
+    // column and prune rows wrongly. Until the .idx footer + IDG-key remap is implemented,
+    // skip IDG replication whenever the id spaces diverge: leave idg_meta cleared (index
+    // absent on the replica, to be rebuilt on the target) rather than publishing a
+    // mismappable index. The common identical-schema CCR path (empty map) is unaffected.
+    std::unordered_map<uint32_t, uint32_t> idg_column_unique_id_map;
+    if (target_tablet_meta->has_schema()) {
+        ReplicationUtils::calc_column_unique_id_map(src_tablet_meta->schema().column(),
+                                                    target_tablet_meta->schema().column(), &idg_column_unique_id_map);
+    }
+    if (src_tablet_meta->has_idg_meta() && !idg_column_unique_id_map.empty()) {
+        LOG(WARNING) << "Lake replicate storage task, skipping IDG (.idx) index replication because source/target "
+                        "column unique ids diverge (fast schema change); the fast-path index will be absent on the "
+                        "replica and must be rebuilt on the target. target_tablet_id: "
+                     << target_tablet_id << ", txn_id: " << txn_id
+                     << ", unique_id_map size: " << idg_column_unique_id_map.size();
+    } else if (src_tablet_meta->has_idg_meta()) {
+        IndexDeltaGroupMetadataPB* dest_meta = new_metadata->mutable_idg_meta();
+        dest_meta->CopyFrom(src_tablet_meta->idg_meta());
+        for (auto& [rssid, idg_ver] : *dest_meta->mutable_idgs()) {
+            for (auto& entry : *idg_ver.mutable_entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                const auto src_idx_filename = entry.index_file();
+                std::string final_idx_filename;
+                ASSIGN_OR_RETURN(
+                        auto is_existed,
+                        determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
+                                                 target_tablet_id, src_data_dir, file_locations, filename_map));
+                entry.set_index_file(final_idx_filename);
+                // The source's encryption meta belongs to the source cluster; drop it and
+                // re-derive against the target (matching the segment handling above).
+                entry.clear_encryption_meta();
+
+                if (config::enable_transparent_data_encryption) {
+                    if (!is_existed) {
+                        // .idx file doesn't exist on target, use the newly generated encryption metadata
+                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_idx_filename];
+                        entry.set_encryption_meta(pair.second.encryption_meta);
+                    } else {
+                        // .idx file already replicated in a previous txn, reuse its existing encryption metadata
+                        auto uuid = extract_uuid_from(src_idx_filename);
+                        auto it = existed_filename_uuids.find(uuid);
+                        if (it != existed_filename_uuids.end()) {
+                            entry.set_encryption_meta(it->second.second);
                         }
                     }
                 }

@@ -24,9 +24,40 @@ namespace starrocks::config {
 // the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
 CONF_mString(vector_query_cache_capacity, "20%");
 
+// Idle time before an unused vector index cache entry expires. The timer starts
+// when the last cache handle is released. IVF-PQ list blocks are released with
+// their owning index entry instead of expiring independently. <= 0 disables TTL.
+CONF_mInt32(vector_index_cache_expire_sec, "900");
+
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
 CONF_mBool(enable_vector_index_block_cache, "true");
+
+// On a top-level vector index cache miss, let the current query fall back to
+// brute-force search and load the index into the cache in the background.
+// A runtime update affects readers initialized after the update.
+CONF_mBool(enable_vector_index_cache_async_load_on_miss, "false");
+
+// Maximum number of workers in the vector index cache background-load pool.
+// Workers are created on demand and retire after being idle. Read once when
+// StorageEnv initializes the pool.
+CONF_Int32(vector_index_cache_async_load_threads, "8");
+
+// Maximum time each synchronous cache caller waits for an in-progress vector
+// index load. On timeout the caller returns a cache miss so query paths can
+// fall back to brute-force search; the existing loader keeps running. <= 0
+// disables waiting. A runtime update affects later waits.
+CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
+
+// Whether index build also populates the vector index cache with the index it
+// just built. Off by default: the cache is sized for the query working set, and
+// letting loads/compactions push freshly built indexes into it evicts entries
+// queries are actually using, in exchange for warming indexes nobody may query.
+// The query path (TenANNReader::init_searcher) populates the cache on demand.
+// Turn on when index build and query run on the same node and the build output
+// is queried immediately, to skip the first read-back from disk/object storage.
+// Read when a builder is created, so a runtime change applies to later builds only.
+CONF_mBool(enable_vector_index_cache_on_build, "false");
 
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");
@@ -60,6 +91,13 @@ CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 // Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
 // ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
 CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
+// When a filtered top-k vector index search returns fewer rows than the candidate bitmap can supply,
+// rescore the candidates exactly to fill the result up to k. Disabled by default because the exact
+// rescan can be expensive. This count gate does not apply to range searches, where fewer results can
+// legitimately mean that no more candidates satisfy the requested radius. A runtime update applies
+// to subsequent searches.
+CONF_mBool(enable_vector_index_topk_underfill_fallback, "false");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat

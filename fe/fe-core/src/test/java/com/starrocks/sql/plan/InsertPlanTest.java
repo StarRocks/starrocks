@@ -15,10 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -29,10 +31,14 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -82,6 +88,65 @@ public class InsertPlanTest extends PlanTestBase {
                 "DUPLICATE KEY(id)\n" +
                 "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
                 "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE insert_online_optimize_shadow_generated_column (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v int NOT NULL,\n" +
+                "  tags json NULL,\n" +
+                "  g varchar(32) NULL AS get_json_string(tags, '$.vendorId')\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY (pk)\n" +
+                "DISTRIBUTED BY HASH (pk) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+    }
+
+    @Test
+    public void testOnlineOptimizeRewriteExcludesStaleGeneratedColumns() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("insert_online_optimize_shadow_generated_column");
+        List<Column> originalFullSchema = table.getFullSchema();
+        List<Column> schemaWithStaleGeneratedColumns = new ArrayList<>(originalFullSchema);
+        for (Column column : table.getBaseSchema()) {
+            if (column.isGeneratedColumn()) {
+                schemaWithStaleGeneratedColumns.add(column.deepCopy());
+                Column shadowColumn = column.deepCopy();
+                shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
+                schemaWithStaleGeneratedColumns.add(shadowColumn);
+            }
+        }
+
+        String sql = "insert into insert_online_optimize_shadow_generated_column (pk, v, tags) " +
+                "select pk, v, tags from insert_online_optimize_shadow_generated_column";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
+                .get(0);
+        boolean originalOptimizeRewrite = connectContext.isOptimizeRewrite();
+        connectContext.setOptimizeRewrite(true);
+        try {
+            connectContext.setQueryId(UUIDUtil.genUUID());
+            connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(sql);
+            Analyzer.analyze(insertStmt, connectContext);
+            AnalyzerUtils.collectAllDatabase(connectContext, insertStmt);
+
+            // Simulate fullSchema changing after analysis but before sink planning, as can happen when
+            // an online optimize job publishes or cleans up a shadow schema concurrently with DML.
+            table.setNewFullSchema(schemaWithStaleGeneratedColumns);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, insertStmt);
+            StatementPlanner.lock(locker);
+            try {
+                ExecPlan execPlan = new InsertPlanner(locker, true).plan(insertStmt, connectContext);
+                OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                Assertions.assertEquals(originalFullSchema.size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
+                        .noneMatch(slot -> slot.getColumn().isShadowColumn()));
+            } finally {
+                StatementPlanner.unLock(locker);
+            }
+        } finally {
+            connectContext.setOptimizeRewrite(originalOptimizeRewrite);
+            table.setNewFullSchema(originalFullSchema);
+        }
     }
 
     @Test
@@ -430,12 +495,15 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     private static String getInsertExecPlan(StatementBase statementBase, String originStmt) throws Exception {
+        return getInsertExecPlanObject(statementBase, originStmt).getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private static ExecPlan getInsertExecPlanObject(StatementBase statementBase, String originStmt) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         connectContext.getDumpInfo().setOriginStmt(originStmt);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
-        return execPlan.getExplainString(TExplainLevel.NORMAL);
+        return new StatementPlanner().plan(statementBase, connectContext);
     }
 
     public static void containsKeywords(String plan, String... keywords) throws Exception {

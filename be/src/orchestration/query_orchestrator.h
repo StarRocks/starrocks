@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 
@@ -32,6 +33,10 @@ public:
 
     Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
                                        std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
+
+    // Build the TQueryOptions used to execute an external scan plan fragment (open_scanner).
+    // Exposed as a static helper so tests can assert the fabricated options.
+    static TQueryOptions build_external_query_options(const TScanOpenParams& params);
 
 private:
     ExecEnv* _exec_env;

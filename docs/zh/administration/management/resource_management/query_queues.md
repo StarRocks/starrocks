@@ -11,8 +11,8 @@ description: "StarRocks supports query queues from v2.5 to automatically queue q
 
 查询队列分为两个版本：
 
-- **Query Queue v1**：基于并发查询数量、BE 内存使用率和 BE CPU 使用率触发排队。本文档中原有的查询队列配置和行为均属于 v1。自 v3.1.4 版本起，v1 支持设置资源组粒度的查询队列。
-- **Query Queue v2**：自 v3.3 版本起支持。v2 会估算每个 Query 消耗的 BE 资源，并将 BE 资源抽象为逻辑 slot，根据 Query 需要的 slot 数量进行排队和调度。
+- [**Query Queue v1**](#query-queue-v1)：基于并发查询数量、BE 内存使用率和 BE CPU 使用率触发排队。本文档中原有的查询队列配置和行为均属于 v1。自 v3.1.4 版本起，v1 支持设置资源组粒度的查询队列。
+- [**Query Queue v2**](#query-queue-v2)：自 v3.3 版本起支持。v2 会估算每个 Query 消耗的 BE 资源，并将 BE 资源抽象为逻辑 slot，根据 Query 需要的 slot 数量进行排队和调度。
 
 ## Query Queue v1
 
@@ -75,13 +75,10 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 :::note
 
-上述三个阈值参数仅适用于 Query Queue v1。启用 Query Queue v2 后，不再支持通过 `query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 触发排队。
+- 启用 Query Queue v2 后，不再支持通过 `query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 触发排队。
+- 默认设置下，BE 每隔一秒向 FE 报告资源使用情况。您可以通过设置 BE 配置项 `report_resource_usage_interval_ms` 来更改此间隔时间。
 
 :::
-
-> **说明**
->
-> 默认设置下，BE 每隔一秒向 FE 报告资源使用情况。您可以通过设置 BE 配置项 `report_resource_usage_interval_ms` 来更改此间隔时间。
 
 #### 资源组粒度的资源阈值
 
@@ -129,7 +126,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 ## Query Queue v2
 
-自 v3.3 版本起，StarRocks 支持 Query Queue v2。v2 不再基于并发查询数量、BE 内存使用率或 BE CPU 使用率的固定阈值触发排队，而是估算每个 Query 需要消耗的 BE 资源，并基于逻辑 slot 进行排队和调度。
+自 v3.3 版本起，StarRocks 支持 Query Queue v2。v2 不再基于并发查询数量、BE 内存使用率或 BE CPU 使用率的固定阈值触发排队，而是估算每个 Query 需要消耗的 BE 资源，并基于逻辑 slot 进行排队和调度。如果可用 Slot 不足，该查询将在队列中等待，直到释放出足够 Slot 为止。
 
 ### 配置 Query Queue v2
 
@@ -139,25 +136,134 @@ Query Queue v2 通过 FE 配置项启用和调整。其中，修改 `enable_quer
 | ------ | ------ | ---- |
 | `enable_query_queue_v2` | `false`（v3.3 至 v4.0）<br />`true`（自 v4.1 起） | 是否启用 Query Queue v2。设置为 `true` 后，StarRocks 使用 v2 基于 slot 的查询调度机制。 |
 | `query_queue_v2_concurrency_level` | `4` | Query Queue v2 计算集群总 slot 数量时使用的逻辑并发层数。值越大，系统可放行的 Query 越多，是一个相对调节参数。 |
+| `query_queue_slots_estimator_strategy` | `PBE` | 队列查询使用的 Slot 估算策略。支持的取值包括：`PBE`（基于并行度，默认值）、`MBE`（基于内存成本）和 `CBE`（基于 CPU 成本）。PBE 根据扫描并行度估算查询所需的 Slot 数，并以 Worker 数量为上限。对于 OLAP 表，它使用裁剪（Pruning）后剩余的 Scan Range 数量进行估算，因此只有极小型查询的 Slot 数才会低于 Worker 数量。对于 Connector 或外部表扫描，则会按全并行扫描处理（即 Worker 数量），而不是作为单 Slot 查询。MBE 根据查询的内存成本除以 `query_queue_v2_mem_bytes_per_slot` 来估算 Slot 数。CBE 根据执行计划的 CPU 成本除以 `query_queue_v2_cpu_costs_per_slot` 来估算 Slot 数。MBE 和 CBE 计算出的每个查询的 Slot 数还会受到 `number_of_workers * max(1, pipeline_dop / 2)` 的限制。为了保证向前兼容，历史取值 `MAX` 和 `MIN` 仍然可以使用，但都会被视为默认估算策略；其他任何取值都会在配置校验时被拒绝。 |
+| `query_queue_v2_schedule_strategy` | `SWRR` | Query Queue V2 对等待中的查询进行排序时使用的调度策略。支持的取值（不区分大小写）包括：`SWRR`（Smooth Weighted Round Robin，默认值），适用于需要公平加权调度的混合工作负载；以及 `SJF`（Short Job First + Aging），优先调度短任务，同时通过 Aging 机制避免任务饥饿。该配置项通过大小写不敏感的枚举解析；如果指定了无法识别的值，系统会记录错误日志并回退到默认调度策略。该配置仅在启用 Query Queue V2 时生效，并与 `query_queue_v2_concurrency_level` 等 V2 容量配置共同影响调度行为。 |
+| `query_queue_v2_mem_bytes_per_slot` | `0` | 基于内存成本估算策略（MBE）使用的每 Slot 内存目标值。当 `query_queue_slots_estimator_strategy` 设置为 `MBE` 时，总 Slot 数由 Warehouse 的内存预算计算得到，而单个查询所需的 Slot 数由其总内存成本除以该值计算，并限制在 `number_of_workers * max(1, pipeline_dop / 2)` 以内。如果该值小于等于 0，则 Query Queue V2 会使用每个 Worker 每个 CPU Core 的平均可用内存作为默认值。 |
+| `query_queue_v2_cpu_costs_per_slot` | `1000000000` | 基于 CPU 成本估算策略（CBE）使用的每 Slot CPU 成本阈值，用于根据查询执行计划的 CPU 成本估算所需的 Slot 数。调度器按照 `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` 计算 Slot 数，并将结果限制在 `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` 范围内。如果该值小于等于 0，则会自动规范化为 `1`。增大该值会减少每个查询分配的 Slot 数，从而提高整体并发能力；减小该值则会增加每个查询分配的 Slot 数，从而降低并发能力。 |
+| `query_queue_concurrency_limit` | `0` | 单个 BE 上允许同时运行的查询数上限。仅当该值大于 `0` 时才生效。设置为 `0` 表示不限制并发查询数量。 |
 
 :::note
 
-`query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 仅适用于 Query Queue v1。启用 Query Queue v2 后，上述参数不再生效。
+`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 仅适用于 Query Queue v1。启用 Query Queue v2 后，上述参数不再生效。
 
 :::
 
-### 资源 slot
+### 资源 Slot
 
-Query Queue v2 将 BE 资源表示为逻辑 slot：
+Query Queue v2 将 BE 资源表示为逻辑 Slot：
 
-- **集群总 slot 数量**：StarRocks 会为整个集群设置一个逻辑上的 slot 总量。该总量与 BE 数量和 BE CPU Core 数量成正相关，也会受 `query_queue_v2_concurrency_level` 影响。
-- **Query 需要的 slot 数量**：StarRocks 会为每个 Query 估算需要消耗的 slot 数量。估算依据包括统计信息、查询复杂度、Fragment 数量、复杂算子的输入和输出数据量估计，以及 DOP 等因素。
+- **集群总 Slot 数量**：StarRocks 会为整个集群设置一个逻辑上的 Slot 总量。该总量与 BE 数量和 BE CPU Core 数量成正相关，也会受 `query_queue_v2_concurrency_level` 影响。
+- **Query 需要的 Slot 数量**：StarRocks 会为每个 Query 估算需要消耗的 Slot 数量。估算依据包括统计信息、查询复杂度、Fragment 数量、复杂算子的输入和输出数据量估计，以及 DOP 等因素。
 
 ### 排队逻辑
 
-当一个 Query 需要的 slot 数量超过当前剩余的 slot 数量时，该 Query 会进入队列等待。Query Queue v2 会优先满足 slot 需求量较小的 Query，使小查询可以先获得资源，避免大查询长期占用队首导致后续小查询被阻塞，即队头阻塞（Head-of-line blocking）问题。
+当一个 Query 需要的 Slot 数量超过当前剩余的 Slot 数量时，该 Query 会进入队列等待。Query Queue v2 会优先满足 Slot 需求量较小的 Query，使小查询可以先获得资源，避免大查询长期占用队首导致后续小查询被阻塞，即队头阻塞（Head-of-line blocking）问题。
 
-整个排队逻辑都在 FE 上完成，包括设置集群总 slot 数量、估算 Query 需要的 slot 数量，以及决定优先满足哪个 Query 的 slot 需求。Query Queue v2 不会根据 BE 的实际资源使用情况进行调度。
+整个排队逻辑都在 FE 上完成，包括设置集群总 Slot 数量、估算 Query 需要的 Slot 数量，以及决定优先满足哪个 Query 的 Slot 需求。Query Queue v2 不会根据 BE 的实际资源使用情况进行调度。
+
+### 选择估算策略
+
+#### PBE
+
+基于并行度估算（PBE）适用于以下场景：
+
+- 常规报表查询
+- 点查与大查询混合的工作负载
+- 不希望深入了解成本模型细节的用户
+- 希望优先获得稳定、简单且易于解释的排队行为的 DBA
+
+使用 PBE 时，通常具有以下特点：
+
+- 点查或经过裁剪后扫描数据量较少的查询会使用较少的 Slot。
+- 扫描范围较大的查询会使用更多的 Slot。
+- 在业务高峰期间，小查询更容易获得执行资源。
+
+以下示例将 PBE 设置为估算策略：
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "PBE");
+```
+
+#### MBE
+
+基于内存成本估算（MBE）适用于存在内存压力的场景，例如大规模 Join、大规模聚合或高基数聚合。
+
+以下示例将 MBE 设置为估算策略，并为每个 Slot 分配 2 GB 内存：
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "MBE");
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_mem_bytes_per_slot" = "2147483648");
+```
+
+MBE 使用查询总内存成本除以该值计算查询所需的 Slot 数，并使用 Warehouse 的总内存预算除以该值计算总 Slot 数。
+
+可以根据以下方向对 MBE 进行调优：
+
+**现象：内存仍然很容易耗尽**
+
+- **调整方式**：降低 `query_queue_v2_concurrency_level`
+- **效果**：直接降低 MBE 使用的总内存预算。
+
+**现象：查询排队严重，但 BE 内存仍有余量**
+
+- **调整方式**：提高 `query_queue_v2_concurrency_level`
+- **效果**：直接提高 MBE 使用的总内存预算。
+
+**现象：`max_slots` 很小，整数取整带来的误差较明显**
+
+- **调整方式**：减小 `query_queue_v2_mem_bytes_per_slot`
+- **效果**：使用更细粒度的内存 Slot，降低整数取整带来的误差。
+
+#### CBE
+
+基于 CPU 成本估算（CBE）适用于 CPU 压力较大的场景，例如计算密集型 SQL、复杂表达式，或扫描完成后仍需大量 CPU 计算的查询。
+
+以下示例将 CBE 设置为估算策略，并将每个 Slot 的 CPU 成本阈值设置为 `1000000000`：
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "CBE");
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_cpu_costs_per_slot" = "1000000000");
+```
+
+**现象：CPU 经常达到饱和**
+
+- **调整方式**：减小 `query_queue_v2_cpu_costs_per_slot`
+- **效果**：相同 CPU 成本对应更多 Slot，使系统采用更保守的并发策略。
+
+**现象：查询排队明显，但 CPU 仍有余量**
+
+- **调整方式**：增大 `query_queue_v2_cpu_costs_per_slot`
+- **效果**：相同 CPU 成本对应更少 Slot，提高系统并发能力。
+
+### 调整并发容量
+
+如果只是希望提高或降低整体并发能力，不建议首先在 PBE、MBE 和 CBE 之间切换，而应优先调整总 Slot 容量：
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
+```
+
+推荐按照以下步骤进行调优：
+
+1. 从默认值 `4` 开始。
+2. 观察 `remain_slots`、`max_slots`、`query_pending_length`、CPU、内存以及查询延迟等指标。
+3. 如果资源仍有余量，但查询排队明显，则逐步提高 `query_queue_v2_concurrency_level`。
+4. 如果资源经常饱和，或者查询之间资源竞争严重，则逐步降低 `query_queue_v2_concurrency_level`。
+5. 每次调整幅度建议控制在 10%～25%，并至少观察一个业务高峰周期后，再进行下一次调整。
+
+**调优优先级**：应优先使用 `query_queue_v2_concurrency_level` 调整整体容量。只有在完成整体容量调优之后，再考虑是否切换到 MBE 或 CBE 等不同估算策略。调优初期不要同时修改多个参数，否则很难判断具体是哪一个参数产生了效果。
+
+#### 回退并发上限
+
+`query_queue_concurrency_limit` 是一个回退并发上限，适用于 PBE、MBE 和 CBE。Query Queue V2 首先使用当前估算策略计算查询所需的 Slot 数，并检查是否还有足够的 Slot 可用；随后再检查当前正在运行的查询数是否已经达到 `query_queue_concurrency_limit`。
+
+默认值 `0` 表示不限制。只有在需要为同时运行的查询数设置绝对上限时，才建议配置该参数：
+
+```SQL
+ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
+```
+
+建议优先使用 `query_queue_v2_concurrency_level` 调整资源容量。只有在需要显式限制同时运行的查询数量时，才使用 `query_queue_concurrency_limit`。
 
 ## 观测查询队列
 
@@ -195,7 +301,7 @@ MySQL [(none)]> SHOW PROCESSLIST;
 
 ### 监控指标
 
-您可以通过[监控报警](../monitoring/Monitor_and_Alert.md)功能获取相应监控指标观测查询队列。下列 FE 指标为各 FE 节点基于自身的统计数据得出。
+您可以通过[监控报警](../monitoring/monitoring.md)功能获取相应监控指标观测查询队列。下列 FE 指标为各 FE 节点基于自身的统计数据得出。
 
 | 指标                                            | 单位 | 类型   | 描述                                                         |
 | ----------------------------------------------- | ---- | ------ | --------------------------------------------------------- |

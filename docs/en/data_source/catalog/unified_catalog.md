@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "A unified catalog in StarRocks handles tables from Hive, Iceberg, Hudi, Delta Lake, and Kudu in a single catalog."
@@ -32,7 +33,7 @@ One unified catalog supports integrations with only a single storage system and 
 
 ## Usage notes
 
-- See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](./iceberg/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md), [Paimon catalog](../catalog/paimon_catalog.md), and [Kudu catalog](../../data_source/catalog/kudu_catalog.md) to understand the file formats and data types supported.
+- See the "Usage notes" section in [Hive catalog](./hive_catalog.md), [Iceberg catalog](./iceberg/iceberg.md), [Hudi catalog](./hudi_catalog.md), [Delta Lake catalog](./deltalake_catalog.md), [Paimon catalog](./paimon_catalog.md), and [Kudu catalog](./kudu_catalog.md) to understand the file formats and data types supported.
 
 - Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
 
@@ -44,7 +45,7 @@ Before you create a unified catalog, make sure your StarRocks cluster can integr
 
 ### AWS IAM
 
-If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Authenticate to AWS resources - Preparations](../../integrations/authenticate_to_aws_resources.md#preparations).
+If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Authenticate to AWS resources - Preparations](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
@@ -167,7 +168,7 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 #### StorageCredentialParams
 
@@ -215,7 +216,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -441,7 +442,7 @@ If you choose Google GCS as storage, take one of the following actions:
 
 #### MetadataUpdateParams
 
-A set of parameters about how StarRocks updates the cached metadata of Hive, Hudi, and Delta Lake. This parameter set is optional. For more information about the policies for updating cached metadata from Hive, Hudi, and Delta Lake, see [Hive catalog](../../data_source/catalog/hive_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md).
+A set of parameters about how StarRocks updates the cached metadata of Hive, Hudi, and Delta Lake. This parameter set is optional. For more information about the policies for updating cached metadata from Hive, Hudi, and Delta Lake, see [Hive catalog](./hive_catalog.md), [Hudi catalog](./hudi_catalog.md), and [Delta Lake catalog](./deltalake_catalog.md).
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
@@ -958,7 +959,7 @@ ENGINE = {|hive|iceberg}
 [partition_desc]
 ```
 
-For more information, see [Create a Hive table](../catalog/hive_catalog.md#create-a-hive-table) and [Create an Iceberg table](./iceberg/iceberg_catalog.md#create-an-iceberg-table).
+For more information, see [Create a Hive table](./hive_catalog.md#create-a-hive-table) and [Create an Iceberg table](./iceberg/iceberg.md#create-an-iceberg-table).
 
 The following example creates a Hive table named `hive_table`. The table consists of three columns `action`, `id`, and `dt`, of which `id` and `dt`are partition columns.
 
@@ -996,7 +997,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-For more information, see [Sink data to a Hive table ](../catalog/hive_catalog.md#sink-data-to-a-hive-table) and [Sink data to an Iceberg table](./iceberg/iceberg_catalog.md#sink-data-to-an-iceberg-table).
+For more information, see [Sink data to a Hive table ](./hive_catalog.md#sink-data-to-a-hive-table) and [Sink data to an Iceberg table](./iceberg/iceberg.md#sink-data-to-an-iceberg-table).
 
 The following example inserts three data rows to a Hive table named `hive_table`:
 
@@ -1024,7 +1025,7 @@ StarRocks supports dropping only Hive and Iceberg tables from unified catalogs.
 DROP TABLE <table_name>
 ```
 
-For more information, see [Drop a Hive table](../catalog/hive_catalog.md#drop-a-hive-table) and [Drop an Iceberg table](./iceberg/iceberg_catalog.md#drop-an-iceberg-table).
+For more information, see [Drop a Hive table](./hive_catalog.md#drop-a-hive-table) and [Drop an Iceberg table](./iceberg/iceberg.md#drop-an-iceberg-table).
 
 The following example drops a Hive table named `hive_table`:
 

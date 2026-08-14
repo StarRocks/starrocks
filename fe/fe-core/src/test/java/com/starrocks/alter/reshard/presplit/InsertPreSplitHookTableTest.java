@@ -81,6 +81,8 @@ import static org.mockito.Mockito.when;
  */
 public class InsertPreSplitHookTableTest {
 
+    private static final long BASE_INDEX_META_ID = 10L;
+
     private boolean savedConfigInsertFromTable;
 
     @BeforeEach
@@ -521,9 +523,8 @@ public class InsertPreSplitHookTableTest {
             InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
             Assertions.assertNotNull(scanContext, "prepare must build a scan context for the eligible source");
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames(),
-                    "scan context must carry the resolved source sort-key column");
-            Assertions.assertEquals(List.of(), scanContext.partitionSourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames(),
+                    "scan context must carry the full resolved target->source column map");
             Assertions.assertNull(scanContext.wherePredicateSql(),
                     "no WHERE clause must yield a null predicate SQL");
             Assertions.assertSame(fixture.sourceTable, scanContext.sourceTable(),
@@ -572,7 +573,42 @@ public class InsertPreSplitHookTableTest {
             Assertions.assertNotNull(scanContext, "source == target must still build a scan context");
             Assertions.assertSame(fixture.target(), scanContext.sourceTable(),
                     "scan context must carry the target table as its source when source == target");
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareBuildsSecondaryIndexSpecsForRollup() throws Exception {
+        // A range target carrying a rollup: prepare must emit one SecondaryIndexSpec per
+        // visible rollup, carrying that rollup's TARGET sort-key columns (the remap to
+        // source names happens later, in the executor, via the scan-context map).
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withVisibleRollup(/*rollupMetaId=*/ 202L, List.of("k"));
+
+            PreSplitFlow.Prepared prepared = fixture.prepare();
+
+            Assertions.assertNotNull(prepared, "prepare must build a Prepared for the rollup target");
+            Assertions.assertEquals(1, prepared.secondaryIndexSpecs().size(),
+                    "one visible rollup -> one secondary index spec");
+            SecondaryIndexSpec spec = prepared.secondaryIndexSpecs().get(0);
+            Assertions.assertEquals(202L, spec.indexMetaId());
+            Assertions.assertEquals(List.of("k"),
+                    spec.sortKey().stream().map(Column::getName).collect(java.util.stream.Collectors.toList()),
+                    "spec carries the rollup's TARGET sort-key columns");
+        }
+    }
+
+    @Test
+    public void prepareSkipsWhenRollupSortKeyUnmappable() throws Exception {
+        // A rollup whose sort-key column has no source mapping (e.g. a range DUP rollup whose
+        // ORDER BY promotes a generated column -- absent from the non-generated base-schema map)
+        // must skip pre-split cleanly (prepare returns null), not build a spec that later fails
+        // the sample. Here "g" is not among the fixture's non-generated base columns {k, v}.
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withVisibleRollup(/*rollupMetaId=*/ 203L, List.of("g"));
+
+            Assertions.assertNull(fixture.prepare(),
+                    "a rollup sort-key column with no source mapping must skip pre-split");
         }
     }
 
@@ -641,7 +677,10 @@ public class InsertPreSplitHookTableTest {
             when(target.isCloudNativeTableOrMaterializedView()).thenReturn(true);
             when(target.isRangeDistribution()).thenReturn(true);
             when(target.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-            when(target.getVisibleIndexMetas()).thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
+            com.starrocks.catalog.MaterializedIndexMeta baseMeta = mock(com.starrocks.catalog.MaterializedIndexMeta.class);
+            when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+            when(target.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+            when(target.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
             when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(columnsOf(targetColumns));
             PartitionInfo targetPartitionInfo = mock(PartitionInfo.class);
             when(targetPartitionInfo.isPartitioned()).thenReturn(false);
@@ -704,6 +743,8 @@ public class InsertPreSplitHookTableTest {
 
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target))
                     .thenReturn(List.of(bigintColumn("k")));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(target), eq(BASE_INDEX_META_ID)))
+                    .thenReturn(List.of(bigintColumn("k")));
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(targetDb), any())).thenReturn(target);
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(sourceDb), any())).thenReturn(sourceTable);
 
@@ -723,7 +764,7 @@ public class InsertPreSplitHookTableTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
 
         /**
@@ -734,11 +775,38 @@ public class InsertPreSplitHookTableTest {
          * mock suffices.
          */
         private InsertFromTableScanContext prepareScanContext() throws AccessDeniedException {
+            PreSplitFlow.Prepared prepared = prepare();
+            return prepared == null ? null : (InsertFromTableScanContext) prepared.scanContext();
+        }
+
+        /**
+         * Drives {@link TablePreSplitSource#prepare} directly and returns the full
+         * {@link PreSplitFlow.Prepared} (or {@code null} when prepare skipped), so a test
+         * can inspect the built {@code secondaryIndexSpecs}.
+         */
+        private PreSplitFlow.Prepared prepare() throws AccessDeniedException {
             SelectRelation selectRelation =
                     (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
-            PreSplitFlow.Prepared prepared = new TablePreSplitSource().prepare(
+            return new TablePreSplitSource().prepare(
                     insertStmt, selectRelation, targetTable, mock(Database.class), context);
-            return prepared == null ? null : (InsertFromTableScanContext) prepared.scanContext();
+        }
+
+        /**
+         * Adds one visible rollup ({@code rollupMetaId}) with the given sort-key columns to
+         * the target's visible-index set, alongside the base index, so prepare builds a
+         * secondary index spec for it.
+         */
+        private void withVisibleRollup(long rollupMetaId, List<String> rollupSortKeyColumnNames) {
+            com.starrocks.catalog.MaterializedIndexMeta baseMeta =
+                    mock(com.starrocks.catalog.MaterializedIndexMeta.class);
+            when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+            com.starrocks.catalog.MaterializedIndexMeta rollupMeta =
+                    mock(com.starrocks.catalog.MaterializedIndexMeta.class);
+            when(rollupMeta.getIndexMetaId()).thenReturn(rollupMetaId);
+            when(targetTable.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+            when(targetTable.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(targetTable), eq(rollupMetaId)))
+                    .thenReturn(columnsOf(rollupSortKeyColumnNames));
         }
 
         /**

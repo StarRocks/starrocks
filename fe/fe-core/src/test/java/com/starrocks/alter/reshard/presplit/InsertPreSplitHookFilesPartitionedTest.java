@@ -121,8 +121,10 @@ public class InsertPreSplitHookFilesPartitionedTest {
             when(globalState.getTabletReshardJobMgr()).thenReturn(mock(TabletReshardJobMgr.class));
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
+            List<IndexPreSplitTarget> indexTargets = List.of(
+                    new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 99L, List.of(bigintColumn("ts"))));
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                    database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
+                    database, table, indexTargets, /*fileTotalBytes*/ 1024L,
                     LoadKind.INSERT_FROM_FILES, null);
 
             // Drive the partitioned meta-tier sampler directly via reflection over the
@@ -159,8 +161,10 @@ public class InsertPreSplitHookFilesPartitionedTest {
             when(globalState.getTabletReshardJobMgr()).thenReturn(mock(TabletReshardJobMgr.class));
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
+            List<IndexPreSplitTarget> indexTargets = List.of(
+                    new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 99L, List.of(bigintColumn("ts"))));
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                    database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
+                    database, table, indexTargets, /*fileTotalBytes*/ 1024L,
                     LoadKind.INSERT_FROM_FILES, null);
 
             java.lang.reflect.Field metaField = DefaultPreSplitPipeline.class.getDeclaredField("metaTierSampler");
@@ -228,14 +232,14 @@ public class InsertPreSplitHookFilesPartitionedTest {
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
             grouper.when(() -> PartitionSampleGrouper.group(
                             any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
+                            anyLong(), anyLong(), any()))
                     .thenReturn(List.of(mock(PartitionSamples.class)));
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
                     () -> false, mock(ConnectContext.class));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
@@ -252,7 +256,7 @@ public class InsertPreSplitHookFilesPartitionedTest {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         List<Column> partitionColumns = List.of(bigintColumn("p_col"));
         return new PreSplitFlow.Prepared(scanContext, sortKey, partitionColumns,
-                /*estimatedBytes*/ 0L, mock(ComputeResource.class));
+                /*estimatedBytes*/ 0L, mock(ComputeResource.class), List.of());
     }
 
     // ---------- Outer try/catch swallows internal throws ----------

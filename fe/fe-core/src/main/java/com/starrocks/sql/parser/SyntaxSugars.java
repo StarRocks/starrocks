@@ -20,7 +20,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 
 import java.util.ArrayList;
 import java.util.List;

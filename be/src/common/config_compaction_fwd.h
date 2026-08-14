@@ -145,6 +145,9 @@ CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 
+// Minimum elapsed time in milliseconds for logging a completed lake compaction attempt or parallel subtask profile.
+CONF_mInt64(lake_compact_slow_log_ms, "5000");
+
 // Maximum data volume (bytes) per parallel compaction subtask.
 // If total picked rowsets data size is less than this threshold, parallel compaction
 // will be skipped and fallback to normal compaction flow.
@@ -163,6 +166,22 @@ CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+
+// Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
+// tablet from cumulative selection (the size-tiered small-file merge, which favors small
+// freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
+// deleted rows first) to drop deleted rows and shrink their delete vectors:
+//   1. lake_pk_compaction_base_delete_ratio_threshold: the tablet's aggregate delete ratio
+//      (sum(num_dels)/sum(num_rows) across rowsets) reaches this fraction.
+//   2. lake_pk_compaction_base_delete_rows_threshold: the tablet's absolute delete-row count
+//      (sum(num_dels)) reaches this many rows. This matters because on hot update/delete tables
+//      the deletes bloat the delete vectors and waste space (delvec bytes ~= num_dels * 0.23)
+//      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
+// Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
+// deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
+
+CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
 // below). Enabled by default: low-value sparse mid-tier picks are skipped per the

@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -271,6 +272,10 @@ public class MergeTabletJob extends TabletReshardJob {
         // 2. Add the new versions of materialized index to catalog
         addNewMaterializedIndexes();
 
+        // 2b. Now that the merged tablets are visible, proactively enqueue them for async
+        // vector-index build (leader-only path; no-op for non-async-vector-index tables).
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
+
         // 3. Get end transaction id
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .peekNextTransactionId();
@@ -280,7 +285,7 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     /*
-     * 1. Wait for previous transactions finished
+     * 1. Abort in-flight lake compactions, then wait for the remaining previous transactions finished
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
      * 4. Set tablet state to NORMAL
@@ -288,10 +293,14 @@ public class MergeTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runCleaningJob() {
-        // 1. Wait for previous transactions finished
+        // 1. Cancel previous in-flight compactions on the resharded partitions so cleaning does not wait
+        //    for slow compaction, then wait for the rest. Compactions on partitions this job does not
+        //    reshard are neither cancelled nor waited on (see CompactionScheduler#cancelPreviousCompactions).
+        Set<Long> ignoredCompactionTxnIds = GlobalStateMgr.getCurrentState().getCompactionMgr()
+                .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet());
         try {
             if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
-                    endTransactionId, dbId, List.of(tableId))) {
+                    endTransactionId, dbId, List.of(tableId), ignoredCompactionTxnIds)) {
                 return;
             }
         } catch (AnalysisException e) { // Db is dropped, ignore exception
@@ -535,10 +544,13 @@ public class MergeTabletJob extends TabletReshardJob {
             txnInfo.gtid = gtid;
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
+            // vectorIndexBuildInfos is required by the publishVersion signature but intentionally
+            // ignored here: reshard output tablets are enqueued for async vector-index build AFTER
+            // they become visible (see VectorIndexBuildScheduler.onReshardComplete in runRunningJob),
+            // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
                     computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
-            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
 
             return tabletRange;
         } catch (Exception e) {
@@ -587,29 +599,8 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     private void removeOldMaterializedIndexes() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
-
-                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                        .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition
-                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
-                    if (oldIndex == null) {
-                        continue;
-                    }
-                    // Remove old tablets from inverted index
-                    for (Tablet tablet : oldIndex.getTablets()) {
-                        invertedIndex.deleteTablet(tablet.getId());
-                    }
-                }
-            }
+            recycleOldMaterializedIndexes(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         }
     }
 

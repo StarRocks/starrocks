@@ -77,6 +77,44 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testSubqueryInWindowPartitionByAndOrderBy() throws Exception {
+        // The subquery has to be planned as an Apply/join below the window. Leaving it as a SubqueryOperator
+        // makes the FE emit a TExprNode without a node_type, which the BE rejects.
+        String sql = "select dense_rank() over (order by abs((select max(v1) from t0)))";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC\n" +
+                "  |  functions: [, dense_rank(), ]\n" +
+                "  |  order by: 8: abs ASC");
+
+        sql = "select dense_rank() over (partition by (select max(v1) from t0)) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "partition by: 8: max");
+
+        // A subquery used directly as the order by expression used to fail analysis with
+        // "slot type shouldn't be invalid", because it was translated to an INVALID-typed operator.
+        sql = "select row_number() over (order by (select max(v1) from t0)) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "order by: 8: max ASC");
+    }
+
+    @Test
+    public void testQuantifiedSubqueryInWindowPartitionByAndOrderBy() throws Exception {
+        // A quantified/existential subquery is planned together with its predicate, because that predicate is
+        // what becomes the Apply. Planning its Subquery child on its own dereferenced a null OptExprBuilder.
+        String sql = "select row_number() over (partition by v4 in (select v1 from t0) order by v4) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC");
+
+        sql = "select row_number() over (order by v4 not in (select v1 from t0)) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC");
+
+        sql = "select row_number() over (partition by exists (select v1 from t0) order by v4) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC");
+    }
+
+    @Test
     public void testPruneWindowColumn() throws Exception {
         String sql = "select sum(t1c) from (select t1c, lag(id_datetime, 1, '2020-01-01') over( partition by t1c)" +
                 "from test_all_type) a ;";
@@ -582,6 +620,61 @@ public class WindowTest extends PlanTestBase {
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0");
         }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRankingWindowWithNonPositivePredicateNotPushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // Ranking window functions start from 1, so these predicates keep no row at all. Pushing them down
+        // used to build a PARTITION-TOP-N with `partition limit: 0`, which crashes the BE when it creates
+        // the per-partition sorter, or a TopN with `limit 0`, which throws from LogicalTopNOperator.
+        for (String predicate : List.of("rk <= 0", "rk = 0", "rk < 0", "rk <= -3")) {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where " + predicate + ";";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+            assertContains(plan, ":SELECT");
+
+            // Without partition by there is no PARTITION-TOP-N, the pushdown used to fail the planner instead.
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where " + predicate + ";";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+            assertContains(plan, ":SELECT");
+        }
+
+        for (String predicate : List.of("rk <= 0", "rk = 0", "rk < 0", "rk <= -3")) {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where " + predicate + ";";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+
+        // A positive bound still gets pushed down.
+        String sql = "select * from (\n" +
+                "    select *, " +
+                "        row_number() over (partition by v3 order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where rk <= 1;";
+        assertContains(getFragmentPlan(sql), "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: 3: v3 \n" +
+                "  |  partition limit: 1\n" +
+                "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                "  |  offset: 0");
         FeConstants.runningUnitTest = false;
     }
 

@@ -186,7 +186,7 @@ public class RangeColocateScanRangeDispatchTest {
         Assertions.assertEquals(2, olapScans.size(), "expected two OlapScanNodes for the join");
 
         for (OlapScanNode scan : olapScans) {
-            ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2Locations = scan.bucketSeq2locations;
+            ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2Locations = scan.getBucketSeqToLocations();
             Assertions.assertFalse(bucketSeq2Locations.isEmpty(),
                     "scan node " + scan.getTableName() + " has no bucketSeq2locations entries");
             Assertions.assertEquals(1, bucketSeq2Locations.keySet().size(),

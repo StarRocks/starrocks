@@ -32,17 +32,23 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/seek_range.h"
+#include "storage/seek_tuple.h"
 #include "storage/tablet_schema_helper.h"
 #include "types/logical_type.h"
 
@@ -77,6 +83,10 @@ private:
             col.set_type("INT");
             col.set_length(4);
             col.set_index_length(4);
+        } else if (type == TYPE_BIGINT) {
+            col.set_type("BIGINT");
+            col.set_length(8);
+            col.set_index_length(8);
         } else if (type == TYPE_VARCHAR) {
             col.set_type("VARCHAR");
             col.set_length(128);
@@ -97,6 +107,8 @@ private:
 public:
     TabletSchemaBuilder& create(int32_t id, bool nullable, LogicalType type, bool key = false) {
         if (type == TYPE_INT) {
+            _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
+        } else if (type == TYPE_BIGINT) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
         } else if (type == TYPE_VARCHAR) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
@@ -165,6 +177,26 @@ struct VecSchemaBuilder {
 private:
     Schema vec_schema;
 };
+
+// Writes |chunk| (already populated with all of |tablet_schema|'s columns, in order)
+// as a single-shot segment (has_key=true) under |path| on |fs|, then opens and returns
+// the resulting Segment. Used by the full-sort-key-index seek tests below.
+inline std::shared_ptr<Segment> write_and_open_segment(const std::shared_ptr<FileSystem>& fs, const std::string& path,
+                                                       const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                       const Chunk& chunk, size_t num_rows_per_block) {
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(path));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = num_rows_per_block;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+    CHECK_OK(writer.init(true));
+    CHECK_OK(writer.append_chunk(chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{path}, 0, tablet_schema));
+    return segment;
+}
 } // namespace test
 
 // This case is only triggered by dictionary inconsistencies.
@@ -363,6 +395,145 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
 
     ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+    res_chunk->reset();
+}
+
+// Regression test for an out-of-bounds read in `SegmentIterator::_switch_context`.
+//
+// Shape of the crash seen in production (4.0.12, SIGSEGV @0x0 with the PC in
+// `_switch_context`): a string column carries a global dictionary that cannot be
+// mapped onto the segment's local dictionary (the pages are not all dict-encoded),
+// so `_has_force_dict_encode` is set and the final-chunk schema is rebuilt from
+// `_encoded_schema`. That rebuild walks every field of `_encoded_schema` while
+// indexing `output_schema()` with a cursor that is never bounds-checked. As soon as
+// the LAST output field has been matched, every remaining encoded field reads
+// `output_schema().field(num_output_fields)` -- one past the end of the output
+// schema's field vector. `Schema::field()` only DCHECKs the index, so a RELEASE
+// binary dereferences whatever the read returns; a zeroed slot yields a null
+// FieldPtr and `->id()` faults at address 0.
+//
+// The trailing column here (`c2`) is predicate-only, i.e. exactly what
+// filter_unused_columns prunes from the output on a query like
+// `SELECT c0, c1 FROM t WHERE c2 >= '...'`.
+TEST_F(SegmentIteratorTest, TestForceGlobalDictEncodeWithTrailingUnusedColumn) {
+    // Two values big enough to overflow the dict page builder, so the column ends up
+    // with no usable local dictionary while a global dictionary still exists for it.
+    const int slice_num = 2;
+    const int overflow_sz = 1024 * 1024 + 10; // 1M
+    std::vector<std::string> values;
+    for (int i = 0; i < slice_num; ++i) {
+        std::string bigstr;
+        bigstr.reserve(overflow_sz);
+        for (int j = 0; j < overflow_sz; ++j) {
+            bigstr.push_back(j);
+        }
+        bigstr.push_back(i);
+        values.emplace_back(std::move(bigstr));
+    }
+    std::sort(values.begin(), values.end());
+
+    std::vector<Slice> data_strs;
+    for (const auto& data : values) {
+        data_strs.emplace_back(data);
+    }
+
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/force_encode_trailing_unused_column";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_INT, true)
+                                                          .create(2, false, TYPE_VARCHAR)
+                                                          .create(3, false, TYPE_VARCHAR)
+                                                          .set_length(overflow_sz + 10)
+                                                          .build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 1024;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = slice_num;
+
+    std::vector<std::string> small_values{"aaa", "bbb"};
+    auto i32_provider = [](int32_t i) { return i; };
+    auto small_slice_provider = [&small_values](int32_t i) { return Slice(small_values[i % small_values.size()]); };
+    auto big_slice_provider = [&data_strs](int32_t i) { return data_strs[i % data_strs.size()]; };
+
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, i32_provider));
+    ASSERT_OK(segment_data_builder.append(1, small_slice_provider));
+    ASSERT_OK(segment_data_builder.append(2, big_slice_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+
+    // The trailing column must have no local dictionary, otherwise the global dict is
+    // applied directly and `_has_force_dict_encode` stays false.
+    ColumnIteratorOptions iter_opts;
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
+    iter_opts.stats = &stats;
+    iter_opts.use_page_cache = false;
+    iter_opts.read_file = read_file.get();
+    iter_opts.check_dict_encoding = true;
+    iter_opts.reader_type = READER_QUERY;
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(tablet_schema->column(2), nullptr));
+    ASSERT_OK(scalar_iter->init(iter_opts));
+    ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_VARCHAR).add(2, "c2", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < slice_num; ++i) {
+        g_dict[Slice(values[i])] = i;
+    }
+    dict_map[2] = &g_dict;
+    seg_opts.global_dictmaps = &dict_map;
+
+    // Every scanned column carries a pushed-down predicate. That keeps `new_segment_iterator()` on
+    // the branch that hands the schema to the iterator AS IS -- with fewer predicate columns than
+    // fields it would instead `reorder_schema()` the predicate columns to the front and wrap the
+    // iterator in a projection, which moves the unused column away from the tail and hides the bug.
+    std::unique_ptr<ColumnPredicate> pred_c0(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "0"));
+    std::unique_ptr<ColumnPredicate> pred_c1(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, "a"));
+    std::unique_ptr<ColumnPredicate> pred_c2(
+            new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 2, values[0].c_str()));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{pred_c0.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c1.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c2.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
+    // c2 is used by the pushed-down predicate only -- pruned from the output, and it is
+    // the last field of the schema.
+    std::unordered_set<uint32_t> unused_output_column_ids{2};
+    ASSERT_OK(chunk_iter->init_output_schema(unused_output_column_ids));
+    ASSERT_EQ(2, chunk_iter->output_schema().num_fields());
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+
+    ASSERT_EQ(2, res_chunk->num_columns());
+    ASSERT_EQ(num_rows, res_chunk->num_rows());
+    const auto& c0 = res_chunk->get_column_by_index(0);
+    const auto& c1 = res_chunk->get_column_by_index(1);
+    for (size_t i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(static_cast<int32_t>(i), c0->get(i).get_int32());
+        EXPECT_EQ(small_values[i % small_values.size()], c1->get(i).get_slice().to_string());
+    }
     res_chunk->reset();
 }
 
@@ -1417,6 +1588,777 @@ TEST_F(SegmentIteratorTest, TestDictLookupBatchDuplicateValues) {
     }
     // 2000/50 = 40 each. 10 matching values -> 400
     ASSERT_EQ(total, 400);
+}
+
+// Verifies the reusable-segment-iterator path: a single underlying SegmentIterator, kept in a
+// caller-owned slot, is driven for two independent scans. The second scan must go through
+// reset_for_reuse() (not rebuild a fresh iterator) and still return the full result set.
+TEST_F(SegmentIteratorTest, ReuseSegmentIteratorAcrossScans) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/reusable_iterator";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100;
+    auto key_provider = [](int32_t i) { return i; };
+    auto val_provider = [](int32_t i) { return i * 2; };
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, key_provider));
+    ASSERT_OK(segment_data_builder.append(1, val_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    auto make_opts = [&]() {
+        SegmentReadOptions o;
+        o.fs = _fs;
+        o.stats = &stats;
+        o.chunk_size = chunk_size;
+        return o;
+    };
+    auto drain = [&](const ChunkIteratorPtr& it) -> size_t {
+        auto chunk = ChunkFactory::new_chunk(it->output_schema(), chunk_size);
+        size_t total = 0;
+        while (true) {
+            chunk->reset();
+            auto st = it->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            total += chunk->num_rows();
+        }
+        return total;
+    };
+
+    // Empty slot -> the first call builds the underlying SegmentIterator and stores it in the slot.
+    ChunkIteratorPtr reusable_slot;
+    ASSIGN_OR_ABORT(auto iter1, segment->new_reusable_iterator(vec_schema, vec_schema, make_opts(), &reusable_slot));
+    ASSERT_NE(nullptr, reusable_slot.get());
+    void* underlying = reusable_slot.get();
+    ASSERT_EQ(num_rows, drain(iter1));
+    // NonClosingChunkIterator: closing the returned iterator must NOT tear down the reused iterator.
+    iter1->close();
+
+    // Second scan reuses the same slot: new_reusable_iterator takes the reset_for_reuse() branch,
+    // so the SAME underlying SegmentIterator instance re-drives the scan and returns all rows again.
+    ASSIGN_OR_ABORT(auto iter2, segment->new_reusable_iterator(vec_schema, vec_schema, make_opts(), &reusable_slot));
+    ASSERT_EQ(underlying, reusable_slot.get()) << "expected the slot's iterator to be reused, not rebuilt";
+    ASSERT_EQ(num_rows, drain(iter2));
+    iter2->close();
+
+    // Third scan reuses the slot with a precomputed scan range (as the prepared-split seed supplies one).
+    // This exercises SegmentReadStateCache + _apply_precomputed_scan_range: the reused iterator applies the
+    // narrowed range instead of re-pruning, so it returns exactly the precomputed subset.
+    const size_t precomputed_rows = 50;
+    auto precomputed = std::make_shared<SparseRange<>>();
+    precomputed->add(Range<rowid_t>(0, precomputed_rows));
+    auto opts3 = make_opts();
+    opts3.read_state_cache.scan_range = precomputed; // borrowed during the scan; must outlive iter3
+    ASSIGN_OR_ABORT(auto iter3, segment->new_reusable_iterator(vec_schema, vec_schema, opts3, &reusable_slot));
+    ASSERT_EQ(underlying, reusable_slot.get());
+    ASSERT_EQ(precomputed_rows, drain(iter3));
+    iter3->close();
+}
+
+// Reusing a slot whose predicate column layout differs from the first scan must rebuild the underlying
+// iterator, not reset it: the stored schema was reordered (predicate columns first) for the first scan, and
+// reusing that stale ordering would mis-map predicate columns. Here scan 1 filters c1 and scan 2 filters c2,
+// so the reorder differs; the slot must be rebuilt and each scan must return its own correct row count.
+TEST_F(SegmentIteratorTest, ReuseRebuildsWhenPredicateLayoutChanges) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/reusable_pred_layout";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).create(3, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100;
+    auto k_provider = [](int32_t i) { return i; };       // c0 key: 0..99
+    auto c1_provider = [](int32_t i) { return i % 10; }; // c1 == 5 -> 10 rows
+    auto c2_provider = [](int32_t i) { return i % 20; }; // c2 == 7 -> 5 rows
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, k_provider));
+    ASSERT_OK(segment_data_builder.append(1, c1_provider));
+    ASSERT_OK(segment_data_builder.append(2, c2_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    // Predicate on a single (non-key) column, so reorder_schema() moves it to the front and the schema
+    // ordering depends on which column is filtered.
+    auto make_pred_opts = [&](ColumnId cid, const std::string& value, std::unique_ptr<ColumnPredicate>& holder) {
+        holder.reset(new_column_eq_predicate(get_type_info(TYPE_INT), cid, value));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode{holder.get()});
+        SegmentReadOptions o;
+        o.fs = _fs;
+        o.stats = &stats;
+        o.chunk_size = chunk_size;
+        o.enable_predicate_col_late_materialize = true;
+        o.pred_tree = PredicateTree::create(std::move(root));
+        return o;
+    };
+    auto drain = [&](const ChunkIteratorPtr& it) -> size_t {
+        CHECK_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        CHECK_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+        auto chunk = ChunkFactory::new_chunk(it->output_schema(), chunk_size);
+        size_t total = 0;
+        while (true) {
+            chunk->reset();
+            auto st = it->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            total += chunk->num_rows();
+        }
+        return total;
+    };
+
+    ChunkIteratorPtr reusable_slot;
+
+    // First scan filters c1 -> reorder_schema puts c1 first.
+    std::unique_ptr<ColumnPredicate> pred_c1;
+    auto opts_c1 = make_pred_opts(1, "5", pred_c1);
+    ASSIGN_OR_ABORT(auto iter_c1, segment->new_reusable_iterator(vec_schema, vec_schema, opts_c1, &reusable_slot));
+    void* first_slot = reusable_slot.get();
+    ASSERT_NE(nullptr, first_slot);
+    ASSERT_EQ(10u, drain(iter_c1));
+    iter_c1->close();
+
+    // Second scan filters c2: the predicate layout no longer matches the stored schema, so the slot must be
+    // rebuilt (different underlying iterator) and still return c2's correct row count.
+    std::unique_ptr<ColumnPredicate> pred_c2;
+    auto opts_c2 = make_pred_opts(2, "7", pred_c2);
+    ASSIGN_OR_ABORT(auto iter_c2, segment->new_reusable_iterator(vec_schema, vec_schema, opts_c2, &reusable_slot));
+    ASSERT_NE(first_slot, reusable_slot.get()) << "predicate layout changed -> slot must be rebuilt";
+    ASSERT_EQ(5u, drain(iter_c2));
+    iter_c2->close();
+}
+
+// Directly exercises the exported seed/rowid helpers used by the lake prepared-split seed path:
+// get_prepared_pruned_row_ranges (seed pruning), block_aligned_rowid_range_from_seek_ranges and
+// segment_seek_ranges_to_rowid_ranges (key-range -> rowid-range resolution), for both the empty-range
+// fast paths and a non-empty key range that drives the block-aligned bound lookups.
+TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
+    using namespace starrocks::test;
+
+    // block_aligned_rowid_range_from_seek_ranges / segment_seek_ranges_to_rowid_ranges re-derive the
+    // FileSystem from the segment's stored path via FileSystemFactory::CreateSharedFromString, so the
+    // segment must live on a real (posix) path -- the in-memory MemoryFileSystem the other cases use is
+    // invisible to the derived posix fs. Write it under a private temp dir and clean it up.
+    const std::string dir = "/tmp/sr_prepared_row_range_helpers";
+    const std::string file_name = dir + "/seg.dat";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_name));
+    (void)fs->delete_dir_recursive(dir);
+    ASSERT_OK(fs->create_dir_recursive(dir));
+    DeferOp cleanup([&] { (void)fs->delete_dir_recursive(dir); });
+
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100;
+    auto key_provider = [](int32_t i) { return i; };
+    auto val_provider = [](int32_t i) { return i * 2; };
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, key_provider));
+    ASSERT_OK(segment_data_builder.append(1, val_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{file_name}, 0, tablet_schema));
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    // get_prepared_pruned_row_ranges: no predicate -> the seed pruning keeps every row.
+    {
+        SegmentReadOptions o;
+        o.fs = fs;
+        o.stats = &stats;
+        o.chunk_size = chunk_size;
+        o.tablet_schema = tablet_schema;
+        ASSIGN_OR_ABORT(auto pruned, get_prepared_pruned_row_ranges(segment, vec_schema, o));
+        ASSERT_EQ(num_rows, pruned.span_size());
+    }
+
+    // Empty-range fast paths: no key bounds -> both helpers cover the whole segment without an index lookup.
+    ASSIGN_OR_ABORT(auto full_block_range, block_aligned_rowid_range_from_seek_ranges(segment.get(), {}));
+    ASSERT_EQ(num_rows, full_block_range.span_size());
+    ASSIGN_OR_ABORT(auto empty_rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, {}, LakeIOOptions{}));
+    ASSERT_TRUE(empty_rowid_ranges.empty());
+
+    // A non-empty key range [10, 50) on the key column drives the short-key bound lookups.
+    // block_aligned_rowid_range_from_seek_ranges requires the index to be loaded first (per its contract);
+    // segment_seek_ranges_to_rowid_ranges loads it internally.
+    LakeIOOptions io_opts{.fill_data_cache = false};
+    ASSERT_OK(segment->load_index());
+    // The SeekTuple key column must carry the segment's short-key length (INT index_length = 4). Without it
+    // short_key_encode emits only a marker byte and every bound collapses to the same block (empty window).
+    auto key_field = std::make_shared<Field>(0, "c0", TYPE_INT, -1, -1, false);
+    key_field->set_uid(0);
+    key_field->set_is_key(true);
+    key_field->set_short_key_length(4);
+    Schema key_schema({key_field});
+    std::vector<SeekRange> seek_ranges;
+    seek_ranges.emplace_back(SeekTuple(key_schema, {Datum(10)}), SeekTuple(key_schema, {Datum(50)}));
+
+    // The block-aligned window is a non-empty subset of the segment (keys 10..49 live in blocks of 10 rows).
+    ASSIGN_OR_ABORT(auto block_range, block_aligned_rowid_range_from_seek_ranges(segment.get(), seek_ranges));
+    ASSERT_GT(block_range.span_size(), 0u);
+    ASSERT_LE(block_range.span_size(), num_rows);
+
+    // One resolved rowid range per input SeekRange.
+    ASSIGN_OR_ABORT(auto rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, seek_ranges, io_opts));
+    ASSERT_EQ(1u, rowid_ranges.size());
+}
+
+// Drains |it| (already positioned via SegmentReadOptions.ranges) and returns each
+// returned row's values for |num_cols| leading int32 columns, in scan order.
+static std::vector<std::vector<int32_t>> drain_int32_rows(const ChunkIteratorPtr& it, size_t num_cols) {
+    CHECK_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    CHECK_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+    auto chunk = ChunkFactory::new_chunk(it->output_schema(), 64);
+    std::vector<std::vector<int32_t>> rows;
+    while (true) {
+        chunk->reset();
+        auto st = it->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        CHECK_OK(st);
+        for (size_t r = 0; r < chunk->num_rows(); r++) {
+            std::vector<int32_t> row;
+            row.reserve(num_cols);
+            for (size_t c = 0; c < num_cols; c++) {
+                row.push_back(chunk->get_column_by_index(c)->get(r).get_int32());
+            }
+            rows.push_back(std::move(row));
+        }
+    }
+    it->close();
+    return rows;
+}
+
+// Seek routing + GO-FORWARD rollback (Task 5). One dual-page segment (write config on, so field 9
+// is truncated and field 11 is the full sort key). The SAME segment, read config on (full-key seek)
+// then off (legacy seek), must return IDENTICAL correct rows for newly-started point/range queries.
+TEST_F(SegmentIteratorTest, FullSortKeyIndexSeekMatchesLegacyOnPointAndRangeQueries) {
+    using namespace starrocks::test;
+
+    // Dual-page write: the full page is additionally written alongside the always-truncated legacy page.
+    const bool old_write = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore_write([&] { config::enable_full_sort_key_index = old_write; });
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT, true).build();
+    ASSERT_EQ(2U, tablet_schema->sort_key_idxes().size());
+
+    const size_t num_rows = 200;
+    auto s = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(s, num_rows);
+    {
+        auto cols = chunk->columns();
+        for (size_t i = 0; i < num_rows; i++) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i / 10)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        }
+    }
+
+    // Shared query schema: 2 INT sort-key fields (short_key_length needed for the
+    // legacy short_key_encode fallback; harmless for the full-key path, which ignores it).
+    auto f0 = std::make_shared<Field>(0, "c0", TYPE_INT, -1, -1, false);
+    f0->set_uid(0);
+    f0->set_is_key(true);
+    f0->set_short_key_length(4);
+    auto f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    f1->set_uid(1);
+    f1->set_is_key(true);
+    f1->set_short_key_length(4);
+    Schema full_schema({f0, f1});
+    Schema prefix_schema({f0});
+
+    // (a) exact point seek on the full composite key: row i=57 (c0=5, c1=57).
+    SeekRange point_range(SeekTuple(full_schema, {Datum(5), Datum(57)}), SeekTuple(full_schema, {Datum(5), Datum(57)}));
+    point_range.set_inclusive_lower(true);
+    point_range.set_inclusive_upper(true);
+
+    // (b) prefix range seek on c0 only: c0 in [3, 5) -> rows i in [30, 50).
+    SeekRange prefix_range(SeekTuple(prefix_schema, {Datum(3)}), SeekTuple(prefix_schema, {Datum(5)}));
+    prefix_range.set_inclusive_lower(true);
+    prefix_range.set_inclusive_upper(false);
+
+    // (c) full composite-key range seek: (2,25) < key <= (4,45) -> rows i in [26, 46).
+    SeekRange full_range(SeekTuple(full_schema, {Datum(2), Datum(25)}), SeekTuple(full_schema, {Datum(4), Datum(45)}));
+    full_range.set_inclusive_lower(false);
+    full_range.set_inclusive_upper(true);
+
+    auto make_expected = [](int begin, int end) {
+        std::vector<std::vector<int32_t>> rows;
+        for (int i = begin; i < end; i++) {
+            rows.push_back({static_cast<int32_t>(i / 10), static_cast<int32_t>(i)});
+        }
+        return rows;
+    };
+
+    struct Case {
+        const char* name;
+        SeekRange range;
+        std::vector<std::vector<int32_t>> expected;
+    };
+    std::vector<Case> cases;
+    cases.push_back({"point", point_range, make_expected(57, 58)});
+    cases.push_back({"prefix_range", prefix_range, make_expected(30, 50)});
+    cases.push_back({"full_range", full_range, make_expected(26, 46)});
+
+    std::string file_name = kSegmentDir + "/full_sort_key_seek_dual";
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *chunk, /*num_rows_per_block=*/10);
+    ASSERT_EQ(num_rows, segment->num_rows());
+    ASSERT_OK(segment->load_index());
+    // The dual-page write leaves the legacy page truncated; the full page is present.
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+
+    for (bool read_on : {true, false}) {
+        const bool old_read = config::enable_full_sort_key_index_read;
+        config::enable_full_sort_key_index_read = read_on;
+        DeferOp restore_read([&] { config::enable_full_sort_key_index_read = old_read; });
+
+        // The read gate decides whether the seek uses the full page; the legacy page always works.
+        EXPECT_EQ(read_on, segment->use_full_sort_key_index());
+        if (read_on) {
+            EXPECT_EQ(2U, segment->num_sort_key_columns());
+        }
+
+        for (auto& c : cases) {
+            OlapReaderStatistics stats;
+            SegmentReadOptions o;
+            o.fs = _fs;
+            o.stats = &stats;
+            o.ranges = {c.range};
+            auto chunk_iter = new_segment_iterator(segment, full_schema, o);
+            auto rows = drain_int32_rows(chunk_iter, 2);
+            EXPECT_EQ(c.expected, rows) << "case=" << c.name << " read_on=" << read_on;
+        }
+    }
+}
+
+// An over-width CHAR search key ('abc' against a CHAR(2) column), followed by
+// another sort column, must not be truncated to the declared width when encoding the
+// query's compact full sort key search key -- an over-width literal stays correctly
+// ordered (raw byte compare) against the shorter stored entries.
+TEST_F(SegmentIteratorTest, FullSortKeyIndexCharOverWidthSeekReturnsCorrectRows) {
+    using namespace starrocks::test;
+
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    const bool old_read = config::enable_full_sort_key_index_read;
+    config::enable_full_sort_key_index_read = true;
+    DeferOp restore([&] {
+        config::enable_full_sort_key_index = old_enable;
+        config::enable_full_sort_key_index_read = old_read;
+    });
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_CHAR, true).set_length(2).create(2, false, TYPE_INT, true).build();
+    ASSERT_EQ(2U, tablet_schema->sort_key_idxes().size());
+
+    // 5 groups of 2-char codes, 5 rows each; c1 is the global row index so the exact
+    // set of returned rows can be identified from c1 alone.
+    const std::vector<std::string> letters = {"aa", "ab", "ac", "ad", "ae"};
+    const size_t group_size = 5;
+    const size_t num_rows = letters.size() * group_size;
+
+    auto s = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(s, num_rows);
+    auto cols = chunk->columns();
+    for (size_t i = 0; i < num_rows; i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(letters[i / group_size])));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    std::string file_name = kSegmentDir + "/full_sort_key_char_overwidth";
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *chunk, /*num_rows_per_block=*/group_size);
+    ASSERT_EQ(num_rows, segment->num_rows());
+
+    // Assert the dual-page write engaged the full-key index and it is usable under the read gate.
+    ASSERT_OK(segment->load_index());
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->use_full_sort_key_index());
+    ASSERT_EQ(2U, segment->num_sort_key_columns());
+
+    // Query key schema: CHAR c0 + INT c1 (matching tablet column positions).
+    auto f0 = std::make_shared<Field>(0, "c0", TYPE_CHAR, -1, -1, false);
+    f0->set_uid(0);
+    f0->set_is_key(true);
+    auto f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    f1->set_uid(1);
+    f1->set_is_key(true);
+    Schema key_schema({f0, f1});
+
+    // Over-width literal "abc" (3 bytes) as the exclusive upper bound, followed by c1=0.
+    // "aa" < "ab" < "abc" < "ac" as raw byte compare (never truncated to width 2), so
+    // rows from groups "aa" and "ab" (c1 in [0, 10)) qualify; "ac".."ae" do not.
+    std::string over_width = "abc";
+    SeekRange range(SeekTuple(), SeekTuple(key_schema, {Datum(Slice(over_width)), Datum(0)}));
+    range.set_inclusive_upper(false);
+
+    // Output schema: c1 only (position 1) -- avoids re-reading the CHAR column back out.
+    auto out_f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    out_f1->set_uid(1);
+    Schema output_schema({out_f1});
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions o;
+    o.fs = _fs;
+    o.stats = &stats;
+    o.ranges = {range};
+    auto chunk_iter = new_segment_iterator(segment, output_schema, o);
+    auto rows = drain_int32_rows(chunk_iter, 1);
+
+    std::vector<std::vector<int32_t>> expected;
+    for (int32_t i = 0; i < static_cast<int32_t>(2 * group_size); i++) {
+        expected.push_back({i});
+    }
+    EXPECT_EQ(expected, rows);
+}
+
+// An embedded-NUL CHAR search key ('a\0b'), followed by another sort column,
+// must be encoded raw (escaped, not NUL-truncated) for the query's compact full sort
+// key search key -- the compact overload's raw escape keeps it correctly ordered
+// against the NUL-truncated stored entries (the physical/writer overload would
+// truncate it to "a" and produce a wrong, over-inclusive bracket).
+TEST_F(SegmentIteratorTest, FullSortKeyIndexCharEmbeddedNulSeekReturnsCorrectRows) {
+    using namespace starrocks::test;
+
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    const bool old_read = config::enable_full_sort_key_index_read;
+    config::enable_full_sort_key_index_read = true;
+    DeferOp restore([&] {
+        config::enable_full_sort_key_index = old_enable;
+        config::enable_full_sort_key_index_read = old_read;
+    });
+
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_CHAR, true).set_length(2).create(2, false, TYPE_INT, true).build();
+    ASSERT_EQ(2U, tablet_schema->sort_key_idxes().size());
+
+    // 5 groups of 1-char codes, 5 rows each; c1 is the global row index.
+    const std::vector<std::string> letters = {"a", "b", "c", "d", "e"};
+    const size_t group_size = 5;
+    const size_t num_rows = letters.size() * group_size;
+
+    auto s = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(s, num_rows);
+    auto cols = chunk->columns();
+    for (size_t i = 0; i < num_rows; i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(letters[i / group_size])));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    std::string file_name = kSegmentDir + "/full_sort_key_char_embedded_nul";
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *chunk, /*num_rows_per_block=*/group_size);
+    ASSERT_EQ(num_rows, segment->num_rows());
+
+    // Assert the dual-page write engaged the full-key index and it is usable under the read gate.
+    ASSERT_OK(segment->load_index());
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->use_full_sort_key_index());
+    ASSERT_EQ(2U, segment->num_sort_key_columns());
+
+    auto f0 = std::make_shared<Field>(0, "c0", TYPE_CHAR, -1, -1, false);
+    f0->set_uid(0);
+    f0->set_is_key(true);
+    auto f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    f1->set_uid(1);
+    f1->set_is_key(true);
+    Schema key_schema({f0, f1});
+
+    // Embedded-NUL literal "a\0b" (3 bytes) as the inclusive lower bound, followed by
+    // c1=0. "a" < "a\0b" < "b" as raw byte compare (the escape of the embedded 0x00
+    // keeps "a\0b" ahead of the terminator-only encoding of stored "a"), so group "a"
+    // (c1 in [0, 5)) is entirely excluded, while groups "b".."e" (c1 in [5, 25)) qualify.
+    std::string embedded_nul;
+    embedded_nul.push_back('a');
+    embedded_nul.push_back('\0');
+    embedded_nul.push_back('b');
+    SeekRange range(SeekTuple(key_schema, {Datum(Slice(embedded_nul)), Datum(0)}), SeekTuple());
+    range.set_inclusive_lower(true);
+
+    auto out_f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    out_f1->set_uid(1);
+    Schema output_schema({out_f1});
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions o;
+    o.fs = _fs;
+    o.stats = &stats;
+    o.ranges = {range};
+    auto chunk_iter = new_segment_iterator(segment, output_schema, o);
+    auto rows = drain_int32_rows(chunk_iter, 1);
+
+    std::vector<std::vector<int32_t>> expected;
+    for (int32_t i = static_cast<int32_t>(group_size); i < static_cast<int32_t>(num_rows); i++) {
+        expected.push_back({i});
+    }
+    EXPECT_EQ(expected, rows);
+}
+
+// A seek against a full-key segment whose sort-key column logical type has
+// drifted from the query's (simulated via SegmentReadOptions.tablet_schema, mirroring
+// a schema-evolution type widening) must bypass the coarse short-key prune rather than
+// emit a mismatched bracket, and still return the exact correct rows -- matching a
+// non-drifted baseline query over the same data.
+TEST_F(SegmentIteratorTest, FullSortKeyIndexSchemaDriftBypassReturnsCorrectRows) {
+    using namespace starrocks::test;
+
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    const bool old_read = config::enable_full_sort_key_index_read;
+    config::enable_full_sort_key_index_read = true;
+    DeferOp restore([&] {
+        config::enable_full_sort_key_index = old_enable;
+        config::enable_full_sort_key_index_read = old_read;
+    });
+
+    // Segment's own (write-time) schema: single INT sort-key column.
+    TabletSchemaBuilder int_builder;
+    std::shared_ptr<TabletSchema> int_schema = int_builder.create(1, false, TYPE_INT, true).build();
+    // "Current" (drifted) schema: the same column (unique_id=1), widened to BIGINT.
+    TabletSchemaBuilder bigint_builder;
+    std::shared_ptr<TabletSchema> bigint_schema = bigint_builder.create(1, false, TYPE_BIGINT, true).build();
+
+    const size_t num_rows = 100;
+    auto s = ChunkHelper::convert_schema(int_schema);
+    auto chunk = ChunkFactory::new_chunk(s, num_rows);
+    auto cols = chunk->columns();
+    for (size_t i = 0; i < num_rows; i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    std::string file_name = kSegmentDir + "/full_sort_key_schema_drift";
+    auto segment = write_and_open_segment(_fs, file_name, int_schema, *chunk, /*num_rows_per_block=*/10);
+    ASSERT_EQ(num_rows, segment->num_rows());
+
+    // Assert the dual-page write engaged the full-key index (its own, non-drifted schema has a
+    // single INT sort-key column) and it is usable under the read gate.
+    ASSERT_OK(segment->load_index());
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->use_full_sort_key_index());
+    ASSERT_EQ(1U, segment->num_sort_key_columns());
+
+    // Baseline: query typed exactly as the segment's own schema (no drift).
+    auto int_field = std::make_shared<Field>(0, "c0", TYPE_INT, -1, -1, false);
+    int_field->set_uid(0);
+    int_field->set_is_key(true);
+    Schema int_query_schema({int_field});
+    SeekRange int_range(SeekTuple(int_query_schema, {Datum(static_cast<int32_t>(30))}),
+                        SeekTuple(int_query_schema, {Datum(static_cast<int32_t>(70))}));
+    int_range.set_inclusive_lower(true);
+    int_range.set_inclusive_upper(false);
+
+    OlapReaderStatistics baseline_stats;
+    SegmentReadOptions baseline_opts;
+    baseline_opts.fs = _fs;
+    baseline_opts.stats = &baseline_stats;
+    baseline_opts.ranges = {int_range};
+    auto baseline_iter = new_segment_iterator(segment, int_query_schema, baseline_opts);
+    auto baseline_rows = drain_int32_rows(baseline_iter, 1);
+
+    std::vector<std::vector<int32_t>> expected;
+    for (int32_t i = 30; i < 70; i++) {
+        expected.push_back({i});
+    }
+    ASSERT_EQ(expected, baseline_rows) << "baseline (non-drifted) query sanity check";
+
+    // Drifted: query typed as BIGINT (the "current" schema); the segment's own schema
+    // (used for the full sort key index bytes) is still INT -- a mismatch that must
+    // trigger the bypass rather than a wrong coarse bracket.
+    auto bigint_field = std::make_shared<Field>(0, "c0", TYPE_BIGINT, -1, -1, false);
+    bigint_field->set_uid(0);
+    bigint_field->set_is_key(true);
+    Schema bigint_query_schema({bigint_field});
+    SeekRange bigint_range(SeekTuple(bigint_query_schema, {Datum(static_cast<int64_t>(30))}),
+                           SeekTuple(bigint_query_schema, {Datum(static_cast<int64_t>(70))}));
+    bigint_range.set_inclusive_lower(true);
+    bigint_range.set_inclusive_upper(false);
+
+    OlapReaderStatistics drift_stats;
+    SegmentReadOptions drift_opts;
+    drift_opts.fs = _fs;
+    drift_opts.stats = &drift_stats;
+    drift_opts.ranges = {bigint_range};
+    drift_opts.tablet_schema = bigint_schema;
+    auto drift_iter = new_segment_iterator(segment, bigint_query_schema, drift_opts);
+
+    CHECK_OK(drift_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    CHECK_OK(drift_iter->init_output_schema(std::unordered_set<uint32_t>()));
+    auto out_chunk = ChunkFactory::new_chunk(drift_iter->output_schema(), 64);
+    std::vector<int64_t> drift_rows;
+    while (true) {
+        out_chunk->reset();
+        auto st = drift_iter->get_next(out_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_TRUE(st.ok()) << st;
+        for (size_t r = 0; r < out_chunk->num_rows(); r++) {
+            drift_rows.push_back(out_chunk->get_column_by_index(0)->get(r).get_int64());
+        }
+    }
+    drift_iter->close();
+
+    std::vector<int64_t> expected64;
+    for (int64_t i = 30; i < 70; i++) {
+        expected64.push_back(i);
+    }
+    EXPECT_EQ(expected64, drift_rows) << "drifted (bypass) query must match the non-drifted baseline";
+}
+
+// Exercises the logical-split byte-wise seam: SegmentReadOptions.short_key_ranges drives
+// _get_row_ranges_by_short_key_ranges(), whose per-row fine search re-encodes each stored
+// page row and byte-compares it against a raw short-key-index boundary. On a full-key segment
+// that boundary was written with the physical full_sort_key_encode overload (CHAR NUL-truncated
+// to its visible prefix), so the stored-row re-encode must use the same physical overload for
+// the CHAR bytes to line up. This uses a CHAR sort key whose values are shorter than the declared
+// width (so CHAR NUL-truncation is actually in play) and asserts the raw-boundary seek returns
+// exactly the same rows as the typed SeekTuple seek over the identical logical bound.
+TEST_F(SegmentIteratorTest, FullSortKeyIndexCharShortKeyRangeMatchesTypedSeek) {
+    using namespace starrocks::test;
+
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    const bool old_read = config::enable_full_sort_key_index_read;
+    config::enable_full_sort_key_index_read = true;
+    DeferOp restore([&] {
+        config::enable_full_sort_key_index = old_enable;
+        config::enable_full_sort_key_index_read = old_read;
+    });
+
+    // CHAR(3) c0 + INT c1, both sort-key columns.
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_CHAR, true).set_length(3).create(2, false, TYPE_INT, true).build();
+    ASSERT_EQ(2U, tablet_schema->sort_key_idxes().size());
+
+    // 6 groups of single-char codes (each shorter than the declared CHAR(3) width, so the stored
+    // form is NUL-padded), 4 rows each; c1 is the global row index.
+    const std::vector<std::string> letters = {"a", "b", "c", "d", "e", "f"};
+    const size_t group_size = 4;
+    const size_t num_rows = letters.size() * group_size;
+
+    auto s = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(s, num_rows);
+    auto cols = chunk->columns();
+    for (size_t i = 0; i < num_rows; i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(Slice(letters[i / group_size])));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    std::string file_name = kSegmentDir + "/full_sort_key_char_short_key_range";
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *chunk, /*num_rows_per_block=*/group_size);
+    ASSERT_EQ(num_rows, segment->num_rows());
+    ASSERT_OK(segment->load_index());
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->use_full_sort_key_index());
+    ASSERT_EQ(2U, segment->num_sort_key_columns());
+
+    // Logical lower bound (c0 = "c", c1 = 9), inclusive; upper is open. Expected rows are those
+    // with (c0, c1) >= ("c", 9): all of "d".."f" plus "c" rows with c1 >= 9 -> c1 in [9, 24).
+    auto f0 = std::make_shared<Field>(0, "c0", TYPE_CHAR, -1, -1, false);
+    f0->set_uid(0);
+    f0->set_is_key(true);
+    auto f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    f1->set_uid(1);
+    f1->set_is_key(true);
+    Schema key_schema({f0, f1});
+
+    auto out_f1 = std::make_shared<Field>(1, "c1", TYPE_INT, -1, -1, false);
+    out_f1->set_uid(1);
+    Schema output_schema({out_f1});
+
+    std::vector<std::vector<int32_t>> expected;
+    for (int32_t i = 9; i < static_cast<int32_t>(num_rows); i++) {
+        expected.push_back({i});
+    }
+
+    // Reference: typed SeekTuple seek over the same logical bound (uses the typed fine compare,
+    // never the byte-wise re-encode seam) -- the ground truth.
+    {
+        SeekRange range(SeekTuple(key_schema, {Datum(Slice("c")), Datum(9)}), SeekTuple());
+        range.set_inclusive_lower(true);
+        OlapReaderStatistics stats;
+        SegmentReadOptions o;
+        o.fs = _fs;
+        o.stats = &stats;
+        o.ranges = {range};
+        auto chunk_iter = new_segment_iterator(segment, output_schema, o);
+        auto rows = drain_int32_rows(chunk_iter, 1);
+        ASSERT_EQ(expected, rows) << "typed SeekTuple reference";
+    }
+
+    // Under test: the raw short-key-index boundary path. The boundary bytes are produced with the
+    // physical full_sort_key_encode overload -- byte-identical to what the segment writer stored at
+    // each block boundary -- and paired with the full sort-key schema, exactly as a logical split does.
+    {
+        auto sk_schema = std::make_shared<Schema>(ChunkHelper::get_full_sort_key_schema(tablet_schema));
+        SeekTuple boundary_tuple(*sk_schema, {Datum(Slice("c")), Datum(9)});
+        std::string boundary = boundary_tuple.full_sort_key_encode(std::vector<uint32_t>{0, 1}, 0);
+
+        auto lower = std::make_unique<ShortKeyOption>(sk_schema, Slice(boundary), /*inclusive=*/true);
+        // Pin the boundary to the full sort key, exactly as a logical split does; the Slice consumer
+        // reads THIS pin (not the live config) to pick the full decoder + full-key re-encode.
+        lower->use_full_sort_key = true;
+        auto upper = std::make_unique<ShortKeyOption>();
+        std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+        short_key_ranges.push_back(std::make_shared<ShortKeyRangeOption>(std::move(lower), std::move(upper)));
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions o;
+        o.fs = _fs;
+        o.stats = &stats;
+        o.short_key_ranges = short_key_ranges;
+        auto chunk_iter = new_segment_iterator(segment, output_schema, o);
+        auto rows = drain_int32_rows(chunk_iter, 1);
+        EXPECT_EQ(expected, rows) << "raw short-key-index boundary seek must match the typed reference";
+    }
 }
 
 } // namespace starrocks

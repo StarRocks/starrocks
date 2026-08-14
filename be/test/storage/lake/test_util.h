@@ -149,10 +149,15 @@ protected:
 };
 
 struct PrimaryKeyParam {
-    bool enable_persistent_index = false;
-    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
+    // Shared-data primary-key tablets support only the cloud-native persistent index; the
+    // in-memory index and the LOCAL persistent index are deprecated. Default accordingly.
+    bool enable_persistent_index = true;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
     bool enable_transparent_data_encryption = false;
+    // When true, the tablet's sort key differs from the primary key (ORDER BY != PK), which exercises
+    // the separate-sort-key load-spill + unsort-SST-writer path.
+    bool separate_sort_key = false;
 };
 
 template <typename T>

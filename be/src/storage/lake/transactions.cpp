@@ -24,6 +24,7 @@
 #include "gutil/strings/join.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -96,8 +97,16 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
+        // skip_meta_cache forces this to read DURABLE storage only: with file bundling a version can sit in
+        // the metacache (its metadata cached during publish) without a durable bundle written yet -- e.g. a
+        // batch publish advanced the primary index and cached the metadata but had not written the bundle,
+        // and is now being retried. A plain cache-hitting read would treat such a version as "exists in
+        // remote", adopt it as the base, and record it as prev_garbage_version, leaving a dangling reference
+        // (NotFound while vacuum walks the chain) once the cache is evicted.
         auto gtid = txns.size() == 1 ? txns[0].gtid() : txns[index_version - base_version - 1].gtid();
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true, gtid);
+        auto res = tablet_mgr->get_tablet_metadata(
+                tablet_id, index_version,
+                CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true}, gtid);
         if (res.ok()) {
             version = index_version;
         } else {
@@ -476,6 +485,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                         return new_version_metadata_or_error(missig_txn_log_meta.status());
                     } else {
                         base_metadata = std::move(missig_txn_log_meta).value();
+                        // Keep base_version in sync with base_metadata.
+                        base_version = base_metadata->version();
                         continue;
                     }
                 } else if (txns[i].force_publish()) {
@@ -494,6 +505,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
         if (log_applier == nullptr) {
             // init log_applier
+            DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
                                               new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata);
@@ -544,6 +556,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             auto tablet_id_in_txn_log = tablet_ids_in_txn_logs[j];
             auto& txn_logs = txn_logs_vector[j];
             for (auto& txn_log : txn_logs) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("convert_txn_log_us");
                 ASSIGN_OR_RETURN(auto converted_txn_log, convert_txn_log(txn_log, base_metadata, tablet_info));
                 txn_log = std::move(converted_txn_log);
             }
@@ -820,6 +833,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_meta : txn_log.op_write().dels_meta()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built tombstone sstables (empty name = del file had no sstable)
+        for (const auto& del_sst : txn_log.op_write().del_ssts()) {
+            if (!del_sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+            }
+        }
         collect_vi_files(txn_log.op_write().rowset());
     }
     if (txn_log.has_op_compaction()) {
@@ -854,6 +873,11 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             }
             for (const auto& del_meta : op_write.dels_meta()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
+            }
+            for (const auto& del_sst : op_write.del_ssts()) {
+                if (!del_sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+                }
             }
             collect_vi_files(op_write.rowset());
         }

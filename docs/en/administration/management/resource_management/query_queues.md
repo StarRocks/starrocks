@@ -12,8 +12,8 @@ From v2.5, StarRocks supports query queues. With query queues enabled, StarRocks
 
 The Query Queue feature has two versions:
 
-- **Query Queue v1**: Triggers queuing based on query concurrency, BE memory usage, and BE CPU usage. The original query queue configurations and behaviors in this topic belong to v1. From v3.1.4 onwards, v1 supports setting query queues on the resource group level.
-- **Query Queue v2**: Supported from v3.3 onwards. v2 estimates the BE resources consumed by each query, represents BE resources as logical slots, and queues and schedules queries based on the number of slots each query needs.
+- [**Query Queue v1**](#query-queue-v1): Triggers queuing based on query concurrency, BE memory usage, and BE CPU usage. The original query queue configurations and behaviors in this topic belong to v1. From v3.1.4 onwards, v1 supports setting query queues on the resource group level.
+- [**Query Queue v2**](#query-queue-v2): Supported from v3.3 onwards. v2 estimates the BE resources consumed by each query, represents BE resources as logical slots, and queues and schedules queries based on the number of slots each query needs.
 
 ## Query Queue v1
 
@@ -74,7 +74,7 @@ You can set the thresholds that trigger query queues via the following global se
 
 :::note
 
-- These three threshold parameters apply only to Query Queue v1. After Query Queue v2 is enabled, `query_queue_concurrency_limit`, `query_queue_mem_used_pct_limit`, and `query_queue_cpu_used_permille_limit` are no longer supported for queue triggering.
+- After Query Queue v2 is enabled, `query_queue_mem_used_pct_limit` and `query_queue_cpu_used_permille_limit` are no longer supported for queue triggering.
 - By default, BE reports resource usage to FE at one-second intervals. You can change this interval by setting the BE configuration item `report_resource_usage_interval_ms`.
 
 :::
@@ -92,11 +92,11 @@ You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information fo
 
 #### Manage query concurrency
 
-When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions &lt; v3.1.4 and &ge; v3.1.4.
+When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions `<` v3.1.4 and `>=` v3.1.4.
 
-- In versions &lt; v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identification of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
+- In versions `<` v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identification of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
 
-- In versions &ge; v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
+- In versions `>=` v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
 
 ### Configure Query Queue v1
 
@@ -125,7 +125,7 @@ You can configure the dynamic adjustment of query concurrency `pipeline_dop` usi
 
 ## Query Queue v2
 
-From v3.3 onwards, StarRocks supports Query Queue v2. In Query Queue v2, query queues are no longer triggered based on fixed thresholds for query concurrency, BE memory usage, or BE CPU usage. Instead, it estimates the BE resources required by each query and queues and schedules queries based on logical slots.
+From v3.3 onwards, StarRocks supports Query Queue v2. In Query Queue v2, query queues are no longer triggered based on fixed thresholds for query concurrency, BE memory usage, or BE CPU usage. Instead, it estimates the BE resources required by each query and queues and schedules queries based on logical slots. If there are not enough available slots, the query waits in the queue until enough slots are released.
 
 ### Configure Query Queue v2
 
@@ -135,10 +135,15 @@ Query Queue v2 is enabled and tuned through FE configuration items. Changes to `
 | ------------------ | ------- | ----------- |
 | `enable_query_queue_v2` | `false` (v3.3 to v4.0)<br />`true` (from v4.1 onwards) | Whether to enable Query Queue v2. When this item is set to `true`, StarRocks uses the v2 slot-based query scheduling mechanism. |
 | `query_queue_v2_concurrency_level` | `4` | The logical concurrency level used by Query Queue v2 to calculate the total number of cluster slots. A larger value allows the system to admit more queries. This is a relative tuning parameter. |
+| `query_queue_slots_estimator_strategy` | `PBE` | The slot estimation strategy used for queue-based queries. Valid values: `PBE` (parallelism-based, the default), `MBE` (memory-cost-based), and `CBE` (CPU-cost-based). PBE estimates a query's slots from scan parallelism, capped by the worker count: for OLAP tables it uses the number of scan ranges left after pruning, so only very small queries fall below the worker count; a connector/external scan is treated as a full-parallelism scan (the worker count) rather than a single-slot query. MBE estimates slots from the query's memory cost divided by `query_queue_v2_mem_bytes_per_slot`. CBE estimates slots from the plan CPU cost divided by `query_queue_v2_cpu_costs_per_slot`. MBE and CBE per-query slots are additionally capped by `number_of_workers * max(1, pipeline_dop / 2)`. The legacy values `MAX` and `MIN` are still accepted for forward compatibility and are treated as the default estimator; any other value is rejected by configuration validation. |
+| `query_queue_v2_schedule_strategy` | `SWRR` | The scheduling policy used by Query Queue V2 to order pending queries. Supported values (case-insensitive) are `SWRR` (Smooth Weighted Round Robin) — the default, suitable for mixed/hybrid workloads that need fair weighted sharing — and `SJF` (Short Job First + Aging) — prioritizes short jobs while using aging to avoid starvation. The value is parsed with case-insensitive enum lookup; an unrecognized value is logged as an error and the default policy is used. This configuration only affects behavior when Query Queue V2 is enabled and interacts with V2 sizing settings such as `query_queue_v2_concurrency_level`. |
+| `query_queue_v2_mem_bytes_per_slot` | `0` | Per-slot memory target used by the memory-cost-based estimator (MBE). When `query_queue_slots_estimator_strategy` is `MBE`, the total slots are derived from the warehouse memory budget, and a query's slots are estimated from its total memory cost divided by this value, capped by `number_of_workers * max(1, pipeline_dop / 2)`. If it is non-positive, Query Queue V2 uses the average worker memory per core. |
+| `query_queue_v2_cpu_costs_per_slot` | `1000000000` | Per-slot CPU cost threshold used by the CPU-cost-based estimator (CBE) to estimate how many slots a query needs from its plan CPU cost. The scheduler computes slots as `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` and clamps the result to the range `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]`. A non-positive value is normalized to `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. |
+| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
 
 :::note
 
-`query_queue_concurrency_limit`, `query_queue_mem_used_pct_limit`, and `query_queue_cpu_used_permille_limit` apply only to Query Queue v1. After Query Queue v2 is enabled, these parameters no longer take effect.
+`query_queue_mem_used_pct_limit` and `query_queue_cpu_used_permille_limit` apply only to Query Queue v1. After Query Queue v2 is enabled, these parameters no longer take effect.
 
 :::
 
@@ -154,6 +159,110 @@ Query Queue v2 represents BE resources as logical slots:
 When the number of slots required by a query exceeds the current number of remaining slots, the query waits in the queue. Query Queue v2 preferentially satisfies queries that require fewer slots, allowing small queries to obtain resources first and avoiding head-of-line blocking where a large query at the head of the queue blocks later small queries.
 
 The entire queuing logic is completed on FE, including setting the total number of cluster slots, estimating the number of slots required by a query, and deciding which query's slot requirement to satisfy first. Query Queue v2 does not schedule based on the actual resource usage of BEs.
+
+### Choose an estimation strategy
+
+#### PBE
+
+Parallel-based estimation (PBE) strategy is best for:
+
+- Normal reporting queries
+- Mixed point lookups and large queries
+- Users who do not want to understand cost model details
+- DBAs who want stable, simple, and explainable queueing behavior first
+
+Expected behaviors with PBE include:
+
+- Point lookups or queries that scan little data after pruning use fewer slots
+- Queries that scan larger ranges use more slots
+- Small queries are more likely to get execution resources during peak hours
+
+The following example sets PBE as the strategy:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "PBE");
+```
+
+#### MBE
+
+Memory cost-based estimation (MBE) strategy is suitable for dealing with memory pressure, such as large joins, large aggregations, or high-cardinality aggregations.
+
+The following example sets MBE as the strategy, and allocates 2 GB of memory to each slot:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "MBE");
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_mem_bytes_per_slot" = "2147483648");
+```
+
+MBE divides the query’s total memory cost by this value to get query slots, and divides the warehouse memory budget by this value to get total slots.
+
+Tune the MBE strategy in the following directions:
+
+**Symptom: Memory still gets saturated easily**
+
+- **Adjustment**: Decrease `query_queue_v2_concurrency_level`
+- **Effect**: Directly lowers the MBE total memory budget
+
+**Symptom: Queue is too long but BE memory still has room**
+
+- **Adjustment**: Increase `query_queue_v2_concurrency_level`
+- **Effect**: Directly raises the MBE total memory budget
+
+**Symptom: `max_slots` is very small and integer rounding is visible**
+
+- **Adjustment**: Decrease `query_queue_v2_mem_bytes_per_slot`
+- **Effect**: Uses a finer memory slot granularity and reduces coarse rounding error
+
+#### CBE
+
+CPU cost-based estimation (CBE) strategy is suitable for dealing with memory pressure, such as compute-heavy SQL, complex expressions, or heavy CPU work after scanning.
+
+The following example sets CBE as the strategy, and set the CPU cost threshold to `1000000000` for each slot:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_slots_estimator_strategy" = "CBE");
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_cpu_costs_per_slot" = "1000000000");
+```
+
+**Symptom: CPU is often saturated**
+
+- **Adjustment**: Decrease `query_queue_v2_cpu_costs_per_slot`
+- **Effect**: The same CPU cost for more slots, making concurrency more conservative
+
+**Symptom: Queries queue noticeably but CPU still has room**
+
+- **Adjustment**: Increase `query_queue_v2_cpu_costs_per_slot`
+- **Effect**: The same CPU cost for fewer slots, making concurrency looser
+
+### Tune concurrency capacity
+
+If you only want to increase or decrease overall concurrency, do not switch between PBE, MBE, and CBE first. Tune total slot capacity first:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
+```
+
+Recommended process:
+
+1. Start with default value `4`.
+2. Observe `remain_slots`, `max_slots`, `query_pending_length`, CPU, memory, and query latency.
+3. If there is resource headroom but queries queue noticeably, gradually increase `query_queue_v2_concurrency_level`.
+4. If resources are often saturated or queries interfere with each other heavily, gradually decrease `query_queue_v2_concurrency_level`.
+5. Make small changes each time, such as 10% to 25%, and observe one business peak period before making another change.
+
+**Tuning Priority**: Use `query_queue_v2_concurrency_level` to tune overall capacity first. Consider switching to MBE or PBE only after that. Do not change multiple parameters at the same time at the beginning, because it becomes hard to tell which parameter caused the effect.
+
+#### Fallback Concurrency Cap
+
+`query_queue_concurrency_limit` is a fallback concurrency cap and applies to PBE, MBE, and CBE. Query Queue V2 first estimates the slots required by a query with the current estimator and checks whether total slots are available. After that, it checks whether the current number of running queries has reached `query_queue_concurrency_limit`.
+
+The default value `0` means unlimited. Set it only when you need an absolute cap on the number of concurrently running queries:
+
+```SQL
+ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
+```
+
+Use `query_queue_v2_concurrency_level` to tune resource capacity first. Use `query_queue_concurrency_limit` only when you need to explicitly limit the number of queries run at the same time.
 
 ## Monitor query queues
 
@@ -191,7 +300,7 @@ You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` 
 
 ### Monitoring metrics
 
-You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/Monitor_and_Alert.md) feature. The following FE metrics are derived from the statistical data of each FE node.
+You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/monitoring.md) feature. The following FE metrics are derived from the statistical data of each FE node.
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |

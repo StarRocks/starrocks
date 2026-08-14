@@ -221,7 +221,7 @@ public:
     // exclusion between publish_resharding_tablet and publish_version, so
     // the cached _data_version cannot advance past metadata->version()
     // during this call.
-    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata);
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
@@ -239,8 +239,6 @@ public:
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
-    void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
-
     Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
@@ -256,6 +254,8 @@ private:
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                       LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
+    Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
+                      RowsetUpdateState& state, LakePrimaryIndex& index, DeletesMap* new_deletes);
 
     // Performs condition-based merge update using parallel chunk-level execution for segments
     // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values

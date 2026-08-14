@@ -38,7 +38,7 @@ TEST_F(GinFunctionsTest, tokenizeTest) {
 
         ctx->set_constant_columns(columns);
 
-        ASSERT_FALSE(GinFunctions::tokenize_prepare(ctx.get(), FunctionContext::THREAD_LOCAL).ok());
+        ASSERT_FALSE(GinFunctions::tokenize_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     }
     {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -52,9 +52,9 @@ TEST_F(GinFunctionsTest, tokenizeTest) {
         columns.emplace_back(ConstColumn::create(tokenizer));
         columns.emplace_back(ConstColumn::create(content));
         ctx->set_constant_columns(columns);
-        ASSERT_TRUE(GinFunctions::tokenize_prepare(ctx.get(), FunctionContext::THREAD_LOCAL).ok());
+        ASSERT_TRUE(GinFunctions::tokenize_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         ColumnPtr result = GinFunctions::tokenize(ctx.get(), columns).value();
-        ASSERT_TRUE(GinFunctions::tokenize_close(ctx.get(), FunctionContext::THREAD_LOCAL).ok());
+        ASSERT_TRUE(GinFunctions::tokenize_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
         columns.clear();
         auto nullable_result = ColumnHelper::as_column<NullableColumn>(result);

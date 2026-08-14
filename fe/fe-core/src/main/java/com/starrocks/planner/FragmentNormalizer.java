@@ -25,6 +25,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.expression.ExprToNormalFormVisitor;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -53,6 +54,7 @@ import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -290,6 +292,17 @@ public class FragmentNormalizer {
         return new Pair<>(remapSlotIds(slotIds), exprs);
     }
 
+    // Serialize a thrift struct into the digest the same way expressions are handled, so a
+    // sub-structure that has no expression form can still take part in the cache key.
+    public ByteBuffer normalizeThrift(org.apache.thrift.TBase<?, ?> value) {
+        try {
+            TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
+            return ByteBuffer.wrap(ser.serialize(value));
+        } catch (Exception e) {
+            throw new RuntimeException("Fatal error happens when normalize thrift struct", e);
+        }
+    }
+
     public List<ByteBuffer> normalizeExprs(List<Expr> exprList) {
         if (exprList == null || exprList.isEmpty()) {
             return Collections.emptyList();
@@ -302,6 +315,13 @@ public class FragmentNormalizer {
             return Collections.emptyList();
         }
         return exprList.stream().map(this::normalizeExpr).collect(Collectors.toList());
+    }
+
+    // The time zone the BE will evaluate this plan with, normalized the same way
+    // CoordinatorPreprocessor.genQueryGlobals() normalizes it before putting it into TQueryGlobals.
+    private String getNormalizedTimeZone() {
+        String timezone = execPlan.getConnectContext().getSessionVariable().getTimeZone();
+        return "CST".equals(timezone) ? TimeUtils.DEFAULT_TIME_ZONE : timezone;
     }
 
     public boolean computeDigest(PlanNode cachePointNode) {
@@ -319,6 +339,12 @@ public class FragmentNormalizer {
             for (TGlobalDict dict : dicts) {
                 digest.update(serializer.serialize(dict));
             }
+            // Session variables that change how expressions are evaluated on the BE are not part of the
+            // plan, so semantically-equivalent plans evaluated under different variables would otherwise
+            // share cache entries. time_zone is such a variable: from_unixtime/unix_timestamp/convert_tz
+            // are evaluated against RuntimeState::timezone, so two sessions that only differ in time_zone
+            // must not reuse each other's per-tablet results.
+            digest.update(getNormalizedTimeZone().getBytes(StandardCharsets.UTF_8));
 
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
@@ -673,6 +699,19 @@ public class FragmentNormalizer {
         }
     }
 
+    // Whether any PlanNode of the subtree rooted at `node` still retains one of the given runtime
+    // filters as a probe. The recursion stops at an ExchangeNode's children, which live in another
+    // fragment, and a local runtime filter cannot reach them anyway.
+    private boolean probesAnyFilterOfSameFragment(PlanNode node, Set<Integer> filterIds) {
+        if (node.getFragment() != fragment) {
+            return false;
+        }
+        if (node.getProbeRuntimeFilters().stream().anyMatch(rf -> filterIds.contains(rf.getFilterId()))) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(child -> probesAnyFilterOfSameFragment(child, filterIds));
+    }
+
     public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
                                                     Set<PlanFragmentId> visitedMultiCastFragments) {
         if (root.getChildren().isEmpty()) {
@@ -774,6 +813,43 @@ public class FragmentNormalizer {
 
         // Not cacheable unless Aggregation node is found
         if (firstAggNode == null) {
+            return false;
+        }
+
+        // Not cacheable if a node of the leftmost path builds a runtime filter of its own. Such a filter
+        // probes the OlapScanNode that feeds the cache interpolation point, so the per-tablet results
+        // that get populated only contain the rows that survived it. Its content is decided at run time
+        // -- it depends on which tablets this instance happened to scan, in which order, and which of
+        // them were served from the cache -- so unlike a JoinNode's runtime filter, whose build side is
+        // packed into the digest together with the data versions of its OlapScanNodes, there is nothing
+        // here that could be packed into the cache key. A populated entry would therefore not be a
+        // function of the cache key, and would produce wrong results as soon as it is read back by a
+        // query that needs the rows the filter dropped.
+        // Both of the nodes that can build such a filter have to be checked, because the two are
+        // mutually exclusive and depend on whether PushDownTopNToPreAggRule fired:
+        //   - AggregationNode builds an AGG_IN_FILTER when it carries a LIMIT of its own, and a
+        //     TOPN_FILTER when the rule attached the TopN to it (SortNode.perPipeline is then true and
+        //     the SortNode builds nothing);
+        //   - SortNode builds the TOPN_FILTER in every other shape, e.g. `group by k order by k limit n`
+        //     over a table distributed by k, which is planned as a one-phase aggregation that the rule's
+        //     TopN->Agg(GLOBAL)->Agg(LOCAL) pattern cannot match.
+        // Neither is visible to the alien-GRF check below: both are onlyLocal/non-remote filters.
+        // Only a filter that actually probes inside the cached subtree matters, though. When a JoinNode
+        // sits between the builder and the cache point, the filter may land entirely on the other input
+        // -- `... join r on l.k = r.k order by r.v limit n` builds a TOPN_FILTER on r.v that only r's
+        // scan can probe. That one cannot change a single row the cache point produces, so rejecting it
+        // would give up the cache for nothing.
+        // The targets are read off the probe nodes rather than off RuntimeFilterDescription's
+        // nodeIdToProbeExpr, because that map is only ever added to: a probe dropped afterwards -- by
+        // removeDictMappingProbeRuntimeFilters for a DictMappingExpr probe, or by computeLocalRfWaitingSet
+        // when global runtime filters are off -- leaves its node id behind and would read as an active
+        // probe here. A PlanNode's retained probe list is what the BE actually applies.
+        Set<Integer> localFilterIds = leftNodesTopDown.stream()
+                .filter(node -> node instanceof RuntimeFilterBuildNode && !(node instanceof JoinNode))
+                .flatMap(node -> ((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().stream())
+                .map(RuntimeFilterDescription::getFilterId)
+                .collect(Collectors.toSet());
+        if (!localFilterIds.isEmpty() && probesAnyFilterOfSameFragment(firstAggNode, localFilterIds)) {
             return false;
         }
 

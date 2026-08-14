@@ -22,7 +22,11 @@
 namespace starrocks {
 
 StreamLoadContextHandle::StreamLoadContextHandle(StreamLoadContext* context, CloseCallback close_cb)
-        : _context(context), _close_cb(std::move(close_cb)) {}
+        : _context(context), _close_cb(std::move(close_cb)) {
+    if (_context != nullptr) {
+        _context->ref();
+    }
+}
 
 StreamLoadContextHandle::~StreamLoadContextHandle() {
     close(Status::Cancelled("Close the stream load pipe"));
@@ -49,6 +53,7 @@ void StreamLoadContextHandle::close(const Status& status) {
     if (_close_cb) {
         _close_cb(_context);
     }
+    StreamLoadContext::release(_context);
     _context = nullptr;
 }
 

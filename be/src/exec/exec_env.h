@@ -59,8 +59,6 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
-class TransactionMgr;
-class BatchWriteMgr;
 class ProcessMetricsRegistry;
 class StorageEngine;
 class TableMetricsManager;
@@ -70,7 +68,6 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class SchemaScannerFactory;
 class WebPageHandler;
-class StreamLoadExecutor;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 
@@ -131,10 +128,6 @@ public:
     BaseLoadPathMgr* load_path_mgr();
     LoadStreamMgr* load_stream_mgr();
     StreamContextMgr* stream_context_mgr();
-    TransactionMgr* transaction_mgr() { return _transaction_mgr; }
-    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
-
-    StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
     const PlatformServices& platform_services() const { return _platform_services; }
     const RpcServices& rpc_services() const { return _rpc_services; }
@@ -180,12 +173,7 @@ private:
     ComputeEnv* _compute_env = nullptr;
     std::unique_ptr<SchemaScannerFactory> _schema_scanner_factory;
 
-    TransactionMgr* _transaction_mgr = nullptr;
-    BatchWriteMgr* _batch_write_mgr = nullptr;
-
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
-
-    StreamLoadExecutor* _stream_load_executor = nullptr;
 
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 

@@ -26,6 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
@@ -895,5 +896,43 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
         Assertions.assertTrue(mv.isActive());
         Config.max_task_consecutive_fail_count = 10;
+    }
+
+    @Test
+    public void testMvInactivatedOnIncrementalBreaking() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_brk_t1 (\n" +
+                "   k1 int,\n" +
+                "   k2 date,\n" +
+                "   k3 string\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_brk_mv1\n" +
+                "REFRESH MANUAL\n" +
+                "AS select sum(k1), k2, k3 from base_brk_t1 group by k2, k3;");
+        executeInsertSql("insert into base_brk_t1 values(1, '2020-06-02','BJ'),(3,'2020-06-02','SZ');");
+        MaterializedView mv = getMv("test_brk_mv1");
+
+        // Breaking failure must inactivate the MV yet leave the running refresh (and its error) intact.
+        new MockUp<MVTaskRunProcessor>() {
+            @Mock
+            public void executePlan(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                throw new RuntimeException("INCREMENTAL materialized views "
+                        + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+            }
+        };
+        Exception thrown = null;
+        try {
+            refreshMV("test", mv);
+        } catch (Exception e) {
+            thrown = e;
+        }
+
+        Assertions.assertNotNull(thrown, "the breaking error must propagate, not be swallowed");
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        Assertions.assertEquals(1, task.getConsecutiveFailCount());
+        Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(mv.getInactiveReason().contains("incremental refresh broken"),
+                "inactive reason: " + mv.getInactiveReason());
     }
 }

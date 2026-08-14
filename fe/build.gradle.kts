@@ -53,17 +53,18 @@ subprojects {
         set("dnsjava.version", "3.6.3")
         set("fastutil.version", "8.5.15")
         set("gcs.connector.version", "hadoop3-2.2.26")
-        set("grpc.version", "1.63.0")
+        set("grpc.version", "1.76.0")
         set("hadoop.version", "3.4.3")
         set("hbase.version", "2.6.2")
         set("hikaricp.version", "7.0.2")
         set("hive-apache.version", "3.1.2-22")
+        set("httpcore5.version", "5.4.3")
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.10.0")
-        set("io.netty.version", "4.1.135.Final")
+        set("io.netty.version", "4.1.136.Final")
         set("jackson.version", "2.21.4")
         set("jackson-annotations.version", "2.21")
-        set("jetty.version", "9.4.57.v20241219")
+        set("jetty.version", "9.4.58.v20250814")
         set("jprotobuf-starrocks.version", "1.0.0")
         set("junit.version", "5.8.2")
         set("kafka-clients.version", "3.9.1")
@@ -73,12 +74,13 @@ subprojects {
         set("odps.version", "0.48.7-public")
         set("paimon.version", "1.3.1")
         set("parquet.version", "1.16.0")
+        set("ranger.version", "2.8.0")
         set("orc.version", "1.9.1")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
-        set("staros.version", "4.2-rc2")
-        set("thrift.version", "0.23.0")
+        set("staros.version", "4.2-rc3")
+        set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
         // var sync end
@@ -89,6 +91,11 @@ subprojects {
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
         implementation(platform("io.netty:netty-bom:${project.ext["io.netty.version"]}"))
+        // Mirrors the grpc-bom import in fe/pom.xml. Added by hand because
+        // build-support/sync_pom_to_gradle.py skips `<type>pom</type>` entries
+        // ("Skip BOMs ... as they are handled with platform()"), so an import-scope
+        // BOM cannot reach this file through the `dependency sync` markers below.
+        implementation(platform("io.grpc:grpc-bom:${project.ext["grpc.version"]}"))
         // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
         testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
 
@@ -158,11 +165,6 @@ subprojects {
             implementation("io.airlift:security:202")
             implementation("io.delta:delta-kernel-api:${project.ext["delta-kernel.version"]}")
             implementation("io.delta:delta-kernel-defaults:${project.ext["delta-kernel.version"]}")
-            implementation("io.grpc:grpc-api:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-core:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-netty-shaded:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-protobuf:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-stub:${project.ext["grpc.version"]}")
             implementation("io.netty:netty-all:${project.ext["io.netty.version"]}")
             implementation("io.netty:netty-handler:${project.ext["io.netty.version"]}")
             implementation("io.trino.hive:hive-apache:${project.ext["hive-apache.version"]}")
@@ -196,6 +198,9 @@ subprojects {
             implementation("org.apache.hbase:hbase-client:${project.ext["hbase.version"]}")
             implementation("org.apache.hbase:hbase-server:${project.ext["hbase.version"]}")
             implementation("org.apache.httpcomponents.client5:httpclient5:5.4.3")
+            implementation("org.apache.httpcomponents.core5:httpcore5:${project.ext["httpcore5.version"]}")
+            implementation("org.apache.httpcomponents.core5:httpcore5-h2:${project.ext["httpcore5.version"]}")
+            implementation("org.apache.httpcomponents.core5:httpcore5-reactive:${project.ext["httpcore5.version"]}")
             implementation("org.apache.hudi:hudi-common:${project.ext["hudi.version"]}")
             implementation("org.apache.hudi:hudi-hadoop-mr:${project.ext["hudi.version"]}")
             implementation("org.apache.hudi:hudi-io:${project.ext["hudi.version"]}")
@@ -221,7 +226,8 @@ subprojects {
             implementation("org.apache.parquet:parquet-column:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-common:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-hadoop:${project.ext["parquet.version"]}")
-            implementation("org.apache.ranger:ranger-plugins-common:2.8.0")
+            implementation("org.apache.ranger:ranger-audit-dest-solr:${project.ext["ranger.version"]}")
+            implementation("org.apache.ranger:ranger-plugins-common:${project.ext["ranger.version"]}")
             implementation("org.apache.spark:spark-catalyst_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-launcher_2.12:${project.ext["spark.version"]}")
@@ -231,6 +237,9 @@ subprojects {
             implementation("org.bouncycastle:bcpkix-jdk18on:${project.ext["bouncycastle.version"]}")
             implementation("org.bouncycastle:bcprov-jdk18on:${project.ext["bouncycastle.version"]}")
             implementation("org.bouncycastle:bcutil-jdk18on:${project.ext["bouncycastle.version"]}")
+            // xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+            // jars that still reference it (commons-compress, clickhouse-jdbc, ...)
+            implementation("org.tukaani:xz:1.9")
             implementation("org.eclipse.jetty:jetty-client:${project.ext["jetty.version"]}")
             implementation("org.eclipse.jetty:jetty-io:${project.ext["jetty.version"]}")
             implementation("org.eclipse.jetty:jetty-security:${project.ext["jetty.version"]}")
@@ -246,7 +255,7 @@ subprojects {
             implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
-            implementation("org.postgresql:postgresql:42.7.11")
+            implementation("org.postgresql:postgresql:42.7.12")
             implementation("org.roaringbitmap:RoaringBitmap:0.8.13")
             implementation("org.scala-lang:scala-library:2.12.10")
             implementation("org.slf4j:slf4j-api:1.7.30")
@@ -276,6 +285,16 @@ subprojects {
         // JSP engine, unused by FE; tomcat 9.0.93 carries CVE-2025-55754/CVE-2025-52434
         exclude(group = "org.apache.tomcat")
         exclude(group = "org.apache.tomcat.embed")
+        // ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's unused tether feature references it
+        exclude(group = "org.apache.avro", module = "avro-ipc")
+        exclude(group = "org.apache.avro", module = "avro-ipc-jetty")
+        // CVE-2026-10050 (jetty-client/jetty-security: Digest auth bypass) and
+        // CVE-2026-2332 (jetty-http): only reachable via Hadoop's embedded
+        // HttpServer2 and the YARN websocket timeline client, neither of which
+        // StarRocks ever instantiates (Hadoop is used purely as an FS client).
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-security")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
     }
 
     // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java

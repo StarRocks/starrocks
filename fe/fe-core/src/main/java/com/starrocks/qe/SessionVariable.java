@@ -304,6 +304,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
     public static final String ENABLE_CACHE_UDAF = "enable_cache_udaf";
     public static final String ENABLE_SPILL = "enable_spill";
+
+    public static final String ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN =
+            "enable_lake_prepared_physical_split_scan";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
@@ -414,6 +417,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
     public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
+
+    public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
+            "lake_tablet_internal_parallel_skew_split_ratio";
+
+    public static final String ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN =
+            "enable_lake_prepared_split_on_dup_table_scan";
 
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
@@ -702,6 +711,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_META_COLLECT_PARALLEL = "statistic_meta_collect_parallel";
 
+    // Bounded-cost external-table statistics-scan budgets. Set by the external ANALYZE job (from Config or
+    // ANALYZE ... PROPERTIES) and read by IcebergScanNode when building connector scan params; INVISIBLE
+    // because they are an internal transport channel, not a user-tunable knob.
+    public static final String EXTERNAL_STATS_SCAN_BYTES_CAP = "external_stats_scan_bytes_cap";
+    public static final String EXTERNAL_STATS_SCAN_FILES_CAP = "external_stats_scan_files_cap";
+    public static final String EXTERNAL_STATS_SCAN_ROWS_CAP = "external_stats_scan_rows_cap";
+
     public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
@@ -980,6 +996,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED =
             "enable_force_group_by_skew_eliminate_when_skewed";
     public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
+    public static final String ENABLE_WINDOW_SKEW_MERGE_SORT = "enable_window_skew_merge_sort";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -997,6 +1014,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
+
+    public static final String ONE_TABLET_OPT_MAX_TABLET_ROWS = "one_tablet_opt_max_tablet_rows";
 
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
@@ -1331,6 +1350,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
 
+    // A lake tablet whose row count exceeds this ratio times the per-driver ideal share is treated as a
+    // skewed straggler and split under the prepared-physical-split scan even when the scan-range count
+    // already reaches pipeline_dop. Only affects enable_lake_prepared_physical_split_scan.
+    @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO)
+    private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
+
+    // When false (default), a lake table scanned by >=2 scan operators in the same query (self-join /
+    // multi-scan) does NOT use the prepared-physical-split scan: its per-scan reuse of a shared prepared
+    // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
+    private boolean enableLakePreparedSplitOnDupTableScan = false;
+
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
     @VariableMgr.VarAttr(name = TABLET_INTERNAL_PARALLEL_MODE, flag = VariableMgr.INVISIBLE)
@@ -1634,6 +1665,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Deprecated: Use connector_sink_shuffle_mode instead
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergSinkGlobalShuffle = false;
+
+    // Lake prepared physical split scan: seed prunes each segment once and shares the prepared read state
+    // across split children. Default off; a per-scan decision in PlanFragmentBuilder gates it further.
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN)
+    private boolean enableLakePreparedPhysicalSplitScan = false;
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_MODE)
     private String connectorSinkShuffleMode = ConnectorSinkShuffleMode.AUTO.modeName();
@@ -2105,6 +2141,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
 
+    // Bounded-cost external-table statistics-scan budgets (see design 2.4). <= 0 means the dimension is
+    // unlimited; all three <= 0 disables early stop, so a plain query never inherits a budget by accident.
+    @VarAttr(name = EXTERNAL_STATS_SCAN_BYTES_CAP, flag = VariableMgr.INVISIBLE)
+    private long externalStatsScanBytesCap = -1;
+
+    @VarAttr(name = EXTERNAL_STATS_SCAN_FILES_CAP, flag = VariableMgr.INVISIBLE)
+    private long externalStatsScanFilesCap = -1;
+
+    @VarAttr(name = EXTERNAL_STATS_SCAN_ROWS_CAP, flag = VariableMgr.INVISIBLE)
+    private long externalStatsScanRowsCap = -1;
+
     @VarAttr(name = STATISTIC_META_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticMetaCollectParallelism = 10;
 
@@ -2438,6 +2485,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSplitTopNAgg() {
         return enableSplitTopNAgg;
+    }
+
+    public boolean isEnableLakePreparedPhysicalSplitScan() {
+        return enableLakePreparedPhysicalSplitScan;
+    }
+
+    public void setEnableLakePreparedPhysicalSplitScan(boolean enableLakePreparedPhysicalSplitScan) {
+        this.enableLakePreparedPhysicalSplitScan = enableLakePreparedPhysicalSplitScan;
     }
 
     public long getSplitTopNAggLimit() {
@@ -3086,6 +3141,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
     private boolean enableSplitWindowSkewToUnion = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_WINDOW_SKEW_MERGE_SORT, flag = VariableMgr.INVISIBLE)
+    private boolean enableWindowSkewMergeSort = false;
+
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
@@ -3103,6 +3161,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
+
+    // Disable the one-tablet optimization (one-phase aggregation / single-tablet gather output) when the
+    // single selected tablet's fuzzy row count exceeds this value; such a large tablet would otherwise be
+    // scanned and aggregated serially on one node. Default 10000000 (10M rows) enables the gate for
+    // genuinely large tablets while sparing small/medium ones; set to -1 to disable the gate entirely and
+    // keep the pre-existing one-tablet behavior regardless of tablet size.
+    @VarAttr(name = ONE_TABLET_OPT_MAX_TABLET_ROWS)
+    private long oneTabletOptMaxTabletRows = 10000000;
 
     @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
     private boolean enablePushdownOrPredicate = true;
@@ -3249,6 +3315,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setAnnParams(String annParams) {
         this.annParams = annParams;
+    }
+
+    public double getKFactor() {
+        return kFactor;
+    }
+
+    public void setKFactor(double kFactor) {
+        this.kFactor = kFactor;
+    }
+
+    public double getPqRefineFactor() {
+        return pqRefineFactor;
     }
 
     public Map<String, String> getAnnParams() {
@@ -3699,6 +3777,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSplitWindowSkewToUnion = enableSplitWindowSkewToUnion;
     }
 
+    public boolean isEnableWindowSkewMergeSort() {
+        return enableWindowSkewMergeSort;
+    }
+
+    public void setEnableWindowSkewMergeSort(boolean enableWindowSkewMergeSort) {
+        this.enableWindowSkewMergeSort = enableWindowSkewMergeSort;
+    }
+
     public boolean getHudiMORForceJNIReader() {
         return hudiMORForceJNIReader;
     }
@@ -3879,6 +3965,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setStatisticCollectParallelism(int parallelism) {
         this.statisticCollectParallelism = parallelism;
+    }
+
+    public long getExternalStatsScanBytesCap() {
+        return externalStatsScanBytesCap;
+    }
+
+    public void setExternalStatsScanBytesCap(long externalStatsScanBytesCap) {
+        this.externalStatsScanBytesCap = externalStatsScanBytesCap;
+    }
+
+    public long getExternalStatsScanFilesCap() {
+        return externalStatsScanFilesCap;
+    }
+
+    public void setExternalStatsScanFilesCap(long externalStatsScanFilesCap) {
+        this.externalStatsScanFilesCap = externalStatsScanFilesCap;
+    }
+
+    public long getExternalStatsScanRowsCap() {
+        return externalStatsScanRowsCap;
+    }
+
+    public void setExternalStatsScanRowsCap(long externalStatsScanRowsCap) {
+        this.externalStatsScanRowsCap = externalStatsScanRowsCap;
     }
 
     public int getStatisticMetaCollectParallelism() {
@@ -4747,6 +4857,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTabletInternalParallel || (RunMode.isSharedDataMode() && enableLakeTabletInternalParallel);
     }
 
+    public double getLakeTabletInternalParallelSkewSplitRatio() {
+        return lakeTabletInternalParallelSkewSplitRatio;
+    }
+
+    public boolean isEnableLakePreparedSplitOnDupTableScan() {
+        return enableLakePreparedSplitOnDupTableScan;
+    }
+
+    public void setEnableLakePreparedSplitOnDupTableScan(boolean enableLakePreparedSplitOnDupTableScan) {
+        this.enableLakePreparedSplitOnDupTableScan = enableLakePreparedSplitOnDupTableScan;
+    }
+
+    public void setLakeTabletInternalParallelSkewSplitRatio(double ratio) {
+        // The BE multiplies the per-driver ideal share by this ratio to decide has_skewed_big_tablet;
+        // a non-positive value would flag every sufficiently large tablet as skewed (over-splitting),
+        // while NaN/Infinity would silently disable the skew override. Require a positive finite number.
+        if (!Double.isFinite(ratio) || ratio <= 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO, ratio, "a positive finite number");
+        }
+        this.lakeTabletInternalParallelSkewSplitRatio = ratio;
+    }
+
     public boolean isEnableResourceGroup() {
         return true;
     }
@@ -4816,10 +4949,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.maxPipelineDop;
     }
 
-    // TODO(murphy) support this variable
-    // It's always false since version 3.5, due to incompatibility with event-based scheduling
+    // Shared scan was hard-disabled in 3.5 (#63543) because the shared round-robin chunk
+    // buffer could drop driver wakeups under event-based scheduling: a chunk produced by one
+    // scan driver lands in a sibling driver's buffer slot, but only the producer's own
+    // observer was notified, so the slot owner could hang. The BE scan operators now notify
+    // all sibling drivers whenever shared scan is active (see {Olap,Connector}ScanOperator::
+    // need_notify_all), making shared scan compatible with event scheduling again. Honor the
+    // session variable. (Query cache still forces shared scan off in the BE; see
+    // fragment_executor.cpp.)
     public boolean isEnableSharedScan() {
-        return false;
+        return enableSharedScan;
     }
 
     public int getResourceGroupId() {
@@ -5720,6 +5859,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
+    public long getOneTabletOptMaxTabletRows() {
+        return oneTabletOptMaxTabletRows;
+    }
+
+    public void setOneTabletOptMaxTabletRows(long oneTabletOptMaxTabletRows) {
+        this.oneTabletOptMaxTabletRows = oneTabletOptMaxTabletRows;
+    }
+
     public TPredicateTreeParams getPredicateTreeParams() {
         TPredicateTreeParams params = new TPredicateTreeParams();
         params.setEnable_or(enablePushdownOrPredicate);
@@ -6589,6 +6736,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } else {
             tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         }
+        tResult.setLake_tablet_internal_parallel_skew_split_ratio(lakeTabletInternalParallelSkewSplitRatio);
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));

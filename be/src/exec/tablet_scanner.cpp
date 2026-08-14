@@ -386,6 +386,22 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_parent->_vector_index_timer,
+                   _reader->stats().vector_index_load_ns + _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_parent->_vector_index_load_timer, _reader->stats().vector_index_load_ns);
+    COUNTER_UPDATE(_parent->_get_row_ranges_by_vector_index_timer,
+                   _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_parent->_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_parent->_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
+    COUNTER_UPDATE(_parent->_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_parent->_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
+    COUNTER_UPDATE(_parent->_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_parent->_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
+    COUNTER_UPDATE(_parent->_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
+    COUNTER_UPDATE(_parent->_vector_search_timer, _reader->stats().vector_search_timer);
+    COUNTER_UPDATE(_parent->_process_vector_distance_and_id_timer,
+                   _reader->stats().process_vector_distance_and_id_timer);
+    COUNTER_UPDATE(_parent->_vector_index_filtered_counter, _reader->stats().rows_vector_index_filtered);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_parent->_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
@@ -418,8 +434,10 @@ void TabletScanner::update_counter() {
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_TIMER(_parent->_scan_profile, "DeleteFilter");
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_parent->_scan_profile, "DeleteFilterRows", TUnit::UNIT);
+        RuntimeProfile::Counter* c3 = ADD_COUNTER(_parent->_scan_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+        COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
     }
     if (_reader->stats().flat_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");

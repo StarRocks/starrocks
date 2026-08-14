@@ -1,7 +1,4 @@
 -- name: test_vector_filter_strategy @sequential @native
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
--- result:
--- !result
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 -- result:
 -- !result
@@ -139,8 +136,5 @@ DROP TABLE vt_pk;
 -- result:
 -- !result
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
--- result:
--- !result
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "false");
 -- result:
 -- !result

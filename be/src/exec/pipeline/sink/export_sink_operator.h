@@ -16,15 +16,13 @@
 
 #include <utility>
 
-#include "exec/data_sinks/file_result_writer.h"
+#include "data_sink/result/file_result_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
-
-class RowDescriptor;
 
 namespace pipeline {
 

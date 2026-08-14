@@ -77,7 +77,10 @@ fi
 
 if [ -f /etc/lsb-release ]; then
     source /etc/lsb-release
-    if [[ $DISTRIB_ID = "Ubuntu" && $DISTRIB_RELEASE =~ 22.* && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
+    # Ubuntu 22.04 and 24.04 share the same prebuilt thirdparty artifacts (vars-ubuntu22-*).
+    # The ubuntu22 artifacts (glibc 2.35) run on both 22.04 and 24.04 (glibc 2.39) by forward
+    # compatibility, so there is no separate vars-ubuntu24-* set.
+    if [[ $DISTRIB_ID = "Ubuntu" && ( $DISTRIB_RELEASE =~ ^22\. || $DISTRIB_RELEASE =~ ^24\. ) && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
         . ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh
     fi
 fi
@@ -97,10 +100,10 @@ OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
 OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
-THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz"
-THRIFT_NAME=thrift-0.23.0.tar.gz
-THRIFT_SOURCE=thrift-0.23.0
-THRIFT_MD5SUM="7b62f4258ded41e233a638fe8b9fcf64"
+THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz"
+THRIFT_NAME=thrift-0.24.0.tar.gz
+THRIFT_SOURCE=thrift-0.24.0
+THRIFT_MD5SUM="232e035ff80c5fb4b7243f0be3a76b02"
 
 # protobuf
 PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.16.1.tar.gz"
@@ -338,10 +341,10 @@ VPACK_SOURCE="velocypack-XYZ1.0"
 VPACK_MD5SUM="161cbf4c347f6daadacfb749c31842f8"
 
 # open-telemetry
-OPENTELEMETRY_DOWNLOAD="https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.2.0.tar.gz"
-OPENTELEMETRY_NAME=opentelemetry-cpp-v1.2.0.tar.gz
-OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.2.0
-OPENTELEMETRY_MD5SUM="c084abc742c6b3cd4c9c3684e559d4e1"
+OPENTELEMETRY_DOWNLOAD="https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.9.1.tar.gz"
+OPENTELEMETRY_NAME=opentelemetry-cpp-v1.9.1.tar.gz
+OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.9.1
+OPENTELEMETRY_MD5SUM="fd353f085f3f3bfbc2c28197287335a0"
 
 # benchmark
 BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
@@ -380,7 +383,7 @@ SERDES_SOURCE="libserdes-7.3.1"
 SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
 
 # lzo
-LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+LZO2_DOWNLOAD="https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
 LZO2_NAME=lzo-2.10.tar.gz
 LZO2_SOURCE=lzo-2.10
 LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"

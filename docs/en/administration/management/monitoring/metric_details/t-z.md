@@ -31,6 +31,11 @@ description: "Alphabetical t - z"
 - Unit: -
 - Description: Highest compaction score of tablets in Primary Key tables in the current BE.
 
+## `threadpool_task_exception_total`
+
+- Unit: Count
+- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+
 ## `thrift_connections_total`
 
 - Unit: Count
@@ -168,6 +173,48 @@ description: "Alphabetical t - z"
 
 - Unit: Count
 - Description: Total number of rowset COMMIT requests in Primary Key tables.
+
+## `vector_index_cache_async_load_failure`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load tasks that started but failed during loading or cache publication. Tasks canceled before execution are not included.
+
+## `vector_index_cache_async_load_inflight`
+
+- Type: Gauge
+- Unit: Count
+- Description: Current number of vector index cache-load tasks running in background workers.
+
+## `vector_index_cache_async_load_ns`
+
+- Type: Counter
+- Unit: Nanoseconds
+- Description: Cumulative execution time of background vector index cache-load tasks that started, including successful and failed tasks. Queue wait time and rejected tasks are not included.
+
+## `vector_index_cache_async_load_queued`
+
+- Type: Gauge
+- Unit: Count
+- Description: Current number of vector index cache-load tasks accepted by the background pool but not yet running.
+
+## `vector_index_cache_async_load_rejected`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load requests rejected before execution, for example because the cache has zero capacity, the pool is stopped, or its queue cannot accept the task.
+
+## `vector_index_cache_async_load_success`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load tasks that successfully loaded and published an index. Capacity eviction can remove a successfully published entry immediately when the cache cannot retain it.
+
+## `vector_index_cache_loading_wait_timeout`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of synchronous cache callers whose wait for an in-progress vector index load reached `vector_index_cache_loading_wait_timeout_ms`. This metric counts callers rather than unique indexes; the existing loader continues after a timeout.
 
 ## `wait_base_compaction_task_num`
 

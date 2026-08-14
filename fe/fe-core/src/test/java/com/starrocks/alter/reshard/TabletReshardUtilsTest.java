@@ -14,12 +14,19 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTablet;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -245,5 +252,32 @@ public class TabletReshardUtilsTest {
 
         // 3. Strict inequality on (1): pairThresh < splitTrigger
         assertTrue(pairThresh < splitTrigger);
+    }
+
+    private MaterializedIndex indexWithTablets(long indexId, Map<Long, Long> tabletIdToVibv) {
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        for (Map.Entry<Long, Long> e : tabletIdToVibv.entrySet()) {
+            LakeTablet tablet = new LakeTablet(e.getKey());
+            tablet.setVectorIndexBuiltVersion(e.getValue());
+            index.addTablet(tablet, null, false);
+        }
+        return index;
+    }
+
+    // minVectorIndexBuiltVersion: split (single parent) inherits the parent; merge (multiple
+    // sources) takes the min; an empty source list yields 0 (non-vector tables are all 0).
+    @Test
+    public void testMinVectorIndexBuiltVersion() {
+        Map<Long, Long> ids = new HashMap<>();
+        ids.put(101L, 100L);
+        ids.put(102L, 50L);
+        MaterializedIndex index = indexWithTablets(1L, ids);
+
+        // merge: min across sources
+        assertEquals(50L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Lists.newArrayList(101L, 102L)));
+        // split / identical: single parent
+        assertEquals(100L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Lists.newArrayList(101L)));
+        // empty -> 0
+        assertEquals(0L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Collections.emptyList()));
     }
 }

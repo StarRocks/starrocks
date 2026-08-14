@@ -84,8 +84,10 @@ public class StatisticsCalcUtils {
             }
             builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
             if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
+                // Dump the histogram-merged statistic (not the base columnStatisticList entry), so the
+                // histogram is captured in the query dump and can be replayed. See QueryDumpSerializer.
                 optimizerContext.getDumpInfo()
-                        .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
+                        .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatistic);
             }
         }
         return builder;

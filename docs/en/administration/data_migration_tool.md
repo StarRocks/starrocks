@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
 ---
@@ -208,7 +209,7 @@ Please note that increasing the values of the following configuration items can 
 
 #### FE Parameters
 
-The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
+The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](./configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) on how to modify them.
 
 | **Parameter**                         | **Default** | **Unit** | **Description**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -219,7 +220,7 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](./configuration/BE_parameters/BE_parameters.md) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |

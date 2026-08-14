@@ -159,7 +159,7 @@ PROPERTIES (
 
 :::note
 
-在存算分离集群中，主键表现仅支持云原生持久化索引（`persistent_index_type = CLOUD_NATIVE`）。创建或修改表时，不再支持将 `persistent_index_type` 设置为 `LOCAL`。已使用 `LOCAL` 持久化索引的存量表不受影响。
+在存算分离集群中，主键表现仅支持云原生持久化索引（`persistent_index_type = CLOUD_NATIVE`）。创建或修改表时，不再支持将 `persistent_index_type` 设置为 `LOCAL`。此前使用 `LOCAL`（或内存）持久化索引的存量表会自动升级为云原生持久化索引。
 
 :::
 
@@ -203,7 +203,7 @@ PROPERTIES (
 
 ## 更多信息
 
-- 建表后导入数据，您可以参考[导入概览](../../loading/Loading_intro.md)选择合适的导入方式。
+- 建表后导入数据，您可以参考[导入概览](../../loading/loading_introduction/loading_introduction.mdx)选择合适的导入方式。
 - 如果需要对主键表中数据进行变更，则可以参考 [通过导入实现数据变更](../../loading/Load_to_Primary_Key_tables.md) 或者 DML 语句（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、[DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）。
 - 如果您需要进一步加速查询，则可以参考[查询加速](../../using_starrocks/async_mv/Materialized_view.md)。
 - 如果需要修改表结构，则可以参考 [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)。

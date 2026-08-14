@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のスナップショット、ブランチ、データメンテナンス、メタデータ管理プロシージャ。"
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
@@ -208,7 +209,7 @@ EXECUTE remove_orphan_files(
 
 ##### `older_than`
 
-- 説明: 孤立ファイルを削除するタイムスタンプの期限。指定しない場合、デフォルトでは、（現在の時刻から）7 日以上前のファイルが削除されます。形式: 'YYYY-MM-DD HH:MM:SS'。
+- 説明: 孤立ファイルを削除するタイムスタンプの期限。指定しない場合、デフォルトでは、（現在の時刻から）7 日以上前のファイルが削除されます。形式: 'YYYY-MM-DD HH:MM:SS'。この値は現在の時刻から少なくとも [`iceberg_remove_orphan_files_min_retention_seconds`](../../../administration/configuration/FE_parameters/shared_lake_other.md)（デフォルトは 24 時間）だけ過去である必要があります。これより新しい値は拒否されます。それほど新しいファイルを削除すると、並行する書き込みがまだコミットしていないデータを消してしまう可能性があるためです。
 - タイプ: DATETIME
 - 必須: いいえ
 

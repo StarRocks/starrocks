@@ -67,6 +67,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->profile = profile;
     dst->global_dictmaps = global_dictmaps;
     dst->rowid_range_option = rowid_range_option;
+    dst->read_state_cache = read_state_cache;
     dst->short_key_ranges = short_key_ranges;
     dst->is_first_split_of_segment = is_first_split_of_segment;
     if (tablet_range.has_value()) {

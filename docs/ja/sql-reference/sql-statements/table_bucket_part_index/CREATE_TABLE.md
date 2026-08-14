@@ -5,10 +5,10 @@ description: "StarRocks で新しいテーブルを作成します。"
 
 # CREATE TABLE
 
-StarRocks で新しいテーブルを作成します。
+StarRocksで新しいテーブルを作成します。
 
 :::tip
-この操作には、対象データベースに対する CREATE TABLE 権限が必要です。
+この操作には、宛先データベースに対するCREATE TABLE権限が必要です。
 :::
 
 ## 構文
@@ -29,8 +29,8 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 
 :::tip
 
-- 作成するテーブル名、パーティション名、列名、インデックス名は、[システム制限](../../System_limit.md)の命名規則に従う必要があります。
-- データベース名、テーブル名、列名、またはパーティション名を指定する際、StarRocks では一部のリテラルが予約キーワードとして使用されていることに注意してください。これらのキーワードを SQL ステートメントで直接使用しないでください。SQL ステートメントでそのようなキーワードを使用する場合は、バッククォート (`) で囲んでください。これらの予約キーワードについては、[キーワード](../keywords.md) を参照してください。
+- 作成するテーブル名、パーティション名、カラム名、インデックス名は、以下の命名規則に従う必要があります。[システム制限](../../System_limit.md)。
+- データベース名、テーブル名、カラム名、またはパーティション名を指定する際、一部のリテラルはStarRocksで予約キーワードとして使用されることに注意してください。これらのキーワードをSQLステートメントで直接使用しないでください。SQLステートメントでそのようなキーワードを使用したい場合は、バッククォート (`) で囲んでください。詳細については、[キーワード](../keywords.md)これらの予約キーワードを参照してください。
 
 :::
 
@@ -39,29 +39,29 @@ CREATE [EXTERNAL] [TEMPORARY] TABLE [IF NOT EXISTS] [database.]table_name
 ### `EXTERNAL`
 
 :::caution
-`EXTERNAL` キーワードは非推奨です。
+`EXTERNAL`キーワードは非推奨です。
 
-Hive、Iceberg、Hudi、JDBC データソースからデータをクエリするには、`EXTERNAL` キーワードを使用して外部テーブルを作成するのではなく、[external catalogs](../../../data_source/catalog/catalog_overview.md) を使用することをお勧めします。
+代わりに、[外部カタログ](../../../data_source/catalog/catalog_overview.md)を使用してHive、Iceberg、Hudi、およびJDBCデータソースからデータをクエリすることをお勧めします。`EXTERNAL`キーワードを使用して外部テーブルを作成する代わりに。
 
 :::
 
-:::tip 
+:::tip
 **推奨事項**
 
-v3.1 以降、StarRocks は Iceberg カタログで Parquet 形式のテーブルを作成し、INSERT INTO を使用してこれらの Parquet 形式の Iceberg テーブルにデータをシンクすることをサポートしています。
+v3.1以降、StarRocksはIcebergカタログでParquet形式のテーブルを作成することをサポートし、INSERT INTOを使用してこれらのParquet形式のIcebergテーブルにデータをシンクすることをサポートします。
 
-v3.2 以降、StarRocks は Hive カタログで Parquet 形式のテーブルを作成し、INSERT INTO を使用してこれらの Parquet 形式の Hive テーブルにデータをシンクすることをサポートしています。v3.3 以降、StarRocks は Hive カタログで ORC および Textfile 形式のテーブルを作成し、INSERT INTO を使用してこれらの ORC および Textfile 形式の Hive テーブルにデータをシンクすることをサポートしています。
+v3.2以降、StarRocksはHiveカタログでParquet形式のテーブルを作成することをサポートし、INSERT INTOを使用してこれらのParquet形式のHiveテーブルにデータをシンクすることをサポートします。v3.3以降、StarRocksはHiveカタログでORCおよびTextfile形式のテーブルを作成することをサポートし、INSERT INTOを使用してこれらのORCおよびTextfile形式のHiveテーブルにデータをシンクすることをサポートします。
 :::
 
-非推奨の `EXTERNAL` キーワードを使用したい場合は、**`EXTERNAL` キーワードの詳細**を展開してください。
+非推奨の`EXTERNAL`キーワードを使用したい場合は、**`EXTERNAL`キーワードの詳細**
 
 <details>
 
-<summary>`EXTERNAL` キーワードの詳細</summary>
+<summary>`EXTERNAL`キーワードの詳細</summary>
 
-外部データソースをクエリするための外部テーブルを作成するには、`CREATE EXTERNAL TABLE` を指定し、`ENGINE` を次のいずれかの値に設定します。詳細については、[External table](../../../data_source/External_table.md) を参照してください。
+  外部データソースをクエリするための外部テーブルを作成するには、`CREATE EXTERNAL TABLE`を指定し、`ENGINE`をこれらのいずれかの値に設定します。詳細については、[外部テーブル](../../../data_source/External_table.md)を参照してください。
 
-- MySQL 外部テーブルの場合、次のプロパティを指定します：
+  - MySQL外部テーブルの場合、以下のプロパティを指定します。
 
     ```plaintext
     PROPERTIES (
@@ -74,13 +74,13 @@ v3.2 以降、StarRocks は Hive カタログで Parquet 形式のテーブル�
     )
     ```
 
-    注意：
+    注:
 
-    MySQL の "table_name" は実際のテーブル名を示す必要があります。対照的に、CREATE TABLE ステートメントの "table_name" は StarRocks 上のこの MySQL テーブルの名前を示します。これらは異なる場合も同じ場合もあります。
+    MySQLにおける「table_name」は実際のテーブル名を示す必要があります。対照的に、CREATE TABLEステートメントにおける「table_name」はStarRocks上のこのMySQLテーブルの名前を示します。これらは異なっていても同じでも構いません。
 
-    StarRocks で MySQL テーブルを作成する目的は、MySQL データベースにアクセスすることです。StarRocks 自体は MySQL データを保持または保存しません。
+    StarRocksでMySQLテーブルを作成する目的は、MySQLデータベースにアクセスすることです。StarRocks自体はMySQLデータを維持または保存しません。
 
-- Elasticsearch 外部テーブルの場合、次のプロパティを指定します：
+  - Elasticsearch外部テーブルの場合、以下のプロパティを指定します。
 
     ```plaintext
     PROPERTIES (
@@ -92,13 +92,13 @@ v3.2 以降、StarRocks は Hive カタログで Parquet 形式のテーブル�
     )
     ```
 
-  - `hosts`: Elasticsearch クラスタに接続するために使用される URL。1 つ以上の URL を指定できます。
-  - `user`: 基本認証が有効な Elasticsearch クラスタにログインするために使用される root ユーザーのアカウント。
-  - `password`: 上記の root アカウントのパスワード。
-  - `index`: Elasticsearch クラスタ内の StarRocks テーブルのインデックス。インデックス名は StarRocks テーブル名と同じです。このパラメータを StarRocks テーブルのエイリアスに設定できます。
-  - `type`: インデックスタイプ。デフォルト値は `doc` です。
+    - `hosts`: Elasticsearchクラスターに接続するために使用されるURLです。1つ以上のURLを指定できます。
+    - `user`: 基本認証が有効になっているElasticsearchクラスターにログインするために使用されるルートユーザーのアカウントです。
+    - `password`: 前述のルートアカウントのパスワードです。
+    - `index`: Elasticsearchクラスター内のStarRocksテーブルのインデックスです。インデックス名はStarRocksテーブル名と同じです。このパラメーターをStarRocksテーブルのエイリアスに設定できます。
+    - `type`: インデックスのタイプです。デフォルト値は`doc`です。
 
-- Hive 外部テーブルの場合、次のプロパティを指定します：
+  - Hive外部テーブルの場合、以下のプロパティを指定します。
 
     ```plaintext
     PROPERTIES (
@@ -108,9 +108,9 @@ v3.2 以降、StarRocks は Hive カタログで Parquet 形式のテーブル�
     )
     ```
 
-    ここで、database は Hive テーブル内の対応するデータベースの名前です。table は Hive テーブルの名前です。`hive.metastore.uris` はサーバーアドレスです。
+    ここで、databaseはHiveテーブル内の対応するデータベース名です。TableはHiveテーブル名です。`hive.metastore.uris`はサーバーアドレスです。
 
-- JDBC 外部テーブルの場合、次のプロパティを指定します：
+  - JDBC外部テーブルの場合、以下のプロパティを指定します。
 
     ```plaintext
     PROPERTIES (
@@ -119,162 +119,179 @@ v3.2 以降、StarRocks は Hive カタログで Parquet 形式のテーブル�
     )
     ```
 
-    `resource` は JDBC リソース名で、`table` は対象テーブルです。
+    `resource` はJDBCリソース名、`table` は宛先テーブルです。
 
-- Iceberg 外部テーブルの場合、次のプロパティを指定します：
+  - Iceberg外部テーブルの場合、以下のプロパティを指定します。
 
-   ```plaintext
-    PROPERTIES (
-    "resource" = "iceberg0", 
-    "database" = "iceberg", 
-    "table" = "iceberg_table"
-    )
+    ```plaintext
+     PROPERTIES (
+     "resource" = "iceberg0", 
+     "database" = "iceberg", 
+     "table" = "iceberg_table"
+     )
     ```
 
-    `resource` は Iceberg リソース名です。`database` は Iceberg データベースです。`table` は Iceberg テーブルです。
+    `resource` はIcebergリソース名です。`database` はIcebergデータベースです。`table` はIcebergテーブルです。
 
-- Hudi 外部テーブルの場合、次のプロパティを指定します：
+  - Hudi外部テーブルの場合、以下のプロパティを指定します。
 
-  ```plaintext
-    PROPERTIES (
-    "resource" = "hudi0", 
-    "database" = "hudi", 
-    "table" = "hudi_table" 
-    )
+    ```plaintext
+      PROPERTIES (
+      "resource" = "hudi0", 
+      "database" = "hudi", 
+      "table" = "hudi_table" 
+      )
     ```
 
 </details>
 
 ### `TEMPORARY`
 
-一時テーブルを作成します。v3.3.1 から、StarRocks は Default Catalog での一時テーブルの作成をサポートしています。詳細については、[Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table) を参照してください。
+一時テーブルを作成します。v3.3.1以降、StarRocksはDefault Catalogでの一時テーブル作成をサポートしています。詳細については、以下を参照してください。[一時テーブル](../../../table_design/StarRocks_table_design.md#temporary-table)。
 
 :::note
-一時テーブルを作成する際には、`ENGINE` を `olap` に設定する必要があります。
+一時テーブルを作成する際は、`ENGINE` を `olap` に設定する必要があります。
 :::
 
-## 列定義
+## カラム定義
 
 ```SQL
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
-### col_name
+### `col_name`
 
-通常、`__op` または `__row` で始まる名前の列を作成することはできません。これらの名前形式は StarRocks で特別な目的のために予約されており、そのような列を作成すると未定義の動作が発生する可能性があります。そのような列を作成する必要がある場合は、FE 動的パラメータ [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) を `TRUE` に設定してください。
+通常、`__op` または `__row` で始まる名前のカラムは作成できません。これらの名前形式はStarRocksで特別な目的のために予約されており、そのようなカラムを作成すると未定義の動作を引き起こす可能性があるためです。どうしてもそのようなカラムを作成する必要がある場合は、FE動的パラメータ[`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) を `TRUE` に設定してください。
 
-### col_type
+### `col_type`
 
-特定の列情報、タイプと範囲：
+型や範囲など、特定のカラム情報：
 
-- TINYINT (1 バイト): -2^7 + 1 から 2^7 - 1 までの範囲。
-- SMALLINT (2 バイト): -2^15 + 1 から 2^15 - 1 までの範囲。
-- INT (4 バイト): -2^31 + 1 から 2^31 - 1 までの範囲。
-- BIGINT (8 バイト): -2^63 + 1 から 2^63 - 1 までの範囲。
-- LARGEINT (16 バイト): -2^127 + 1 から 2^127 - 1 までの範囲。
-- FLOAT (4 バイト): 科学的記数法をサポート。
-- DOUBLE (8 バイト): 科学的記数法をサポート。
-- DECIMAL[(precision, scale)] (16 バイト)
+- TINYINT (1バイト): -2^7 + 1 から 2^7 - 1 の範囲です。
+
+- SMALLINT (2バイト): -2^15 + 1 から 2^15 - 1 の範囲です。
+
+- INT (4バイト): -2^31 + 1 から 2^31 - 1 の範囲です。
+
+- BIGINT (8バイト): -2^63 + 1 から 2^63 - 1 の範囲です。
+
+- LARGEINT (16バイト): -2^127 + 1 から 2^127 - 1 の範囲です。
+
+- FLOAT (4バイト): 科学表記をサポートします。
+
+- DOUBLE (8バイト): 科学表記をサポートします。
+
+- DECIMAL[(精度, スケール)] (16バイト)
 
   - デフォルト値: DECIMAL(10, 0)
-  - precision: 1 ~ 38
-  - scale: 0 ~ precision
-  - 整数部分: precision - scale
+  - 精度: 1 ~ 38
+  - スケール: 0 ~ 精度
+  - 整数部: 精度 - スケール
 
-    科学的記数法はサポートされていません。
+    科学表記はサポートされていません。
 
-- DATE (3 バイト): 0000-01-01 から 9999-12-31 までの範囲。
-- DATETIME (8 バイト): 0000-01-01 00:00:00 から 9999-12-31 23:59:59 までの範囲。
-- CHAR[(length)]: 固定長文字列。範囲: 1 ~ 255。デフォルト値: 1。
-- VARCHAR[(length)]: 可変長文字列。デフォルト値は 1。単位: バイト。StarRocks 2.1 より前のバージョンでは、`length` の値の範囲は 1–65533 です。[プレビュー] StarRocks 2.1 以降のバージョンでは、`length` の値の範囲は 1–1048576 です。
-- HLL (1~16385 バイト): HLL タイプの場合、長さやデフォルト値を指定する必要はありません。長さはデータ集約に応じてシステム内で制御されます。HLL 列は [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、および [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) によってのみクエリまたは使用できます。
-- BITMAP: ビットマップタイプは、指定された長さやデフォルト値を必要としません。これは符号なしの bigint 数の集合を表します。最大の要素は 2^64 - 1 までです。
+- DATE (3バイト): 0000-01-01 から 9999-12-31 の範囲です。
 
-### agg_type
+- DATETIME (8バイト): 0000-01-01 00:00:00 から 9999-12-31 23:59:59 の範囲です。
 
-集計タイプ。指定されていない場合、この列はキー列です。
-指定されている場合、それは値列です。サポートされている集計タイプは次のとおりです：
+- CHAR[(長さ)]: 固定長文字列。範囲: 1 ~ 255。デフォルト値: 1。
 
-- `SUM`, `MAX`, `MIN`, `REPLACE`
-- `HLL_UNION` ( `HLL` タイプのみ)
-- `BITMAP_UNION` ( `BITMAP` のみ)
-- `REPLACE_IF_NOT_NULL`: これは、インポートされたデータが非ヌル値の場合にのみ置き換えられることを意味します。ヌル値の場合、StarRocks は元の値を保持します。
+- VARCHAR[(長さ)]: 可変長文字列。デフォルト値は1です。単位: バイト。StarRocks 2.1より前のバージョンでは、`length` の値の範囲は1～65533です。[プレビュー] StarRocks 2.1以降のバージョンでは、`length` の値の範囲は1～1048576です。
+
+- HLL (1～16385バイト): HLL型の場合、長さやデフォルト値を指定する必要はありません。長さはデータ集計に応じてシステム内で制御されます。HLLカラムは、[hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/scalar-functions/hll_hash.md)によってのみクエリまたは使用できます。
+
+- BITMAP: ビットマップ型は、長さやデフォルト値を指定する必要がありません。符号なしのbigint数値のセットを表します。最大の要素は2^64 - 1まで可能です。
+
+### `agg_type`
+
+集計タイプ。指定しない場合、このカラムはキーカラムです。
+指定した場合、値カラムです。サポートされている集計タイプは以下の通りです。
+
+- `SUM`、`MAX`、`MIN`、`REPLACE`
+- `HLL_UNION` (`HLL`型のみ)
+- `BITMAP_UNION` (`BITMAP`のみ)
+- `REPLACE_IF_NOT_NULL`: これは、インポートされたデータが非NULL値の場合にのみ置換されることを意味します。NULL値の場合、StarRocksは元の値を保持します。
 
 :::note
-- 集計タイプ BITMAP_UNION の列がインポートされるとき、その元のデータタイプは TINYINT、SMALLINT、INT、および BIGINT でなければなりません。
-- テーブル作成時に REPLACE_IF_NOT_NULL 列で NOT NULL が指定されている場合、StarRocks はデータを NULL に変換し、ユーザーにエラーレポートを送信しません。これにより、ユーザーは選択した列をインポートできます。
+
+- 集計タイプBITMAP_UNIONの列がインポートされる場合、その元のデータ型はTINYINT、SMALLINT、INT、BIGINTである必要があります。
+- テーブル作成時にREPLACE_IF_NOT_NULL列でNOT NULLが指定されている場合でも、StarRocksはユーザーにエラーレポートを送信することなくデータをNULLに変換します。これにより、ユーザーは選択した列をインポートできます。
 :::
 
-この集計タイプは、key_desc タイプが AGGREGATE KEY の集計テーブルにのみ適用されます。v3.1.9 以降、`REPLACE_IF_NOT_NULL` は BITMAP タイプの列を新たにサポートします。
+この集計タイプは、key_descタイプがAGGREGATE KEYであるAggregateテーブルにのみ適用されます。v3.1.9以降、`REPLACE_IF_NOT_NULL`は新しくBITMAP型の列をサポートします。
 
-**NULL | NOT NULL**: 列が `NULL` を許可するかどうか。デフォルトでは、重複キーテーブル、集計テーブル、またはユニークキーテーブルを使用するテーブルのすべての列に対して `NULL` が指定されます。主キーテーブルを使用するテーブルでは、デフォルトで値列には `NULL` が指定され、キー列には `NOT NULL` が指定されます。生データに `NULL` 値が含まれている場合、`\N` で表現してください。StarRocks はデータロード中に `\N` を `NULL` として扱います。
+### `NULL` | `NOT NULL`
 
-**DEFAULT "default_value"**: 列のデフォルト値。StarRocks にデータをロードする際、列にマッピングされたソースフィールドが空の場合、StarRocks は自動的にデフォルト値を列に埋めます。次のいずれかの方法でデフォルト値を指定できます：
+列が`NULL`を許可されているかどうか。デフォルトでは、Duplicate Key、Aggregate、またはUnique Keyテーブルを使用するテーブルのすべての列に`NULL`が指定されます。Primary Keyテーブルを使用するテーブルでは、デフォルトで値列には`NULL`が指定され、キー列には`NOT NULL`が指定されます。生データに`NULL`値が含まれている場合は、`\N`で表現します。StarRocksはデータロード中に`\N`を`NULL`として扱います。
 
-- **DEFAULT current_timestamp**: 現在の時刻をデフォルト値として使用します。詳細については、[current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) を参照してください。
-- **DEFAULT (\<expr\>)**: 与えられた式または関数の結果をデフォルト値として使用します。次の式がサポートされています：
-  - [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：一意の識別子を生成します。
-  - ARRAY リテラル式（例：`[1, 2, 3]`）：ARRAY 型の列用。
-  - MAP 式（例：`map{key: value}`）：MAP 型の列用。
-  - row() 関数（例：`row(val1, val2)`）：STRUCT 型の列用。
-- **DEFAULT `<default_value>`**: 列のデータタイプの与えられた値をデフォルト値として使用します。StarRocks はさまざまなタイプのデフォルト値の指定をサポートしています：
-  
-  **基本タイプ**: 文字列リテラルを使用してデフォルト値を指定します。
-  
+### `DEFAULT`
+
+列のデフォルト値。StarRocksにデータをロードする際、列にマッピングされたソースフィールドが空の場合、StarRocksは自動的に列にデフォルト値を入力します。デフォルト値は以下のいずれかの方法で指定できます。
+
+- **DEFAULT current_timestamp**: 現在時刻をデフォルト値として使用します。詳細については、以下を参照してください。[current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
+- **DEFAULT (`<expr>`)**: 指定された式または関数によって返される結果をデフォルト値として使用します。以下の式がサポートされています。
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): 一意の識別子を生成します。
+  - ARRAYリテラル式 (例: `[1, 2, 3]`): ARRAY型列の場合。
+  - MAP式 (例: `map{key: value}`): MAP型列の場合。
+  - row()関数 (例: `row(val1, val2)`): STRUCT型列の場合。
+- **DEFAULT `<default_value>`**: 列のデータ型の指定された値をデフォルト値として使用します。StarRocksは異なる型に対してデフォルト値の指定をサポートしています。
+
+  **基本型**: 文字列リテラルを使用してデフォルト値を指定します。
+
   ```sql
   -- 数値型
   age INT DEFAULT '18'
   price DECIMAL(10,2) DEFAULT '99.99'
-  
+
   -- 文字列型
   name VARCHAR(50) DEFAULT 'Anonymous'
-  
+
   -- 日付/時刻型
   created_at DATETIME DEFAULT '2024-01-01 00:00:00'
-  
-  -- ブール型
-  is_active BOOLEAN DEFAULT 'true'  -- 'true'/'false'/'1'/'0' をサポート
+
+  -- 真偽値型
+  is_active BOOLEAN DEFAULT 'true'  -- Supports 'true'/'false'/'1'/'0'
   ```
-  
-  **JSON 型**: JSON 形式の文字列を使用してデフォルト値を指定します。
-  
+
+  **JSON型**: JSON形式の文字列を使用してデフォルト値を指定します。
+
   ```sql
   metadata JSON DEFAULT '{"status": "active"}'
   tags JSON DEFAULT '[1, 2, 3]'
   ```
-  
-  **VARBINARY 型**: デフォルト値として空文字列のみサポートされます。
-  
+
+  **VARBINARY型**: デフォルト値として空文字列のみがサポートされています。
+
   ```sql
   binary_data VARBINARY DEFAULT ''
   ```
-  
-  **BITMAP および HLL 型**: デフォルト値として空文字列のみサポートされます。AGGREGATE KEY テーブル専用です。
-  
+
+  **BITMAPおよびHLL型**: デフォルト値として空文字列のみがサポートされており、AGGREGATE KEYテーブルのみに適用されます。
+
   ```sql
-  -- AGGREGATE KEY テーブル内
+  -- AGGREGATE KEYテーブルで
   bm BITMAP BITMAP_UNION DEFAULT ''
   h HLL HLL_UNION DEFAULT ''
   ```
-  
-  **複合型 (ARRAY/MAP/STRUCT)**: 式構文を使用してデフォルト値を指定します。OLAP テーブルのみサポートされます。
-  
+
+  **複合型 (ARRAY/MAP/STRUCT)**: 式構文を使用してデフォルト値を指定します。OLAPテーブルのみでサポートされています。
+
   :::note
-  複合型のデフォルト値は **`fast_schema_evolution = true` の場合にのみサポート**されます。テーブルの `fast_schema_evolution` プロパティが明示的に `false` に設定されている場合、複合型のデフォルト値を追加するとエラーが発生します。
-  :::
-  
+複合型のデフォルト値は**`fast_schema_evolution = true`の場合のみサポートされます**。テーブルの`fast_schema_evolution`プロパティが明示的に`false`に設定されている場合、複合型にデフォルト値を追加するとエラーになります。
+:::
+
   ```sql
-  -- ARRAY 型
+  -- ARRAY型
   tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
   scores ARRAY<INT> DEFAULT [90, 85, 92]
-  
-  -- MAP 型
+
+  -- MAP型
   attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
-  
-  -- STRUCT 型
+
+  -- STRUCT型
   person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
-  
-  -- 複雑なネスト：STRUCT、ARRAY、MAP を含むネストされた STRUCT
+
+  -- 複雑なネスト: STRUCT内にSTRUCT、ARRAY、MAPがネストされている
   user_profile STRUCT<
     id INT, 
     name VARCHAR(50), 
@@ -285,13 +302,17 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
   ```
 
   **制限事項**:
-  
-  - TIME および VARIANT 型はまだデフォルト値をサポートしていません。
-  - 複合型 (ARRAY/MAP/STRUCT) のデフォルト値は OLAP テーブルのみでサポートされ、`fast_schema_evolution` プロパティを有効にする必要があります。
 
-**AUTO_INCREMENT**: `AUTO_INCREMENT` 列を指定します。`AUTO_INCREMENT` 列のデータタイプは BIGINT でなければなりません。自動インクリメントされた ID は 1 から始まり、1 のステップで増加します。`AUTO_INCREMENT` 列の詳細については、[AUTO_INCREMENT](auto_increment.md) を参照してください。v3.0 以降、StarRocks は `AUTO_INCREMENT` 列をサポートしています。
+  - TIMEおよびVARIANT型は、まだデフォルト値をサポートしていません。
+  - 複合型（ARRAY/MAP/STRUCT）のデフォルト値は、OLAPテーブルでのみサポートされており、`fast_schema_evolution`プロパティを有効にする必要があります。
 
-**AS generation_expr**: 生成列とその式を指定します。[生成列](../generated_columns.md) は、式の結果を事前に計算して保存するために使用でき、同じ複雑な式を持つクエリを大幅に高速化します。v3.1 以降、StarRocks は生成列をサポートしています。
+### `AUTO_INCREMENT`
+
+`AUTO_INCREMENT`カラムを指定します。`AUTO_INCREMENT`カラムのデータ型はBIGINTである必要があります。自動インクリメントされるIDは1から始まり、1ステップずつ増加します。`AUTO_INCREMENT`カラムの詳細については、を参照してください。[AUTO_INCREMENT](auto_increment.md)。v3.0以降、StarRocksは`AUTO_INCREMENT`カラムをサポートしています。
+
+### `AS`
+
+生成されたカラムとその式を指定します。[生成されたカラム](../generated_columns.md)は、式の計算結果を事前に計算して保存するために使用でき、同じ複雑な式を持つクエリを大幅に高速化します。v3.1以降、StarRocksは生成されたカラムをサポートしています。
 
 ## インデックス定義
 
@@ -299,13 +320,13 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-パラメータの説明と使用上の注意については、[ビットマップインデックス](../../../table_design/indexes/Bitmap_index.md#create-an-index) を参照してください。
+パラメータの説明と使用上の注意点の詳細については、を参照してください。[ビットマップインデックス](../../../table_design/indexes/Bitmap_index.md#create-an-index)。
 
 ## `ENGINE`
 
-デフォルト値: `olap`。このパラメータが指定されていない場合、デフォルトで OLAP テーブル (StarRocks 内部テーブル) が作成されます。
+デフォルト値: `olap`。このパラメータが指定されていない場合、デフォルトでOLAPテーブル（StarRocksネイティブテーブル）が作成されます。
 
-オプションの値: `mysql`, `elasticsearch`, `hive`, `jdbc`, `iceberg`, および `hudi`。
+オプション値: `mysql`、`elasticsearch`、`hive`、`jdbc`、`iceberg`、および`hudi`。
 
 ## キー
 
@@ -315,45 +336,46 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 key_type(k1[,k2 ...])
 ```
 
-データは指定されたキー列で順序付けされ、異なるキータイプに対して異なる属性を持ちます：
+データは指定されたキーカラムでシーケンスされ、キータイプごとに異なる属性を持ちます。
 
-- AGGREGATE KEY: キー列の同一内容は、指定された集計タイプに従って値列に集約されます。通常、財務報告書や多次元分析などのビジネスシナリオに適用されます。
-- UNIQUE KEY/PRIMARY KEY: キー列の同一内容は、インポート順序に従って値列に置き換えられます。キー列の追加、削除、変更、クエリに適用できます。
-- DUPLICATE KEY: StarRocks には、キーカラムに同一のコンテンツが共存する。これを利用して、詳細データや集計属性のないデータを格納することができる。
+- AGGREGATE KEY: キーカラム内の同一の内容は、指定された集計タイプに従って値カラムに集計されます。これは通常、財務諸表や多次元分析などのビジネスシナリオに適用されます。
+- UNIQUE KEY/PRIMARY KEY: キーカラム内の同一の内容は、インポートシーケンスに従って値カラムで置き換えられます。これは、キーカラムに対する追加、削除、変更、およびクエリを行うために適用できます。
+- DUPLICATE KEY: キーカラム内の同一の内容はStarRocksに共存します。これは、詳細データや集計属性を持たないデータを保存するために使用できます。
 
   :::note
-  DUPLICATE KEY はデフォルトのタイプです。データはキー列に従って順序付けされます。
-  :::
-
-:::note
-AGGREGATE KEY を除く他のキータイプを使用してテーブルを作成する場合、値列は集計タイプを指定する必要はありません。
+DUPLICATE KEYはデフォルトのタイプです。データはキーカラムに従ってシーケンスされます。
 :::
 
-### 範囲ベースのディストリビューション
+:::note
+AGGREGATE KEY以外のキータイプを使用してテーブルを作成する場合、値カラムは集計タイプを指定する必要はありません。
+:::
 
-v4.1 以降、StarRocks は**レンジベースの分散セマンティクス**（デフォルトでは無効）をサポートしており、これは FE 設定の `enable_range_distribution` によって制御されます。データはキー列のデータ範囲に従ってシーケンス化され、各タブレットには特定の範囲のデータが含まれます。
+### 範囲ベースの分散
 
-範囲ベースのディストリビューションセマンティクスは、以下の点でデフォルトのセマンティクスとは異なります：
-- キータイプ（AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY）が明示的に指定されており、かつ DISTRIBUTED BY 句が指定されていない場合、データはデフォルトで範囲ごとにディストリビューションされます。
-- キータイプ、DISTRIBUTED BY 句、および ORDER BY のいずれも指定されていない場合、ランダムバケット戦略を採用した重複キーテーブルが作成されます。
-- キータイプと DISTRIBUTED BY 句が指定されていないが、ORDER BY 句が指定されている場合、範囲ベースのディストリビューション戦略を持つ重複キーテーブルが作成されます。この場合、DUPLICATE KEY は ORDER BY 句と同等であり、その逆も同様です。
-- DUPLICATE KEY と ORDER BY 句の両方が指定された場合、ORDER BY 句のみが有効となり、DUPLICATE KEY は無視されます。
+v4.1以降、StarRocksは**範囲ベースの分散セマンティクス**をサポートしており、FE設定`enable_range_distribution`によって制御されます。共有データモードではデフォルトで有効になっています。無効にするには、この設定を`false`に設定します。共有なしモードでは効果がありません。データはキーカラムのデータ範囲に従ってシーケンスされ、各タブレットは特定の範囲のデータを含みます。
 
-## COMMENT
+範囲ベースの分散セマンティクスは、以下の点でデフォルトのセマンティクスとは異なります。
 
-テーブル作成時にテーブルコメントを追加できます（オプション）。COMMENT は `key_desc` の後に配置する必要があることに注意してください。そうしないと、テーブルは作成されません。
+- キータイプ（AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY）が明示的に指定されており、DISTRIBUTED BY句が指定されていない場合、データはデフォルトで範囲によって分散されます。
+- キータイプ、DISTRIBUTED BY句、またはORDER BYのいずれも指定されていない場合、ランダムバケット戦略を持つDuplicate Keyテーブルが作成されます。
+- キータイプとDISTRIBUTED BY句が指定されていないが、ORDER BY句が指定されている場合、範囲ベースの分散戦略を持つDuplicate Keyテーブルが作成されます。この場合、DUPLICATE KEYはORDER BY句と同等であり、その逆も同様です。
+- DUPLICATE KEYとORDER BY句の両方が指定されている場合、ORDER BY句のみが有効になり、DUPLICATE KEYは無視されます。
 
-v3.1 以降、`ALTER TABLE <table_name> COMMENT = "new table comment"` を使用してテーブルコメントを変更できます。
+## `COMMENT`
+
+テーブルを作成する際にテーブルコメントを追加できます（オプション）。COMMENTは`key_desc`の後に配置する必要があることに注意してください。そうしないと、テーブルを作成できません。
+
+v3.1以降、`ALTER TABLE <table_name> COMMENT = "new table comment"`を使用してテーブルコメントを変更できます。
 
 ## パーティション
 
-パーティションは次の方法で管理できます：
+パーティションは以下の方法で管理できます。
 
 ### パーティションを動的に作成する
 
-[動的パーティション化](../../../table_design/data_distribution/dynamic_partitioning.md) は、パーティションの有効期限管理 (TTL) を提供します。StarRocks はデータの新鮮さを確保するために、事前に新しいパーティションを自動的に作成し、期限切れのパーティションを削除します。この機能を有効にするには、テーブル作成時に動的パーティション化関連のプロパティを設定します。
+[動的パーティション分割](../../../table_design/data_distribution/dynamic_partitioning.md)は、パーティションの有効期間（TTL）管理を提供します。StarRocksは、データの鮮度を確保するために、新しいパーティションを事前に自動的に作成し、期限切れのパーティションを削除します。この機能を有効にするには、テーブル作成時に動的パーティション関連プロパティを設定できます。
 
-### パーティションを一つずつ作成する
+### パーティションを1つずつ作成する
 
 #### パーティションの上限のみを指定する
 
@@ -369,15 +391,15 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 ```
 
 :::note
-指定されたキー列と指定された値範囲を使用してパーティション化してください。
+パーティショニングには、指定されたキー列と指定された値の範囲を使用してください。
 :::
 
-- パーティションの命名規則については、[システム制限](../../System_limit.md) を参照してください。
-- v3.3.0 より前は、レンジパーティション化の列は TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、および DATETIME のみをサポートしています。v3.3.0 以降、3 つの特定の時間関数をレンジパーティション化の列として使用できます。詳細な使用法については、[データ分布](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions) を参照してください。
+- パーティションの命名規則については、[システム制限](../../System_limit.md)を参照してください。
+- v3.3.0より前では、範囲パーティショニングの列はTINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、DATETIMEの型のみをサポートしていました。v3.3.0以降では、3つの特定の時間関数を範囲パーティショニングの列として使用できます。詳細な使用方法については、[データ分散](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions)を参照してください。
 - パーティションは左閉右開です。最初のパーティションの左境界は最小値です。
-- NULL 値は最小値を含むパーティションにのみ保存されます。最小値を含むパーティションが削除されると、NULL 値はインポートできなくなります。
-- パーティション列は単一列または複数列のいずれかです。パーティション値はデフォルトの最小値です。
-- パーティション列として 1 つの列のみが指定されている場合、最新のパーティションのパーティション列の上限として `MAXVALUE` を設定できます。
+- NULL値は、最小値を含むパーティションにのみ格納されます。最小値を含むパーティションが削除されると、NULL値はインポートできなくなります。
+- パーティション列は単一列でも複数列でも構いません。パーティション値はデフォルトの最小値です。
+- パーティショニング列として1つの列のみが指定されている場合、最新のパーティションのパーティショニング列の上限として`MAXVALUE`を設定できます。
 
   ```SQL
   PARTITION BY RANGE (pay_dt) (
@@ -388,8 +410,9 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
   ```
 
 :::note
+
 - パーティションは、時間に関連するデータを管理するためによく使用されます。
-- データのバックトラッキングが必要な場合、必要に応じてパーティションを追加するために最初のパーティションを空にすることを検討するかもしれません。
+- データの後方追跡が必要な場合、必要に応じて後でパーティションを追加するために、最初のパーティションを空にすることを検討してください。
 :::
 
 #### パーティションの下限と上限の両方を指定する
@@ -407,9 +430,10 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 ```
 
 :::note
-- 固定レンジは LESS THAN よりも柔軟です。左と右のパーティションをカスタマイズできます。
-- 固定レンジは他の側面では LESS THAN と同じです。
-- パーティション列として 1 つの列のみが指定されている場合、最新のパーティションのパーティション列の上限として `MAXVALUE` を設定できます。
+
+- Fixed RangeはLESS THANよりも柔軟です。左右のパーティションをカスタマイズできます。
+- Fixed Rangeは、その他の点ではLESS THANと同じです。
+- パーティショニング列として1つの列のみが指定されている場合、最新のパーティションのパーティショニング列の上限として`MAXVALUE`を設定できます。
 :::
 
   ```SQL
@@ -424,54 +448,55 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 
 構文
 
-- パーティション列が日付型の場合。
+- パーティショニング列が日付型の場合。
 
-    ```sql
-    PARTITION BY RANGE (<partitioning_column>) (
-        START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
-    )
-    ```
+  ```sql
+  PARTITION BY RANGE (<partitioning_column>) (
+      START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+  )
+  ```
 
-- パーティション列が整数型の場合。
+- パーティショニング列が整数型の場合。
 
-    ```sql
-    PARTITION BY RANGE (<partitioning_column>) (
-        START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
-    )
-    ```
+  ```sql
+  PARTITION BY RANGE (<partitioning_column>) (
+      START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+  )
+  ```
 
 説明
 
-`START()` と `END()` で開始値と終了値を指定し、`EVERY()` で時間単位またはパーティショングラニュラリティを指定して、一括で複数のパーティションを作成できます。
+`START()`と`END()`で開始値と終了値を、`EVERY()`で時間単位またはパーティショニングの粒度を指定して、複数のパーティションを一括で作成できます。
 
-- v3.3.0 より前は、レンジパーティション化の列は TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、および DATETIME のみをサポートしています。v3.3.0 以降、3 つの特定の時間関数をレンジパーティション化の列として使用できます。詳細な使用法については、[データ分布](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions) を参照してください。
-- パーティション列が日付型の場合、`INTERVAL` キーワードを使用して時間間隔を指定する必要があります。時間単位として、時間 (v3.0 以降)、日、週、月、年を指定できます。パーティションの命名規則は動的パーティションと同じです。
+- v3.3.0より前では、範囲パーティショニングの列はTINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、DATETIMEの型のみをサポートしていました。v3.3.0以降では、3つの特定の時間関数を範囲パーティショニングの列として使用できます。詳細な使用方法については、[データ分散](../../../table_design/data_distribution/Data_distribution.md#manually-create-partitions)を参照してください。
+- パーティショニング列が日付型の場合、`INTERVAL`キーワードを使用して時間間隔を指定する必要があります。時間単位は、時間（v3.0以降）、日、週、月、または年として指定できます。パーティションの命名規則は、動的パーティションの場合と同じです。
 
-詳細については、[データ分布](../../../table_design/data_distribution/Data_distribution.md) を参照してください。
+詳細については、[データ分散](../../../table_design/data_distribution/Data_distribution.md)を参照してください。
 
-## ディストリビューション
+## 分散
 
-StarRocks はハッシュバケット法とランダムバケット法をサポートしています。バケット法を設定しない場合、StarRocks はランダムバケット法を使用し、デフォルトでバケット数を自動的に設定します。
+StarRocksはハッシュバケットとランダムバケットをサポートしています。バケットを設定しない場合、StarRocksはランダムバケットを使用し、デフォルトでバケット数を自動的に設定します。共有データモードでは、キータイプまたは `ORDER BY` 句を指定し、`DISTRIBUTED BY` 句を指定しないテーブルは、代わりにデフォルトで範囲ベースの分散を使用します。[範囲ベースの分散](#range-based-distribution)を参照してください。
 
-- ランダムバケット法 (v3.1 以降)
+- ランダムバケット (v3.1以降)
 
-  パーティション内のデータに対して、StarRocks は特定の列値に基づかずにデータをすべてのバケットにランダムに分散します。StarRocks にバケット数を自動的に設定させたい場合、バケット設定を指定する必要はありません。バケット数を手動で指定する場合、構文は次のとおりです：
+  パーティション内のデータについて、StarRocksは特定の列値に基づかず、すべてのバケットにデータをランダムに分散します。StarRocksにバケット数を自動的に設定させたい場合、バケット設定を指定する必要はありません。バケット数を手動で指定することを選択した場合の構文は次のとおりです。
 
   ```SQL
   DISTRIBUTED BY RANDOM BUCKETS <num>
   ```
-  
-  ただし、ランダムバケット法によって提供されるクエリパフォーマンスは、大量のデータをクエリし、特定の列を条件列として頻繁に使用する場合には理想的でない可能性があります。このようなシナリオでは、ハッシュバケット法を使用することをお勧めします。スキャンおよび計算が必要なバケットの数が少ないため、クエリパフォーマンスが大幅に向上します。
+
+  ただし、大量のデータをクエリし、特定の列を条件列として頻繁に使用する場合、ランダムバケットによって提供されるクエリパフォーマンスは理想的ではない可能性があることに注意してください。このシナリオでは、ハッシュバケットを使用することをお勧めします。これは、少数のバケットのみをスキャンおよび計算する必要があるため、クエリパフォーマンスが大幅に向上するためです。
 
   **注意事項**
-  - ランダムバケット法は重複キーテーブルの作成にのみ使用できます。
-  - ランダムにバケットされたテーブルには [Colocation Group](../../../using_starrocks/Colocate_join.md) を指定できません。
-  - Spark Load を使用してランダムにバケットされたテーブルにデータをロードすることはできません。
-  - StarRocks v2.5.7 以降、テーブル作成時にバケット数を設定する必要はありません。StarRocks は自動的にバケット数を設定します。このパラメータを設定したい場合は、[バケット数の設定](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
 
-  詳細については、[ランダムバケット法](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31) を参照してください。
+  - Duplicate Keyテーブルを作成するには、ランダムバケットのみを使用できます。
+  - 指定できません[コロケーショングループ](../../../using_starrocks/Colocate_join.md)ランダムにバケット化されたテーブルの場合。
+  - Spark Loadは、ランダムにバケット化されたテーブルにデータをロードするために使用できません。
+  - StarRocks v2.5.7以降、テーブル作成時にバケット数を設定する必要はありません。StarRocksは自動的にバケット数を設定します。このパラメータを設定したい場合は、以下を参照してください。[バケット数の設定](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)。
 
-- ハッシュバケット法
+  詳細については、以下を参照してください。[ランダムバケット](../../../table_design/data_distribution/Data_distribution.md#random-bucketing-since-v31)。
+
+- ハッシュバケット
 
   構文:
 
@@ -479,31 +504,32 @@ StarRocks はハッシュバケット法とランダムバケット法をサポ�
   DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
   ```
 
-  パーティション内のデータは、バケット列のハッシュ値とバケット数に基づいてバケットに細分化できます。次の 2 つの要件を満たす列をバケット列として選択することをお勧めします。
+  パーティション内のデータは、バケット列のハッシュ値とバケット数に基づいてバケットに細分化できます。以下の2つの要件を満たす列をバケット列として選択することをお勧めします。
 
-  - 高いカーディナリティを持つ列 (例: ID)
-  - クエリでフィルタとして頻繁に使用される列
+  - IDなどのカーディナリティの高い列
+  - クエリで頻繁にフィルターとして使用される列
 
-  そのような列が存在しない場合、クエリの複雑さに応じてバケット列を決定できます。
+  そのような列が存在しない場合、クエリの複雑さに基づいてバケット列を決定できます。
 
-  - クエリが複雑な場合、バケット列として高いカーディナリティを持つ列を選択して、バケット間のデータ分布を均等にし、クラスタリソースの利用率を向上させることをお勧めします。
-  - クエリが比較的単純な場合、クエリ条件として頻繁に使用される列をバケット列として選択して、クエリ効率を向上させることをお勧めします。
+  - クエリが複雑な場合は、バケット間のデータ分散を均等にし、クラスタリソースの利用率を向上させるために、カーディナリティの高い列をバケット列として選択することをお勧めします。
+  - クエリが比較的単純な場合は、クエリ効率を向上させるために、クエリ条件として頻繁に使用される列をバケット列として選択することをお勧めします。
 
-  1 つのバケット列を使用してもパーティションデータが各バケットに均等に分配されない場合、複数のバケット列 (最大 3 つ) を選択できます。詳細については、[バケット列の選択](../../../table_design/data_distribution/Data_distribution.md#hash-bucketing) を参照してください。
+  1つのバケット列を使用してもパーティションデータを各バケットに均等に分散できない場合は、複数のバケット列（最大3つ）を選択できます。詳細については、以下を参照してください。[バケット列の選択](../../../table_design/data_distribution/Data_distribution.md#hash-bucketing)。
 
   **注意事項**:
+
   - **テーブルを作成する際、バケット列を指定する必要があります**。
   - バケット列の値は更新できません。
-  - バケット列は指定後に変更できません。
-  - StarRocks v2.5.7 以降、テーブル作成時にバケット数を設定する必要はありません。StarRocks は自動的にバケット数を設定します。このパラメータを設定したい場合は、[バケット数の設定](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets) を参照してください。
+  - バケット列は、指定後に変更することはできません。
+  - StarRocks v2.5.7以降、テーブル作成時にバケット数を設定する必要はありません。StarRocksは自動的にバケット数を設定します。このパラメータを設定したい場合は、以下を参照してください。[バケット数の設定](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)。
 
-- 範囲ベースのディストリビューション
+- 範囲ベースの分散
 
-  v4.1 以降、StarRocks は**範囲ベースのディストリビューションセマンティクス**（デフォルトでは無効）をサポートしており、これは FE 設定の `enable_range_distribution` によって制御されます。詳細については、[範囲ベースのディストリビューション](#範囲ベースのディストリビューション)を参照してください。
+  v4.1以降、StarRocksは**範囲ベースの分散セマンティクス**をサポートしており、FE設定`enable_range_distribution`によって制御されます。共有データモードではデフォルトで有効になっています。詳細については、以下を参照してください。[範囲ベースの分散](#range-based-distribution)。
 
 ## ロールアップインデックス
 
-テーブル作成時に一括でロールアップを作成できます。
+テーブル作成時にロールアップを一括で作成できます。
 
 構文:
 
@@ -513,21 +539,21 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)],...)
 ```
 
-## ORDER BY
+## `ORDER BY`
 
-v3.0 以降、主キーテーブルは `ORDER BY` を使用してソートキーを定義することをサポートしています。v3.3 以降、重複キーテーブル、集計テーブル、およびユニークキーテーブルは `ORDER BY` を使用してソートキーを定義することをサポートしています。
+v3.0以降、Primary Keyテーブルは`ORDER BY`を使用してソートキーの定義をサポートしています。v3.3以降、Duplicate Keyテーブル、Aggregateテーブル、およびUnique Keyテーブルは`ORDER BY`を使用してソートキーの定義をサポートしています。
 
-ソートキーの詳細については、[ソートキーとプレフィックスインデックス](../../../table_design/indexes/Prefix_index_sort_key.md) を参照してください。
+ソートキーの詳細については、以下を参照してください。[ソートキーとプレフィックスインデックス](../../../table_design/indexes/Prefix_index_sort_key.md)。
 
-## プロパティ
+## `PROPERTIES`
 
 ### ストレージとレプリカ
 
-エンジンタイプが `OLAP` の場合、テーブル作成時に初期記憶媒体 (`storage_medium`)、自動ストレージクールダウン時間 (`storage_cooldown_time`) または時間間隔 (`storage_cooldown_ttl`)、およびレプリカ数 (`replication_num`) を指定できます。
+エンジンタイプが`OLAP`の場合、テーブル作成時に初期ストレージメディア（`storage_medium`）、自動ストレージクールダウン時間（`storage_cooldown_time`）または時間間隔（`storage_cooldown_ttl`）、およびレプリカ数（`replication_num`）を指定できます。
 
-プロパティが有効な範囲: テーブルにパーティションが 1 つしかない場合、プロパティはテーブルに属します。テーブルが複数のパーティションに分割されている場合、プロパティは各パーティションに属します。指定されたパーティションに異なるプロパティを設定する必要がある場合、テーブル作成後に [ALTER TABLE ... ADD PARTITION または ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) を実行できます。
+プロパティが有効になるスコープ：テーブルにパーティションが1つしかない場合、プロパティはテーブルに属します。テーブルが複数のパーティションに分割されている場合、プロパティは各パーティションに属します。特定のパーティションに異なるプロパティを設定する必要がある場合は、以下を実行できます。[ALTER TABLE ... ADD PARTITION または ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md)テーブル作成後に。
 
-#### 初期記憶媒体と自動ストレージクールダウン時間の設定
+#### 初期ストレージメディアと自動ストレージクールダウン時間の設定
 
 ```sql
 PROPERTIES (
@@ -539,54 +565,57 @@ PROPERTIES (
 
 **プロパティ**
 
-- `storage_medium`: 初期記憶媒体で、`SSD` または `HDD` に設定できます。明示的に指定した記憶媒体のタイプが、StarRocks クラスタの BE ディスクタイプに対して BE 静的パラメータ `storage_root_path` で指定されたものと一致していることを確認してください。<br />
+- `storage_medium`: 初期ストレージメディア。`SSD`または`HDD`に設定できます。明示的に指定したストレージメディアのタイプが、BE静的パラメータ`storage_root_path`で指定されたStarRocksクラスターのBEディスクタイプと一致していることを確認してください。<br />
 
-    FE 設定項目 `enable_strict_storage_medium_check` が `true` に設定されている場合、テーブル作成時にシステムは BE ディスクタイプを厳密にチェックします。CREATE TABLE で指定した記憶媒体が BE ディスクタイプと一致しない場合、エラー "Failed to find enough host in all backends with storage medium is SSD|HDD." が返され、テーブル作成が失敗します。`enable_strict_storage_medium_check` が `false` に設定されている場合、システムはこのエラーを無視し、強制的にテーブルを作成します。ただし、データがロードされた後、クラスタディスクスペースが不均一に分配される可能性があります。<br />
+  FE設定項目`enable_strict_storage_medium_check`が`true`に設定されている場合、テーブル作成時にシステムはBEディスクタイプを厳密にチェックします。CREATE TABLEで指定したストレージメディアがBEディスクタイプと一致しない場合、「Failed to find enough host in all backends with storage medium is SSD|HDD.」というエラーが返され、テーブル作成は失敗します。`enable_strict_storage_medium_check`が`false`に設定されている場合、システムはこのエラーを無視し、強制的にテーブルを作成します。ただし、データロード後にクラスターのディスクスペースが不均一に分散される可能性があります。<br />
 
-    v2.3.6、v2.4.2、v2.5.1、および v3.0 以降、`storage_medium` が明示的に指定されていない場合、システムは BE ディスクタイプに基づいて記憶媒体を自動的に推測します。<br />
+  v2.3.6、v2.4.2、v2.5.1、およびv3.0以降、`storage_medium`が明示的に指定されていない場合、システムはBEディスクタイプに基づいてストレージメディアを自動的に推測します。<br />
 
-  - システムは次のシナリオでこのパラメータを SSD に自動的に設定します：
+  - システムは以下のシナリオでこのパラメータを自動的にSSDに設定します。
 
-    - BE によって報告されたディスクタイプ (`storage_root_path`) が SSD のみを含む場合。
-    - BE によって報告されたディスクタイプ (`storage_root_path`) が SSD と HDD の両方を含む場合。v2.3.10、v2.4.5、v2.5.4、および v3.0 以降、BE によって報告された `storage_root_path` が SSD と HDD の両方を含み、プロパティ `storage_cooldown_time` が指定されている場合、システムは `storage_medium` を SSD に設定します。
+    - BEによって報告されるディスクタイプ（`storage_root_path`）にSSDのみが含まれている場合。
+    - BEによって報告されるディスクタイプ（`storage_root_path`）にSSDとHDDの両方が含まれている場合。v2.3.10、v2.4.5、v2.5.4、およびv3.0以降、BEによって報告される`storage_root_path`にSSDとHDDの両方が含まれ、かつプロパティ`storage_cooldown_time`が指定されている場合、システムは`storage_medium`をSSDに設定することに注意してください。
 
-  - システムは次のシナリオでこのパラメータを HDD に自動的に設定します：
+  - システムは以下のシナリオでこのパラメータを自動的にHDDに設定します。
 
-    - BE によって報告されたディスクタイプ (`storage_root_path`) が HDD のみを含む場合。
-    - v2.3.10、v2.4.5、v2.5.4、および v3.0 以降、BE によって報告された `storage_root_path` が SSD と HDD の両方を含み、プロパティ `storage_cooldown_time` が指定されていない場合、システムは `storage_medium` を HDD に設定します。
+    - BEによって報告されるディスクタイプ（`storage_root_path`）にHDDのみが含まれている場合。
+    - 2.3.10、2.4.5、2.5.4、および3.0以降、BEによって報告される`storage_root_path`にSSDとHDDの両方が含まれ、かつプロパティ`storage_cooldown_time`が指定されていない場合、システムは`storage_medium`をHDDに設定します。
 
-- `storage_cooldown_ttl` または `storage_cooldown_time`: 自動ストレージクールダウン時間または時間間隔。自動ストレージクールダウンとは、SSD から HDD へのデータの自動移行を指します。この機能は、初期記憶媒体が SSD の場合にのみ有効です。
+- `storage_cooldown_ttl`または`storage_cooldown_time`: 自動ストレージクールダウン時間または時間間隔。自動ストレージクールダウンとは、SSDからHDDへデータを自動的に移行することを指します。この機能は、初期ストレージメディアがSSDの場合にのみ有効です。
 
-  - `storage_cooldown_ttl`: このテーブルのパーティションに対する自動ストレージクールダウンの**時間間隔**。最新のパーティションを SSD に保持し、一定の時間間隔後に古いパーティションを自動的に HDD にクールダウンする必要がある場合、このパラメータを使用できます。各パーティションの自動ストレージクールダウン時間は、このパラメータの値とパーティションの上限時間を使用して計算されます。
+  - `storage_cooldown_ttl`: **時間間隔**このテーブルのパーティションに対する自動ストレージクールダウンの。最新のパーティションをSSDに保持し、一定の時間間隔後に古いパーティションを自動的にHDDにクールダウンする必要がある場合、このパラメータを使用できます。各パーティションの自動ストレージクールダウン時間は、このパラメータの値にパーティションの上限時間を加算して計算されます。
 
-  サポートされている値は `<num> YEAR`、`<num> MONTH`、`<num> DAY`、および `<num> HOUR` です。`<num>` は非負整数です。デフォルト値は null で、自動ストレージクールダウンが自動的に実行されないことを示します。
+  サポートされている値は`<num> YEAR`、`<num> MONTH`、`<num> DAY`、および`<num> HOUR`です。`<num>`は非負の整数です。デフォルト値はnullで、ストレージクールダウンが自動的に実行されないことを示します。
 
-  たとえば、テーブル作成時に `"storage_cooldown_ttl"="1 DAY"` と指定し、範囲が `[2023-08-01 00:00:00,2023-08-02 00:00:00)` のパーティション `p20230801` が存在する場合、このパーティションの自動ストレージクールダウン時間は `2023-08-03 00:00:00` であり、これは `2023-08-02 00:00:00 + 1 DAY` です。テーブル作成時に `"storage_cooldown_ttl"="0 DAY"` と指定した場合、このパーティションの自動ストレージクールダウン時間は `2023-08-02 00:00:00` です。
+  例えば、テーブル作成時に値を`"storage_cooldown_ttl"="1 DAY"`と指定し、`[2023-08-01 00:00:00,2023-08-02 00:00:00)`の範囲を持つパーティション`p20230801`が存在するとします。このパーティションの自動ストレージクールダウン時間は`2023-08-03 00:00:00`であり、これは`2023-08-02 00:00:00 + 1 DAY`です。テーブル作成時に値を`"storage_cooldown_ttl"="0 DAY"`と指定した場合、このパーティションの自動ストレージクールダウン時間は`2023-08-02 00:00:00`です。
 
-  - `storage_cooldown_time`: テーブルが SSD から HDD にクールダウンされるときの自動ストレージクールダウン時間 (**絶対時間**)。指定された時間は現在の時間より後である必要があります。形式: "yyyy-MM-dd HH:mm:ss"。指定されたパーティションに異なるプロパティを設定する必要がある場合、テーブル作成後に [ALTER TABLE ... ADD PARTITION または ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md) を実行できます。
+  - `storage_cooldown_time`: 自動ストレージクールダウン時間（**絶対時間**）テーブルがSSDからHDDにクールダウンされるとき。指定された時間は現在時刻より後である必要があります。形式：「yyyy-MM-dd HH:mm:ss」。特定のパーティションに異なるプロパティを設定する必要がある場合は、以下を実行できます。[ALTER TABLE ... ADD PARTITION または ALTER TABLE ... MODIFY PARTITION](ALTER_TABLE.md)。
 
 ##### 使用法
 
-- 自動ストレージクールダウンに関連するパラメータの比較は次のとおりです：
-  - `storage_cooldown_ttl`: テーブルのプロパティで、このテーブルのパーティションに対する自動ストレージクールダウンの時間間隔を指定します。システムは、このパラメータの値とパーティションの上限時間を加算した時点でパーティションを自動的にクールダウンします。したがって、自動ストレージクールダウンはパーティショングラニュラリティで実行され、より柔軟です。
-  - `storage_cooldown_time`: テーブルのプロパティで、このテーブルの自動ストレージクールダウン時間 (**絶対時間**) を指定します。また、テーブル作成後に指定されたパーティションに異なるプロパティを設定できます。
-  - `storage_cooldown_second`: クラスタ内のすべてのテーブルに対する自動ストレージクールダウン遅延を指定する静的 FE パラメータ。
+- 自動ストレージクールダウンに関連するパラメータの比較は以下の通りです。
+  - `storage_cooldown_ttl`: テーブル内のパーティションに対する自動ストレージクールダウンの時間間隔を指定するテーブルプロパティです。システムは`the value of this parameter plus the upper time bound of the partition`の時点でパーティションを自動的にクールダウンします。したがって、自動ストレージクールダウンはパーティション粒度で実行され、より柔軟です。
+  - `storage_cooldown_time`: 自動ストレージクールダウン時間（**絶対時間**）をこのテーブルに指定するテーブルプロパティです。また、テーブル作成後に特定のパーティションに異なるプロパティを設定することもできます。
+  - `storage_cooldown_second`: クラスター内のすべてのテーブルに対する自動ストレージクールダウンの遅延を指定する静的FEパラメータです。
 
-- テーブルプロパティ `storage_cooldown_ttl` または `storage_cooldown_time` は、FE 静的パラメータ `storage_cooldown_second` よりも優先されます。
-- これらのパラメータを設定する際には、`"storage_medium = "SSD"` を指定する必要があります。
-- これらのパラメータを設定しない場合、自動ストレージクールダウンは自動的に実行されません。
-- 各パーティションの自動ストレージクールダウン時間を確認するには、`SHOW PARTITIONS FROM <table_name>` を実行します。
+- テーブルプロパティ`storage_cooldown_ttl`または`storage_cooldown_time`は、FE静的パラメータ`storage_cooldown_second`よりも優先されます。
+
+- これらのパラメータを設定する際には、`"storage_medium = "SSD"`を指定する必要があります。
+
+- これらのパラメーターを設定しない場合、自動ストレージクールダウンは自動的に実行されません。
+
+- 各パーティションの自動ストレージクールダウン時間を表示するには、`SHOW PARTITIONS FROM <table_name>` を実行します。
 
 ##### 制限
 
-- 表現およびリストパーティション化はサポートされていません。
+- 式およびリストパーティショニングはサポートされていません。
 - パーティション列は日付型である必要があります。
 - 複数のパーティション列はサポートされていません。
-- 主キーテーブルはサポートされていません。
+- プライマリキーテーブルはサポートされていません。
 
-#### 各パーティション内のタブレットのレプリカ数を設定する
+#### パーティション内の各タブレットのレプリカ数を設定します
 
-`replication_num`: 各パーティション内のテーブルのレプリカ数。デフォルト数: `3`。
+`replication_num`: パーティション内の各テーブルのレプリカ数。デフォルト数: `3`。
 
 ```sql
 PROPERTIES (
@@ -598,13 +627,13 @@ PROPERTIES (
 
 エンジンタイプが `olap` の場合、ブルームフィルターインデックスを採用する列を指定できます。
 
-ブルームフィルターインデックスを使用する際の制限は次のとおりです：
+ブルームフィルターインデックスを使用する場合、以下の制限が適用されます。
 
-- 重複キーテーブルまたは主キーテーブルのすべての列に対してブルームフィルターインデックスを作成できます。集計テーブルまたはユニークキーテーブルの場合、キー列に対してのみブルームフィルターインデックスを作成できます。
-- TINYINT、FLOAT、DOUBLE、および DECIMAL 列はブルームフィルターインデックスの作成をサポートしていません。
-- ブルームフィルターインデックスは、`in` および `=` 演算子を含むクエリのパフォーマンスを向上させることができます。たとえば、`Select xxx from table where x in {}` および `Select xxx from table where column = xxx` です。この列により多くの離散値があるほど、クエリはより正確になります。
+- Duplicate Key または Primary Key テーブルのすべての列にブルームフィルターインデックスを作成できます。Aggregate テーブルまたは Unique Key テーブルの場合、キー列にのみブルームフィルターインデックスを作成できます。
+- TINYINT、FLOAT、DOUBLE、および DECIMAL 列は、ブルームフィルターインデックスの作成をサポートしていません。
+- ブルームフィルターインデックスは、`in` および `=` 演算子を含むクエリ（例: `Select xxx from table where x in {}` および `Select xxx from table where column = xxx`）のパフォーマンスのみを向上させることができます。この列に離散値が多いほど、より正確なクエリが生成されます。
 
-詳細については、[ブルームフィルターインデックス](../../../table_design/indexes/Bloomfilter_index.md) を参照してください。
+詳細については、以下を参照してください。[ブルームフィルターインデックス作成](../../../table_design/indexes/Bloomfilter_index.md)
 
 ```SQL
 PROPERTIES (
@@ -612,9 +641,9 @@ PROPERTIES (
 )
 ```
 
-### Colocate Join
+### コロケート結合
 
-Colocate Join 属性を使用したい場合、`properties` で指定してください。
+コロケート結合属性を使用する場合は、`properties` で指定します。
 
 ```SQL
 PROPERTIES (
@@ -624,7 +653,7 @@ PROPERTIES (
 
 ### 動的パーティション
 
-動的パーティション属性を使用したい場合、`properties` で指定してください。
+動的パーティション属性を使用する場合は、プロパティで指定してください。
 
 ```SQL
 PROPERTIES (
@@ -638,24 +667,24 @@ PROPERTIES (
 
 **`PROPERTIES`**
 
-| パラメータ                   | 必須 | 説明                                                  |
-| --------------------------- | -------- | ------------------------------------------------------------ |
-| dynamic_partition.enable    | No       | 動的パーティション化を有効にするかどうか。 有効な値: `TRUE` および `FALSE`。 デフォルト値: `TRUE`。 |
-| dynamic_partition.time_unit | Yes      | 動的に作成されるパーティションの時間粒度。必須パラメータです。 有効な値: `DAY`、`WEEK`、および `MONTH`。 時間粒度は動的に作成されるパーティションのサフィックス形式を決定します。<br/>  - 値が `DAY` の場合、動的に作成されるパーティションのサフィックス形式は `yyyyMMdd` です。 例: `20200321`。<br/>  - 値が `WEEK` の場合、動的に作成されるパーティションのサフィックス形式は `yyyy_ww` で、例えば `2020_13` は 2020 年の第 13 週を表します。<br/>  - 値が `MONTH` の場合、動的に作成されるパーティションのサフィックス形式は `yyyyMM` で、例えば `202003` です。 |
-| dynamic_partition.start     | No       | 動的パーティション化の開始オフセット。このパラメータの値は負の整数でなければなりません。このオフセットの前のパーティションは、`dynamic_partition.time_unit` によって決定される現在の日、週、または月に基づいて削除されます。デフォルト値は `Integer.MIN_VALUE`、すなわち -2147483648 で、これは履歴パーティションが削除されないことを意味します。 |
-| dynamic_partition.end       | Yes      | 動的パーティション化の終了オフセット。このパラメータの値は正の整数でなければなりません。現在の日、週、または月から終了オフセットまでのパーティションが事前に作成されます。 |
-| dynamic_partition.prefix    | No       | 動的パーティションの名前に追加されるプレフィックス。デフォルト値: `p`。 |
-| dynamic_partition.buckets   | No       | 動的パーティションごとのバケット数。デフォルト値は、予約語 `BUCKETS` によって決定されるバケット数と同じか、StarRocks によって自動的に設定されます。 |
+| パラメーター | 必須 | 説明 |
+| --- | --- | --- |
+| dynamic_partition.enable | いいえ | 動的パーティショニングを有効にするかどうか。有効な値: `TRUE` および `FALSE`。デフォルト値: `TRUE`。 |
+| dynamic_partition.time_unit | はい | 動的に作成されるパーティションの時間粒度。必須パラメーターです。有効な値: `DAY`、`WEEK`、および `MONTH`。時間粒度によって、動的に作成されるパーティションのサフィックス形式が決まります。<br />  - 値が `DAY` の場合、動的に作成されるパーティションのサフィックス形式は `yyyyMMdd` です。パーティション名サフィックスの例は `20200321` です。<br />  - 値が `WEEK` の場合、動的に作成されるパーティションのサフィックス形式は `yyyy_ww` です。例えば、2020年の13週目は `2020_13` となります。<br />  - 値が `MONTH` の場合、動的に作成されるパーティションのサフィックス形式は `yyyyMM` です。例えば、`202003` となります。 |
+| dynamic_partition.start | いいえ | 動的パーティショニングの開始オフセット。このパラメーターの値は負の整数である必要があります。このオフセットより前のパーティションは、`dynamic_partition.time_unit` によって決定される現在の日、週、または月に基づいて削除されます。デフォルト値は `Integer.MIN_VALUE`、つまり -2147483648 であり、これは履歴パーティションが削除されないことを意味します。 |
+| dynamic_partition.end | はい | 動的パーティショニングの終了オフセット。このパラメーターの値は正の整数である必要があります。現在の日、週、または月から終了オフセットまでのパーティションは事前に作成されます。 |
+| dynamic_partition.prefix | いいえ | 動的パーティションの名前に追加されるプレフィックス。デフォルト値: `p`。 |
+| dynamic_partition.buckets | いいえ | 動的パーティションあたりのバケット数。デフォルト値は、予約語 `BUCKETS` によって決定されるバケット数、または StarRocks によって自動的に設定されるバケット数と同じです。 |
 
 :::note
 
-パーティション列が INT 型の場合、その形式は必ず `yyyyMMdd` でなければなりません。パーティション時間の粒度に関わらず、この形式が適用されます。
+パーティション列が INT 型の場合、パーティションの時間粒度に関係なく、その形式は `yyyyMMdd` である必要があります。
 
 :::
 
-### ランダムバケット法によるバケットサイズ
+### ランダムバケット化によるバケットサイズ
 
-v3.2 以降、ランダムバケット法が設定されたテーブルの場合、テーブル作成時に `PROPERTIES` の `bucket_size` パラメータを使用してバケットサイズを指定し、バケット数のオンデマンドおよび動的な増加を有効にできます。単位: B。
+v3.2以降、ランダムバケット化が設定されたテーブルの場合、テーブル作成時に `PROPERTIES` の `bucket_size` パラメーターを使用してバケットサイズを指定することで、オンデマンドかつ動的にバケット数を増やすことができます。単位: B。
 
 ```sql
 PROPERTIES (
@@ -665,16 +694,16 @@ PROPERTIES (
 
 ### データ圧縮アルゴリズム
 
-テーブル作成時にプロパティ `compression` を追加してデータ圧縮アルゴリズムを指定できます。
+テーブルを作成する際に、プロパティ `compression` を追加することで、テーブルのデータ圧縮アルゴリズムを指定できます。
 
-`compression` の有効な値は次のとおりです：
+`compression` の有効な値は次のとおりです。
 
-- `LZ4`: LZ4 アルゴリズム。
-- `ZSTD`: Zstandard アルゴリズム。
-- `ZLIB`: zlib アルゴリズム。
-- `SNAPPY`: Snappy アルゴリズム。
+- `LZ4`: LZ4アルゴリズム。
+- `ZSTD`: Zstandardアルゴリズム。
+- `ZLIB`: zlibアルゴリズム。
+- `SNAPPY`: Snappyアルゴリズム。
 
-v3.3.2 以降、StarRocks はテーブル作成時に zstd 圧縮形式の圧縮レベルを指定することをサポートしています。
+v3.3.2以降、StarRocksはテーブル作成時にzstd圧縮形式の圧縮レベルを指定することをサポートしています。
 
 構文:
 
@@ -682,7 +711,7 @@ v3.3.2 以降、StarRocks はテーブル作成時に zstd 圧縮形式の圧縮
 PROPERTIES ("compression" = "zstd(<compression_level>)")
 ```
 
-`compression_level`: ZSTD 圧縮形式の圧縮レベル。タイプ: 整数。範囲: [1,22]。デフォルト: `3` (推奨)。数値が大きいほど、圧縮率が高くなります。圧縮レベルが高いほど、圧縮および解凍にかかる時間が増加します。
+`compression_level`: ZSTD圧縮形式の圧縮レベル。型: 整数。範囲: [1,22]。デフォルト: `3` (推奨)。数値が大きいほど圧縮率が高くなります。圧縮レベルが高いほど、圧縮と解凍にかかる時間が長くなります。
 
 例:
 
@@ -690,40 +719,41 @@ PROPERTIES ("compression" = "zstd(<compression_level>)")
 PROPERTIES ("compression" = "zstd(3)")
 ```
 
-適切なデータ圧縮アルゴリズムを選択する方法については、[データ圧縮](../../../table_design/data_compression.md) を参照してください。
+適切なデータ圧縮アルゴリズムの選択方法の詳細については、以下を参照してください。[データ圧縮](../../../table_design/data_compression.md)。
 
-### データロードのための書き込みクォーラム
+### データロードの書き込みクォーラム
 
-StarRocks クラスタに複数のデータレプリカがある場合、テーブルに対して異なる書き込みクォーラムを設定できます。つまり、StarRocks がロードタスクを成功と判断する前に、ロード成功を返す必要があるレプリカの数を指定できます。このプロパティは v2.5 からサポートされています。
+StarRocksクラスターに複数のデータレプリカがある場合、テーブルごとに異なる書き込みクォーラムを設定できます。これは、StarRocksがロードタスクの成功を判断する前に、いくつのレプリカがロード成功を返す必要があるかを示します。テーブル作成時にプロパティ`write_quorum`を追加することで、書き込みクォーラムを指定できます。このプロパティはv2.5以降でサポートされています。
 
-`write_quorum` の有効な値は次のとおりです：
+`write_quorum`の有効な値は次のとおりです。
 
-- `MAJORITY`: デフォルト値。データレプリカの**過半数**がロード成功を返した場合、StarRocks はロードタスク成功を返します。それ以外の場合、StarRocks はロードタスク失敗を返します。
-- `ONE`: データレプリカの**1 つ**がロード成功を返した場合、StarRocks はロードタスク成功を返します。それ以外の場合、StarRocks はロードタスク失敗を返します。
-- `ALL`: データレプリカの**すべて**がロード成功を返した場合、StarRocks はロードタスク成功を返します。それ以外の場合、StarRocks はロードタスク失敗を返します。
+- `MAJORITY`: デフォルト値。データレプリカの**過半数**がロード成功を返すと、StarRocksはロードタスクの成功を返します。それ以外の場合、StarRocksはロードタスクの失敗を返します。
+- `ONE`: データレプリカの**1つ**がロード成功を返すと、StarRocksはロードタスクの成功を返します。それ以外の場合、StarRocksはロードタスクの失敗を返します。
+- `ALL`: データレプリカの**すべて**がロード成功を返すと、StarRocksはロードタスクの成功を返します。それ以外の場合、StarRocksはロードタスクの失敗を返します。
 
 :::caution
-- ロードのための低い書き込みクォーラムを設定すると、データのアクセス不能や損失のリスクが増加します。たとえば、StarRocks クラスタに 2 つのレプリカがあるテーブルに対して 1 つの書き込みクォーラムでデータをロードし、データが 1 つのレプリカにのみ正常にロードされた場合、StarRocks はロードタスク成功と判断しますが、データの生存レプリカは 1 つしかありません。ロードされたデータのタブレットを保存するサーバーがダウンした場合、これらのタブレットのデータはアクセス不能になります。サーバーのディスクが破損した場合、データは失われます。
-- StarRocks は、すべてのデータレプリカがステータスを返した後にのみロードタスクのステータスを返します。ロードステータスが不明なレプリカがある場合、StarRocks はロードタスクのステータスを返しません。レプリカ内でのロードタイムアウトもロード失敗と見なされます。
+
+- ロードの書き込みクォーラムを低く設定すると、データにアクセスできなくなるリスク、さらにはデータ損失のリスクが高まります。たとえば、2つのレプリカを持つStarRocksクラスターで、書き込みクォーラムを1つに設定したテーブルにデータをロードし、データが1つのレプリカにのみ正常にロードされたとします。StarRocksはロードタスクが成功したと判断しますが、データの生存レプリカは1つだけです。ロードされたデータのタブレットを保存するサーバーがダウンした場合、これらのタブレット内のデータにはアクセスできなくなります。また、サーバーのディスクが損傷した場合、データは失われます。
+- StarRocksは、すべてのデータレプリカがステータスを返した後でのみ、ロードタスクのステータスを返します。ロードステータスが不明なレプリカがある場合、StarRocksはロードタスクのステータスを返しません。レプリカでは、ロードタイムアウトもロード失敗と見なされます。
 :::
 
-### レプリカデータの書き込みとレプリケーションモード
+### レプリカデータ書き込みおよびレプリケーションモード
 
-StarRocks クラスタに複数のデータレプリカがある場合、`PROPERTIES` の `replicated_storage` パラメータを指定して、レプリカ間のデータ書き込みとレプリケーションモードを構成できます。
+StarRocksクラスターに複数のデータレプリカがある場合、`PROPERTIES`内の`replicated_storage`パラメーターを指定して、レプリカ間のデータ書き込みおよびレプリケーションモードを設定できます。
 
-- `true` (v3.0 以降のデフォルト) は「シングルリーダーレプリケーション」を示し、データはプライマリレプリカにのみ書き込まれます。他のレプリカはプライマリレプリカからデータを同期します。このモードは、複数のレプリカへのデータ書き込みによって引き起こされる CPU コストを大幅に削減します。v2.5 からサポートされています。
-- `false` (v2.5 のデフォルト) は「リーダーレスレプリケーション」を示し、データはプライマリおよびセカンダリレプリカを区別せずに複数のレプリカに直接書き込まれます。CPU コストはレプリカの数によって増加します。
+- `true` (v3.0以降のデフォルト) は「シングルリーダーレプリケーション」を示し、データはプライマリレプリカにのみ書き込まれます。他のレプリカはプライマリレプリカからデータを同期します。このモードは、複数のレプリカへのデータ書き込みによって発生するCPUコストを大幅に削減します。v2.5以降でサポートされています。
+- `false` (v2.5のデフォルト) は「リーダーレスレプリケーション」を示し、データはプライマリレプリカとセカンダリレプリカを区別することなく、複数のレプリカに直接書き込まれます。CPUコストはレプリカの数に比例して増加します。
 
-ほとんどの場合、デフォルト値を使用することで、より良いデータ書き込みパフォーマンスが得られます。レプリカ間のデータ書き込みとレプリケーションモードを変更したい場合は、ALTER TABLE コマンドを実行します。例:
+ほとんどの場合、デフォルト値を使用すると、データ書き込みパフォーマンスが向上します。レプリカ間のデータ書き込みおよびレプリケーションモードを変更したい場合は、ALTER TABLEコマンドを実行します。例:
 
 ```sql
 ALTER TABLE example_db.my_table
 SET ("replicated_storage" = "false");
 ```
 
-### Delta Join のユニークキーおよび外部キー制約
+### Delta Joinのユニークキー制約と外部キー制約
 
-View Delta Join シナリオでクエリの書き換えを有効にするには、Delta Join で結合されるテーブルに対してユニークキー制約 `unique_constraints` と外部キー制約 `foreign_key_constraints` を定義する必要があります。詳細については、[非同期マテリアライズドビュー - View Delta Join シナリオでのクエリの書き換え](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) を参照してください。
+View Delta Joinシナリオでクエリリライトを有効にするには、Delta Joinで結合するテーブルに対して、ユニークキー制約`unique_constraints`と外部キー制約`foreign_key_constraints`を定義する必要があります。詳細については、[非同期マテリアライズドビュー - View Delta Joinシナリオでのクエリリライト](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#query-delta-join-rewrite)を参照してください。
 
 ```SQL
 PROPERTIES (
@@ -737,23 +767,24 @@ PROPERTIES (
 )
 ```
 
-- `child_column`: テーブルの外部キー。複数の `child_column` を定義できます。
-- `catalog_name`: 結合されるテーブルが存在するカタログの名前。指定されていない場合、デフォルトカタログが使用されます。
-- `database_name`: 結合されるテーブルが存在するデータベースの名前。指定されていない場合、現在のデータベースが使用されます。
-- `parent_table_name`: 結合されるテーブルの名前。
-- `parent_column`: 結合される列。これらは対応するテーブルの主キーまたはユニークキーでなければなりません。
+- `child_column`: テーブルの外部キー。複数の`child_column`を定義できます。
+- `catalog_name`: 結合するテーブルが存在するカタログの名前。このパラメーターが指定されていない場合、デフォルトのカタログが使用されます。
+- `database_name`: 結合するテーブルが存在するデータベースの名前。このパラメーターが指定されていない場合、現在のデータベースが使用されます。
+- `parent_table_name`: 結合するテーブルの名前。
+- `parent_column`: 結合する列。これらは、対応するテーブルの主キーまたはユニークキーである必要があります。
 
 :::caution
-- `unique_constraints` と `foreign_key_constraints` はクエリの書き換えにのみ使用されます。テーブルにデータがロードされるとき、外部キー制約のチェックは保証されません。テーブルにロードされるデータが制約を満たしていることを確認する必要があります。
-- 主キーテーブルの主キーまたはユニークキーテーブルのユニークキーは、デフォルトで対応する `unique_constraints` です。手動で設定する必要はありません。
-- テーブルの `foreign_key_constraints` 内の `child_column` は、別のテーブルの `unique_constraints` 内の `unique_key` に参照されなければなりません。
-- `child_column` と `parent_column` の数は一致している必要があります。
-- `child_column` と対応する `parent_column` のデータタイプは一致している必要があります。
+
+- `unique_constraints`と`foreign_key_constraints`はクエリリライトにのみ使用されます。データがテーブルにロードされる際、外部キー制約のチェックは保証されません。テーブルにロードされるデータが制約を満たしていることを確認する必要があります。
+- 主キーテーブルの主キーまたはユニークキーテーブルのユニークキーは、デフォルトで対応する`unique_constraints`です。手動で設定する必要はありません。
+- テーブルの`foreign_key_constraints`内の`child_column`は、別のテーブルの`unique_constraints`内の`unique_key`を参照する必要があります。
+- `child_column`と`parent_column`の数は一致している必要があります。
+- `child_column`と対応する`parent_column`のデータ型は一致している必要があります。
 :::
 
-### 共有データクラスタ用のクラウドネイティブテーブル
+### 共有データクラスター向けのクラウドネイティブテーブル
 
-StarRocks 共有データクラスタを使用するには、次のプロパティを持つクラウドネイティブテーブルを作成する必要があります：
+StarRocks Shared-data クラスターを使用するには、以下のプロパティを持つクラウドネイティブテーブルを作成する必要があります。
 
 ```SQL
 PROPERTIES (
@@ -764,84 +795,87 @@ PROPERTIES (
 )
 ```
 
-- `storage_volume`: 作成するクラウドネイティブテーブルを保存するために使用されるストレージボリュームの名前。このプロパティが指定されていない場合、デフォルトのストレージボリュームが使用されます。このプロパティは v3.1 以降でサポートされています。
+- `storage_volume`: 作成するクラウドネイティブテーブルを保存するために使用されるストレージボリュームの名前。このプロパティが指定されていない場合、デフォルトのストレージボリュームが使用されます。このプロパティはv3.1以降でサポートされています。
 
 - `datacache.enable`: ローカルディスクキャッシュを有効にするかどうか。デフォルト: `true`。
 
-  - このプロパティが `true` に設定されている場合、ロードされるデータはオブジェクトストレージとローカルディスク (クエリアクセラレーションのキャッシュとして) に同時に書き込まれます。
-  - このプロパティが `false` に設定されている場合、データはオブジェクトストレージにのみロードされます。
+  - このプロパティが`true`に設定されている場合、ロードされるデータはオブジェクトストレージとローカルディスク（クエリ高速化のためのキャッシュとして）に同時に書き込まれます。
+  - このプロパティが`false`に設定されている場合、データはオブジェクトストレージにのみロードされます。
 
   :::note
-  ローカルディスクキャッシュを有効にするには、BE 設定項目 `storage_root_path` にディスクのディレクトリを指定する必要があります。
-  :::
+ローカルディスクキャッシュを有効にするには、BE構成項目`storage_root_path`でディスクのディレクトリを指定する必要があります。
+:::
 
-- `datacache.partition_duration`: ホットデータの有効期間。ローカルディスクキャッシュが有効な場合、すべてのデータがキャッシュにロードされます。キャッシュがいっぱいになると、StarRocks はキャッシュから使用頻度の低いデータを削除します。クエリが削除されたデータをスキャンする必要がある場合、StarRocks はデータが有効期間内にあるかどうかを確認します。データが有効期間内であれば、StarRocks はデータを再度キャッシュにロードします。データが有効期間内でない場合、StarRocks はそれをキャッシュにロードしません。このプロパティは、`YEAR`、`MONTH`、`DAY`、および `HOUR` の単位で指定できる文字列値です。例: `7 DAY`、`12 HOUR`。指定されていない場合、すべてのデータがホットデータとしてキャッシュされます。
-
-  :::note
-  このプロパティは、`datacache.enable` が `true` に設定されている場合にのみ利用可能です。
-  :::
-
-- `file_bundling` (オプション): クラウドネイティブテーブルに対してファイルバンドリング最適化を有効にするかどうか。v4.0 以降でサポートされています。この機能を有効に設定（`true` に設定）すると、システムはロード、コンパクション、またはパブリッシュ操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減します。
+- `datacache.partition_duration`: ホットデータの有効期間。ローカルディスクキャッシュが有効になっている場合、すべてのデータはキャッシュにロードされます。キャッシュがいっぱいになると、StarRocksは最近使用頻度の低いデータをキャッシュから削除します。クエリが削除されたデータをスキャンする必要がある場合、StarRocksはそのデータが有効期間内にあるかどうかを確認します。データが期間内にある場合、StarRocksはそのデータを再度キャッシュにロードします。データが期間内にない場合、StarRocksはそれをキャッシュにロードしません。このプロパティは文字列値であり、`YEAR`、`MONTH`、`DAY`、`HOUR`などの単位で指定できます（例: `7 DAY`、`12 HOUR`）。指定されていない場合、すべてのデータはホットデータとしてキャッシュされます。
 
   :::note
-  - ファイルバンドリングは、StarRocks v4.0 以降を搭載した共有データクラスターでのみ利用可能です。
-  - ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。これは FE 設定の `enable_file_bundling`（デフォルト: true）によって制御されます。
-  - ファイルバンドリングを有効化した後、クラスターを v3.5.2 以降にダウングレードできます。v3.5.2 より前のバージョンにダウングレードしたい場合は、まずファイルバンドリングを有効化したテーブルを削除する必要があります。
-  - クラスターを v4.0 にアップグレードした後、既存のテーブルに対してファイルバンドリングはデフォルトで無効のままです。
-  - 既存のテーブルに対して、[ALTER TABLE](ALTER_TABLE.md) ステートメントを使用して手動でファイルバンドリングを有効にできます。ただし、以下の制限事項があります：
-    - v4.0 以前に作成されたロールアップインデックスを持つテーブルでは、ファイルバンドリングを有効にできません。v4.0 以降でインデックスを削除し再作成した後、そのテーブルでファイルバンドリングを有効にできます。
-    - 特定の期間内に `file_bundling` プロパティを **繰り返し **変更することはできません。そうでない場合、システムはエラーを返します。`file_bundling` プロパティが変更可能かどうかを確認するには、次の SQL ステートメントを実行してください：
+このプロパティは、`datacache.enable`が`true`に設定されている場合にのみ利用可能です。
+:::
+
+- `file_bundling` (オプション): クラウドネイティブテーブルのファイルバンドリング最適化を有効にするかどうか。v4.0以降でサポートされています。この機能が有効になっている場合（`true`に設定）、システムはロード、コンパクション、またはパブリッシュ操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによって発生するAPIコストを削減します。
+
+  :::note
+
+  - ファイルバンドリングは、StarRocks v4.0以降の共有データクラスターでのみ利用可能です。
+  - ファイルバンドリングは、v4.0以降で作成されたテーブルではデフォルトで有効になっており、FE構成`enable_file_bundling`（デフォルト: true）によって制御されます。
+  - ファイルバンドリングが有効になった後、クラスターをv3.5.2以降にのみダウングレードできます。v3.5.2より前のバージョンにダウングレードしたい場合は、まずファイルバンドリングを有効にしたテーブルを削除する必要があります。
+  - クラスターがv4.0にアップグレードされた後も、既存のテーブルではファイルバンドリングはデフォルトで無効のままです。
+  - 既存のテーブルに対してファイルバンドリングを手動で有効にするには、[ALTER TABLE](ALTER_TABLE.md)ステートメントを使用し、以下の制限があります。
+    - v4.0より前のバージョンで作成されたロールアップインデックスを持つテーブルに対しては、ファイルバンドリングを有効にできません。v4.0以降でインデックスを削除して再作成し、その後テーブルに対してファイルバンドリングを有効にすることができます。
+    - `file_bundling`プロパティを**繰り返し**特定の期間内に変更することはできません。そうしないと、システムはエラーを返します。`file_bundling`プロパティが変更可能かどうかは、以下のSQLステートメントを実行して確認できます。
 
       ```SQL
       SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
       ```
 
-      `file_bundling` プロパティを変更できるのは、`0` が返される場合のみです。非ゼロ値は、`METADATA_SWITCH_VERSION` に対応するデータバージョンが GC メカニズムによってまだ回収されていないことを示します。データバージョンが回収されるまで待つ必要があります。
+      `file_bundling`プロパティは、`0`が返された場合にのみ変更が許可されます。ゼロ以外の値は、`METADATA_SWITCH_VERSION`に対応するデータバージョンがGCメカニズムによってまだ回収されていないことを示します。データバージョンが回収されるまで待つ必要があります。
 
-      この間隔を短縮するには、FE の動的設定 `lake_autovacuum_grace_period_minutes` の値を低く設定します。ただし、`file_bundling` プロパティを変更した後は、設定を元の値に戻すことを忘れないでください。
-  :::
+      FE動的構成`lake_autovacuum_grace_period_minutes`の値を低く設定することで、この間隔を短縮できます。ただし、`file_bundling`プロパティを変更した後、構成を元の値にリセットすることを忘れないでください。
+:::
 
-### Fast Schema Evolution
+### 高速スキーマ進化
 
-- `fast_schema_evolution`: テーブルに対して Fast Schema Evolution を有効にするかどうか。 有効な値は `TRUE` または `FALSE` (デフォルト) です。Fast Schema Evolution を有効にすると、スキーマ変更の速度が向上し、列の追加や削除時のリソース使用量が削減されます。現在、このプロパティはテーブル作成時にのみ有効にでき、テーブル作成後に ALTER TABLE を使用して変更することはできません。
-
-  :::note
-  - Fast Schema Evolution は、v3.2.0 以降の共有なしクラスタでサポートされています。
-  - Fast Schema Evolution は、v3.3 以降の共有データクラスタでサポートされており、デフォルトで有効になっています。共有データクラスタでクラウドネイティブテーブルを作成する際にこのプロパティを指定する必要はありません。FE 動的パラメータ `enable_fast_schema_evolution` (デフォルト: true) がこの動作を制御します。
-  :::
-
-- `cloud_native_fast_schema_evolution_v2`: **クラウドネイティブテーブル**に対して Fast Schema Evolution v2 を有効化するかどうか。v4.1 以降でサポートされています。有効な値は `TRUE`（デフォルト）または `FALSE` です。Fast Schema Evolution v2 を有効にすると、スキーマ変更は同期処理になります。ALTER TABLE ステートメントが正常に返されると、新しいスキーマは即時に有効になります。システムは S3 上に存在するタブレットメタデータではなく、FEメタデータのみを変更するため、テーブル内のパーティションやタブレットの数にかかわらず、常にセカンドレベルレイテンシを達成できます。従来の動作では、スキーマ変更は非同期ジョブとして実行され、時間をかけてタブレットのメタデータを更新します。
+- `fast_schema_evolution`: テーブルの高速スキーマ進化を有効にするかどうか。有効な値は`TRUE`または`FALSE`（デフォルト）です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。現在、このプロパティはテーブル作成時にのみ有効にでき、テーブル作成後にALTER TABLEを使用して変更することはできません。
 
   :::note
-  - Fast Schema Evolution v2 は v4.1 以降でサポートされ、共有データクラスタ内の**クラウドネイティブテーブル**でのみ利用可能です。
+
+  - 高速スキーマ進化は、v3.2.0以降の共有なしクラスターでサポートされています。
+  - 高速スキーマ進化は、v3.3以降の共有データクラスターでサポートされており、デフォルトで有効になっています。共有データクラスターでクラウドネイティブテーブルを作成する際に、このプロパティを指定する必要はありません。FE動的パラメータ`enable_fast_schema_evolution`（デフォルト: true）がこの動作を制御します。
+:::
+
+- `cloud_native_fast_schema_evolution_v2`: の高速スキーマ進化v2を有効にするかどうか。**クラウドネイティブテーブル**。v4.1以降でサポートされています。有効な値は`TRUE`（デフォルト）または`FALSE`です。高速スキーマ進化v2が有効になっている場合、スキーマ変更は同期プロセスになります。ALTER TABLEステートメントが正常に返されると、新しいスキーマはすぐに有効になります。システムはS3にあるタブレットメタデータではなくFEメタデータのみを変更するため、テーブル内のパーティションやタブレットの数に関係なく、常に秒レベルのレイテンシを達成できます。従来の動作では、スキーマ変更はタブレットメタデータを時間とともに更新する非同期ジョブとして実行されます。
+
+  :::note
+
+  - 高速スキーマ進化v2はv4.1以降でサポートされており、**クラウドネイティブテーブル**の共有データクラスターでのみ利用可能です。
   - デフォルトの動作:
-    - v4.1 クラスタで新規作成されるテーブルでは、Fast Schema Evolution v2 がデフォルトで有効です。
-    - v4.1 にアップグレードされたクラスタの既存テーブルでは、Fast Schema Evolution v2 はデフォルトで無効です。[ALTER TABLE](ALTER_TABLE.md) でこのプロパティを明示的に `true` に設定することで有効化できます。
+    - v4.1クラスターで作成された新しいテーブルの場合、高速スキーマ進化v2はデフォルトで有効になっています。
+    - v4.1にアップグレードされたクラスターの既存のテーブルの場合、高速スキーマ進化v2はデフォルトで無効になっています。このプロパティを`true`に明示的に設定することで有効にできます。[ALTER TABLE](ALTER_TABLE.md)。
   - ダウングレード要件:
-    - 共有データクラスターを v4.1 から v4.0.5 以降にダウングレードする場合、標準のダウングレード手順に従って直接ダウングレードできます。
-    - 共有データクラスターを v4.1 から v3.x または v4.0.5 より前のパッチバージョンにダウングレードする前に、ALTER TABLE で Fast Schema Evolution v2 を有効にしているテーブルについては、手動で `cloud_native_fast_schema_evolution_v2` を `false` に設定する必要があります。非同期ジョブが FINISHED 状態になるまで待機する必要があります。ジョブの状態は SHOW ALTER で追跡可能です。
-  :::
+    - 共有データクラスターをv4.1からv4.0.5以降にダウングレードするには、標準のダウングレード手順に従って直接ダウングレードできます。
+    - 共有データクラスターをv4.1からv3.xまたはv4.0.5より前のパッチバージョンにダウングレードする前に、ALTER TABLEを介してFast Schema Evolution v2を有効にしたすべてのテーブルに対して、`cloud_native_fast_schema_evolution_v2`を`false`に手動で設定する必要があります。非同期ジョブがFINISHEDになるまで待つ必要があります。ジョブのステータスはSHOW ALTERで追跡できます。
+:::
 
-スキーマ変更ジョブは [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md) で確認できます。
+スキーマ変更ジョブは以下で確認できます。[SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md)。
 
 例:
 
 ```SQL
--- テーブル内の最近のカラム/スキーマ変更ジョブを一覧表示する
+-- テーブル内の最近の列/スキーマ変更ジョブを一覧表示する
 SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
 ```
 
-Fast Schema Evolution v2 が有効化されたクラウドネイティブテーブルでは、スキーマ変更ジョブは通常 FINISHED として表示されます。これは変更が FE メタデータの更新のみで適用されるためです。
+Fast Schema Evolution v2が有効になっているクラウドネイティブテーブルの場合、変更はFEメタデータの更新によってのみ適用されるため、スキーマ変更ジョブは通常FINISHEDとして表示されます。
 
 ### ベースコンパクションの禁止
 
-`base_compaction_forbidden_time_ranges`: テーブルに対してベースコンパクションが禁止される時間範囲。このプロパティが設定されている場合、システムは指定された時間範囲外でのみ適格なタブレットに対してベースコンパクションを実行します。このプロパティは v3.2.13 からサポートされています。
+`base_compaction_forbidden_time_ranges`: テーブルのベースコンパクションが禁止される時間範囲。このプロパティが設定されている場合、システムは指定された時間範囲外でのみ、対象となるタブレットに対してベースコンパクションを実行します。このプロパティはv3.2.13以降でサポートされています。
 
 :::note
-ベースコンパクションが禁止されている期間中にテーブルにロードされるデータの数が 500 を超えないようにしてください。
+ベースコンパクションが禁止されている期間中、テーブルへのデータロード数が500を超えないようにしてください。
 :::
 
-`base_compaction_forbidden_time_ranges` の値は [Quartz cron 構文](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm) に従い、`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>` のフィールドのみをサポートし、`<minute>` は `*` でなければなりません。
+`base_compaction_forbidden_time_ranges`の値は[Quartz cron構文](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)に従い、`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`のフィールドのみをサポートします。ここで`<minute>`は`*`である必要があります。
 
 ```SQL
 crontab_param_value ::= [ "" | crontab ]
@@ -849,58 +883,59 @@ crontab_param_value ::= [ "" | crontab ]
 crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ```
 
-- このプロパティが設定されていないか、`""` (空の文字列) に設定されている場合、ベースコンパクションはいつでも禁止されません。
-- このプロパティが `* * * * *` に設定されている場合、ベースコンパクションは常に禁止されます。
-- その他の値は Quartz cron 構文に従います。
-  - 独立した値はフィールドの単位時間を示します。たとえば、`<hour>` フィールドの `8` は 8:00-8:59 を意味します。
-  - 値の範囲はフィールドの時間範囲を示します。たとえば、`<hour>` フィールドの `8-9` は 8:00-9:59 を意味します。
-  - カンマで区切られた複数の値の範囲は、フィールドの複数の時間範囲を示します。
-  - `<day of the week>` の開始値は `1` で日曜日を示し、`7` は土曜日を示します。
+- このプロパティが設定されていないか、`""`（空の文字列）に設定されている場合、ベースコンパクションはいつでも禁止されません。
+- このプロパティが`* * * * *`に設定されている場合、ベースコンパクションは常に禁止されます。
+- その他の値はQuartz cron構文に従います。
+  - 独立した値はフィールドの単位時間を示します。例えば、`<hour>`フィールドの`8`は8:00-8:59を意味します。
+  - 値の範囲はフィールドの時間範囲を示します。例えば、`<hour>`フィールドの`8-9`は8:00-9:59を意味します。
+  - コンマで区切られた複数の値の範囲は、フィールドの複数の時間範囲を示します。
+  - `<day of the week>`は日曜日の開始値が`1`で、`7`は土曜日を表します。
 
 例:
 
 ```SQL
--- 毎日午前 8 時から午後 9 時までベースコンパクションを禁止します。
+-- 毎日午前8時から午後9時までベースコンパクションを禁止する。
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * *'
 
--- 毎日午前 0 時から午前 5 時まで、および午後 9 時から午後 11 時までベースコンパクションを禁止します。
+-- 毎日午前0時から午前5時までと午後9時から午後11時までベースコンパクションを禁止する。
 'base_compaction_forbidden_time_ranges' = '* 0-4,21-22 * * *'
 
--- 月曜日から金曜日までベースコンパクションを禁止します (つまり、土曜日と日曜日には許可されます)。
+-- 月曜日から金曜日までベースコンパクションを禁止する（つまり、土曜日と日曜日は許可する）。
 'base_compaction_forbidden_time_ranges' = '* * * * 2-6'
 
--- 平日の午前 8 時から午後 9 時までベースコンパクションを禁止します (つまり、月曜日から金曜日)。
+-- 毎週営業日（つまり月曜日から金曜日）の午前8時から午後9時までベースコンパクションを禁止する。
 'base_compaction_forbidden_time_ranges' = '* 8-20 * * 2-6'
 ```
 
-### 共通パーティション式 TTL の指定
+### 共通パーティション式TTLの指定
 
-v3.5.0 以降、StarRocks 内部テーブルは共通パーティション式 TTL をサポートしています。
+v3.5.0以降、StarRocksネイティブテーブルは共通パーティション式TTLをサポートしています。
 
-`partition_retention_condition`: 動的に保持されるパーティションを宣言する式。この式の条件を満たさないパーティションは定期的に削除されます。
+`partition_retention_condition`: 動的に保持されるパーティションを宣言する式。式内の条件を満たさないパーティションは定期的に削除されます。
+
 - 式にはパーティション列と定数のみを含めることができます。非パーティション列はサポートされていません。
-- 共通パーティション式は、リストパーティションとレンジパーティションに対して異なる方法で適用されます：
-  - リストパーティションを持つテーブルの場合、StarRocks は共通パーティション式でフィルタリングされたパーティションを削除することをサポートしています。
-  - レンジパーティションを持つテーブルの場合、StarRocks は FE のパーティションプルーニング機能を使用してパーティションをフィルタリングおよび削除することしかできません。パーティションプルーニングによってサポートされていない述語に対応するパーティションはフィルタリングおよび削除できません。
+- 共通パーティション式は、リストパーティションと範囲パーティションに異なる方法で適用されます。
+  - リストパーティションを持つテーブルの場合、StarRocksは共通パーティション式によってフィルタリングされたパーティションの削除をサポートします。
+  - 範囲パーティションを持つテーブルの場合、StarRocksはFEのパーティションプルーニング機能を使用してのみパーティションをフィルタリングおよび削除できます。パーティションプルーニングでサポートされていない述語に対応するパーティションは、フィルタリングおよび削除できません。
 
 例:
 
 ```SQL
--- 過去 3 か月のデータを保持します。列 `dt` はテーブルのパーティション列です。
+-- 過去3ヶ月間のデータを保持する。列dtはテーブルのパーティション列である。
 "partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"
 ```
 
-この機能を無効にするには、ALTER TABLE ステートメントを使用してこのプロパティを空の文字列として設定します：
+この機能を無効にするには、ALTER TABLEステートメントを使用してこのプロパティを空の文字列として設定します。
 
 ```SQL
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### テーブルレベルの Flat JSON プロパティを設定
+### テーブルレベルでFlat JSONプロパティを設定する
 
-v3.3 から、StarRocks は JSON データクエリの効率を向上させ、JSON の使用複雑さを軽減するため、[Flat JSON](../../../using_starrocks/Flat_json.md) 機能を導入しました。この機能は、特定の B E設定項目とシステム変数によって制御されていました。そのため、グローバルにのみ有効化（または無効化）可能です。
+v3.3で、StarRocksは[Flat JSON](../../../using_starrocks/Flat_json.md)機能を導入し、JSONデータクエリの効率を向上させ、JSONの使用の複雑さを軽減しました。この機能は特定のBE構成項目とシステム変数によって制御されていました。そのため、グローバルにのみ有効化（または無効化）できました。
 
-v4.0 以降、テーブルレベルで Flat JSON 関連のプロパティを設定できます。
+v4.0以降、Flat JSON関連のプロパティをテーブルレベルで設定できます。
 
 ```SQL
 PROPERTIES (
@@ -911,14 +946,14 @@ PROPERTIES (
 )
 ```
 
-- `flat_json.enable` (オプション): Flat JSON 機能を有効にするかどうか。この機能を有効にすると、新たに読み込まれた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。
-- `flat_json.null.factor` (オプション): 列内の NULL 値の割合の閾値。この閾値を超えるNULL値の割合を持つ列は、Flat JSON によって抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `0.3`。
-- `flat_json.sparsity.factor` (オプション): 同じ名前を持つ列の割合の閾値。同じ名前を持つ列の割合がこの値未満の場合、Flat JSON ではその列が抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。デフォルト値: `0.3`。
-- `flat_json.column.max` (オプション): Flat JSON で抽出可能なサブフィールドの最大数。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `100`。
+- `flat_json.enable` (オプション): Flat JSON機能を有効にするかどうか。この機能が有効になると、新しくロードされたJSONデータは自動的にフラット化され、JSONクエリのパフォーマンスが向上します。
+- `flat_json.null.factor` (オプション): 列内のNULL値の割合のしきい値。NULL値の割合がこのしきい値よりも高い場合、その列はFlat JSONによって抽出されません。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `0.3`。
+- `flat_json.sparsity.factor` (オプション): 同名の列の割合のしきい値。同名の列の割合がこの値よりも低い場合、その列はFlat JSONによって抽出されません。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `0.3`。
+- `flat_json.column.max` (オプション): Flat JSONによって抽出できるサブフィールドの最大数。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `100`。
 
 ## 例
 
-### ハッシュバケット法と列指向ストレージを使用した集計テーブル
+### ハッシュバケットとカラム型ストレージを持つ集計テーブル
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -935,7 +970,7 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### ストレージ媒体とクールダウン時間が設定された集計テーブル
+### ストレージメディアとクールダウン時間が設定された集計テーブル
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -955,9 +990,9 @@ PROPERTIES(
 );
 ```
 
-### レンジパーティション、ハッシュバケット法、列ベースストレージ、ストレージ媒体、およびクールダウン時間を持つ重複キーテーブル
+### レンジパーティション、ハッシュバケット、カラムベースストレージ、ストレージメディア、クールダウン時間を持つDuplicate Keyテーブル
 
-LESS THAN
+未満
 
 ```SQL
 CREATE TABLE example_db.table_range
@@ -983,9 +1018,9 @@ PROPERTIES(
 );
 ```
 
-注意:
+注:
 
-このステートメントは 3 つのデータパーティションを作成します：
+このステートメントは3つのデータパーティションを作成します:
 
 ```SQL
 ( {    MIN     },   {"2014-01-01"} )
@@ -995,7 +1030,7 @@ PROPERTIES(
 
 これらの範囲外のデータはロードされません。
 
-固定レンジ
+固定範囲
 
 ```SQL
 CREATE TABLE table_range
@@ -1019,7 +1054,7 @@ PROPERTIES(
 );
 ```
 
-### MySQL 外部テーブル
+### MySQL外部テーブル
 
 ```SQL
 CREATE EXTERNAL TABLE example_db.table_mysql
@@ -1042,7 +1077,7 @@ PROPERTIES
 )
 ```
 
-### HLL 列を持つテーブル
+### HLLカラムを持つテーブル
 
 ```SQL
 CREATE TABLE example_db.example_table
@@ -1058,9 +1093,9 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### BITMAP_UNION 集計タイプを使用するテーブル
+### BITMAP_UNION集計タイプを使用するテーブル
 
-`v1` および `v2` 列の元のデータタイプは TINYINT、SMALLINT、または INT でなければなりません。
+`v1` および `v2` カラムの元のデータ型は、TINYINT、SMALLINT、または INT である必要があります。
 
 ```SQL
 CREATE TABLE example_db.example_table
@@ -1076,7 +1111,7 @@ DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
-### Colocate Join をサポートするテーブル
+### Colocate Joinをサポートするテーブル
 
 ```SQL
 CREATE TABLE `t1` 
@@ -1126,9 +1161,9 @@ PROPERTIES ("storage_type"="column");
 
 ### 動的パーティションテーブル
 
-動的パーティション化機能は FE 設定で有効にする必要があります ("dynamic_partition.enable" = "true")。詳細については、[動的パーティションの設定](#configure-dynamic-partitions) を参照してください。
+動的パーティショニング機能は、FE設定で有効にする必要があります（"dynamic_partition.enable" = "true"）。詳細については、[動的パーティションの設定](#configure-dynamic-partitions)。
 
-この例では、次の 3 日間のパーティションを作成し、3 日前に作成されたパーティションを削除します。たとえば、今日が 2020-01-08 の場合、次の名前のパーティションが作成されます: p20200108、p20200109、p20200110、p20200111。それらの範囲は次のとおりです：
+この例では、今後3日間のパーティションを作成し、3日前に作成されたパーティションを削除します。例えば、今日が2020-01-08の場合、p20200108、p20200109、p20200110、p20200111という名前のパーティションが作成され、その範囲は次のとおりです:
 
 ```plaintext
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
@@ -1166,12 +1201,13 @@ PROPERTIES(
 );
 ```
 
-### 一括で複数のパーティションを作成し、整数列をパーティション列として使用するテーブル
+### バッチで複数のパーティションが作成され、整数カラムがパーティショニングカラムとして使用されるテーブル
 
-次の例では、パーティション列 `datekey` は INT 型です。すべてのパーティションは、単純なパーティションクローズ `START ("1") END ("5") EVERY (1)` のみで作成されます。すべてのパーティションの範囲は `1` から始まり、`5` で終わり、パーティショングラニュラリティは `1` です：
-> **注意**
+以下の例では、パーティショニングカラム `datekey` はINT型です。すべてのパーティションは、1つのシンプルなパーティション句 `START ("1") END ("5") EVERY (1)` のみによって作成されます。すべてのパーティションの範囲は `1` から始まり `5` で終わり、パーティションの粒度は `1` です:
+
+> **注**
 >
-> **START()** および **END()** 内のパーティション列の値は引用符で囲む必要がありますが、**EVERY()** 内のパーティショングラニュラリティは引用符で囲む必要はありません。
+> パーティショニングカラムの値は**START()**と**END()**は引用符で囲む必要がありますが、**EVERY()**のパーティション粒度は引用符で囲む必要はありません。
 
 ```SQL
 CREATE TABLE site_access (
@@ -1189,9 +1225,9 @@ DISTRIBUTED BY HASH(site_id)
 PROPERTIES ("replication_num" = "3");
 ```
 
-### Hive 外部テーブル
+### Hive外部テーブル
 
-Hive 外部テーブルを作成する前に、Hive リソースとデータベースを作成している必要があります。詳細については、[外部テーブル](../../../data_source/External_table.md#deprecated-hive-external-table) を参照してください。
+Hive外部テーブルを作成する前に、Hiveリソースとデータベースを作成しておく必要があります。詳細については、[外部テーブル](../../../data_source/External_table.md#deprecated-hive-external-table)。
 
 ```SQL
 CREATE EXTERNAL TABLE example_db.table_hive
@@ -1209,9 +1245,9 @@ PROPERTIES
 );
 ```
 
-### 特定のソートキーを持つ主キーテーブル
+### 特定のソートキーを持つPrimary Keyテーブル
 
-ユーザーの住所や最終アクティブ時間などの次元からリアルタイムでユーザーの行動を分析する必要があるとします。テーブルを作成する際に、`user_id` 列を主キーとして定義し、`address` 列と `last_active` 列の組み合わせをソートキーとして定義できます。
+ユーザーの住所や最終アクティブ時間などのディメンションからユーザー行動をリアルタイムで分析する必要があるとします。テーブルを作成する際、`user_id` カラムをプライマリキーとして定義し、`address` と `last_active` カラムの組み合わせをソートキーとして定義できます。
 
 ```SQL
 create table users (
@@ -1258,7 +1294,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### Flat JSON プロパティを持つテーブル
+### フラットJSONプロパティを持つテーブル
 
 ```SQL
 CREATE TABLE example_db.example_table
@@ -1279,11 +1315,10 @@ PROPERTIES (
 );
 ```
 
-## 参考資料
+## 参照
 
 - [SHOW CREATE TABLE](SHOW_CREATE_TABLE.md)
-- [SHOW TABLES](SHOW_TABLES.md)
-- [USE](../Database/USE.md)
-- [ALTER TABLE](ALTER_TABLE.md)
-- [DROP TABLE](DROP_TABLE.md)
-```
+- [テーブルを表示](SHOW_TABLES.md)
+- [使用](../Database/USE.md)
+- [テーブルを変更](ALTER_TABLE.md)
+- [テーブルを削除](DROP_TABLE.md)

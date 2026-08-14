@@ -93,6 +93,13 @@ public class StatsConstants {
 
     public static final String STATISTIC_SAMPLE_COLLECT_PARTITIONS = "statistic_sample_collect_partitions";
 
+    // Bounded-cost external-table statistics-scan budgets. Per-statement overrides for the matching
+    // connector_table_analyze_scan_*_cap Config: an explicit property wins over the global Config, an
+    // absent property falls back to the Config default. Each <= 0 disables that dimension.
+    public static final String EXTERNAL_ANALYZE_SCAN_BYTES_CAP = "scan_bytes_cap";
+    public static final String EXTERNAL_ANALYZE_SCAN_FILES_CAP = "scan_files_cap";
+    public static final String EXTERNAL_ANALYZE_SCAN_ROWS_CAP = "scan_rows_cap";
+
     // Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
     public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
@@ -102,6 +109,9 @@ public class StatsConstants {
     // SQL plan manager table
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
     public static final String QUERY_HISTORY_TABLE_NAME = "query_history";
+
+    // Durable per-partition LAST_ACCESS_TIME table
+    public static final String PARTITION_ACCESS_TIME_TABLE_NAME = "partition_access_time";
 
     /**
      * Deprecated stats properties
@@ -131,7 +141,8 @@ public class StatsConstants {
             EXTERNAL_FULL_STATISTICS_TABLE_NAME,
             MULTI_COLUMN_STATISTICS_TABLE_NAME,
             HISTOGRAM_STATISTICS_TABLE_NAME,
-            EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+            EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME,
+            PARTITION_ACCESS_TIME_TABLE_NAME
     );
 
     public enum AnalyzeType {

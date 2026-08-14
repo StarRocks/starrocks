@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks コミュニティ提供のクロスクラスターデータ移行ツールを使用して異なるクラスター間のデータ移行を実施。"
 ---
@@ -208,7 +209,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### FE パラメーター
 
-以下の FE パラメーターは動的設定項目です。変更方法については、[FE 動的パラメーターの設定](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)を参照してください。
+以下の FE パラメーターは動的設定項目です。変更方法については、[FE 動的パラメーターの設定](./configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)を参照してください。
 
 | **パラメーター**                              | **デフォルト** | **単位** | **説明**                                                     |
 | --------------------------------------------- | -------------- | -------- | ------------------------------------------------------------ |
@@ -219,7 +220,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### BE パラメーター
 
-以下の BE パラメーターは動的設定項目です。変更方法については、[BE 動的パラメーターの設定](../administration/management/BE_configuration.md)を参照してください。
+以下の BE パラメーターは動的設定項目です。変更方法については、[BE 動的パラメーターの設定](./configuration/BE_parameters/BE_parameters.md)を参照してください。
 
 | **パラメーター**    | **デフォルト** | **単位** | **説明**                                                     |
 | ------------------- | -------------- | -------- | ------------------------------------------------------------ |

@@ -274,6 +274,12 @@ static void set_all_data_files_shared(TxnLogPB_OpWrite* op_write) {
     for (auto& del_meta : *op_write->mutable_dels_meta()) {
         del_meta.set_shared(true);
     }
+    // Pre-built tombstone sstables are ingested by every child during split cross-publish; mark them
+    // shared too so bulk_erase records them as shared and a child's vacuum/compaction cannot delete a
+    // file the siblings still reference.
+    for (auto& del_sst : *op_write->mutable_del_ssts()) {
+        del_sst.set_shared(true);
+    }
 }
 
 // Marks all data files referenced by an OpCompaction as shared. Used both for the

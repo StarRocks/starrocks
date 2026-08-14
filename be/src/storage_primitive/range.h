@@ -392,7 +392,10 @@ inline SparseRangeIterator<T>::SparseRangeIterator(const SparseRange<T>* r) : _r
 
 template <typename T>
 inline bool SparseRangeIterator<T>::has_more() const {
-    return _index < _range->_ranges.size();
+    // A default-constructed iterator (_range == nullptr) has no ranges; guard the null before
+    // dereferencing. PhysicalSplitMorselQueue can reach has_more() on such an iterator when
+    // _init_segment() early-returns without assigning it (issue #75203).
+    return _range != nullptr && _index < _range->_ranges.size();
 }
 
 template <typename T>
@@ -468,7 +471,7 @@ inline size_t SparseRangeIterator<T>::remaining_rows() const {
         return 0;
     }
     size_t res = 0;
-    auto range = Range<T>(_next_rowid, _range->_ranges[0].end());
+    auto range = Range<T>(_next_rowid, _range->_ranges[_index].end());
     res += range.span_size();
     for (size_t i = _index + 1; i < _range->_ranges.size(); i++) {
         res += _range->_ranges[i].span_size();

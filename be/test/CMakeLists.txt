@@ -1,6 +1,7 @@
 add_subdirectory(testutil)
 
 set(EXEC_FILES
+        ./exec/aggregator_limited_mem_state_test.cpp
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
@@ -8,8 +9,6 @@ set(EXEC_FILES
         ./common/uri_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
-        ./exec/data_sinks/range_router_test.cpp
-        ./exec/plain_text_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
@@ -24,12 +23,14 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/data_sinks/pipeline_sink_builder_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+        ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
@@ -39,6 +40,8 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_full_key_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -48,7 +51,6 @@ set(EXEC_FILES
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
-        ./exec/analytor_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
@@ -57,12 +59,9 @@ set(EXEC_FILES
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/lake_meta_scanner_test.cpp
-        ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/repeat_node_test.cpp
+        ./exec/set_hash_set_test.cpp
         ./exec/sorting_test.cpp
-        ./exec/data_sinks/tablet_sink_index_channel_test.cpp
-        ./exec/data_sinks/tablet_sink_sender_range_test.cpp
-        ./exec/data_sinks/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/olap_scan_keys_test.cpp
@@ -103,6 +102,7 @@ set(EXEC_FILES
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
         ./formats/parquet/metadata_test.cpp
+        ./formats/parquet/meta_helper_test.cpp
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/complex_column_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
@@ -120,6 +120,7 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
+        ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/metrics_action_test.cpp
@@ -130,23 +131,16 @@ set(EXEC_FILES
         ./http/action/proc_profile_e2e_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./exec/data_sinks/arrow_result_writer_test.cpp
-        ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
-        ./runtime/batch_write/batch_write_mgr_test.cpp
-        ./runtime/batch_write/batch_write_util_test.cpp
-        ./runtime/batch_write/isomorphic_batch_write_test.cpp
-        ./runtime/batch_write/txn_state_cache_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
-        ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
-        ./exec/data_sinks/memory_scratch_sink_test.cpp
-        ./exec/data_sinks/mysql_result_writer_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
+        ./storage/seek_tuple_test.cpp
+        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -188,6 +182,7 @@ add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(exec_primitive)
 add_subdirectory(connector_primitive)
+add_subdirectory(data_sink)
 add_subdirectory(exec)
 add_subdirectory(schema_scanner)
 add_subdirectory(connector)
@@ -265,6 +260,7 @@ SET(DW_TEST_FILES
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/vector/vector_index_cache_test.cpp
+    ./storage/index/vector/vector_index_file_reader_test.cpp
     ./storage/index/vector/vector_index_cache_metrics_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
     ./storage/kv_store_test.cpp
@@ -323,7 +319,7 @@ SET(DW_TEST_FILES
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp
-    ./storage/lake/write_combined_txn_log_test.cpp
+    ./storage/lake/combined_txn_log_writer_test.cpp
     ./storage/lake/lake_persistent_index_fileset_test.cpp
     ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
@@ -374,6 +370,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
@@ -390,6 +387,7 @@ SET(DW_TEST_FILES
     ./storage/segment_stream_converter_test.cpp
     ./storage/del_file_stream_converter_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
+    ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
@@ -427,6 +425,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test SchemaScannerBuiltin ${TEST_LINK_LIBS})
+target_link_be_test_cxa_throw_wrap(starrocks_dw_test)
 STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test ${EXPR_FORCE_LOAD_LIBS})
 
 

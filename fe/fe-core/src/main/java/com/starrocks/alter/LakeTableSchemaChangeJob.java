@@ -160,7 +160,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
-    private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -173,6 +174,24 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     // for deserialization
     public LakeTableSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-verifies the watershed and re-sends every AlterReplicaTask.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Start from an empty batch: the WAITING_TXN handler APPENDS to it (double-add hazard),
+        // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
+        // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
+        // queue before this hook runs. watershedTxnId/Gtid stay - they are durable with the
+        // WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
+        schemaChangeBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
     }
 
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
@@ -393,7 +412,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            lightWeight = table.isLightWeightTabletCreation();
+            // Light-weight's on-demand shadow schema reads the table's index/BF set, written back only at job finish.
+            lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange;
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {
@@ -795,6 +815,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 inactiveRelatedMv(modifiedColumns, table);
                 table.onReload();
             });
+        }
+
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
         }
 
         if (span != null) {

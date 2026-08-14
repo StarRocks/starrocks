@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -29,17 +30,12 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.GenericManifestFile;
-import org.apache.iceberg.InternalData;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.CloseableIterable;
-import org.apache.iceberg.io.FileIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +62,8 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
     private static final int DELETE_BATCH_SIZE = 1000;
 
     private static final String PROCEDURE_NAME = "remove_orphan_files";
+
+    private static final String MIN_RETENTION_CONF = "iceberg_remove_orphan_files_min_retention_seconds";
 
     // We only need each content file's path to build the set of reachable file names
     private static final List<String> MANIFEST_ENTRY_PROJECTION = List.of("file_path");
@@ -107,6 +105,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                     map(ConstantOperator::getDatetime).orElseThrow(() ->
                             new StarRocksConnectorException("invalid argument type for %s, expected DATETIME", OLDER_THAN));
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+            validateRetentionInterval(olderThanMillis);
         }
 
         Table table = context.table();
@@ -133,7 +132,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                 validFileNames.add(fileName(snapshot.manifestListLocation()));
             }
 
-            try (CloseableIterable<ManifestFile> manifests = readManifests(snapshot, table.io())) {
+            try (CloseableIterable<ManifestFile> manifests = IcebergUtil.readManifests(snapshot, table.io())) {
                 for (ManifestFile manifest : manifests) {
                     if (!processedManifestFilePaths.add(manifest.path())) {
                         continue;
@@ -168,29 +167,26 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
     }
 
     /**
-     * Reads manifest files for a snapshot. When the snapshot has a manifest list file,
-     * reads from it directly (AVRO) for better efficiency; otherwise falls back to
-     * snapshot.allManifests(). Aligned with Iceberg FileCleanupStrategy.readManifests().
+     * Rejects an `older_than` that leaves too small a retention window.
+     * <p>
+     * The valid file names are collected from the table state loaded above and storage is only listed
+     * afterwards, so every file that appears in between - including the data files of an INSERT that has not
+     * committed yet - looks orphaned. The modification time cutoff is what keeps those files safe, so it has
+     * to stay far enough in the past.
      */
-    private static final Schema MANIFEST_PROJECTION =
-            ManifestFile.schema().select(
-                    "manifest_path",
-                    "manifest_length",
-                    "content",
-                    "partition_spec_id",
-                    "added_snapshot_id",
-                    "deleted_data_files_count");
-
-    private static CloseableIterable<ManifestFile> readManifests(Snapshot snapshot, FileIO fileIO) {
-        if (snapshot.manifestListLocation() != null) {
-            return InternalData.read(
-                            FileFormat.AVRO, fileIO.newInputFile(snapshot.manifestListLocation()))
-                    .setRootType(GenericManifestFile.class)
-                    .project(MANIFEST_PROJECTION)
-                    .reuseContainers()
-                    .build();
-        } else {
-            return CloseableIterable.withNoopClose(snapshot.allManifests(fileIO));
+    private static void validateRetentionInterval(long olderThanMillis) {
+        long minRetentionSeconds = Config.iceberg_remove_orphan_files_min_retention_seconds;
+        if (minRetentionSeconds < 0) {
+            throw new StarRocksConnectorException("invalid FE configuration `%s`: %d, it must not be negative. A " +
+                    "negative minimum retention stretches the window into the future and would admit exactly the %s " +
+                    "values this check exists to reject.", MIN_RETENTION_CONF, minRetentionSeconds, OLDER_THAN);
+        }
+        if (System.currentTimeMillis() - olderThanMillis < Duration.ofSeconds(minRetentionSeconds).toMillis()) {
+            throw new StarRocksConnectorException("invalid argument value for %s, it must be at least the minimum " +
+                    "retention of %d seconds before now. Removing orphan files with a shorter interval may delete " +
+                    "files that concurrent writes have not committed yet and leave the table unreadable. Adjust the " +
+                    "FE configuration `%s` if no concurrent write can be affected.",
+                    OLDER_THAN, minRetentionSeconds, MIN_RETENTION_CONF);
         }
     }
 

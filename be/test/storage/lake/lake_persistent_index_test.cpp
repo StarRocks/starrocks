@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
@@ -30,6 +32,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -324,6 +327,183 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     vector<IndexValue> upsert_old_values(upsert_keys.size());
     ASSERT_TRUE(index->upsert(N, upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data()).ok());
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// The parallel reverse-lookup in erase (for keys not resolved by the active memtable) must produce
+// exactly the same old_values as the serial path. Build an index whose keys all live in sstables,
+// then erase every key both with and without parallel execution and compare bit-for-bit.
+TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
+    auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
+    auto saved_parallel = config::enable_pk_index_parallel_execution;
+    auto saved_min_rows = config::pk_index_parallel_execution_min_rows;
+    // Tiny l0 budget forces every batch to flush, so all keys end up in sstables (active memtable
+    // empty) and the whole delete goes through the reverse lookup. A small min-rows lets the parallel
+    // path split the delete into many concurrent subsets without needing a huge key count.
+    config::l0_max_mem_usage = 10;
+    config::pk_index_parallel_execution_min_rows = 1000;
+    DeferOp restore([&]() {
+        config::l0_max_mem_usage = saved_l0_max_mem_usage;
+        config::enable_pk_index_parallel_execution = saved_parallel;
+        config::pk_index_parallel_execution_min_rows = saved_min_rows;
+    });
+
+    using Key = uint64_t;
+    const int kBatches = 13;
+    const int kPerBatch = 1000;
+    const int kTotal = kBatches * kPerBatch; // 13000 keys; with min-rows=1000 -> ~13 concurrent lookup subsets
+
+    // Insert kTotal distinct keys across kBatches flushed batches, then erase all of them and return
+    // the reverse-looked-up old values.
+    auto build_and_erase = [&](std::vector<IndexValue>* erase_old_values) {
+        std::vector<Key> keys(kTotal);
+        std::vector<Slice> key_slices(kTotal);
+        for (int i = 0; i < kTotal; ++i) {
+            keys[i] = i;
+            key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
+        }
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+        ASSERT_OK(index->init(_tablet_metadata));
+        for (int b = 0; b < kBatches; ++b) {
+            std::vector<Key> bk(kPerBatch);
+            std::vector<Slice> bks(kPerBatch);
+            std::vector<IndexValue> bv(kPerBatch);
+            for (int j = 0; j < kPerBatch; ++j) {
+                int gid = b * kPerBatch + j;
+                bk[j] = gid;
+                bks[j] = Slice((uint8_t*)(&bk[j]), sizeof(Key));
+                bv[j] = IndexValue((uint64_t)(gid + 1)); // distinct, non-null
+            }
+            index->prepare(EditVersion(b + 1, 0), 0);
+            std::vector<IndexValue> old(kPerBatch);
+            ASSERT_OK(index->upsert(kPerBatch, bks.data(), bv.data(), old.data()));
+            ASSERT_OK(index->flush_memtable(true));
+            ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10s: commit every sstable
+        }
+        erase_old_values->assign(kTotal, IndexValue(NullIndexValue));
+        ASSERT_OK(index->erase(kTotal, key_slices.data(), erase_old_values->data(), /*del_rssid=*/12345));
+    };
+
+    std::vector<IndexValue> serial_values;
+    config::enable_pk_index_parallel_execution = false;
+    build_and_erase(&serial_values);
+
+    std::vector<IndexValue> parallel_values;
+    config::enable_pk_index_parallel_execution = true;
+    build_and_erase(&parallel_values);
+
+    ASSERT_EQ(serial_values.size(), parallel_values.size());
+    int found = 0;
+    for (int i = 0; i < kTotal; ++i) {
+        ASSERT_EQ(serial_values[i].get_value(), parallel_values[i].get_value()) << "mismatch at index " << i;
+        // Reverse lookup must have found the value inserted for this key.
+        ASSERT_EQ(serial_values[i].get_value(), (uint64_t)(i + 1)) << "wrong old value at index " << i;
+        if (serial_values[i].get_value() != NullIndexValue) {
+            ++found;
+        }
+    }
+    ASSERT_EQ(found, kTotal); // every key was resolved through the sstable reverse lookup
+}
+
+// bulk_erase (ingest a pre-built tombstone sstable, bypassing the memtable) must be observationally
+// identical to the memtable erase(): same reverse-looked-up old_values (delvec inputs) AND the deleted
+// keys must read back as tombstones while the untouched keys keep their values.
+TEST_F(LakePersistentIndexTest, test_bulk_erase_matches_memtable) {
+    auto saved_l0 = config::l0_max_mem_usage;
+    auto saved_min_rows = config::pk_index_parallel_execution_min_rows;
+    config::l0_max_mem_usage = 10;                       // force flushes -> keys live in sstables
+    config::pk_index_parallel_execution_min_rows = 1000; // small -> exercise the parallel reverse-lookup
+    DeferOp restore([&]() {
+        config::l0_max_mem_usage = saved_l0;
+        config::pk_index_parallel_execution_min_rows = saved_min_rows;
+    });
+
+    using Key = uint64_t;
+    const int N = 20000; // total keys
+    const int M = 16000; // keys to delete (0..M-1); keep M..N-1
+    const uint32_t del_rssid = 100;
+
+    std::vector<Key> keys(N);
+    std::vector<Slice> key_slices(N);
+    for (int i = 0; i < N; ++i) {
+        keys[i] = i;
+        key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+
+    // Build a fresh index with all N keys flushed into sstables (active memtable empty). Value = key+1
+    // so every key has a distinct, non-null rss_rowid the reverse lookup must recover.
+    auto build_index = [&]() {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+        CHECK_OK(index->init(_tablet_metadata));
+        const int batches = 4, per = N / 4;
+        for (int b = 0; b < batches; ++b) {
+            std::vector<Slice> bks(per);
+            std::vector<IndexValue> bv(per);
+            for (int j = 0; j < per; ++j) {
+                int gid = b * per + j;
+                bks[j] = key_slices[gid];
+                bv[j] = IndexValue((uint64_t)(gid + 1));
+            }
+            index->prepare(EditVersion(b + 1, 0), 0);
+            std::vector<IndexValue> old(per);
+            CHECK_OK(index->upsert(per, bks.data(), bv.data(), old.data()));
+            CHECK_OK(index->flush_memtable(true));
+            CHECK_OK(index->sync_flush_all_memtables(10000000));
+        }
+        index->prepare(EditVersion(batches + 1, 0), 0); // version stamped on the delete tombstones
+        return index;
+    };
+
+    // Path A: memtable erase.
+    auto idx_a = build_index();
+    std::vector<IndexValue> ov_a(M, IndexValue(NullIndexValue));
+    ASSERT_OK(idx_a->erase(M, key_slices.data(), ov_a.data(), del_rssid));
+
+    // Path B: bulk_erase -- pre-build a tombstone sstable from the delete keys (exactly as the writer does
+    // at import time), then apply the delete by ingesting it. TableBuilder requires bytewise-ascending
+    // keys, so sort a copy for the sstable; the reverse-lookup takes the original key order (independent).
+    std::vector<Slice> sorted_del(key_slices.begin(), key_slices.begin() + M);
+    std::sort(sorted_del.begin(), sorted_del.end(), [](const Slice& a, const Slice& b) { return a.compare(b) < 0; });
+    const std::string del_sst_name = "test_bulk_erase_tombstone.sst";
+    ASSIGN_OR_ABORT(auto del_sst_wf,
+                    fs::new_writable_file(_tablet_mgr->sst_location(_tablet_metadata->id(), del_sst_name)));
+    uint64_t del_sst_filesize = 0;
+    PersistentIndexSstableRangePB del_sst_range;
+    ASSERT_OK(PersistentIndexSstable::build_tombstone_sstable(sorted_del.data(), M, /*version=*/0, del_sst_wf.get(),
+                                                              &del_sst_filesize, &del_sst_range));
+    ASSERT_OK(del_sst_wf->close());
+    FileMetaPB del_sst_meta;
+    del_sst_meta.set_name(del_sst_name);
+    del_sst_meta.set_size(del_sst_filesize);
+
+    auto idx_b = build_index();
+    std::vector<IndexValue> ov_b(M, IndexValue(NullIndexValue));
+    ASSERT_OK(idx_b->bulk_erase(M, key_slices.data(), ov_b.data(), del_rssid, del_sst_meta, del_sst_range,
+                                /*version=*/5));
+
+    // 1. Reverse-looked-up old values must match bit-for-bit and recover the inserted value (key+1).
+    for (int i = 0; i < M; ++i) {
+        ASSERT_EQ(ov_a[i].get_value(), ov_b[i].get_value()) << "old_value mismatch at " << i;
+        ASSERT_EQ(ov_a[i].get_value(), (uint64_t)(i + 1)) << "old_value wrong at " << i;
+    }
+
+    // 2. Deleted keys must read back as tombstones on both paths.
+    std::vector<IndexValue> get_a(M), get_b(M);
+    ASSERT_OK(idx_a->get(M, key_slices.data(), get_a.data()));
+    ASSERT_OK(idx_b->get(M, key_slices.data(), get_b.data()));
+    for (int i = 0; i < M; ++i) {
+        ASSERT_EQ(NullIndexValue, get_a[i].get_value()) << "memtable path: key " << i << " not deleted";
+        ASSERT_EQ(NullIndexValue, get_b[i].get_value()) << "sst path: key " << i << " not deleted";
+    }
+
+    // 3. Untouched keys (M..N-1) must keep their values on both paths.
+    const int R = N - M;
+    std::vector<IndexValue> keep_a(R), keep_b(R);
+    ASSERT_OK(idx_a->get(R, key_slices.data() + M, keep_a.data()));
+    ASSERT_OK(idx_b->get(R, key_slices.data() + M, keep_b.data()));
+    for (int i = 0; i < R; ++i) {
+        ASSERT_EQ(keep_a[i].get_value(), (uint64_t)(M + i + 1)) << "memtable path: kept key wrong at " << i;
+        ASSERT_EQ(keep_b[i].get_value(), (uint64_t)(M + i + 1)) << "sst path: kept key wrong at " << i;
+    }
 }
 
 TEST_F(LakePersistentIndexTest, test_replace) {
@@ -1077,7 +1257,8 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk
 
 // Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),
 // and an optional del file count.
-static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0) {
+static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0,
+                                    int64_t del_rows_per_file = 0) {
     RowsetMetadataPB rowset;
     rowset.set_id(id);
     int64_t total_rows = 0;
@@ -1089,7 +1270,12 @@ static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg
     }
     rowset.set_num_rows(total_rows);
     for (int i = 0; i < del_file_cnt; ++i) {
-        rowset.add_del_files();
+        auto* del = rowset.add_del_files();
+        // del_rows_per_file < 0 leaves num_rows unset, simulating del files written before the
+        // per-del-file row count existed.
+        if (del_rows_per_file >= 0) {
+            del->set_num_rows(del_rows_per_file);
+        }
     }
     return rowset;
 }
@@ -1161,16 +1347,31 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
         EXPECT_EQ(row_cnt, 100);
     }
 
-    // Case 5: del files are counted in file_cnt but not in row_cnt.
-    // Rowset id=0: 1 segment (100 rows) + 2 del files.
+    // Case 5: del files with num_rows absent (pre-upgrade metadata, has_num_rows()==false) are counted
+    // in file_cnt but contribute 0 to row_cnt (backward-compatible fallback). Passing a negative to the
+    // helper leaves num_rows unset, simulating a del file written before the field existed.
+    // Rowset id=0: 1 segment (100 rows) + 2 del files, num_rows unset.
     {
         metadata.Clear();
         sstable_meta.Clear();
-        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/2);
+        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/2, /*del_rows_per_file=*/-1);
 
         auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
         EXPECT_EQ(file_cnt, 3u); // 1 segment + 2 del files
         EXPECT_EQ(row_cnt, 100);
+    }
+
+    // Case 6: del files with a recorded num_rows contribute their tombstone count to row_cnt, so a
+    // tombstone-heavy workload can cross the rebuild-rows threshold even with few segment rows.
+    // Rowset id=0: 1 segment (100 rows) + 3 del files each recording 40 tombstones.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/3, /*del_rows_per_file=*/40);
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 4u);          // 1 segment + 3 del files
+        EXPECT_EQ(row_cnt, 100 + 3 * 40); // 100 segment rows + 120 tombstone rows
     }
 }
 
@@ -1338,6 +1539,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
         if (sst.filename() == sst_filename) {
             match_count++;
             EXPECT_TRUE(sst.shared()) << "sst_meta.shared=true must be preserved in committed sstable_meta";
+            EXPECT_EQ(1, sst.generation_version()) << "ingest_sst stamps the generation version (the ingest version)";
         }
     }
     EXPECT_EQ(match_count, 1);
@@ -1578,6 +1780,103 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
     ASSERT_EQ(serial.size(), parallel.size());
     for (size_t i = 0; i < serial.size(); ++i) {
         EXPECT_EQ(serial[i], parallel[i]) << "mismatch at key " << keys[i];
+    }
+}
+
+TEST(AssignGenerationVersionsTest, stamps_new_preserves_existing_and_legacy) {
+    PersistentIndexSstableMetaPB prev;
+    {
+        auto* s = prev.add_sstables();
+        s->set_filename("existing_v3.sst");
+        s->set_generation_version(3);
+    }
+    {
+        auto* s = prev.add_sstables();
+        s->set_filename("legacy_zero.sst"); // version unset == 0
+    }
+
+    PersistentIndexSstableMetaPB cur;
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("existing_v3.sst"); // reappears, version dropped by copy
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("legacy_zero.sst"); // legacy, still unset
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("fresh_new.sst"); // brand new this publish
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("ingested.sst");
+        s->set_generation_version(9); // producer already stamped, absent from prev
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("existing_v3.sst");
+        s->set_generation_version(7); // same filename as prev@3 but already non-zero
+    }
+
+    LakePersistentIndex::assign_generation_versions(&cur, prev, /*generation_version=*/100);
+
+    ASSERT_EQ(5, cur.sstables_size());
+    EXPECT_EQ(3, cur.sstables(0).generation_version());   // existing, local 0 -> carried from prev (3)
+    EXPECT_EQ(0, cur.sstables(1).generation_version());   // legacy 0 -> STAYS 0 (present in prev); vacuum retains
+    EXPECT_EQ(100, cur.sstables(2).generation_version()); // new (absent from prev) -> new version
+    EXPECT_EQ(9, cur.sstables(3).generation_version());   // producer-stamped non-zero -> preserved (absent from prev)
+    EXPECT_EQ(7, cur.sstables(4).generation_version());   // non-zero -> NEVER overwritten, even though prev has @3
+}
+
+TEST_F(LakePersistentIndexTest, test_commit_stamps_version) {
+    const int N = 100;
+    const int64_t publish_version = 7;
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    using Key = uint64_t;
+    std::vector<Key> keys(N);
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values;
+    key_slices.reserve(N);
+    values.reserve(N);
+    for (int j = 0; j < N; j++) {
+        keys[j] = j;
+        key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+        values.emplace_back(j * 2);
+    }
+    index->prepare(EditVersion(publish_version, 0), 0);
+    std::vector<IndexValue> old_values(N);
+    ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
+    ASSERT_OK(index->flush_memtable(true));
+    ASSERT_OK(index->sync_flush_all_memtables(10000000));
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto meta = std::make_shared<TabletMetadata>();
+    meta->CopyFrom(*_tablet_metadata);
+    meta->set_version(publish_version);
+    MetaFileBuilder builder(tablet, meta);
+    ASSERT_OK(index->commit(&builder));
+
+    // A freshly-flushed sstable is stamped with the publish version.
+    ASSERT_GE(meta->sstable_meta().sstables_size(), 1);
+    for (const auto& s : meta->sstable_meta().sstables()) {
+        EXPECT_EQ(publish_version, s.generation_version()) << "freshly-flushed sstable must carry its publish version";
+    }
+
+    // Re-commit at a later version WITHOUT new data: existing sstables must keep
+    // their original version (no re-stamp), because they are present in
+    // the previous sstable_meta the builder carries forward.
+    auto meta2 = std::make_shared<TabletMetadata>();
+    meta2->CopyFrom(*meta); // carries the publish_version sstable_meta forward
+    meta2->set_version(publish_version + 10);
+    MetaFileBuilder builder2(tablet, meta2);
+    ASSERT_OK(index->commit(&builder2));
+    ASSERT_GE(meta2->sstable_meta().sstables_size(), 1);
+    for (const auto& s : meta2->sstable_meta().sstables()) {
+        EXPECT_EQ(publish_version, s.generation_version()) << "re-commit must not re-stamp an existing sstable";
     }
 }
 

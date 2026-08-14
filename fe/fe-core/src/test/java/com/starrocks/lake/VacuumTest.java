@@ -59,11 +59,15 @@ import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
@@ -498,7 +502,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -625,7 +629,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -791,5 +795,251 @@ public class VacuumTest {
             long fullVacuumResult = FullVacuumDaemon.computeMinActiveTxnId(db, olapTable);
             Assertions.assertEquals(50L, fullVacuumResult);
         }
+    }
+
+    @Test
+    public void testParallelPartitionsPoolResize() throws Exception {
+        // lake_autovacuum_parallel_partitions is mutable: the executor is resized in place by
+        // adjustExecutorService() (invoked from the ConfigRefreshDaemon listener) rather than rebuilt.
+        int oldParallel = Config.lake_autovacuum_parallel_partitions;
+        try {
+            Config.lake_autovacuum_parallel_partitions = 8;
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+
+            java.lang.reflect.Method getExecutorService =
+                    AutovacuumDaemon.class.getDeclaredMethod("getExecutorService");
+            getExecutorService.setAccessible(true);
+            java.lang.reflect.Method adjustExecutorService =
+                    AutovacuumDaemon.class.getDeclaredMethod("adjustExecutorService");
+            adjustExecutorService.setAccessible(true);
+
+            // Lazy creation: a fixed pool with core == max == config.
+            ThreadPoolExecutor pool = (ThreadPoolExecutor) getExecutorService.invoke(daemon);
+            Assertions.assertEquals(8, pool.getCorePoolSize());
+            Assertions.assertEquals(8, pool.getMaximumPoolSize());
+
+            // Grow.
+            Config.lake_autovacuum_parallel_partitions = 16;
+            adjustExecutorService.invoke(daemon);
+            Assertions.assertEquals(16, pool.getCorePoolSize());
+            Assertions.assertEquals(16, pool.getMaximumPoolSize());
+
+            // Shrink.
+            Config.lake_autovacuum_parallel_partitions = 4;
+            adjustExecutorService.invoke(daemon);
+            Assertions.assertEquals(4, pool.getCorePoolSize());
+            Assertions.assertEquals(4, pool.getMaximumPoolSize());
+
+            // Values above the hard cap are clamped to MAX_PARALLEL_PARTITIONS (256) so in-flight work
+            // never exceeds the pool queue.
+            Config.lake_autovacuum_parallel_partitions = 1000;
+            adjustExecutorService.invoke(daemon);
+            Assertions.assertEquals(256, pool.getCorePoolSize());
+            Assertions.assertEquals(256, pool.getMaximumPoolSize());
+
+            // Non-positive values are ignored so the pool keeps its previous size (256 from the clamp above).
+            Config.lake_autovacuum_parallel_partitions = 0;
+            adjustExecutorService.invoke(daemon);
+            Assertions.assertEquals(256, pool.getCorePoolSize());
+            Assertions.assertEquals(256, pool.getMaximumPoolSize());
+
+            Config.lake_autovacuum_parallel_partitions = -1;
+            adjustExecutorService.invoke(daemon);
+            Assertions.assertEquals(256, pool.getCorePoolSize());
+            Assertions.assertEquals(256, pool.getMaximumPoolSize());
+        } finally {
+            Config.lake_autovacuum_parallel_partitions = oldParallel;
+        }
+    }
+
+    @Test
+    public void testCollectCandidatesSkipsInFlightAndCapturesLastVacuumTime() throws Exception {
+        long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
+        boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
+        try {
+            // Make shouldVacuum() deterministic: no naptime gate and no vacuumed-version short-circuit.
+            Config.lake_autovacuum_partition_naptime_seconds = 0;
+            Config.lake_autovacuum_detect_vaccumed_version = false;
+
+            PhysicalPartition p1 = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+            PhysicalPartition p2 = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
+            Assertions.assertNotNull(p1);
+            Assertions.assertNotNull(p2);
+
+            long now = System.currentTimeMillis();
+            // Both partitions are non-empty and fresh, so shouldVacuum() returns true.
+            p1.setMetadataSwitchVersion(0);
+            p1.setVisibleVersion(10L, now);
+            p1.setLastVacuumTime(2000L);   // vacuumed more recently
+            p2.setMetadataSwitchVersion(0);
+            p2.setVisibleVersion(10L, now);
+            p2.setLastVacuumTime(1000L);   // vacuumed longer ago -> should sort first (LRU)
+
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+            java.lang.reflect.Method collectTableCandidates = AutovacuumDaemon.class.getDeclaredMethod(
+                    "collectTableCandidates", Database.class, OlapTable.class, List.class);
+            collectTableCandidates.setAccessible(true);
+
+            // Fresh candidates: both partitions are collected, and each candidate snapshots the
+            // partition's lastVacuumTime used as the LRU ordering key.
+            List<Object> candidates = new ArrayList<>();
+            collectTableCandidates.invoke(daemon, db, olapTable, candidates);
+            collectTableCandidates.invoke(daemon, db, olapTable2, candidates);
+
+            Object c1 = findCandidate(candidates, p1.getId());
+            Object c2 = findCandidate(candidates, p2.getId());
+            Assertions.assertNotNull(c1, "partition p1 should be collected");
+            Assertions.assertNotNull(c2, "partition p2 should be collected");
+            Assertions.assertEquals(2000L, candidateLastVacuumTime(c1));
+            Assertions.assertEquals(1000L, candidateLastVacuumTime(c2));
+
+            // LRU ordering: the partition vacuumed longest ago (p2) comes first after sorting.
+            candidates.sort(Comparator.comparingLong(candidate -> {
+                try {
+                    return candidateLastVacuumTime(candidate);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }));
+            Assertions.assertEquals(p2.getId(), candidatePartitionId(candidates.get(0)));
+
+            // Partitions already in flight are excluded from the next round's candidates.
+            java.lang.reflect.Field vacuumingField =
+                    AutovacuumDaemon.class.getDeclaredField("vacuumingPartitions");
+            vacuumingField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Set<Long> vacuumingPartitions = (Set<Long>) vacuumingField.get(daemon);
+            vacuumingPartitions.add(p1.getId());
+            try {
+                List<Object> afterInFlight = new ArrayList<>();
+                collectTableCandidates.invoke(daemon, db, olapTable, afterInFlight);
+                Assertions.assertNull(findCandidate(afterInFlight, p1.getId()),
+                        "in-flight partition must be skipped");
+            } finally {
+                vacuumingPartitions.remove(p1.getId());
+            }
+        } finally {
+            Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
+            Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
+        }
+    }
+
+    @Test
+    public void testScheduleVacuumRoundGatesAndRejectionRollback() throws Exception {
+        long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
+        boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
+        int oldParallel = Config.lake_autovacuum_parallel_partitions;
+        try {
+            Config.lake_autovacuum_partition_naptime_seconds = 0;
+            Config.lake_autovacuum_detect_vaccumed_version = false;
+
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+            java.util.Collection<?> pendingCandidates = Deencapsulation.getField(daemon, "pendingCandidates");
+            Set<Long> vacuumingPartitions = Deencapsulation.getField(daemon, "vacuumingPartitions");
+
+            // Non-positive parallelism disables AutoVacuum: the round returns before collecting anything.
+            Config.lake_autovacuum_parallel_partitions = 0;
+            Deencapsulation.invoke(daemon, "scheduleVacuumRound");
+            Assertions.assertTrue(pendingCandidates.isEmpty());
+
+            // All slots already in flight: the round also returns before collecting.
+            Config.lake_autovacuum_parallel_partitions = 2;
+            vacuumingPartitions.add(1L);
+            vacuumingPartitions.add(2L);
+            Deencapsulation.invoke(daemon, "scheduleVacuumRound");
+            Assertions.assertTrue(pendingCandidates.isEmpty());
+            vacuumingPartitions.clear();
+
+            // Free slots and a vacuumable partition, but an injected shut-down pool makes every
+            // execute() throw RejectedExecutionException: the submission must be rolled back so no
+            // partition id is left "in flight" forever.
+            PhysicalPartition p = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+            Assertions.assertNotNull(p);
+            p.setMetadataSwitchVersion(0);
+            p.setVisibleVersion(10L, System.currentTimeMillis());
+            p.setLastVacuumTime(1000L);
+
+            Config.lake_autovacuum_parallel_partitions = 8;
+            ThreadPoolExecutor deadPool = new ThreadPoolExecutor(
+                    1, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+            deadPool.shutdown();
+            Deencapsulation.setField(daemon, "executorService", deadPool);
+            Deencapsulation.invoke(daemon, "scheduleVacuumRound");
+            Assertions.assertTrue(vacuumingPartitions.isEmpty());
+        } finally {
+            Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
+            Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
+            Config.lake_autovacuum_parallel_partitions = oldParallel;
+        }
+    }
+
+    @Test
+    public void testRefillOnlyWhenEmptyAndBackoffOnEmptyCollection() throws Exception {
+        long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
+        boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
+        try {
+            Config.lake_autovacuum_partition_naptime_seconds = 0;
+            Config.lake_autovacuum_detect_vaccumed_version = false;
+
+            PhysicalPartition p = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+            Assertions.assertNotNull(p);
+            p.setMetadataSwitchVersion(0);
+            p.setVisibleVersion(10L, System.currentTimeMillis());
+            p.setLastVacuumTime(1000L);
+
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+            java.util.Collection<?> pendingCandidates = Deencapsulation.getField(daemon, "pendingCandidates");
+
+            // First call fills the queue from a collection.
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
+            int sizeAfterFirst = pendingCandidates.size();
+            Assertions.assertTrue(sizeAfterFirst > 0);
+
+            // A second call is a no-op while the queue is non-empty: no re-collection, size unchanged.
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
+            Assertions.assertEquals(sizeAfterFirst, pendingCandidates.size());
+
+            // Drain the queue and make every table's partitions non-vacuumable (empty partitions):
+            // the next collection comes up empty, arms the back-off, and leaves the queue empty.
+            pendingCandidates.clear();
+            for (OlapTable table : new OlapTable[] {olapTable, olapTable2, olapTable7}) {
+                for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+                    partition.setMetadataSwitchVersion(0);
+                    partition.setVisibleVersion(1L, System.currentTimeMillis());
+                }
+            }
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
+            long backoffUntil = Deencapsulation.getField(daemon, "nextCollectTimeMs");
+            Assertions.assertTrue(backoffUntil > System.currentTimeMillis());
+            Assertions.assertTrue(pendingCandidates.isEmpty());
+
+            // A subsequent call within the back-off window is skipped: the back-off point does not move.
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
+            Assertions.assertEquals(backoffUntil, (long) Deencapsulation.getField(daemon, "nextCollectTimeMs"));
+        } finally {
+            Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
+            Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
+        }
+    }
+
+    private static Object findCandidate(List<Object> candidates, long partitionId) throws Exception {
+        for (Object candidate : candidates) {
+            if (candidatePartitionId(candidate) == partitionId) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static long candidatePartitionId(Object candidate) throws Exception {
+        java.lang.reflect.Field field = candidate.getClass().getDeclaredField("partition");
+        field.setAccessible(true);
+        return ((PhysicalPartition) field.get(candidate)).getId();
+    }
+
+    private static long candidateLastVacuumTime(Object candidate) throws Exception {
+        java.lang.reflect.Field field = candidate.getClass().getDeclaredField("lastVacuumTime");
+        field.setAccessible(true);
+        return (long) field.get(candidate);
     }
 }

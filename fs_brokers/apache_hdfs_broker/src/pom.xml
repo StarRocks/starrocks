@@ -44,16 +44,17 @@ under the License.
         <guava.version>32.0.1-jre</guava.version>
         <zookeeper.version>3.9.5</zookeeper.version>
         <protobuf.version>3.25.5</protobuf.version>
-        <thrift.version>0.23.0</thrift.version>
+        <thrift.version>0.24.0</thrift.version>
         <tomcat.version>9.0.118</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.21.4</jackson.version>
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
-        <io.netty.version>4.1.135.Final</io.netty.version>
+        <io.netty.version>4.1.136.Final</io.netty.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
     <profiles>
@@ -127,6 +128,22 @@ under the License.
                 <version>${bouncycastle.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-reactive</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
             <dependency>
                 <groupId>commons-cli</groupId>
@@ -154,13 +171,6 @@ under the License.
                 <version>1.11.0</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/commons-configuration/commons-configuration -->
-            <dependency>
-                <groupId>commons-configuration</groupId>
-                <artifactId>commons-configuration</artifactId>
-                <version>1.6</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/commons-daemon/commons-daemon -->
             <dependency>
                 <groupId>commons-daemon</groupId>
@@ -175,18 +185,14 @@ under the License.
                 <version>2.14.0</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/commons-lang/commons-lang -->
-            <dependency>
-                <groupId>commons-lang</groupId>
-                <artifactId>commons-lang</artifactId>
-                <version>2.6</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
+            <!-- Keep at or above 3.18.0: it fixes CVE-2025-48924 (ClassUtils.getClass
+                 StackOverflow), and hadoop-common/commons-text/commons-configuration2
+                 need APIs added after 3.3.2 (e.g. lang3.function.FailableSupplier). -->
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
-                <version>3.3.2</version>
+                <version>3.20.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-logging/commons-logging -->

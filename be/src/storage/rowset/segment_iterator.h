@@ -30,6 +30,7 @@ class SeekRange;
 
 class ColumnIterator;
 class ColumnPredicate;
+class DisjunctivePredicates;
 class PredicateTree;
 class Schema;
 class SegmentReadOptions;
@@ -37,12 +38,28 @@ struct LakeIOOptions;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
+// Returns a per-scan iterator backed by |reusable_slot|. Closing the returned
+// iterator does not close |reusable_slot|; the slot owner must close it.
+StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<Segment>& segment,
+                                                         const Schema& iterator_schema, const Schema& output_schema,
+                                                         const SegmentReadOptions& options,
+                                                         ChunkIteratorPtr* reusable_slot);
+StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                                       const SegmentReadOptions& options);
 
-// Resolve a key-space SeekRange to the corresponding rowid range within |segment|.
-// Wraps the lookup machinery of SegmentIterator so callers outside the
-// iterator scan path can convert a TabletRangePB-derived SeekRange into a
-// contiguous [lower, upper) rowid window.
-// Returns std::nullopt when the range is empty on this segment.
+// Build a block-aligned rowid range from key-space SeekRanges. The segment's
+// short-key index must be loaded before calling this when |ranges| is non-empty.
+StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segment,
+                                                                   const std::vector<SeekRange>& ranges);
+
+// Resolve key-space SeekRanges to corresponding rowid ranges within |segment|.
+// This wraps SegmentIterator's lookup machinery so callers outside the scan
+// path can precompute rowid windows and reuse them later.
+// Each result is std::nullopt when the corresponding range is empty on this segment.
+StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+        const LakeIOOptions& lake_io_opts);
+// Convenience wrapper for a single SeekRange.
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,
                                                                           const LakeIOOptions& lake_io_opts);
@@ -79,5 +96,13 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
         std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
         const std::vector<uint8_t>* dict_code_candidates_by_cid = nullptr);
+
+// Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
+// A caller that truncates candidates by rank (ANN top-k, BM25 WAND) must pre-apply deletes here; the read
+// loop otherwise applies them only per-chunk afterwards, letting a deleted row steal a top-k slot so the
+// LIMIT under-returns. Declared here for direct unit testing. An unreadable delete column is an error.
+StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
+        const DisjunctivePredicates& delete_predicates, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid, const roaring::Roaring& candidate);
 
 } // namespace starrocks

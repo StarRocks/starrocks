@@ -14,8 +14,11 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include <climits>
+
 #include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
@@ -38,6 +41,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
@@ -88,6 +92,8 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
         return Status::OK();
     }
 
+    ASSIGN_OR_RETURN(_upt_memory_usage_per_row, _calc_upt_memory_usage_per_row(*params.tablet_schema));
+
     // Build PK schema
     vector<uint32_t> pk_columns;
     pk_columns.reserve(params.tablet_schema->num_key_columns());
@@ -133,6 +139,41 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     return Status::OK();
 }
 
+StatusOr<int64_t> ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row(const TabletSchema& tablet_schema) {
+    // RowsetMetadataPB only exposes compressed file sizes. The segment footer's per-column
+    // total_mem_footprint is accumulated from Column::byte_size() by SegmentWriter, which matches
+    // the total_update_row_size accounting used by the shared-nothing update rowset writer.
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = true};
+    ASSIGN_OR_RETURN(auto segments, _rowset_ptr->segments(lake_io_opts));
+
+    int64_t total_update_row_size = 0;
+    int64_t num_rows_upt = 0;
+    for (const auto& segment : segments) {
+        if (segment == nullptr) {
+            continue;
+        }
+        num_rows_upt += segment->num_rows();
+        // Sum every column that is actually present in the partial-update segment, including PK
+        // columns. This intentionally retains the conservative shared-nothing accounting even when
+        // the source segment is processed one update-column group at a time.
+        for (size_t cid = 0; cid < tablet_schema.num_columns(); ++cid) {
+            const auto* column_reader = segment->column_with_uid(tablet_schema.column(cid).unique_id());
+            if (column_reader == nullptr) {
+                continue;
+            }
+            const uint64_t column_size = column_reader->total_mem_footprint();
+            if (column_size > static_cast<uint64_t>(INT64_MAX - total_update_row_size)) {
+                return Status::Corruption("partial update row memory footprint overflows int64");
+            }
+            total_update_row_size += static_cast<int64_t>(column_size);
+        }
+    }
+
+    int64_t result = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(total_update_row_size, num_rows_upt);
+    TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row", &result);
+    return result;
+}
+
 // this function build delta writer for delta column group's file.(end with `.col`)
 StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepare_delta_column_group_writer(
         const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema) {
@@ -157,8 +198,9 @@ StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepar
     return std::move(segment_writer);
 }
 
-StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(const RowsetUpdateStateParams& params,
-                                                                             const Schema& schema, uint32_t rssid) {
+Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
+        const RowsetUpdateStateParams& params, const Schema& schema, uint32_t rssid,
+        const std::function<Status(StreamChunkContainer)>& update_func) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_read_from_source_us");
     OlapReaderStatistics stats;
     size_t footer_size_hint = 16 * 1024;
@@ -193,9 +235,27 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     seg_options.tablet_schema = params.tablet_schema;
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(params.metadata);
+    seg_options.chunk_size = config::vector_chunk_size;
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
-    auto source_chunk_ptr = ChunkFactory::new_chunk(schema, segment->num_rows());
-    auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, 1024);
+    auto source_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+    auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+    uint32_t start_rowid = 0;
+    // Accumulate the source bytes incrementally. bytes_usage() may walk every value for
+    // object-backed columns, while appending a batch adds exactly that batch's bytes.
+    int64_t source_chunk_bytes = 0;
+    auto emit_container = [&]() {
+        StreamChunkContainer container = {
+                .chunk_ptr = source_chunk_ptr.get(),
+                .start_rowid = start_rowid,
+                .end_rowid = start_rowid + static_cast<uint32_t>(source_chunk_ptr->num_rows())};
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit",
+                                 &container);
+        RETURN_IF_ERROR(update_func(container));
+        start_rowid += static_cast<uint32_t>(source_chunk_ptr->num_rows());
+        source_chunk_ptr->reset();
+        source_chunk_bytes = 0;
+        return Status::OK();
+    };
     while (true) {
         tmp_chunk_ptr->reset();
         auto st = seg_iter->get_next(tmp_chunk_ptr.get());
@@ -204,10 +264,33 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
         } else if (!st.ok()) {
             return st;
         } else {
+            // Check before appending from it: appending reads the source offsets, and reading
+            // offsets that have already wrapped is what throws or silently copies from the wrong
+            // address. Note this accumulator has no byte budget at all -- it is sized at the whole
+            // segment -- so the column limit is the only thing bounding it.
+            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*tmp_chunk_ptr,
+                                                                 "column mode partial update source segment read batch",
+                                                                 params.tablet->id(), _txn_id));
+            const int64_t batch_bytes = static_cast<int64_t>(tmp_chunk_ptr->bytes_usage());
+            const int64_t rows_after = static_cast<int64_t>(source_chunk_ptr->num_rows()) +
+                                       static_cast<int64_t>(tmp_chunk_ptr->num_rows());
+            if (!source_chunk_ptr->is_empty() &&
+                (rows_after >= INT32_MAX || source_chunk_bytes + batch_bytes + rows_after * _upt_memory_usage_per_row >
+                                                    config::partial_update_memory_limit_per_worker)) {
+                RETURN_IF_ERROR(emit_container());
+            }
+            // Keep an oversized iterator batch intact. The capacity check below remains the hard
+            // safety bound, while the memory limit controls accumulation across batches.
             source_chunk_ptr->append(*tmp_chunk_ptr);
+            source_chunk_bytes += batch_bytes;
+            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
+                    *source_chunk_ptr, "column mode partial update source chunk", params.tablet->id(), _txn_id));
         }
     }
-    return source_chunk_ptr;
+    if (!source_chunk_ptr->is_empty()) {
+        RETURN_IF_ERROR(emit_container());
+    }
+    return Status::OK();
 }
 
 static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const ChunkUniquePtr& result_chunk) {
@@ -233,7 +316,8 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // win, matching the existing upsert/row-mode condition-update semantics (see
 // UpdateManager::_process_single_chunk_update_with_condition).
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
-                                                                   const Schema& partial_schema, ChunkPtr* source_chunk,
+                                                                   const Schema& partial_schema,
+                                                                   StreamChunkContainer container,
                                                                    int32_t condition_idx_in_partial_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
@@ -261,21 +345,25 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
             }
         });
         RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[upt_id], upt_chunk));
+        // A whole .upt file lands in one chunk, because the upt rowids below index into it. Check
+        // before append_selective() reads its offsets.
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update upt file chunk",
+                                                             _rowset_ptr->tablet_id(), _txn_id));
         const size_t upt_chunk_size = upt_chunk->memory_usage();
         _tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { _tracker->release(upt_chunk_size); });
         // 2. update source chunk
         std::vector<uint32_t> sorted_source_rowids;
         std::vector<uint32_t> unsorted_upt_rowids;
-        // Sort source rowid -> upt rowid pairs by source rowid.
-        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, nullptr);
+        // Keep only source rowids in this streamed chunk and align them to the chunk's rowid base.
+        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
 
         // When condition update is enabled, compare the condition column value in
         // source chunk vs upt chunk and keep winners (old <= new); equal values let
         // the new row win, matching the upsert path.
         if (condition_idx_in_partial_schema >= 0) {
-            const auto& source_cond = (*source_chunk)->get_column_by_index(condition_idx_in_partial_schema);
+            const auto& source_cond = container.chunk_ptr->get_column_by_index(condition_idx_in_partial_schema);
             const auto& upt_cond = upt_chunk->get_column_by_index(condition_idx_in_partial_schema);
             const size_t original_size = sorted_source_rowids.size();
             std::vector<uint32_t> filtered_source_rowids;
@@ -301,7 +389,13 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
-        RETURN_IF_EXCEPTION((*source_chunk)->update_rows(*tmp_chunk, sorted_source_rowids.data()));
+        RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
+        // The merge writes values wider than the ones it replaces, so the result can be over the
+        // limit even though both inputs were under it, and the next .upt file in this loop reads
+        // these offsets again.
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*container.chunk_ptr,
+                                                             "column mode partial update merged source chunk",
+                                                             _rowset_ptr->tablet_id(), _txn_id));
     }
     return Status::OK();
 }
@@ -475,30 +569,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                          upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
                          &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex,
                          &shared_status]() {
-                // 3.3 read from source segment
-                auto source_chunk_or = _read_from_source_segment(params, partial_schema, rssid);
-                if (!source_chunk_or.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(source_chunk_or.status());
-                    return;
-                }
-                auto source_chunk_ptr = std::move(source_chunk_or.value());
-                const size_t source_chunk_size = source_chunk_ptr->memory_usage();
-                _tracker->consume(source_chunk_size);
-                DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
-
-                // 3.4 read from update segment and apply updates
-                auto st = _update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, &source_chunk_ptr,
-                                                      condition_idx_in_partial_schema);
-                if (!st.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(st);
-                    return;
-                }
-
-                padding_char_columns(partial_schema, partial_tschema, source_chunk_ptr.get());
-
-                // 3.5 write delta column group (.col file with UUID name, no collision)
+                // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
                 auto writer_or = _prepare_delta_column_group_writer(params, partial_tschema);
                 if (!writer_or.ok()) {
                     std::lock_guard<std::mutex> l(result_mutex);
@@ -506,14 +577,34 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     return;
                 }
                 auto delta_column_group_writer = std::move(writer_or.value());
+                auto st = _read_from_source_segment_and_update(
+                        params, partial_schema, rssid, [&](StreamChunkContainer container) {
+                            const size_t source_chunk_size = container.chunk_ptr->memory_usage();
+                            _tracker->consume(source_chunk_size);
+                            DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
+
+                            // 3.4 read from update segments and apply rows in this source range.
+                            RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
+                                                                        condition_idx_in_partial_schema));
+                            padding_char_columns(partial_schema, partial_tschema, container.chunk_ptr);
+                            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
+                                    *container.chunk_ptr, "column mode partial update padded source chunk",
+                                    params.tablet->id(), _txn_id));
+
+                            // 3.5 append this bounded source range to the same DCG file.
+                            RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*container.chunk_ptr));
+                            return Status::OK();
+                        });
+                if (!st.ok()) {
+                    std::lock_guard<std::mutex> l(result_mutex);
+                    shared_status.update(st);
+                    return;
+                }
 
                 uint64_t segment_file_size = 0;
                 uint64_t index_size = 0;
                 uint64_t footer_position = 0;
-                st = delta_column_group_writer->append_chunk(*source_chunk_ptr);
-                if (st.ok()) {
-                    st = delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position);
-                }
+                st = delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position);
 
                 // 3.6 collect results under lock
                 std::lock_guard<std::mutex> l(result_mutex);

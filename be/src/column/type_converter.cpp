@@ -61,6 +61,17 @@ Status TypeConverter::convert_column(TypeInfo* src_type, const Column& src, Type
         Datum old_datum = src.get(i);
         Datum new_datum;
         RETURN_IF_ERROR(convert_datum(src_type, old_datum, dst_type, &new_datum, allocator));
+        // convert_datum() produces a null Datum for a value that cannot be represented in the
+        // target type (e.g. an unparseable or out-of-range string->number conversion). Appending
+        // a null Datum to a non-nullable column would read the wrong std::variant alternative and
+        // throw std::bad_variant_access, which the alter_tablet threadpool catches and retries
+        // forever (schema change stuck in RUNNING). Fail the conversion with a clear error instead.
+        if (new_datum.is_null() && !dst->is_nullable()) {
+            return Status::InternalError(strings::Substitute(
+                    "schema change failed: value at row $0 cannot be converted to the target type "
+                    "(unparseable or out of range) and would become NULL, but the target column is NOT NULL",
+                    i));
+        }
         dst->append_datum(new_datum);
     }
     return Status::OK();

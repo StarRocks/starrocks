@@ -233,11 +233,35 @@ description: "Alphabetical s"
 - 类型：瞬时
 - 描述：分配给每个内存池的资源组数量。
 
+## `starrocks_be_pipe_connector_scan_expected_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：外表 Scan 执行器当前应运行的工作线程数，为所有资源组之和。该值随配置变更和资源组调整立即生效，与 `starrocks_be_pipe_connector_scan_worker_threads` 对比即可判断执行器是否满编。
+
+## `starrocks_be_pipe_connector_scan_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：外表 Scan 执行器中实际存活的工作线程数，为所有资源组之和。该值低于 `starrocks_be_pipe_connector_scan_expected_worker_threads` 说明工作线程已丢失且未被补充，消费 Scan 任务的能力低于配置值；高于该值属正常的短暂现象，因为执行器缩容后工作线程要等下一次被唤醒才会退出。
+
 ## `starrocks_be_pipe_prepare_pool_queue_len`
 
 - 单位：计数
 - 类型：瞬时
 - 描述：管道准备线程池任务队列长度的瞬时值。
+
+## `starrocks_be_pipe_scan_expected_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：内表 Scan 执行器当前应运行的工作线程数，为所有资源组之和。该值随配置变更和资源组调整立即生效，与 `starrocks_be_pipe_scan_worker_threads` 对比即可判断执行器是否满编。
+
+## `starrocks_be_pipe_scan_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：内表 Scan 执行器中实际存活的工作线程数，为所有资源组之和。该值低于 `starrocks_be_pipe_scan_expected_worker_threads` 说明工作线程已丢失且未被补充，消费 Scan 任务的能力低于配置值；高于该值属正常的短暂现象，因为执行器缩容后工作线程要等下一次被唤醒才会退出。
 
 ## `starrocks_be_priority_exec_state_report_active_threads`
 
@@ -310,6 +334,23 @@ description: "Alphabetical s"
 - 类型：瞬时值
 - 描述：仅存算分离模式。当前分配给该 BE 的 StarOSWorker 的 shard 数量（即 worker 本地 shard 表的大小）。该值在 `StarOSWorker::add_shard` 与 `StarOSWorker::remove_shard` 内同步写入（mutation 时推送），不是在指标采集时重新计算；因此采集到的值反映的是最近一次 shard 表的变更结果。BE 关闭时该 gauge 不会被清零，会保留到下一次发生 mutation 为止。可用于观测各 BE 之间的 shard 分布均衡情况，并发现与 FE 端调度结果的偏差。
 
+## `starrocks_fe_alter_duration_ms`
+
+- 单位：毫秒
+- 类型：摘要
+- 标签：`execution_mode`（`fse`、`legacy_fse` 或 `rewrite`）、`is_leader`
+- 描述：应用一次 ALTER TABLE 变更的耗时（毫秒），按语句统计。仅由 Leader FE 上报（`is_leader="true"`）。包含 0.75、0.95、0.98、0.99、0.999 分位数及 `_sum`、`_count`。`execution_mode` 标签表示变更的应用方式：
+  - `fse`：当前的 Fast Schema Evolution（FSE），在语句执行期间立即完成。
+  - `legacy_fse`：旧版 FSE 路径，在后台执行，通常慢得多。仅出现在存算分离集群且表未开启 `cloud_native_fast_schema_evolution_v2` 时（默认开启，此时走 `fse`）。
+  - `rewrite`：该变更需要物理重写表数据（例如修改列类型），同样在后台执行。
+
+## `starrocks_fe_alter_operation_total`
+
+- 单位：计数
+- 类型：累积
+- 标签：`type`（`add_column`、`drop_column` 或 `modify_column`）、`is_leader`
+- 描述：ALTER TABLE 列操作的次数，按类型统计。一条语句可以包含多个操作——例如 `ADD COLUMN a, DROP COLUMN b`——每个操作按其类型分别计数。重命名、调整列顺序以及仅修改注释不计入。仅由 Leader FE 上报（`is_leader="true"`）。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 单位：字节
@@ -368,7 +409,7 @@ description: "Alphabetical s"
 
 所有事务指标共享以下标签：
 
-- `type`：按加载作业源类型（例如，`all`、`stream_load`、`routine_load`）对事务进行分类。这允许监控整体事务性能和特定加载类型的性能。报告组可以通过FE参数配置[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`：按加载作业源类型（例如，`all`、`stream_load`、`routine_load`）对事务进行分类。这允许监控整体事务性能和特定加载类型的性能。报告组可以通过FE参数配置[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`：指示报告的FE节点是否为Leader。只有Leader FE (`is_leader="true"`) 报告实际指标值。Follower将具有`is_leader="false"`并报告无数据。
 
 ## `starrocks_fe_query_resource_group`
@@ -485,6 +526,55 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 描述：被拦截的黑名单 SQL 的次数。
+
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
+
+- 单位：计数
+- 类型：累计
+- 标签：无
+- 描述：有作用域的同步统计信息等待因单查询统计信息等待预算耗尽而无法继续，或因等待达到剩余预算超时时间而结束的总次数。没有单查询预算作用域时执行的单次调用等待不计入该指标。
+
+## `starrocks_fe_statistics_cache_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 标签：`cache` — 统计信息缓存名称：`table_stats`、`column_stats`、`partition_stats`、`connector_table_stats`、`histogram_stats`、`connector_histogram_stats` 或 `multi_column_stats`。
+- 描述：对应统计信息缓存（基于 Caffeine）中当前大致的条目数。每个缓存的最大条目数由 FE 配置项 `statistic_cache_columns` 控制。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存中被淘汰（因容量或过期）的条目累计数量。若该值相对缓存大小持续增长，说明可以适当调大 `statistic_cache_columns`。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存命中的累计次数。结合 `starrocks_fe_statistics_cache_miss_count` 可计算缓存命中率。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存中因 Caffeine 加载器异常完成而失败的加载累计次数。缺失的统计信息行会以空结果缓存，并计为加载成功，而不是加载失败。该值非零且持续增长通常意味着读取统计信息表时出现错误。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存加载成功的累计次数。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存未命中并触发加载的累计次数。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
@@ -676,4 +766,3 @@ description: "Alphabetical s"
 - 描述: Stream Load请求的总数量。
 
 ##### 分割
-

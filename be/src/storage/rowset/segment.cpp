@@ -57,6 +57,7 @@
 #include "runtime/runtime_env.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -283,6 +284,10 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
+    _has_full_sort_key_index_page = footer.has_full_sort_key_index_page();
+    if (_has_full_sort_key_index_page) {
+        _full_sort_key_index_page = PagePointer(footer.full_sort_key_index_page());
+    }
     _skip_vector_index =
             footer.has_vector_index_storage_type() && footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
     return Status::OK();
@@ -338,9 +343,7 @@ struct SegmentZoneMapPruner {
     const SegmentReadOptions& read_options;
 };
 
-StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
-    DCHECK(read_options.stats != nullptr);
-
+Status Segment::_prune_by_segment_zone_map(const SegmentReadOptions& read_options) {
     const auto pruned = config::enable_index_segment_level_zonemap_filter &&
                         read_options.pred_tree_for_zone_map.visit(SegmentZoneMapPruner{this, read_options});
     if (pruned) {
@@ -349,7 +352,13 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         }
         return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
     }
+    return Status::OK();
+}
 
+StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
+    DCHECK(read_options.stats != nullptr);
+
+    RETURN_IF_ERROR(_prune_by_segment_zone_map(read_options));
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
@@ -358,6 +367,17 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
         return Status::InvalidArgument("stats is null pointer");
     }
     return _new_iterator(schema, read_options);
+}
+
+StatusOr<ChunkIteratorPtr> Segment::new_reusable_iterator(const Schema& iterator_schema, const Schema& output_schema,
+                                                          const SegmentReadOptions& read_options,
+                                                          ChunkIteratorPtr* reusable_slot) {
+    if (read_options.stats == nullptr) {
+        return Status::InvalidArgument("stats is null pointer");
+    }
+    RETURN_IF_ERROR(_prune_by_segment_zone_map(read_options));
+    return new_reusable_segment_iterator(shared_from_this(), iterator_schema, output_schema, read_options,
+                                         reusable_slot);
 }
 
 Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
@@ -426,10 +446,122 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
 void Segment::_reset() {
     _sk_index_handle.reset();
     _sk_index_decoder.reset();
+    _full_sk_index_handle.reset();
+    _full_sk_index_decoder.reset();
 }
 
 bool Segment::has_loaded_index() const {
     return invoked(_load_index_once);
+}
+
+bool Segment::use_full_sort_key_index() {
+    return config::enable_full_sort_key_index_read && ensure_full_sort_key_index_usable();
+}
+
+bool Segment::ensure_full_sort_key_index_usable() {
+    if (invoked(_load_full_sk_index_once)) {
+        return _full_sort_key_index_usable.load(std::memory_order_acquire) == FullSortKeyIndexUsability::USABLE;
+    }
+    invoke_once(_load_full_sk_index_once, [&] {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+        Status st = _has_full_sort_key_index_page ? _load_full_sort_key_index()
+                                                  : Status::NotFound("segment has no full sort key index page");
+        if (st.ok()) {
+            _full_sort_key_index_usable.store(FullSortKeyIndexUsability::USABLE, std::memory_order_release);
+        } else {
+            // Permanently unusable: retain no allocation and fall back to the legacy short key page.
+            _full_sk_index_handle.reset();
+            _full_sk_index_decoder.reset();
+            _full_sort_key_index_usable.store(FullSortKeyIndexUsability::UNUSABLE, std::memory_order_release);
+            if (_has_full_sort_key_index_page) {
+                LOG(WARNING) << "full sort key index page unusable for segment " << _segment_file_info.path
+                             << ", falling back to legacy short key index: " << st;
+            }
+        }
+    });
+    return _full_sort_key_index_usable.load(std::memory_order_acquire) == FullSortKeyIndexUsability::USABLE;
+}
+
+Status Segment::_load_full_sort_key_index() {
+    DCHECK(_has_full_sort_key_index_page);
+
+    // The geometry validation below compares against the legacy short key page, so make sure it is
+    // loaded first. load_index() is idempotent; a query reaching here has typically loaded it
+    // already for the legacy seek path.
+    RETURN_IF_ERROR(load_index());
+    DCHECK(_sk_index_decoder != nullptr);
+
+    // This lazy, once-per-segment load has no caller LakeIOOptions to thread through, so do not fill
+    // the local data cache with this one-time index-page read: the page is retained in-memory by the
+    // decoder, and filling the disk cache here would evict useful data for the common
+    // fill_data_cache=false path (the legacy short key index honors that flag via _load_index).
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = true};
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
+    }
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
+
+    PageReadOptions opts;
+    opts.use_page_cache = false;
+    opts.read_file = read_file.get();
+    opts.page_pointer = _full_sort_key_index_page;
+    opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
+    OlapReaderStatistics tmp_stats;
+    opts.stats = &tmp_stats;
+
+    PageHandle handle;
+    Slice body;
+    PageFooterPB footer;
+    RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
+    if (footer.type() != SORT_KEY_PAGE || !footer.has_sort_key_page_footer()) {
+        return Status::Corruption(strings::Substitute("Bad full sort key index page in $0: unexpected page footer",
+                                                      _segment_file_info.path));
+    }
+
+    auto decoder = std::make_unique<ShortKeyIndexDecoder>();
+    RETURN_IF_ERROR(decoder->parse(body, footer.sort_key_page_footer()));
+
+    // Validate. Any failure keeps the segment on the always-valid legacy short key page.
+    // 1) block geometry (num_items / num_rows_per_block / num_segment_rows) must equal the legacy page,
+    // 2) sort-key arity must equal the segment's resolved sort-key column count,
+    // 3) entries must be byte-wise non-decreasing (order-preserving encoding), so the binary search
+    //    maps ordered boundaries to monotone rowids (no overlaps/duplicates/out-of-range rows).
+    // The page being a SORT_KEY_PAGE (checked above) already guarantees it is full-sort-key encoded.
+    if (decoder->num_items() != _sk_index_decoder->num_items() ||
+        decoder->num_rows_per_block() != _sk_index_decoder->num_rows_per_block() ||
+        decoder->num_segment_rows() != _sk_index_decoder->num_segment_rows()) {
+        return Status::Corruption("full sort key index page geometry does not match the legacy short key page");
+    }
+    if (decoder->num_sort_key_columns() != _tablet_schema->sort_key_idxes().size()) {
+        return Status::Corruption("full sort key index page sort-key arity does not match the schema");
+    }
+    // 5) the resolved sort-key schema must still be order-preserving-encodable. This mirrors the
+    //    writer gate (segment_writer.cpp): the page bytes were produced by full_sort_key_encode over
+    //    the sort-key codecs, and the seek/split paths re-encode search keys the same way. If a schema
+    //    change evolved a sort-key column to a type with no key coder (e.g. FLOAT/DOUBLE/JSON) at the
+    //    same arity, encoding would dereference a null coder and comparing incompatible byte layouts
+    //    would prune the wrong rows; fall back to the always-valid legacy short key page instead.
+    if (!is_full_sort_key_encodable(*_tablet_schema->schema(), _tablet_schema->sort_key_idxes())) {
+        return Status::Corruption("full sort key index page sort-key schema is not order-preserving-encodable");
+    }
+    for (uint32_t i = 1; i < decoder->num_items(); i++) {
+        if (decoder->key(i).compare(decoder->key(i - 1)) < 0) {
+            return Status::Corruption("full sort key index page entries are not non-decreasing");
+        }
+    }
+
+    // Publish and charge the incremental memory once. The destructor releases the combined short key
+    // index memory (legacy + full), so consume exactly the full page's contribution here.
+    _full_sk_index_handle = std::move(handle);
+    _full_sk_index_decoder = std::move(decoder);
+    int64_t full_index_mem = _full_sk_index_handle.mem_usage() + _full_sk_index_decoder->mem_usage();
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), full_index_mem);
+    update_cache_size();
+    return Status::OK();
 }
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {

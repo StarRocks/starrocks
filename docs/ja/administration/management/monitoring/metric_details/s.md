@@ -207,11 +207,35 @@ description: "Alphabetical s"
 - タイプ: 瞬間値
 - 説明: 各メモリプールに割り当てられたリソースグループの数。
 
+## `starrocks_be_pipe_connector_scan_expected_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 外部テーブル用 Scan エグゼキューターが現在実行すべきワーカースレッド数で、すべてのリソースグループの合計です。設定変更やリソースグループの変更が即座に反映されるため、`starrocks_be_pipe_connector_scan_worker_threads` と比較することで定員を満たしているかを判断できます。
+
+## `starrocks_be_pipe_connector_scan_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 外部テーブル用 Scan エグゼキューターで実際に生存しているワーカースレッド数で、すべてのリソースグループの合計です。`starrocks_be_pipe_connector_scan_expected_worker_threads` を下回る場合、ワーカーが失われたまま補充されておらず、設定値より少ない Scan タスクしか消費できていないことを意味します。上回るのは正常かつ一時的で、縮小されたエグゼキューターのワーカーは次に起こされたときに初めて終了するためです。
+
 ## `starrocks_be_pipe_prepare_pool_queue_len`
 
 - 単位: カウント
 - タイプ: 瞬間値
 - 説明: パイプライン準備スレッドプールタスクキューの長さの瞬間値。
+
+## `starrocks_be_pipe_scan_expected_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 内部テーブル用 Scan エグゼキューターが現在実行すべきワーカースレッド数で、すべてのリソースグループの合計です。設定変更やリソースグループの変更が即座に反映されるため、`starrocks_be_pipe_scan_worker_threads` と比較することで定員を満たしているかを判断できます。
+
+## `starrocks_be_pipe_scan_worker_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 内部テーブル用 Scan エグゼキューターで実際に生存しているワーカースレッド数で、すべてのリソースグループの合計です。`starrocks_be_pipe_scan_expected_worker_threads` を下回る場合、ワーカーが失われたまま補充されておらず、設定値より少ない Scan タスクしか消費できていないことを意味します。上回るのは正常かつ一時的で、縮小されたエグゼキューターのワーカーは次に起こされたときに初めて終了するためです。
 
 ## `starrocks_be_priority_exec_state_report_active_threads`
 
@@ -284,6 +308,23 @@ description: "Alphabetical s"
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。現在この BE の StarOSWorker に割り当てられている shard 数（worker のローカル shard テーブルのサイズ）。値は `StarOSWorker::add_shard` および `StarOSWorker::remove_shard` の内部で同期的に書き込まれ（mutation 時に push される方式）、メトリクス取得時に再計算されるわけではありません。したがって取得される値は、直近に発生した shard テーブルの変更結果を反映します。BE シャットダウン時に gauge はリセットされず、次回の mutation が発生するまで前回の値を保持します。BE 間の shard 分布バランスを観測したり、FE 側の配置結果との乖離を検出するために利用できます。
 
+## `starrocks_fe_alter_duration_ms`
+
+- 単位: ミリ秒
+- タイプ: サマリー
+- ラベル: `execution_mode` (`fse`、`legacy_fse`、または `rewrite`)、`is_leader`
+- 説明: ALTER TABLE の変更を適用するのにかかった時間 (ミリ秒)。ステートメント単位。報告するのは Leader FE (`is_leader="true"`) のみです。0.75、0.95、0.98、0.99、0.999 の分位値と `_sum`、`_count` を含みます。`execution_mode` ラベルは変更の適用方法を示します。
+  - `fse`: 現行の Fast Schema Evolution (FSE) で、ステートメント実行中に即座に完了します。
+  - `legacy_fse`: 旧来の FSE パスで、バックグラウンドで実行され通常はるかに遅くなります。`cloud_native_fast_schema_evolution_v2` が無効な共有データ (shared-data) クラスターでのみ発生します (デフォルトは有効で、その場合は `fse`)。
+  - `rewrite`: 変更のためにテーブルデータを物理的に書き換える必要があった場合 (例: 列の型変更) を示し、これもバックグラウンドで実行されます。
+
+## `starrocks_fe_alter_operation_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type` (`add_column`、`drop_column`、または `modify_column`)、`is_leader`
+- 説明: ALTER TABLE の列操作の回数を、タイプ別に集計します。1 つのステートメントに複数の操作を含めることができ (例: `ADD COLUMN a, DROP COLUMN b`)、それぞれがタイプ別に個別にカウントされます。列名の変更、列順の変更、コメントのみの変更はカウントされません。報告するのは Leader FE (`is_leader="true"`) のみです。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -342,7 +383,7 @@ description: "Alphabetical s"
 
 すべてのトランザクションメトリクスは以下のラベルを共有します。
 
-- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups)。
+- `type`: トランザクションをロードジョブのソースタイプ（例: `all`、`stream_load`、`routine_load`）で分類します。これにより、トランザクション全体のパフォーマンスと特定のロードタイプのパフォーマンスの両方を監視できます。報告されるグループはFEパラメータで設定できます。[`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups)。
 - `is_leader`: 報告元のFEノードがリーダーであるかどうかを示します。リーダーFE (`is_leader="true"`) のみが実際のメトリクス値を報告します。フォロワーは `is_leader="false"` となり、データは報告しません。
 
 ## `starrocks_fe_query_resource_group`
@@ -459,6 +500,55 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - 説明: ブラックリストに登録されたSQLがインターセプトされた回数。
+
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: なし
+- 説明: スコープ付きの同期統計情報待機が、クエリ単位の統計情報待機予算を使い切ったため継続できなかった回数、または残り予算のタイムアウトに達した回数の合計。クエリ単位の予算スコープなしで実行される単発の待機は、このメトリックには含まれません。
+
+## `starrocks_fe_statistics_cache_entries`
+
+- 単位: カウント
+- タイプ: ゲージ
+- ラベル: `cache` — 統計情報キャッシュの名前: `table_stats`、`column_stats`、`partition_stats`、`connector_table_stats`、`histogram_stats`、`connector_histogram_stats`、または `multi_column_stats`。
+- 説明: 対象の統計情報キャッシュ（Caffeine ベース）に現在保持されているおおよそのエントリ数。キャッシュごとの最大値は FE 設定 `statistic_cache_columns` で制御されます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 対象の統計情報キャッシュから（サイズまたは有効期限により）退避されたエントリの累積数。キャッシュサイズに対してこの値が継続的に増加する場合は、`statistic_cache_columns` の引き上げを検討してください。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 統計情報キャッシュから提供されたルックアップの累積数。`starrocks_fe_statistics_cache_miss_count` と合わせてキャッシュヒット率を算出できます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: Caffeine ローダーが例外で完了したため失敗した統計情報キャッシュロードの累積数。欠落している統計情報行は空の結果としてキャッシュされ、ロード失敗ではなくロード成功としてカウントされます。値が 0 以外で増加し続ける場合、統計情報テーブルの読み取りでエラーが発生していることを示します。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 成功した統計情報キャッシュのロードの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: キャッシュに見つからずロードをトリガーした統計情報キャッシュのルックアップの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
@@ -650,4 +740,3 @@ description: "Alphabetical s"
 - 説明: Stream Loadリクエストの合計数。
 
 ##### SPLIT
-

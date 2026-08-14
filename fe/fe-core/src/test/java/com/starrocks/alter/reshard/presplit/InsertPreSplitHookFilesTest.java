@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -256,9 +257,10 @@ public class InsertPreSplitHookFilesTest {
             // flow would reach submitAsynchronously if the MV gate were removed.
             targets.when(() -> PreSplitTargets.findEligibleTarget(database, mv))
                     .thenReturn(new PreSplitTargets.EligibleTarget(database, mv, /*partitionId*/ 11L,
-                            /*oldTabletId*/ 22L));
+                            List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
+                                    List.of(bigintColumn("sort_col"))))));
             pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                    any(), any(), anyLong(), anyLong(), any(), any()))
+                    any(), any(), any(), anyLong(), any(), any()))
                     .thenReturn(mock(DefaultPreSplitPipeline.class));
 
             InsertPreSplitHook.maybeRunPreSplit(stmt, context);
@@ -266,7 +268,7 @@ public class InsertPreSplitHookFilesTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
     }
 

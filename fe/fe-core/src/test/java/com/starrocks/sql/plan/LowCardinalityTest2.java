@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -210,6 +214,29 @@ public class LowCardinalityTest2 extends PlanTestBase {
         connectContext.getSessionVariable().setSqlMode(0);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+    }
+
+    // Query-dump capture path: enabling the dump makes buildPlan install a real QueryDumpInfo (shouldDumpQuery()
+    // true), so the low-cardinality rewrite captures the accepted global dict into the dump. The mock dict manager
+    // supplies the dict here. Exercises DecodeCollector capture + LowCardinalityRewriteRule commit + the
+    // QueryDumpSerializer global_dict section.
+    @Test
+    public void testCaptureGlobalDictIntoQueryDump() throws Exception {
+        connectContext.getSessionVariable().setEnableQueryDump(true);
+        try {
+            getFragmentPlan("select S_ADDRESS, count(*) from supplier_nullable group by S_ADDRESS");
+            QueryDumpInfo dumpInfo = (QueryDumpInfo) connectContext.getDumpInfo();
+            Assertions.assertTrue(dumpInfo.getTableGlobalDictMap().values().stream()
+                            .anyMatch(m -> m.containsKey("S_ADDRESS")),
+                    "low-cardinality rewrite should capture S_ADDRESS's global dict into the dump");
+            String json = new GsonBuilder()
+                    .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpSerializer())
+                    .create().toJson(dumpInfo, QueryDumpInfo.class);
+            Assertions.assertTrue(json.contains("global_dict"),
+                    "serialized dump should carry a global_dict section, json:\n" + json);
+        } finally {
+            connectContext.getSessionVariable().setEnableQueryDump(false);
+        }
     }
 
     @Test
@@ -2174,19 +2201,51 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "RESULT SINK\n" +
                 "\n" +
-                "  12:Decode\n" +
-                "  |  <dict id 59> : <string id 40>\n" +
-                "  |  <dict id 60> : <string id 42>\n" +
-                "  |  <dict id 61> : <string id 43>\n" +
+                "  14:Decode\n" +
+                "  |  <dict id 65> : <string id 40>\n" +
+                "  |  <dict id 66> : <string id 42>\n" +
+                "  |  <dict id 67> : <string id 43>\n" +
+                "  |  <dict id 56> : <string id 48>\n" +
+                "  |  <dict id 57> : <string id 39>\n" +
+                "  |  <dict id 58> : <string id 44>\n" +
+                "  |  <dict id 59> : <string id 45>\n" +
+                "  |  <dict id 60> : <string id 46>\n" +
+                "  |  <dict id 61> : <string id 47>\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  \n" +
-                "  |----11:Decode\n" +
-                "  |    |  <dict id 62> : <string id 29>\n" +
+                "  |----13:Project\n" +
+                "  |    |  <slot 29> : 29: case\n" +
+                "  |    |  <slot 35> : 35: ifnull\n" +
+                "  |    |  <slot 62> : 62: cast\n" +
+                "  |    |  <slot 63> : 63: cast\n" +
+                "  |    |  <slot 64> : 64: cast\n" +
+                "  |    |  <slot 75> : 1\n" +
+                "  |    |  <slot 76> : 2\n" +
+                "  |    |  <slot 77> : 2\n" +
+                "  |    |  <slot 78> : 1\n" +
+                "  |    |  <slot 79> : 2\n" +
+                "  |    |  <slot 80> : 2\n" +
                 "  |    |  \n" +
-                "  |    10:EXCHANGE\n" +
+                "  |    12:Decode\n" +
+                "  |    |  <dict id 68> : <string id 29>\n" +
+                "  |    |  \n" +
+                "  |    11:EXCHANGE\n" +
                 "  |    \n" +
-                "  5:EXCHANGE\n");
+                "  6:Project\n" +
+                "  |  <slot 15> : 15: concat\n" +
+                "  |  <slot 21> : 21: round\n" +
+                "  |  <slot 50> : 50: c_user\n" +
+                "  |  <slot 51> : 51: c_dept\n" +
+                "  |  <slot 52> : 52: c_par\n" +
+                "  |  <slot 69> : 1\n" +
+                "  |  <slot 70> : 1\n" +
+                "  |  <slot 71> : 1\n" +
+                "  |  <slot 72> : 2\n" +
+                "  |  <slot 73> : 1\n" +
+                "  |  <slot 74> : 1\n" +
+                "  |  \n" +
+                "  5:EXCHANGE");
     }
 
     @Test
@@ -3077,7 +3136,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |      [30, INT, true] | [31, INT, true] | [33, INT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
-                "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+                "  |      [34: expr, INT, true] | [35: expr, INT, false] | [36: expr, INT, true]", plan);
     }
 
     @Test
@@ -3265,6 +3324,90 @@ public class LowCardinalityTest2 extends PlanTestBase {
             starRocksAssert.dropTable("window_skew_lc");
             connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
             connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
+        }
+    }
+
+    @Test
+    void testUnionAllConstantInputsOnly() throws Exception {
+        String sql = """
+                select c_user, "abc", null const FROM low_card_t1 as s
+                UNION ALL
+                select c_mr, null, null FROM low_card_t2;
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "9:Decode\n" +
+                "  |  <dict id 28> : <string id 24>\n" +
+                "  |  <dict id 30> : <string id 23>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [28, INT, true] | [25, BOOLEAN, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [26: c_user, INT, true] | [31: expr, INT, false] | [13: expr, BOOLEAN, true]\n" +
+                "  |      [29: cast, INT, true] | [32: expr, INT, true] | [20: expr, BOOLEAN, true]", plan);
+        String thrift = getThriftPlan(sql);
+        Assertions.assertTrue(thrift.contains("TGlobalDict(columnId:28"), thrift);
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT
+                       max(source), min(source), count(source), sum(length(source)),
+                       max(value), min(value), count(value), sum(length(value))
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // Aggregate is not pushed
+            assertContains(plan, "  10:AGGREGATE (update serialize)\n" +
+                    "  |  output: max(34: expr), min(34: expr), count(34: expr), sum(22: length), max(36: c_user)," +
+                    " min(36: c_user), count(36: c_user), sum(23: length)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  9:Project\n" +
+                    "  |  <slot 22> : DictDecode(34: expr, [length(<place-holder>)])\n" +
+                    "  |  <slot 23> : DictDecode(36: c_user, [length(<place-holder>)])\n" +
+                    "  |  <slot 34> : 34: expr\n" +
+                    "  |  <slot 36> : 36: c_user\n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithoutDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // update stage is pushed below the union, merge stage is above it.
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                    "  |  output: max(33: max), min(34: min), count(24: count), max(35: max), min(36: min), count(27: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
         }
     }
 }

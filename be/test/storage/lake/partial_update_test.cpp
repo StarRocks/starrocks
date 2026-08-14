@@ -34,6 +34,7 @@
 #include "common/logging.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
@@ -280,6 +281,77 @@ TEST_P(LakePartialUpdateTest, test_write) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+}
+
+TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads source segments while generating DCGs";
+    }
+
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+
+    const auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
+    ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    int64_t upt_memory_usage_per_row = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row",
+                                          [&](void* arg) { upt_memory_usage_per_row = *static_cast<int64_t*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit",
+                                          [&](void* arg) {
+                                              const auto* container = static_cast<StreamChunkContainer*>(arg);
+                                              emitted_ranges.emplace_back(container->start_rowid, container->end_rowid);
+                                          });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    EXPECT_GE(upt_memory_usage_per_row, static_cast<int64_t>(sizeof(int32_t) * 2));
+    EXPECT_EQ((std::vector<std::pair<uint32_t, uint32_t>>{{0, 4}, {4, 8}, {8, 12}}), emitted_ranges);
+    EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
 // Regression test: when a partial update orphans a bundled segment, the orphan_files entry must be
@@ -1561,14 +1633,12 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        LakePartialUpdateTest, LakePartialUpdateTest,
-        ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
-                          PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
-                          PrimaryKeyParam{.enable_persistent_index = true,
-                                          .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE},
-                          PrimaryKeyParam{.enable_persistent_index = false,
-                                          .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
+INSTANTIATE_TEST_SUITE_P(LakePartialUpdateTest, LakePartialUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
+                                           PrimaryKeyParam{
+                                                   .enable_persistent_index = true,
+                                                   .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
+                                                   .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
 
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:
@@ -4099,6 +4169,17 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         int original_dels_count = op_write.dels_meta_size();
         LOG(INFO) << "Original del files count: " << original_dels_count;
 
+        // The writer must emit del_num_rows parallel to dels_meta, and it must account every
+        // tombstone (kChunkSize/4 deletes). This is the input that _handle_column_upsert_mode
+        // has to carry onto the synthesized new_rows_op.
+        ASSERT_GT(original_dels_count, 0);
+        ASSERT_EQ(op_write.del_num_rows_size(), op_write.dels_meta_size());
+        int64_t txnlog_del_rows = 0;
+        for (int i = 0; i < op_write.del_num_rows_size(); i++) {
+            txnlog_del_rows += op_write.del_num_rows(i);
+        }
+        EXPECT_EQ(txnlog_del_rows, kChunkSize / 4);
+
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
@@ -4145,9 +4226,157 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         // Check that rowsets have proper del file info or delvec metadata
         ASSERT_GE(metadata->rowsets_size(), 1);
 
+        // The fix under test: _handle_column_upsert_mode must carry op_write.del_num_rows onto the
+        // synthesized new_rows_op, so the persisted del files record their tombstone count. Sum
+        // num_rows across every persisted del file; it must match the tombstones written above and
+        // every persisted del file must carry a recorded count.
+        int64_t persisted_del_rows = 0;
+        int del_files_seen = 0;
+        int del_files_with_count = 0;
+        for (const auto& rs : metadata->rowsets()) {
+            for (const auto& df : rs.del_files()) {
+                ++del_files_seen;
+                if (df.has_num_rows()) {
+                    ++del_files_with_count;
+                    persisted_del_rows += df.num_rows();
+                }
+            }
+        }
+        ASSERT_GT(del_files_seen, 0);
+        EXPECT_EQ(del_files_with_count, del_files_seen); // every persisted del file carries a count
+        EXPECT_EQ(persisted_del_rows, kChunkSize / 4);   // matches the tombstones written
+
         LOG(INFO) << "Final version: " << version;
         LOG(INFO) << "Total rowsets: " << metadata->rowsets_size();
         LOG(INFO) << "DCG count: " << metadata->dcg_meta().dcgs_size();
+    }
+}
+
+// A column-mode partial update publishes its del files through UpdateManager::_handle_delete_files,
+// which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
+// tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a
+// sstable no publisher ingests: it never enters sstable_meta(), so only a full vacuum's orphan scan
+// would ever reclaim it. Drive the threshold to 1 byte (so every del file would qualify) and assert the
+// writer emits no tombstone sstable for a COLUMN_UPSERT_MODE load, while the deletes still apply.
+TEST_F(LakeColumnUpsertModeTest, test_no_del_tombstone_sstable_in_column_upsert_mode) {
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+    const int64_t kChunkSize = 64;
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    // Seed the tablet so the deletes below have existing rows to shadow.
+    {
+        auto chunk = generate_data(kChunkSize, 0, false, 100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column-mode partial update that DELETEs the first quarter and upserts the rest.
+    {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize, 777);
+        std::vector<uint8_t> ops(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = i;
+            ops[i] = (i < kChunkSize / 4) ? TOpType::DELETE : TOpType::UPSERT;
+        }
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto cop = Int8Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        cop->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+
+        Chunk::SlotHashMap ops_slot_map;
+        ops_slot_map[0] = 0;
+        ops_slot_map[1] = 1;
+        ops_slot_map[3] = 2; // op column
+        Chunk chunk_with_ops({std::move(c0), std::move(c1), std::move(cop)}, ops_slot_map);
+
+        std::vector<uint32_t> idx(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) idx[i] = i;
+
+        std::vector<SlotDescriptor> op_slots;
+        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        std::vector<SlotDescriptor*> op_slot_pointers;
+        for (auto& slot : op_slots) {
+            op_slot_pointers.emplace_back(&slot);
+        }
+
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&op_slot_pointers)
+                                         .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk_with_ops, idx.data(), idx.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        const auto& op_write = txn_log->op_write();
+        // Precondition: this load really did produce a del file, and it really is a column-mode partial
+        // update -- otherwise the assertion below would pass vacuously.
+        ASSERT_GT(op_write.dels_meta_size(), 0);
+        ASSERT_EQ(PartialUpdateMode::COLUMN_UPSERT_MODE, op_write.txn_meta().partial_update_mode());
+        // The fix under test: no tombstone sstable was built. Entries stay index-aligned with dels_meta,
+        // so an entry may exist -- it must just be empty, which is what publish reads as "no sstable".
+        for (int i = 0; i < op_write.del_ssts_size(); i++) {
+            EXPECT_TRUE(op_write.del_ssts(i).name().empty())
+                    << "del_ssts[" << i << "] would never be ingested by the column-mode publish path";
+        }
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // The deletes still applied: the first quarter is gone, the rest survives.
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        auto chk = ChunkFactory::new_chunk(*_schema, 256);
+        std::set<int> found_keys;
+        while (true) {
+            auto st = reader->get_next(chk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (int i = 0; i < chk->num_rows(); i++) {
+                found_keys.insert(chk->columns()[0]->get(i).get_int32());
+            }
+            chk->reset();
+        }
+        for (int i = 0; i < kChunkSize / 4; i++) {
+            EXPECT_EQ(found_keys.count(i), 0) << "deleted key " << i << " should be gone";
+        }
+        for (int i = kChunkSize / 4; i < kChunkSize; i++) {
+            EXPECT_EQ(found_keys.count(i), 1) << "upserted key " << i << " should be present";
+        }
     }
 }
 

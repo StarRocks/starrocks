@@ -191,7 +191,6 @@ public class FunctionSet {
     public static final String TO_BINARY = "to_binary";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
-    public static final String ENCODE_ROW_ID = "encode_row_id";
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
 
     // Vector Index functions:
@@ -597,6 +596,11 @@ public class FunctionSet {
 
     public static final String NGRAM_SEARCH = "ngram_search";
     public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
+
+    public static final String TOKENIZE = "tokenize";
+    // Tokenizers GinFunctions::tokenize() implements on the BE. Matching is case-sensitive there.
+    public static final Set<String> SUPPORTED_TOKENIZERS =
+            ImmutableSet.of("english", "standard", "chinese");
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(

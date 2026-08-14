@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "Iceberg Catalog 存储过程支持快照管理、分支管理、数据维护和元数据操作。"
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
@@ -208,7 +209,7 @@ EXECUTE remove_orphan_files(
 
 ##### `older_than`
 
-- 说明：删除孤立文件的时间戳。如果未指定，则默认删除早于 7 天（从当前时间开始计算）的文件。格式：'YYYY-MM-DD HH:MM:SS'。
+- 说明：删除孤立文件的时间戳。如果未指定，则默认删除早于 7 天（从当前时间开始计算）的文件。格式：'YYYY-MM-DD HH:MM:SS'。该值距当前时间至少要有 [`iceberg_remove_orphan_files_min_retention_seconds`](../../../administration/configuration/FE_parameters/shared_lake_other.md)（默认 24 小时）。更接近当前时间的值会被拒绝，因为删除这么新的文件可能删掉并发写入尚未提交的数据。
 - 类型：DATETIME
 - 是否必须：否
 

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
@@ -78,6 +80,21 @@ public:
         return Status::NotSupported("LakePersistentIndex::erase not supported");
     }
 
+    // Apply a large delete by ingesting the tombstone sstable |del_sst_meta| that was pre-built at import
+    // time (PkTabletWriter::flush_del_file), avoiding tombstone accumulation and additional memtable flushes.
+    // Flushes the existing memtable first (so the ingested sstable becomes the newest layer), reverse-looks-up
+    // each key's rss_rowid into |old_values| for the delete vector, then ingests the sstable stamped with
+    // |del_rssid| and |version| (the sstable was written with entry version 0). Cloud-native only.
+    //
+    // Precondition: |keys| holds no repeated primary key -- one del file is one memtable flush, and
+    // MemTable::_sort aggregates duplicate primary keys away before re-sorting by the sort key. Unlike
+    // erase(), which resolves a repeat against the tombstone its first occurrence just wrote and so
+    // reports it once, this reverse-looks-up every position independently and would report the same
+    // rss_rowid once per occurrence, overshooting the delete vector's cardinality at publish.
+    Status bulk_erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid,
+                      const FileMetaPB& del_sst_meta, const PersistentIndexSstableRangePB& del_sst_range,
+                      int64_t version);
+
     // batch insert delete operations, used when rebuild index.
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -121,7 +138,7 @@ public:
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
-    Status commit(MetaFileBuilder* builder);
+    Status commit(MetaFileBuilder* builder, int64_t generation_version = 0);
 
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
@@ -137,6 +154,14 @@ public:
 
     static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
                                         std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
+
+    // Assign the generation version (PersistentIndexSstablePB.generation_version) to each
+    // sstable in |new_meta|: a sstable that already carries a non-zero value is left
+    // untouched; a file present in |prev_meta| keeps its recorded value (a legacy 0 stays 0,
+    // so lake vacuum retention treats it conservatively); a file absent from |prev_meta| is
+    // new this publish and is stamped with |generation_version|.
+    static void assign_generation_versions(PersistentIndexSstableMetaPB* new_meta,
+                                           const PersistentIndexSstableMetaPB& prev_meta, int64_t generation_version);
 
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
@@ -181,6 +206,13 @@ private:
 
     Status get_from_inactive_memtables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
                                        int64_t version) const;
+
+    // Reverse-look up |num_tasks| subsets of positions from the inactive memtables + sstables into
+    // |old_values|, fanning out on pk_index_execution_thread_pool when |parallel_worthwhile|, else serial.
+    // |make_subset(i)| yields task i's key indexes and is invoked inside the task, so a caller iterating a
+    // contiguous range never materializes one giant KeyIndexSet. Shared by erase() and bulk_erase().
+    Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
+                                   const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);

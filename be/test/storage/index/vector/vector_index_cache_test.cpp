@@ -21,22 +21,31 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <future>
 #include <sstream>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
-#include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
+#include "storage/index/vector/vector_index_reader_factory.h"
+#include "storage/tablet_index.h"
+#include "storage_primitive/storage_stats.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
 #include "tenann/index/index_cache.h"
@@ -47,10 +56,10 @@ namespace starrocks {
 namespace {
 constexpr size_t kDummyBytes = 1024;
 
-tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes) {
+tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes, tenann::IndexType type = tenann::IndexType::kFaissHnsw) {
     void* buf = std::malloc(bytes);
     return std::make_shared<tenann::Index>(
-            buf, tenann::IndexType::kFaissIvfPqOneInvertedList, [](void* v) { std::free(v); },
+            buf, type, [](void* v) { std::free(v); },
             /*explicit_bytes=*/bytes);
 }
 
@@ -64,18 +73,65 @@ tenann::IndexMeta make_minimal_meta() {
     meta.SetIndexType(tenann::IndexType::kFaissHnsw);
     return meta;
 }
+
+std::shared_ptr<TabletIndex> make_minimal_tablet_index() {
+    auto tablet_index = std::make_shared<TabletIndex>();
+    TabletIndexPB index_pb;
+    index_pb.set_index_id(0);
+    index_pb.set_index_name("test_index");
+    index_pb.set_index_type(IndexType::VECTOR);
+    index_pb.add_col_unique_id(1);
+    tablet_index->init_from_pb(index_pb);
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+    return tablet_index;
+}
+
+// FileInfo holds its FileSystem by shared_ptr; these tests keep the FS on the stack,
+// so hand out a non-owning alias instead of transferring ownership.
+std::shared_ptr<FileSystem> borrowed_fs(FileSystem* fs) {
+    return std::shared_ptr<FileSystem>(fs, [](FileSystem*) {});
+}
+
+FileInfo remote_vi(std::string path, FileSystem* fs) {
+    return FileInfo{.path = std::move(path), .fs = borrowed_fs(fs)};
+}
+
+bool wait_for_probe_state(VectorIndexCache* cache, const char* key, VectorIndexCacheProbeState expected,
+                          std::chrono::milliseconds timeout = std::chrono::seconds(5)) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (cache->ProbeForQuery(tenann::CacheKey(key)).state == expected) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
 } // namespace
 
 class VectorIndexCacheTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        saved_expire_seconds_ = config::vector_index_cache_expire_sec;
+        saved_loading_wait_timeout_ms_ = config::vector_index_cache_loading_wait_timeout_ms;
         tracker_ = std::make_unique<MemTracker>(-1, "vector_index_test");
         cache_ = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get());
     }
     void TearDown() override {
         cache_.reset();
         tracker_.reset();
+        config::vector_index_cache_expire_sec = saved_expire_seconds_;
+        config::vector_index_cache_loading_wait_timeout_ms = saved_loading_wait_timeout_ms_;
     }
+    int32_t saved_expire_seconds_ = 0;
+    int32_t saved_loading_wait_timeout_ms_ = 0;
     std::unique_ptr<MemTracker> tracker_;
     std::unique_ptr<VectorIndexCache> cache_;
 };
@@ -86,14 +142,11 @@ TEST_F(VectorIndexCacheTest, Lookup_Miss_ReturnsFalse) {
     EXPECT_FALSE(h.valid());
 }
 
-// Lookup must report miss for entries that exist but have not been populated
-// with an IndexRef yet — covers the `!entry->value().has_ref()` branch that a
-// concurrent GetOrCreate would otherwise expose to racing Lookups. Inserting
-// a nullptr IndexRef is the deterministic way to reach the same state from a
-// single thread.
-TEST_F(VectorIndexCacheTest, Lookup_EntryWithoutRef_ReportsMiss) {
+TEST_F(VectorIndexCacheTest, Insert_NullDoesNotLeaveEmptyEntry) {
     tenann::IndexCacheHandle h_ins;
     cache_->Insert(tenann::CacheKey("/loading.vi"), /*ref=*/nullptr, &h_ins);
+    EXPECT_FALSE(h_ins.valid());
+    EXPECT_EQ(0, cache_->entry_count());
 
     tenann::IndexCacheHandle h_lkp;
     EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/loading.vi"), &h_lkp));
@@ -249,11 +302,8 @@ TEST_F(VectorIndexCacheTest, GetOrCreate_ConcurrentCallers_SingleFlight) {
     }
 }
 
-// Loader-failure cleanup: GetOrCreate must return false, leave the handle
-// invalid, and not cache anything so a later call reruns the loader. The
-// null-return mode here covers the same _cache.remove(entry) branch as the
-// throw path (which can't be exercised under ASAN — the std::function throw
-// machinery aborts the binary before reaching the catch).
+// Loader-failure cleanup: GetOrCreate must leave the handle invalid and the
+// key retryable whether the loader returns null or throws.
 TEST_F(VectorIndexCacheTest, GetOrCreate_LoaderReturnsNull_NotCached) {
     auto null_loader = []() -> tenann::IndexRef { return nullptr; };
     tenann::IndexCacheHandle h;
@@ -268,6 +318,778 @@ TEST_F(VectorIndexCacheTest, GetOrCreate_LoaderReturnsNull_NotCached) {
     EXPECT_TRUE(cache_->GetOrCreate(tenann::CacheKey("/e.vi"), good_loader, &h));
     EXPECT_EQ(1, good_calls); // retry ran (entry was not left in a cached state)
     EXPECT_TRUE(h.valid());
+}
+
+TEST_F(VectorIndexCacheTest, GetOrCreate_LoaderThrows_NotCached) {
+    auto throwing_loader = []() -> tenann::IndexRef { throw 42; };
+    tenann::IndexCacheHandle h;
+    EXPECT_FALSE(cache_->GetOrCreate(tenann::CacheKey("/throw.vi"), throwing_loader, &h));
+    EXPECT_FALSE(h.valid());
+    EXPECT_EQ(0, cache_->entry_count());
+
+    int retry_calls = 0;
+    auto retry_loader = [&]() -> tenann::IndexRef {
+        ++retry_calls;
+        return make_dummy_ref();
+    };
+    EXPECT_TRUE(cache_->GetOrCreate(tenann::CacheKey("/throw.vi"), retry_loader, &h));
+    EXPECT_EQ(1, retry_calls);
+    EXPECT_TRUE(h.valid());
+}
+
+TEST_F(VectorIndexCacheTest, GetOrCreate_EstimateExceptionDoesNotLeaveLoading) {
+    SyncPoint::GetInstance()->SetCallBack("VectorIndexCache::_get_or_create:before_estimate",
+                                          [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    });
+
+    tenann::IndexCacheHandle handle;
+    EXPECT_FALSE(cache_->GetOrCreate(
+            tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
+    EXPECT_FALSE(handle.valid());
+    EXPECT_EQ(0, cache_->entry_count());
+
+    SyncPoint::GetInstance()->DisableProcessing();
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    EXPECT_TRUE(cache_->GetOrCreate(
+            tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
+    EXPECT_TRUE(handle.valid());
+}
+
+TEST_F(VectorIndexCacheTest, Lookup_WaitsForLoadingThenReturnsReady) {
+    const auto expected_ref = make_dummy_ref();
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+
+    auto leader = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        const bool ok = cache_->GetOrCreate(
+                tenann::CacheKey("/lookup-wait-success.vi"),
+                [&]() -> tenann::IndexRef {
+                    loader_started.set_value();
+                    release_future.wait();
+                    return expected_ref;
+                },
+                &handle);
+        return std::make_pair(ok, std::move(handle));
+    });
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto lookup = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        const bool found = cache_->Lookup(tenann::CacheKey("/lookup-wait-success.vi"), &handle);
+        return std::make_pair(found, std::move(handle));
+    });
+    EXPECT_EQ(std::future_status::timeout, lookup.wait_for(std::chrono::milliseconds(100)));
+
+    release_loader.set_value();
+    auto [leader_ok, leader_handle] = leader.get();
+    auto [found, lookup_handle] = lookup.get();
+    EXPECT_TRUE(leader_ok);
+    ASSERT_TRUE(leader_handle.valid());
+    EXPECT_EQ(expected_ref.get(), leader_handle.index_ref().get());
+    EXPECT_TRUE(found);
+    ASSERT_TRUE(lookup_handle.valid());
+    EXPECT_EQ(expected_ref.get(), lookup_handle.index_ref().get());
+}
+
+TEST_F(VectorIndexCacheTest, Lookup_WaitsForLoadingFailureThenReturnsMiss) {
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+
+    auto leader = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        return cache_->GetOrCreate(
+                tenann::CacheKey("/lookup-wait-failure.vi"),
+                [&]() -> tenann::IndexRef {
+                    loader_started.set_value();
+                    release_future.wait();
+                    return nullptr;
+                },
+                &handle);
+    });
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto lookup = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        const bool found = cache_->Lookup(tenann::CacheKey("/lookup-wait-failure.vi"), &handle);
+        return std::make_pair(found, std::move(handle));
+    });
+    EXPECT_EQ(std::future_status::timeout, lookup.wait_for(std::chrono::milliseconds(100)));
+
+    release_loader.set_value();
+    EXPECT_FALSE(leader.get());
+    auto [found, lookup_handle] = lookup.get();
+    EXPECT_FALSE(found);
+    EXPECT_FALSE(lookup_handle.valid());
+    EXPECT_EQ(0, cache_->entry_count());
+}
+
+TEST_F(VectorIndexCacheTest, Lookup_TimesOutWithoutCancellingLoader) {
+    config::vector_index_cache_loading_wait_timeout_ms = 50;
+    MetricRegistry registry("test_registry");
+    VectorIndexCacheMetrics metrics(&registry);
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get(), &metrics);
+
+    auto expected_ref = make_dummy_ref();
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto leader = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        const bool ok = cache->GetOrCreate(
+                tenann::CacheKey("/lookup-timeout.vi"),
+                [&]() -> tenann::IndexRef {
+                    loader_started.set_value();
+                    release_future.wait();
+                    return expected_ref;
+                },
+                &handle);
+        return std::make_pair(ok, std::move(handle));
+    });
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    tenann::IndexCacheHandle timed_out_handle;
+    EXPECT_FALSE(cache->Lookup(tenann::CacheKey("/lookup-timeout.vi"), &timed_out_handle));
+    EXPECT_FALSE(timed_out_handle.valid());
+    EXPECT_EQ(1, metrics.vector_index_cache_loading_wait_timeout.value());
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, cache->ProbeForQuery(tenann::CacheKey("/lookup-timeout.vi")).state);
+
+    release_loader.set_value();
+    auto [leader_ok, leader_handle] = leader.get();
+    EXPECT_TRUE(leader_ok);
+    ASSERT_TRUE(leader_handle.valid());
+
+    tenann::IndexCacheHandle warm_handle;
+    EXPECT_TRUE(cache->Lookup(tenann::CacheKey("/lookup-timeout.vi"), &warm_handle));
+    EXPECT_EQ(expected_ref.get(), warm_handle.index_ref().get());
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_ProbeDoesNotWaitForLoaderIo) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+
+    auto schedule = cache_->TryGetOrSchedule(tenann::CacheKey("/async-probe.vi"), std::move(loader));
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, schedule.state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto probe_future = std::async(std::launch::async,
+                                   [&] { return cache_->ProbeForQuery(tenann::CacheKey("/async-probe.vi")).state; });
+    const bool probe_returned = probe_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::ready;
+    release_loader.set_value();
+    EXPECT_TRUE(probe_returned) << "ProbeForQuery waited for loader I/O";
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, probe_future.get());
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/async-probe.vi", VectorIndexCacheProbeState::kReady));
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_ConcurrentMissesSingleFlight) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::atomic<int> loader_calls{0};
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto first_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_calls.fetch_add(1);
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/async-singleflight.vi"), std::move(first_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    constexpr int kFollowers = 16;
+    std::vector<std::thread> followers;
+    std::vector<VectorIndexCacheProbeState> states(kFollowers);
+    for (int i = 0; i < kFollowers; ++i) {
+        followers.emplace_back([&, i] {
+            auto duplicate_loader = [&]() -> StatusOr<tenann::IndexRef> {
+                loader_calls.fetch_add(1);
+                return make_dummy_ref();
+            };
+            states[i] =
+                    cache_->TryGetOrSchedule(tenann::CacheKey("/async-singleflight.vi"), std::move(duplicate_loader))
+                            .state;
+        });
+    }
+    for (auto& follower : followers) {
+        follower.join();
+    }
+    EXPECT_EQ(1, loader_calls.load());
+    for (auto state : states) {
+        EXPECT_EQ(VectorIndexCacheProbeState::kLoading, state);
+    }
+
+    release_loader.set_value();
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/async-singleflight.vi", VectorIndexCacheProbeState::kReady));
+    EXPECT_EQ(1, loader_calls.load());
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_FailureReturnsToMissAndDoesNotRetainEmptyEntry) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto failed_loader = []() -> StatusOr<tenann::IndexRef> {
+        return Status::InternalError("injected async load failure");
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/async-failure.vi"), std::move(failed_loader)).state);
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/async-failure.vi", VectorIndexCacheProbeState::kMiss));
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (cache_->entry_count() != 0 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    EXPECT_EQ(0, cache_->entry_count());
+
+    auto retry_loader = []() -> StatusOr<tenann::IndexRef> { return make_dummy_ref(); };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/async-failure.vi"), std::move(retry_loader)).state);
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/async-failure.vi", VectorIndexCacheProbeState::kReady));
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_RecordsSuccessFailureAndLoadTime) {
+    MetricRegistry registry("test_registry");
+    VectorIndexCacheMetrics metrics(&registry);
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get(), &metrics);
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto successful_loader = []() -> StatusOr<tenann::IndexRef> {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(
+            VectorIndexCacheProbeState::kLoading,
+            cache->TryGetOrSchedule(tenann::CacheKey("/async-metrics-success.vi"), std::move(successful_loader)).state);
+    const auto success_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (metrics.vector_index_cache_async_load_success.value() != 1 &&
+           std::chrono::steady_clock::now() < success_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_EQ(1, metrics.vector_index_cache_async_load_success.value());
+    registry.trigger_hook();
+    EXPECT_EQ(kDummyBytes, metrics.vector_index_cache_usage.value());
+
+    auto failed_loader = []() -> StatusOr<tenann::IndexRef> {
+        return Status::InternalError("injected async load failure");
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/async-metrics-failure.vi"), std::move(failed_loader)).state);
+    const auto failure_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (metrics.vector_index_cache_async_load_failure.value() != 1 &&
+           std::chrono::steady_clock::now() < failure_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    cache->shutdown_async_load_pool();
+    EXPECT_EQ(1, metrics.vector_index_cache_async_load_success.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_async_load_failure.value());
+    EXPECT_GT(metrics.vector_index_cache_async_load_ns.value(), 0);
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_TracksQueuedAndInflight) {
+    MetricRegistry registry("test_registry");
+    VectorIndexCacheMetrics metrics(&registry);
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get(), &metrics);
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> first_started;
+    std::promise<void> release_first;
+    auto release_future = release_first.get_future().share();
+    auto first_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        first_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/metrics-running.vi"), std::move(first_loader)).state);
+    ASSERT_EQ(std::future_status::ready, first_started.get_future().wait_for(std::chrono::seconds(5)));
+    EXPECT_EQ(1, metrics.vector_index_cache_async_load_inflight.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_async_load_queued.value());
+
+    auto second_loader = []() -> StatusOr<tenann::IndexRef> { return make_dummy_ref(); };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/metrics-queued.vi"), std::move(second_loader)).state);
+    EXPECT_EQ(1, metrics.vector_index_cache_async_load_inflight.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_async_load_queued.value());
+
+    release_first.set_value();
+    cache->shutdown_async_load_pool();
+    EXPECT_EQ(0, metrics.vector_index_cache_async_load_inflight.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_async_load_queued.value());
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_OverCapacityEvictedAfterLoadingPinRelease) {
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/512, tracker_.get());
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref(/*bytes=*/1024);
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/async-over-capacity.vi"), std::move(loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    release_loader.set_value();
+    cache->shutdown_async_load_pool();
+    EXPECT_EQ(0, cache->memory_usage());
+    EXPECT_EQ(0, cache->entry_count());
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss,
+              cache->ProbeForQuery(tenann::CacheKey("/async-over-capacity.vi")).state);
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_OverCapacityEvictedAfterWaitingHandleRelease) {
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/512, tracker_.get());
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref(/*bytes=*/1024);
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/async-over-capacity-waiter.vi"), std::move(loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto waiter = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        const bool found = cache->Lookup(tenann::CacheKey("/async-over-capacity-waiter.vi"), &handle);
+        return std::make_pair(found, std::move(handle));
+    });
+    EXPECT_EQ(std::future_status::timeout, waiter.wait_for(std::chrono::milliseconds(100)));
+
+    release_loader.set_value();
+    auto [found, handle] = waiter.get();
+    ASSERT_TRUE(found);
+    ASSERT_TRUE(handle.valid());
+    cache->shutdown_async_load_pool();
+
+    EXPECT_EQ(1024, cache->memory_usage());
+    EXPECT_EQ(1, cache->entry_count());
+    handle = tenann::IndexCacheHandle{};
+    EXPECT_EQ(0, cache->memory_usage());
+    EXPECT_EQ(0, cache->entry_count());
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_LoaderExceptionReturnsToMiss) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto throwing_loader = []() -> StatusOr<tenann::IndexRef> { throw std::runtime_error("injected exception"); };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/async-exception.vi"), std::move(throwing_loader)).state);
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/async-exception.vi", VectorIndexCacheProbeState::kMiss));
+    EXPECT_EQ(0, cache_->entry_count());
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_EstimateExceptionDoesNotTerminateOrLeaveLoading) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+    SyncPoint::GetInstance()->SetCallBack("VectorIndexLoadTask::run_impl:before_estimate",
+                                          [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    });
+
+    auto loader = []() -> StatusOr<tenann::IndexRef> { return make_dummy_ref(); };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/async-estimate-throws.vi"), std::move(loader)).state);
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/async-estimate-throws.vi", VectorIndexCacheProbeState::kMiss));
+    EXPECT_EQ(0, cache_->entry_count());
+}
+
+TEST_F(VectorIndexCacheTest, GetOrCreateForQueryDoesNotWaitForAsyncLoad) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/query-no-wait.vi"), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    std::atomic<int> query_loader_calls{0};
+    auto query = std::async(std::launch::async, [&] {
+        return cache_->GetOrCreateForQuery(
+                tenann::CacheKey("/query-no-wait.vi"),
+                [&]() -> tenann::IndexRef {
+                    query_loader_calls.fetch_add(1);
+                    return make_dummy_ref();
+                },
+                /*wait_for_loading=*/false);
+    });
+    const auto query_status = query.wait_for(std::chrono::milliseconds(500));
+    if (query_status != std::future_status::ready) {
+        release_loader.set_value();
+    }
+    ASSERT_EQ(std::future_status::ready, query_status);
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, query.get().state);
+    EXPECT_EQ(0, query_loader_calls.load());
+
+    release_loader.set_value();
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/query-no-wait.vi", VectorIndexCacheProbeState::kReady));
+}
+
+TEST_F(VectorIndexCacheTest, GetOrCreateForQueryWaitsForSyncLeader) {
+    auto leader_ref = make_dummy_ref();
+    std::atomic<int> loader_calls{0};
+    std::promise<void> leader_started;
+    std::promise<void> release_leader;
+    auto release_future = release_leader.get_future().share();
+
+    auto leader = std::async(std::launch::async, [&] {
+        return cache_->GetOrCreateForQuery(
+                tenann::CacheKey("/query-sync-singleflight.vi"),
+                [&]() -> tenann::IndexRef {
+                    loader_calls.fetch_add(1);
+                    leader_started.set_value();
+                    release_future.wait();
+                    return leader_ref;
+                },
+                /*wait_for_loading=*/true);
+    });
+    ASSERT_EQ(std::future_status::ready, leader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto follower = std::async(std::launch::async, [&] {
+        return cache_->GetOrCreateForQuery(
+                tenann::CacheKey("/query-sync-singleflight.vi"),
+                [&]() -> tenann::IndexRef {
+                    loader_calls.fetch_add(1);
+                    return make_dummy_ref();
+                },
+                /*wait_for_loading=*/true);
+    });
+    EXPECT_EQ(std::future_status::timeout, follower.wait_for(std::chrono::milliseconds(100)));
+
+    release_leader.set_value();
+    ASSERT_EQ(std::future_status::ready, leader.wait_for(std::chrono::seconds(5)));
+    ASSERT_EQ(std::future_status::ready, follower.wait_for(std::chrono::seconds(5)));
+    auto leader_result = leader.get();
+    auto follower_result = follower.get();
+    ASSERT_EQ(VectorIndexCacheProbeState::kReady, leader_result.state);
+    ASSERT_EQ(VectorIndexCacheProbeState::kReady, follower_result.state);
+    EXPECT_EQ(1, loader_calls.load());
+    EXPECT_EQ(leader_ref.get(), leader_result.handle.index_ref().get());
+    EXPECT_EQ(leader_ref.get(), follower_result.handle.index_ref().get());
+}
+
+TEST_F(VectorIndexCacheTest, GetOrCreateForQueryTimesOutWithoutRunningFollowerLoader) {
+    config::vector_index_cache_loading_wait_timeout_ms = 50;
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto async_ref = make_dummy_ref();
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return async_ref;
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/query-wait-timeout.vi"), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    std::atomic<int> follower_loader_calls{0};
+    auto result = cache_->GetOrCreateForQuery(
+            tenann::CacheKey("/query-wait-timeout.vi"),
+            [&]() -> tenann::IndexRef {
+                follower_loader_calls.fetch_add(1);
+                return make_dummy_ref();
+            },
+            /*wait_for_loading=*/true);
+    EXPECT_EQ(VectorIndexCacheProbeState::kWaitTimeout, result.state);
+    EXPECT_FALSE(result.handle.valid());
+    EXPECT_EQ(0, follower_loader_calls.load());
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->ProbeForQuery(tenann::CacheKey("/query-wait-timeout.vi")).state);
+
+    release_loader.set_value();
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/query-wait-timeout.vi", VectorIndexCacheProbeState::kReady));
+}
+
+TEST_F(VectorIndexCacheTest, SyncGetOrCreateWaitsForSameKeyAsyncLoad) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto async_ref = make_dummy_ref();
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return async_ref;
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/config-switch.vi"), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    std::atomic<int> sync_loader_calls{0};
+    std::promise<void> sync_done;
+    tenann::IndexCacheHandle sync_handle;
+    bool sync_ok = false;
+    std::thread sync_thread([&] {
+        sync_ok = cache_->GetOrCreate(
+                tenann::CacheKey("/config-switch.vi"),
+                [&]() -> tenann::IndexRef {
+                    sync_loader_calls.fetch_add(1);
+                    return make_dummy_ref();
+                },
+                &sync_handle);
+        sync_done.set_value();
+    });
+    auto sync_done_future = sync_done.get_future();
+    EXPECT_EQ(std::future_status::timeout, sync_done_future.wait_for(std::chrono::milliseconds(100)));
+
+    release_loader.set_value();
+    ASSERT_EQ(std::future_status::ready, sync_done_future.wait_for(std::chrono::seconds(5)));
+    sync_thread.join();
+    EXPECT_TRUE(sync_ok);
+    EXPECT_EQ(0, sync_loader_calls.load());
+    EXPECT_EQ(async_ref.get(), sync_handle.index_ref().get());
+}
+
+TEST_F(VectorIndexCacheTest, Factory_ConfigOffTimesOutWaitingForExistingAsyncLoad) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+    config::vector_index_cache_loading_wait_timeout_ms = 50;
+
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = false;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    constexpr const char* kMissingPath = "/factory-config-off-missing.vi";
+    MemoryFileSystem fs;
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return Status::InternalError("injected async load failure");
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey(kMissingPath), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto tablet_index = make_minimal_tablet_index();
+    auto factory = std::async(std::launch::async, [&] {
+        auto vi_file = remote_vi(kMissingPath, &fs);
+        VectorIndexReaderFactory reader_factory(*cache_);
+        OlapReaderStatistics stats;
+        return reader_factory.create_and_init(std::move(vi_file), tablet_index, {}, {.stats = stats});
+    });
+    ASSERT_EQ(std::future_status::ready, factory.wait_for(std::chrono::seconds(1)));
+    auto result_or = factory.get();
+    ASSERT_OK(result_or);
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, result_or->state);
+    EXPECT_EQ(nullptr, result_or->reader);
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, cache_->ProbeForQuery(tenann::CacheKey(kMissingPath)).state);
+
+    release_loader.set_value();
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), kMissingPath, VectorIndexCacheProbeState::kMiss));
+}
+
+TEST_F(VectorIndexCacheTest, Factory_RefineQueryTimesOutWaitingForExistingAsyncLoad) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+    config::vector_index_cache_loading_wait_timeout_ms = 50;
+
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = true;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    constexpr const char* kMissingPath = "/factory-refine-missing.vi";
+    MemoryFileSystem fs;
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return Status::InternalError("injected async load failure");
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey(kMissingPath), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto tablet_index = make_minimal_tablet_index();
+    auto factory = std::async(std::launch::async, [&] {
+        auto vi_file = remote_vi(kMissingPath, &fs);
+        VectorIndexReaderFactory reader_factory(*cache_);
+        OlapReaderStatistics stats;
+        return reader_factory.create_and_init(std::move(vi_file), tablet_index, {},
+                                              {.refine_distance = true, .stats = stats});
+    });
+    ASSERT_EQ(std::future_status::ready, factory.wait_for(std::chrono::seconds(1)));
+    auto result_or = factory.get();
+    ASSERT_OK(result_or);
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, result_or->state);
+    EXPECT_EQ(nullptr, result_or->reader);
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, cache_->ProbeForQuery(tenann::CacheKey(kMissingPath)).state);
+
+    release_loader.set_value();
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), kMissingPath, VectorIndexCacheProbeState::kMiss));
+}
+
+TEST_F(VectorIndexCacheTest, ZeroCapacityQueryStillLoadsSynchronously) {
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/0, tracker_.get());
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::atomic<int> async_loader_calls{0};
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        async_loader_calls.fetch_add(1);
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss,
+              cache->TryGetOrSchedule(tenann::CacheKey("/zero-capacity.vi"), std::move(async_loader)).state);
+    EXPECT_EQ(0, async_loader_calls.load());
+
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss, cache->ProbeForQuery(tenann::CacheKey("/zero-capacity.vi")).state);
+    std::atomic<int> sync_loader_calls{0};
+    auto result = cache->GetOrCreateForQuery(
+            tenann::CacheKey("/zero-capacity.vi"),
+            [&]() -> tenann::IndexRef {
+                sync_loader_calls.fetch_add(1);
+                return make_dummy_ref();
+            },
+            /*wait_for_loading=*/true);
+    EXPECT_EQ(VectorIndexCacheProbeState::kReady, result.state);
+    EXPECT_TRUE(result.handle.valid());
+    EXPECT_EQ(1, sync_loader_calls.load());
+    EXPECT_EQ(1, cache->lookup_count());
+}
+
+TEST_F(VectorIndexCacheTest, InsertWinsAgainstLateAsyncCompletion) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto late_ref = make_dummy_ref();
+    auto inserted_ref = make_dummy_ref();
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return late_ref;
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/insert-wins.vi"), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    tenann::IndexCacheHandle inserted_handle;
+    cache_->Insert(tenann::CacheKey("/insert-wins.vi"), inserted_ref, &inserted_handle);
+    release_loader.set_value();
+    cache_->shutdown_async_load_pool();
+
+    tenann::IndexCacheHandle probe;
+    ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/insert-wins.vi"), &probe));
+    EXPECT_EQ(inserted_ref.get(), probe.index_ref().get());
+}
+
+TEST_F(VectorIndexCacheTest, QueueRejectionRestoresMissAndAllowsRetry) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/0));
+
+    std::promise<void> first_started;
+    std::promise<void> release_first;
+    auto release_future = release_first.get_future().share();
+    auto first_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        first_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/queue-running.vi"), std::move(first_loader)).state);
+    ASSERT_EQ(std::future_status::ready, first_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    std::atomic<int> rejected_loader_calls{0};
+    auto rejected_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        rejected_loader_calls.fetch_add(1);
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/queue-rejected.vi"), std::move(rejected_loader)).state);
+    EXPECT_EQ(0, rejected_loader_calls.load());
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss, cache_->ProbeForQuery(tenann::CacheKey("/queue-rejected.vi")).state);
+
+    release_first.set_value();
+    ASSERT_TRUE(wait_for_probe_state(cache_.get(), "/queue-running.vi", VectorIndexCacheProbeState::kReady));
+
+    VectorIndexCacheProbeState retry_state = VectorIndexCacheProbeState::kMiss;
+    const auto retry_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    do {
+        auto retry_loader = [&]() -> StatusOr<tenann::IndexRef> {
+            rejected_loader_calls.fetch_add(1);
+            return make_dummy_ref();
+        };
+        retry_state = cache_->TryGetOrSchedule(tenann::CacheKey("/queue-rejected.vi"), std::move(retry_loader)).state;
+        if (retry_state == VectorIndexCacheProbeState::kMiss) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    } while (retry_state == VectorIndexCacheProbeState::kMiss && std::chrono::steady_clock::now() < retry_deadline);
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading, retry_state);
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), "/queue-rejected.vi", VectorIndexCacheProbeState::kReady));
+    EXPECT_EQ(1, rejected_loader_calls.load());
+}
+
+TEST_F(VectorIndexCacheTest, ShutdownCancelsQueuedAsyncLoadAndRestoresMiss) {
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> first_started;
+    std::promise<void> release_first;
+    auto release_future = release_first.get_future().share();
+    auto first_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        first_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/shutdown-running.vi"), std::move(first_loader)).state);
+    ASSERT_EQ(std::future_status::ready, first_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    std::atomic<int> queued_loader_calls{0};
+    auto queued_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        queued_loader_calls.fetch_add(1);
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/shutdown-queued.vi"), std::move(queued_loader)).state);
+
+    std::thread shutdown_thread([&] { cache_->shutdown_async_load_pool(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    release_first.set_value();
+    shutdown_thread.join();
+
+    EXPECT_EQ(0, queued_loader_calls.load());
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss, cache_->ProbeForQuery(tenann::CacheKey("/shutdown-queued.vi")).state);
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss,
+              cache_->TryGetOrSchedule(tenann::CacheKey("/after-shutdown.vi"), []() -> StatusOr<tenann::IndexRef> {
+                        return make_dummy_ref();
+                    }).state);
 }
 
 TEST_F(VectorIndexCacheTest, Insert_OverCapacity_EvictsLRU) {
@@ -313,6 +1135,131 @@ TEST_F(VectorIndexCacheTest, SetCapacity_Shrink_EvictsImmediately) {
     tenann::IndexCacheHandle probe;
     EXPECT_FALSE(c->Lookup(tenann::CacheKey("/s1.vi"), &probe));
     EXPECT_FALSE(c->Lookup(tenann::CacheKey("/s2.vi"), &probe));
+}
+
+TEST_F(VectorIndexCacheTest, TTL_StartsAfterLastHandleRelease) {
+    config::vector_index_cache_expire_sec = 10;
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/ttl.vi"), make_dummy_ref(), &handle);
+
+    // A pinned entry survives a sweep.
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->clear_expired(base_time));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    handle = tenann::IndexCacheHandle{};
+    const int64_t released_at = MonotonicMillis();
+    EXPECT_TRUE(cache_->clear_expired(released_at + 9 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    EXPECT_FALSE(cache_->clear_expired(released_at + 11 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    EXPECT_TRUE(cache_->clear_expired(released_at + 14 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_CacheHitRefreshesOnHandleRelease) {
+    config::vector_index_cache_expire_sec = 10;
+
+    tenann::IndexCacheHandle inserted;
+    cache_->Insert(tenann::CacheKey("/refresh.vi"), make_dummy_ref(), &inserted);
+    inserted = tenann::IndexCacheHandle{};
+
+    tenann::IndexCacheHandle hit;
+    ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/refresh.vi"), &hit));
+    config::vector_index_cache_expire_sec = 900;
+    hit = tenann::IndexCacheHandle{};
+
+    // The hit is released under the 900-second TTL. Lowering the runtime
+    // setting afterward must not shorten this entry's existing deadline.
+    config::vector_index_cache_expire_sec = 10;
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->clear_expired(base_time + 11 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    EXPECT_TRUE(cache_->clear_expired(base_time + 901 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_ConsecutiveSweepsHonorDeadline) {
+    config::vector_index_cache_expire_sec = 10;
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/consecutive-sweeps.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+    const int64_t base_time = MonotonicMillis();
+
+    EXPECT_TRUE(cache_->clear_expired(base_time + 9 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    EXPECT_FALSE(cache_->clear_expired(base_time + 11 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    EXPECT_TRUE(cache_->clear_expired(base_time + 14 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_DisabledKeepsUnusedEntries) {
+    config::vector_index_cache_expire_sec = 0;
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/no-ttl.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+
+    EXPECT_FALSE(cache_->clear_expired(MonotonicMillis() + 24 * 60 * 60 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateOnlyAffectsFutureReleases) {
+    config::vector_index_cache_expire_sec = 900;
+
+    tenann::IndexCacheHandle old_ttl_handle;
+    const tenann::CacheKey old_ttl_key("/old-ttl.vi");
+    cache_->Insert(old_ttl_key, make_dummy_ref(), &old_ttl_handle);
+    old_ttl_handle = tenann::IndexCacheHandle{};
+
+    config::vector_index_cache_expire_sec = 10;
+    tenann::IndexCacheHandle new_ttl_handle;
+    const tenann::CacheKey new_ttl_key("/new-ttl.vi");
+    cache_->Insert(new_ttl_key, make_dummy_ref(), &new_ttl_handle);
+    new_ttl_handle = tenann::IndexCacheHandle{};
+
+    EXPECT_TRUE(cache_->clear_expired(MonotonicMillis() + 14 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    tenann::IndexCacheHandle probe;
+    EXPECT_TRUE(cache_->Lookup(old_ttl_key, &probe));
+    probe = tenann::IndexCacheHandle{};
+    EXPECT_FALSE(cache_->Lookup(new_ttl_key, &probe));
+}
+
+TEST_F(VectorIndexCacheTest, TTL_IVFPQExpiresOuterEntryAndAllListBlocksTogether) {
+    config::vector_index_cache_expire_sec = 900;
+
+    tenann::IndexCacheHandle list_handle;
+    cache_->Insert(tenann::CacheKey("/ivfpq.vi#list-0"),
+                   make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList), &list_handle);
+
+    struct IvfPqPayload {
+        tenann::IndexCacheHandle list_handle;
+        std::vector<char> bytes;
+    };
+    auto* payload = new IvfPqPayload{std::move(list_handle), std::vector<char>(2048)};
+    auto outer_ref = std::make_shared<tenann::Index>(
+            payload, tenann::IndexType::kFaissIvfPq, [](void* p) { delete static_cast<IvfPqPayload*>(p); },
+            /*explicit_bytes=*/2048);
+
+    tenann::IndexCacheHandle outer_handle;
+    cache_->Insert(tenann::CacheKey("/ivfpq.vi"), outer_ref, &outer_handle);
+    outer_ref.reset();
+    outer_handle = tenann::IndexCacheHandle{};
+
+    EXPECT_TRUE(cache_->clear_expired(MonotonicMillis() + 901 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+
+    tenann::IndexCacheHandle probe;
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/ivfpq.vi"), &probe));
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/ivfpq.vi#list-0"), &probe));
 }
 
 TEST_F(VectorIndexCacheTest, MemTracker_Consume_AfterInsert) {
@@ -374,7 +1321,8 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     // Seed an "inner" entry plus a pinning handle that the outer ref will
     // hold and release on destruction — the BlockCacheInvertedLists pattern.
     tenann::IndexCacheHandle inner;
-    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024), &inner);
+    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024, tenann::IndexType::kFaissIvfPqOneInvertedList),
+              &inner);
 
     // Outer Index whose deleter consumes the inner handle. Moving the handle
     // into the deleter lambda is the same shape as faiss owning a
@@ -397,8 +1345,7 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     // which must not deadlock when the chained release runs.
     c->SetCapacity(0);
 
-    // Shutdown safety: destructing the cache must drain the remaining inner
-    // entry without re-locking _cache._lock.
+    // Shutdown safety remains covered after the cascading list-handle release.
     c.reset();
 }
 
@@ -450,55 +1397,77 @@ TEST(VectorIndexFileReaderTest, OpenSucceedsOnMemoryFs) {
     MemoryFileSystem fs;
     ASSERT_OK(fs.create_dir("/tmp"));
     ASSERT_OK(fs.append_file("/tmp/idx.vi", Slice("abcd", 4)));
-    ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(&fs, "/tmp/idx.vi"));
+    ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(remote_vi("/tmp/idx.vi", &fs)));
     ASSERT_NE(nullptr, reader);
     EXPECT_EQ(4, reader->GetSize());
 }
 
 TEST(VectorIndexFileReaderTest, OpenFailsOnMissingFile) {
     MemoryFileSystem fs;
-    auto r = VectorIndexFileReader::open(&fs, "/no/such/path.vi");
+    auto r = VectorIndexFileReader::open(remote_vi("/no/such/path.vi", &fs));
     EXPECT_FALSE(r.ok());
 }
 
-TEST(EmptyIndexReaderTest, AllMethodsReturnNotSupported) {
-    EmptyIndexReader r;
-    tenann::IndexMeta meta;
-    EXPECT_TRUE(r.init_searcher(meta, "/x.vi", /*fs=*/nullptr).is_not_supported());
-    EXPECT_TRUE(r.search(tenann::PrimitiveSeqView{}, /*k=*/1, nullptr, nullptr).is_not_supported());
-    std::vector<int64_t> ids;
-    std::vector<float> dists;
-    EXPECT_TRUE(r.range_search(tenann::PrimitiveSeqView{}, /*k=*/1, &ids, &dists, nullptr, /*range=*/0.0f, /*order=*/0)
-                        .is_not_supported());
-}
-
-TEST(TenANNReaderTest, InitSearcher_NoGlobalCache_ReturnsInternalError) {
+TEST(TenANNReaderTest, InitSearcher_UsesInjectedCacheWithoutGlobalCache) {
+    MemTracker tracker(-1, "tenann_reader_test");
+    VectorIndexCache cache(/*capacity=*/1024, &tracker);
     auto* saved = tenann::GetGlobalIndexCache();
     tenann::SetGlobalIndexCache(nullptr);
-    TenANNReader r;
-    tenann::IndexMeta meta;
-    auto st = r.init_searcher(meta, "/x.vi", /*fs=*/nullptr);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    tenann::SetGlobalIndexCache(saved);
+    DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved); });
+
+    MemoryFileSystem fs;
+    TenANNReader r(cache, /*async_load_on_miss=*/false);
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(make_minimal_meta(), remote_vi("/no/such/index.vi", &fs), stats);
+    EXPECT_TRUE(st.status().is_not_found()) << st.status();
 }
 
 // Drives init_searcher through the loader's fs!=nullptr branch with a missing
 // path so the captured Status (NotFound) flows back through GetOrCreate to the
-// caller. This is the signal VectorIndexReaderFactory's brute-force fallback
-// keys off — collapsing it to InternalError would silently disable the fallback.
+// caller instead of being collapsed to an unhelpful InternalError.
 TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     MemTracker tracker(-1, "tenann_reader_test");
     VectorIndexCache cache(/*capacity=*/1024, &tracker);
-    auto* saved = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(&cache);
 
     MemoryFileSystem fs;
-    TenANNReader r;
+    TenANNReader r(cache, /*async_load_on_miss=*/false);
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, "/no/such/index.vi", &fs);
-    EXPECT_TRUE(st.is_not_found()) << st.to_string();
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(std::move(meta), remote_vi("/no/such/index.vi", &fs), stats);
+    EXPECT_TRUE(st.status().is_not_found()) << st.status();
+    EXPECT_EQ(0, stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+    EXPECT_GT(stats.vector_index_file_open_ns, 0);
+    EXPECT_EQ(0, stats.vector_index_read_file_ns);
+    EXPECT_EQ(0, stats.vector_index_init_index_ns);
+}
 
-    tenann::SetGlobalIndexCache(saved);
+TEST_F(VectorIndexCacheTest, TenANNReader_LoadWaitTimeoutFallsBack) {
+    config::vector_index_cache_loading_wait_timeout_ms = 50;
+    ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    constexpr const char* kPath = "/reader-wait-timeout.vi";
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto async_loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref();
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache_->TryGetOrSchedule(tenann::CacheKey(kPath), std::move(async_loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    TenANNReader reader(*cache_, /*async_load_on_miss=*/false);
+    OlapReaderStatistics stats;
+    auto result = reader.init_searcher(make_minimal_meta(), FileInfo{.path = kPath}, stats);
+    ASSERT_OK(result);
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, result.value());
+    EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+
+    release_loader.set_value();
+    EXPECT_TRUE(wait_for_probe_state(cache_.get(), kPath, VectorIndexCacheProbeState::kReady));
 }
 
 // Same fs-bound path but the file IS present, just not a real tenann index.
@@ -510,19 +1479,16 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
 TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
     MemTracker tracker(-1, "tenann_reader_test");
     VectorIndexCache cache(/*capacity=*/1024, &tracker);
-    auto* saved = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(&cache);
 
     MemoryFileSystem fs;
     ASSERT_OK(fs.create_dir("/tmp"));
     ASSERT_OK(fs.append_file("/tmp/garbage.vi", Slice("not a real index", 16)));
 
-    TenANNReader r;
+    TenANNReader r(cache, /*async_load_on_miss=*/false);
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, "/tmp/garbage.vi", &fs);
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(std::move(meta), remote_vi("/tmp/garbage.vi", &fs), stats);
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
-
-    tenann::SetGlobalIndexCache(saved);
 }
 
 // A FileSystem that records which mem tracker is active when the index file is
@@ -566,8 +1532,6 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
 
     MemTracker cache_tracker(-1, "vi_cache_probe");
     VectorIndexCache cache(/*capacity=*/1024, &cache_tracker);
-    auto* saved = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(&cache);
 
     // Simulate the load being triggered while running under a query's mem tracker
     // (distinct from both process and vector_index). The loader must redirect the
@@ -575,12 +1539,12 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
     MemTracker fake_query(-1, "fake_query_ambient");
     {
         CurrentThreadMemTrackerSetter ambient(&fake_query);
-        TenANNReader r;
+        TenANNReader r(cache, /*async_load_on_miss=*/false);
         auto meta = make_minimal_meta();
+        OlapReaderStatistics stats;
         // Load runs the probe fs, then fails NotFound (return ignored).
-        (void)r.init_searcher(meta, "/no/such/probe.vi", &fs);
+        (void)r.init_searcher(std::move(meta), remote_vi("/no/such/probe.vi", &fs), stats);
     }
-    tenann::SetGlobalIndexCache(saved);
 
     ASSERT_NE(nullptr, fs.captured) << "loader never opened the index file via fs";
     EXPECT_EQ(process, fs.captured) << "index load charged to '" << fs.captured->label() << "', expected 'process'";

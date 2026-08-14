@@ -238,13 +238,41 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        // Array element is nullable, so we need to extract the data from nullable column first
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto offset_size = input_column->get_element_offset_size(row_num);
-        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
-
+        const auto& array_element = input_column->elements();
         const auto* element_data_column = ColumnHelper::get_data_column(&array_element);
-        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+
+        // The offsets and the element column must agree on how many elements the array has.
+        // If they don't, the update() below indexes past the element column and hands the state
+        // a wild Slice.
+        if (UNLIKELY(offset_size.first + offset_size.second > element_data_column->size())) {
+            LOG_FIRST_N(ERROR, 20) << "array_agg merge: inconsistent array column"
+                                   << " row=" << row_num << " offset=" << offset_size.first
+                                   << " size=" << offset_size.second << " elements=" << element_data_column->size()
+                                   << " array_rows=" << input_column->size()
+                                   << " elem_nullable=" << array_element.is_nullable();
+            ctx->set_error("array_agg: corrupted array column (offsets exceed element column)");
+            return;
+        }
+
+        // update() reinterprets the element column as the column for LT. Nothing in the type
+        // system ties the two together -- a dictionary-encoded stand-in for a string column is
+        // an INT column -- so check rather than reinterpret.
+        if constexpr (lt_is_string_or_binary<LT>) {
+            if (UNLIKELY(!element_data_column->is_binary() && !element_data_column->is_large_binary())) {
+                LOG_FIRST_N(ERROR, 20) << "array_agg merge: array element column is " << element_data_column->get_name()
+                                       << ", expected a binary column for logical type " << static_cast<int>(LT);
+                ctx->set_error("array_agg: unexpected array element column type");
+                return;
+            }
+        }
+
+        // Array elements are normally nullable, but nothing in the type system guarantees it.
+        size_t element_null_count = array_element.is_nullable()
+                                            ? down_cast<const NullableColumn&>(array_element)
+                                                      .null_count(offset_size.first, offset_size.second)
+                                            : 0;
         DCHECK_LE(element_null_count, offset_size.second);
 
         this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,

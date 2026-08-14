@@ -19,13 +19,13 @@
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
-#include "exec/data_sinks/arrow_result_writer.h"
-#include "exec/data_sinks/customized_result_writer.h"
-#include "exec/data_sinks/http_result_writer.h"
-#include "exec/data_sinks/metadata_result_writer.h"
-#include "exec/data_sinks/mysql_result_writer.h"
-#include "exec/data_sinks/statistic_result_writer.h"
-#include "exec/data_sinks/variable_result_writer.h"
+#include "data_sink/result/arrow_result_writer.h"
+#include "data_sink/result/customized_result_writer.h"
+#include "data_sink/result/http_result_writer.h"
+#include "data_sink/result/metadata_result_writer.h"
+#include "data_sink/result/mysql_result_writer.h"
+#include "data_sink/result/statistic_result_writer.h"
+#include "data_sink/result/variable_result_writer.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
@@ -74,8 +74,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
         break;
     case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
-        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _output_column_names, profile,
-                                                      _row_desc);
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _output_column_names, profile);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

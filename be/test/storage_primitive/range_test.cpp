@@ -204,4 +204,56 @@ TEST(SparseRangeIteratorTest, intersect_test) {
     }
 }
 
+TEST(SparseRangeIteratorTest, remaining_rows) {
+    // Three disjoint ranges, 10 + 20 + 20 = 50 rows in total.
+    SparseRange<> r1({{0, 10}, {20, 40}, {50, 70}});
+    SparseRangeIterator<> iter = r1.new_iterator();
+
+    // Fresh iterator: every row remains.
+    EXPECT_EQ(50u, iter.remaining_rows());
+
+    // Consume 5 rows inside the first range (still _index == 0).
+    (void)iter.next(5);
+    EXPECT_EQ(45u, iter.remaining_rows());
+
+    // Consume the remaining 5 rows of the first range; the iterator now sits at the
+    // start of the second range (_index == 1, _next_rowid == 20). This is the case the
+    // fix targets: the un-consumed part of the *current* range must be measured against
+    // _ranges[_index].end(), not _ranges[0].end(). The buggy version treated the current
+    // partial range as empty and returned 20 (dropping [20,40)'s 20 rows).
+    (void)iter.next(5);
+    EXPECT_EQ(40u, iter.remaining_rows());
+
+    // Advance 5 rows into the second range (_index == 1, _next_rowid == 25).
+    (void)iter.next(5);
+    EXPECT_EQ(35u, iter.remaining_rows());
+
+    // Finish the second range; now at the third range (_index == 2, _next_rowid == 50).
+    (void)iter.next(15);
+    EXPECT_EQ(20u, iter.remaining_rows());
+
+    // Drain the last range.
+    (void)iter.next(20);
+    EXPECT_FALSE(iter.has_more());
+    EXPECT_EQ(0u, iter.remaining_rows());
+}
+
+// Regression test for issue #75203: CN SIGSEGV @0x0 in
+// PhysicalSplitMorselQueue::_try_get_split_from_single_tablet().
+//
+// The physical-split loop evaluates `_segment_range_iter.has_more()` in its while
+// condition. On empty/edge tablets the iterator can still be default-constructed
+// (its _range pointer is null) when has_more() is reached. Before the fix has_more()
+// did an unconditional `_index < _range->_ranges.size()`, dereferencing the null
+// _range -> std::vector::size() read at address 0 -> SIGSEGV @0x0 (exactly the crash
+// stack in the issue: has_more() inlined into _try_get_split_from_single_tablet()).
+//
+// A default-constructed iterator has no ranges, so has_more() must report false
+// rather than dereference null. Without the fix this line is an ASAN
+// null/heap-buffer-overflow read; with it, it returns false.
+TEST(SparseRangeIteratorTest, has_more_on_default_constructed_is_null_safe) {
+    SparseRangeIterator<> iter; // default-constructed: _range == nullptr
+    EXPECT_FALSE(iter.has_more());
+}
+
 } // namespace starrocks

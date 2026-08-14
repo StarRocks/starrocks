@@ -166,7 +166,7 @@ SELECT /*+ SET_VAR
 
 ### ユーザーのプロパティとして変数を設定
 
-[ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
+[ALTER USER](./sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
 
 例：
 
@@ -188,6 +188,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **導入バージョン**: v3.0
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
+
+### ann_params
+
+* **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。
+* **デフォルト**: `""`
+* **データ型**: String
+* **スコープ**: Session
 
 ### array_low_cardinality_optimize
 
@@ -608,7 +615,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 ### enable_insert_strict
 
-* **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/load_concept/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
+* **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
 * **デフォルト**: true
 
 ### max_unknown_string_meta_length (global)
@@ -631,6 +638,27 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **データ型**: Boolean
 * **導入バージョン**: v3.5.16, v4.0.9
+
+### enable_lake_prepared_physical_split_scan
+
+* **説明**: 共有データクラスタ内のクラウドネイティブ（レイク）テーブルに対して Prepared Physical Split Scan を有効にするかどうか。有効にすると、各セグメントは一度だけプルーニングされ、その Prepared Read State が同一タブレットの Split 子タスク間で共有されるため、大きい、またはデータが偏ったタブレットのスキャンを高速化できます。この最適化はスキャンノードごとに判断され、さらにクラウドネイティブテーブルであることと Query Cache が無効であることを必要とします。共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **説明**: Prepared Physical Split scan において、Scan Range 数がすでに Pipeline DOP に達している場合でも、単一の巨大な Lake タブレットを分割できるようにするデータ偏りのしきい値。あるタブレットの行数が、この比率に Driver あたりの理想的な分担（総行数を有効 DOP で割った値）を掛けた値を超えると、そのタブレットは偏ったストラグラーとみなされて分割されます。値が大きいほど分割にはより極端な偏りが必要になり、値が小さいほど積極的に分割します。正の有限な数値である必要があります。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: 1.5
+* **データ型**: Double
+* **導入バージョン**: v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **説明**: 同一クエリ内で 2 つ以上の Scan オペレータによってスキャンされるクラウドネイティブ（レイク）テーブル（セルフジョインや、複数回参照されるテーブルなど）に対して、Prepared Physical Split Scan を許可するかどうか。`false`（デフォルト）の場合、そのような重複スキャンは通常のスキャンにフォールバックします。この最適化が Scan ごとに再利用する Prepared Read State を、同一テーブルの兄弟 Scan 間で共有することは安全ではないためです。`true` に設定すると、それらのスキャンを最適化に再度組み込みます。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -857,7 +885,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 ### enable_scan_datacache
 
-* **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
+* **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
 * **デフォルト**: true
 * **導入バージョン**: v2.5
 
@@ -934,6 +962,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **スコープ**: セッション
 * **データタイプ**: boolean
 * **導入バージョン**: v3.2.4
+
+### enable_vector_index_refine
+
+* **説明**: 量子化ベクターインデックスが返した候補について、元のベクトルから正確な距離を再計算し、再順位付けするかどうかを指定します。IVFPQ、および `sq4`、`sq8`、`pq` 量子化器を使用する HNSW インデックスに適用されます。量子化されていない HNSW インデックス（`quantizer = flat`）には影響しません。有効にすると結果の精度が向上する可能性がありますが、I/O と計算コストが増加します。`EXPLAIN` の `Refine: ON/OFF` で有効かどうかを確認できます。
+* **デフォルト**: `false`
+* **データ型**: Boolean
+* **スコープ**: Session
 
 ### enable_view_based_mv_rewrite
 
@@ -1055,6 +1090,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1
 * **データ型**: Int
 * **導入バージョン**: -
+
+### k_factor
+
+* **説明**: クエリの `LIMIT` にこの値を掛け、各 Segment が返すベクターインデックス候補数を決定します。`1` より大きい値は、複数 Segment の候補をマージした後の再現率を向上させる可能性がありますが、インデックス検索、メモリ、および後続処理のコストが増加します。最終的な候補数は少なくとも `1` に調整されます。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### lake_bucket_assign_mode
 
@@ -1190,6 +1232,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 3000
 * **単位**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **説明**: Tablet のサイズに基づいて単一 Tablet 最適化を制御します。クエリが単一の Tablet に絞り込まれると、StarRocks は集計を 1 フェーズで実行し、結果を単一ノードに集約して Shuffle を省略できます。小さな Tablet には効率的ですが、Tablet が大きい場合はクエリ全体を単一ノードで直列化します。選択された単一 Tablet の行数がこのしきい値を超える場合、この最適化は無効になり、通常の分散（Shuffle）プランが使用されます。`-1` に設定すると、このゲートが無効になり、Tablet のサイズに関係なく常に単一 Tablet 最適化が適用されます。
+* **デフォルト**: 10000000
+* **データ型**: Long
+* **導入バージョン**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **説明**: マテリアライズドビューの書き換えルールが消費できる最大時間を指定します。しきい値に達すると、このルールはクエリ書き換えに使用されません。
@@ -1275,7 +1324,7 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
 
 ### plan_mode
 
-* **説明**: Iceberg Catalog のメタデータ取得戦略。詳細は [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy) を参照してください。有効な値:
+* **説明**: Iceberg Catalog のメタデータ取得戦略。詳細は [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg.md#appendix-periodic-metadata-refresh-strategy) を参照してください。有効な値:
   * `auto`: システムが自動的に取得プランを選択します。
   * `local`: FE がローカルで Iceberg manifest ファイルを解析し、解析しながら scan range を段階的に BE に配信します。すべての manifest の解析完了を待つ必要がなく、メモリ使用量と初回レイテンシを削減できます。
   * `distributed`: manifest の解析を複数の BE に分散して並列処理しますが、FE はすべての BE の結果が揃うまで scan range を配信できません。manifest ファイルが多い大規模テーブルでは、メモリ使用量の増大と待ち時間の長期化を招く可能性があります。FE の CPU がボトルネックになっている場合にのみ推奨します。
@@ -1290,6 +1339,13 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
   * `never`: データをキャッシュしません。
 * **デフォルト**: auto
 * **導入バージョン**: v3.3.2
+
+### pq_refine_factor
+
+* **説明**: `enable_vector_index_refine` を有効にしたベクター範囲検索で使用する追加の候補倍率です。`k_factor` の後に適用されます。値を大きくすると、正確な距離による再順位付け前の再現率が向上する可能性がありますが、インデックス検索、I/O、および距離計算のコストが増加します。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### query_cache_agg_cardinality_limit
 

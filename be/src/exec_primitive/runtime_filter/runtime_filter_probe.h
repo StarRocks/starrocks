@@ -41,7 +41,6 @@
 namespace starrocks {
 
 class HashJoinNode;
-class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterCache;
 
@@ -62,7 +61,7 @@ public:
     bool skip_wait() const { return _skip_wait; }
     // RF is built by stream
     bool is_stream_build_filter() const { return _is_stream_build_filter; }
-    ExprContext* probe_expr_ctx() { return _probe_expr_ctx; }
+    ExprContext* probe_expr_ctx() const { return _probe_expr_ctx; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const { return _probe_expr_ctx->root()->is_bound(tuple_ids); }
     // Disable pushing down runtime filters when:
     //  - partition_by_exprs have multi columns;
@@ -79,7 +78,7 @@ public:
         return true;
     }
     LogicalType probe_expr_type() const { return _probe_expr_ctx->root()->type().type; }
-    void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
+    void replace_probe_expr_ctx(RuntimeState* state, ExprContext* new_probe_expr_ctx);
     std::string debug_string() const;
     bool is_local() const { return _is_local; }
     TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }

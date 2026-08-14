@@ -24,7 +24,6 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -78,6 +77,7 @@ import com.starrocks.planner.ExecGroupSets;
 import com.starrocks.planner.FetchNode;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.FileTableScanNode;
+import com.starrocks.planner.FlussScanNode;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
@@ -183,6 +183,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
@@ -212,6 +213,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -326,7 +328,8 @@ public class PlanFragmentBuilder {
         if ((!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
+                .reduce(Integer::sum).orElse(2) <= 1)
+                && !hasOversizedSingleTablet(execPlan)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
             for (PlanFragment fragment : execPlan.getFragments()) {
                 fragment.setSingleTabletGatherOutputFragment(true);
@@ -343,6 +346,30 @@ public class PlanFragmentBuilder {
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
+    }
+
+    // Consistency guard for one_tablet_opt_max_tablet_rows: when a single scanned tablet is too large the
+    // logical one-tablet optimization is disabled at its source (Utils.isSelectedSingleTabletTooLarge in
+    // LogicalProperty), so the physical single-tablet gather output must be disabled too. Otherwise a now
+    // two-phase (shuffled, multi-instance) aggregation could be wrongly pinned to a single-tablet gather.
+    private static boolean hasOversizedSingleTablet(ExecPlan execPlan) {
+        if (execPlan.getConnectContext() == null) {
+            return false;
+        }
+        long maxTabletRows = execPlan.getConnectContext().getSessionVariable().getOneTabletOptMaxTabletRows();
+        if (maxTabletRows < 0) {
+            return false;
+        }
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode olapScanNode) {
+                if (Utils.isSelectedSingleTabletTooLarge(olapScanNode.getDesc().getTable(),
+                        olapScanNode.getSelectedIndexMetaId(), olapScanNode.getSelectedPartitionIds(),
+                        olapScanNode.getScanTabletIds(), maxTabletRows)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
@@ -910,6 +937,21 @@ public class PlanFragmentBuilder {
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
+
+            // Per-scan decision to enable the lake prepared-physical-split scan. Gated on the (INVISIBLE)
+            // session switch + a cloud-native (lake) table. Query cache is mutually exclusive with this
+            // optimization by design: when query cache is on we fall back to the non-split scan so the
+            // per-fragment cache/ticket path is not perturbed.
+            ConnectContext connectContext = context.getConnectContext();
+            if (connectContext != null
+                    && connectContext.getSessionVariable().isEnableLakePreparedPhysicalSplitScan()
+                    && !connectContext.getSessionVariable().isEnableQueryCache()
+                    && referenceTable.isCloudNativeTableOrMaterializedView()
+                    && (connectContext.getSessionVariable().isEnableLakePreparedSplitOnDupTableScan()
+                            || !context.getDuplicatedLakeScanTableIds().contains(referenceTable.getId()))) {
+                scanNode.setUsePreparedPhysicalSplitScan(true);
+            }
+
             currentExecGroup.add(scanNode);
 
             // set slot
@@ -972,11 +1014,7 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                DistributionInfo distInfo = referenceTable.getDefaultDistributionInfo();
-                RangeColocateScanDispatch dispatch = null;
-                if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-                    dispatch = RangeColocateScanDispatch.forTable(referenceTable);
-                }
+                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
                 // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
@@ -1016,30 +1054,8 @@ public class PlanFragmentBuilder {
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        // Range-colocate scans use the dispatch facade when alignment
-                        // holds; if alignment is transiently broken the same scan still
-                        // needs a bucketSeq for non-colocate consumers, so fall back to
-                        // position-based and let the dispatch-time alignment guard in
-                        // OlapScanNode.getBucketNums() handle the colocate-dispatch path.
-                        if (dispatch != null) {
-                            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
-                            if (rangeColocateMap != null) {
-                                tabletId2BucketSeq.putAll(rangeColocateMap);
-                            } else {
-                                // Range-colocate but transiently unaligned: fall back to position-based
-                                // bucketSeq so a non-colocate scan still works. getBucketNums() fails closed
-                                // on the colocate-dispatch path by validating this built assignment against
-                                // the aligned mapping, so no unaligned observation needs to be recorded here.
-                                for (int i = 0; i < allTabletIds.size(); i++) {
-                                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                                }
-                            }
-                        } else {
-                            // HASH or range non-colocate: position-based bucketSeq.
-                            for (int i = 0; i < allTabletIds.size(); i++) {
-                                tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                            }
-                        }
+                        OlapScanNode.fillTabletId2BucketSeq(
+                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
@@ -1730,6 +1746,58 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalFlussScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalFlussScanOperator node = (PhysicalFlussScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            FlussScanNode flussScanNode =
+                    new FlussScanNode(context.getNextNodeId(), tupleDescriptor, "FlussScanNode");
+            flussScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            flussScanNode.computeStatistics(optExpression.getStatistics());
+            currentExecGroup.add(flussScanNode, true);
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    flussScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                HDFSScanNodePredicates scanNodePredicates = flussScanNode.getScanNodePredicates();
+                scanNodePredicates.setSelectedPartitionIds(
+                        node.getScanOperatorPredicates().getSelectedPartitionIds());
+                scanNodePredicates.setIdToPartitionKey(
+                        node.getScanOperatorPredicates().getIdToPartitionKey());
+                flussScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), node.getLimit());
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
+                scanNodePredicates.getNonPartitionConjuncts().addAll(scanNodePredicates.getNoEvalPartitionConjuncts());
+            } catch (Exception e) {
+                LOG.warn("Fluss scan node get scan range locations failed : ", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            flussScanNode.setLimit(node.getLimit());
+            flussScanNode.setDataCacheOptions(node.getDataCacheOptions());
+
+            tupleDescriptor.computeMemLayout();
+            registerScanNode(node, flussScanNode, context);
+
+            PlanFragment flussScanFragment =
+                    new PlanFragment(context.getNextFragmentId(), flussScanNode, DataPartition.RANDOM);
+            context.getFragments().add(flussScanFragment);
+            return flussScanFragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
             return buildIcebergScanNode(optExpression, context);
         }
@@ -1775,8 +1843,17 @@ public class PlanFragmentBuilder {
 
             // Iceberg table scan slots are always nullable because the source data
             // is not governed by StarRocks NOT NULL constraints and may contain nulls.
+            // Widen both the slot descriptors AND the shared column refs. Downstream
+            // fragment building rebuilds tuples from ColumnRefOperator.isNullable()
+            // (e.g. the UNNEST outer columns in visitPhysicalTableFunction); if a ref
+            // for a required (NOT NULL) Iceberg column still reports not-null while the
+            // runtime column produced by the scan is nullable, the aggregator group-by
+            // nullability check rejects it with "error nullablel column".
             for (SlotDescriptor slotDescriptor : tupleDescriptor.getSlots()) {
                 slotDescriptor.setIsNullable(true);
+            }
+            for (ColumnRefOperator columnRefOperator : node.getColRefToColumnMetaMap().keySet()) {
+                columnRefOperator.setNullable(true);
             }
 
             // partition id generator
@@ -3391,12 +3468,10 @@ public class PlanFragmentBuilder {
                         if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
                             return false;
                         }
-                        HashDistributionDesc.SourceType hashSourceType =
+                        HashDistributionDesc desc =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                        .getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                                        .getHashDistributionDesc();
+                        return desc.isShuffleLike();
                     });
         }
 
@@ -3538,6 +3613,7 @@ public class PlanFragmentBuilder {
                     analyticWindow,
                     node.isUseHashBasedPartition(),
                     node.isSkewed(),
+                    node.isForceMergeSort(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -3557,8 +3633,10 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
+            // Both the skewed and the forceMergeSort paths make the AnalyticNode consume a single
+            // ordered stream via OrderedPartitionExchanger, so the child SortNode must merge.
             passPartitionByToSortNode(context, inputFragment.getPlanRoot(), analyticEvalNode.getPartitionExprs(),
-                    node.isSkewed());
+                    node.isSkewed() || node.isForceMergeSort());
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
@@ -3622,9 +3700,13 @@ public class PlanFragmentBuilder {
          * In new planner.
          * Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
          * to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+         *
+         * @param needsMerge when true, forces the SortNode to produce a single merged output stream
+         *                   instead of partition-sorted streams, because the downstream AnalyticNode
+         *                   consumes a single globally-ordered input.
          */
         private static void passPartitionByToSortNode(ExecPlan context, PlanNode childRoot, List<Expr> partitionExprs,
-                                                      boolean isSkewed) {
+                                                      boolean needsMerge) {
             SortNode sortNode = null;
             if (childRoot instanceof SortNode) {
                 sortNode = (SortNode) childRoot;
@@ -3656,7 +3738,7 @@ public class PlanFragmentBuilder {
 
             if (sortNode != null) {
                 // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
-                sortNode.setAnalyticPartitionSkewed(isSkewed);
+                sortNode.setAnalyticNeedsMerge(needsMerge);
             }
         }
 
@@ -3793,11 +3875,11 @@ public class PlanFragmentBuilder {
             }
 
             ExecGroup execGroup = execGroups.newExecGroup();
-            // TODO(by satanson): only all children of Set operator are colocate branch, we turn on execGroup.
-            //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
-            //  query hanging forever.
-            boolean canExecGroup = true;
             Optional<List<BucketProperty>> extractedBP = extractBucketProperties(inputFragments);
+            if (optExpr.getOp() instanceof PhysicalUnionOperator) {
+                setOperationFragment.mergeQueryGlobalDicts(
+                        ((PhysicalUnionOperator) optExpr.getOp()).getGlobalDicts());
+            }
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
@@ -3805,9 +3887,19 @@ public class PlanFragmentBuilder {
                 setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
                 setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
                 ExecGroup inputExecGroup = inputExecGroups.get(i);
+                // This branch's exec group is about to disappear -- merged into the Set operator's
+                // group below (which we then disable), or simply dropped when the branch sits
+                // behind an exchange. Runtime filters built inside the branch were stamped with
+                // build_from_group_execution back when that group was still colocate
+                // (RuntimeFilterPushDownContext stamps it as the join is built), and merge() copies
+                // only node ids -- so nothing would ever clear the flag. The BE would keep treating
+                // those probes as group-colocate filters and refuse to push them down, even though
+                // no colocate TExecGroup is emitted for them any more. disableColocateGroup() drops
+                // that metadata; it walks only this group's own node ids, so a colocate group
+                // elsewhere in the plan is left untouched.
+                inputExecGroup.disableColocateGroup(inputFragment.getPlanRoot());
                 execGroups.remove(inputExecGroup);
                 if (inputFragment.getPlanRoot() instanceof ExchangeNode) {
-                    canExecGroup = false;
                     if (isColocate) {
                         inputFragment.getChildren().forEach(fragment -> {
                             fragment.setOutputPartition(
@@ -3825,11 +3917,30 @@ public class PlanFragmentBuilder {
             execGroup.add(setOperationNode);
 
             setOperationNode.setColocate(isColocate);
-            if (canExecGroup && isColocate && ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
-                execGroup.setColocateGroup();
-            } else {
-                execGroup.disableColocateGroup(setOperationNode);
-            }
+            // Never run a Set operator inside a colocate exec group: it hangs forever.
+            //
+            // A colocate Set operator carries localPartitionByExprs, so on the BE
+            // UnionNode::decompose_to_pipeline routes each branch through
+            // maybe_interpolate_local_bucket_shuffle_exchange, which returns early -- without
+            // interpolating a grouped exchange -- whenever the branch source reports
+            // could_local_shuffle() == false. A group-execution scan always reports false. The
+            // branch pipelines therefore stay in the colocate exec group but are terminated by a
+            // plain LocalExchangeSink instead of a GroupedExecutionSink.
+            //
+            // ColocateExecutionGroup submits its logical bucket groups in waves of physical dop
+            // and the only thing that advances a wave is
+            // GroupedExecutionSinkOperator::set_finishing() -> submit_next_driver(). With no
+            // grouped sink on those pipelines, the groups beyond the first wave are never
+            // submitted, the gather exchanger never sees all sinkers finish, and every downstream
+            // driver stays INPUT_EMPTY forever. Reproduces whenever
+            // bucket groups >= 2 * physical dop (e.g. INSERT INTO, whose sink fragment dop is
+            // forced down in InsertPlanner).
+            //
+            // Group execution buys nothing for this shape anyway -- the gather exchanger at the
+            // Set operator collapses logical dop back to physical dop, so the per-group agg/join
+            // benefit is already lost -- hence disabling it outright rather than teaching the BE
+            // to split the group here.
+            execGroup.disableColocateGroup(setOperationNode);
             currentExecGroup = execGroup;
             return setOperationFragment;
         }
@@ -3928,7 +4039,19 @@ public class PlanFragmentBuilder {
                         context.getDescTbl().addSlotDescriptor(udtfOutputTuple, new SlotId(columnRefOperator.getId()));
                 slotDesc.setType(columnRefOperator.getType());
                 slotDesc.setIsMaterialized(true);
-                slotDesc.setIsNullable(columnRefOperator.isNullable());
+                // Outer (pass-through) columns are materialized by the child, whose slot reflects
+                // the true runtime nullability. That can be wider than the logical colRef -- e.g. a
+                // required (NOT NULL) Iceberg column, or an expression derived from one, whose runtime
+                // column is nullable. Prefer the child slot so we never declare a NOT NULL outer slot
+                // over a nullable runtime column (which the aggregator rejects with the group-by
+                // "error nullablel column" check). This only widens; fn-result columns have no child
+                // SlotRef in the map yet, so they keep the colRef nullability.
+                boolean nullable = columnRefOperator.isNullable();
+                Expr childOutputExpr = context.getColRefToExpr().get(columnRefOperator);
+                if (childOutputExpr instanceof SlotRef) {
+                    nullable |= ((SlotRef) childOutputExpr).getDesc().getIsNullable();
+                }
+                slotDesc.setIsNullable(nullable);
 
                 context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDesc));
             }

@@ -58,8 +58,8 @@ StatusOr<std::unique_ptr<ConnectorSink>> FileChunkSinkProvider::create_sink(int3
     if (runtime_state == nullptr) {
         return Status::InternalError("FileChunkSinkContext requires runtime_state");
     }
-    std::shared_ptr<FileSystem> fs =
-            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
 
     auto normalized_format = normalize_format_name(ctx->format);

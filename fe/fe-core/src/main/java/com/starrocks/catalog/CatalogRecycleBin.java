@@ -70,6 +70,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -96,6 +97,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private final Map<Long, RecyclePartitionInfo> idToPartition;
     private final Map<Long, Long> physicalPartitionIdToPartitionId;
+    // Superseded materialized indexes parked here by a tablet reshard (issue #75993), keyed by the
+    // index's own (globally unique) id. Never user-recoverable; erased strictly at the tablet level.
+    private final Map<Long, RecycleMaterializedIndexInfo> idToIndex;
 
     private Map<RecyclePartitionInfo, CompletableFuture<Boolean>> asyncDeleteForPartitions;
 
@@ -103,8 +107,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     // Key: tableId, Value: Set of partitionIds that belong to this table
     private final Map<Long, Set<Long>> lakeTableToPartitions;
 
-    private static final ExecutorService ASYNC_REMOVE_PARTITION_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
-                Config.lake_remove_partition_thread_num, Integer.MAX_VALUE, "lake-remove-partition-pool", true);
+    // Not final and instance-owned (was a static pool nothing ever stopped): leader demotion drains
+    // it to termination in onStopped() and nulls it, and the getter lazily rebuilds it on the next
+    // leader session - the same lifecycle as the other LeaderDaemon-owned pools, so the re-activation
+    // cleanliness gate's "isRunning == false => owned pools terminated" invariant covers it.
+    private volatile ExecutorService asyncRemovePartitionExecutor;
 
     protected Map<Long, Long> idToRecycleTime;
 
@@ -123,6 +130,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         nameToTableInfo = HashBasedTable.create();
         idToPartition = Maps.newHashMap();
         physicalPartitionIdToPartitionId = Maps.newHashMap();
+        idToIndex = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
         asyncDeleteForPartitions = Maps.newHashMap();
@@ -267,6 +275,96 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         putPartitionToRecycleBin(recyclePartitionInfo);
         LOG.debug("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
+    }
+
+    /**
+     * Park a superseded materialized index (e.g. retired by a tablet reshard) in the recycle bin.
+     * Idempotent: a re-run/replay of the reshard cleanup that re-invokes this is a no-op, so it can be
+     * called unconditionally without a duplicate-id precondition. Keyed by the index's own id.
+     */
+    public synchronized void recycleMaterializedIndex(RecycleMaterializedIndexInfo info) {
+        long indexId = info.getIndexId();
+        if (idToIndex.containsKey(indexId)) {
+            return;
+        }
+        idToIndex.put(indexId, info);
+        idToRecycleTime.put(indexId, System.currentTimeMillis());
+        LOG.info("Put materialized index {} to recycle bin. dbId: {} tableId: {} physicalPartitionId: {}",
+                indexId, info.getDbId(), info.getTableId(), info.getPhysicalPartitionId());
+    }
+
+    // Whether the given materialized index is scheduled for removal (parked by a reshard and awaiting
+    // its retention deadline). The index stays installed on its partition until then.
+    public synchronized boolean isMaterializedIndexRecycled(long indexId) {
+        return idToIndex.containsKey(indexId);
+    }
+
+    // Erase parked indexes whose retention (reusing partition_recycle_retention_period_secs, floored
+    // to a positive value so an entry is never immediately erasable before its recycle is durable) has
+    // elapsed. info.delete() detaches the index from its live partition and drops its tablets from the
+    // inverted index; the now-unreferenced shards are then reclaimed per-shard by StarMgrMetaSyncer,
+    // still gated by cluster-snapshot safety. The snapshot check here mirrors that gate so we don't
+    // drop tablets a snapshot still needs.
+    //
+    // delete() takes the table write lock, and the established lock order is catalog-lock -> recycle-bin
+    // monitor (e.g. recyclePartition / recycleMaterializedIndex run under a catalog lock). So we must
+    // NOT hold the monitor while calling delete(): collect the erasable entries under the monitor, then
+    // detach + journal outside it (the journal's WAL applier reacquires the monitor only for the map
+    // bookkeeping, holding no table lock).
+    protected void eraseMaterializedIndex(long currentTimeMs) {
+        long expireMs = Math.max(Config.partition_recycle_retention_period_secs, 1L) * 1000L;
+        List<RecycleMaterializedIndexInfo> erasable = new ArrayList<>();
+        synchronized (this) {
+            for (Map.Entry<Long, RecycleMaterializedIndexInfo> entry : idToIndex.entrySet()) {
+                long indexId = entry.getKey();
+                RecycleMaterializedIndexInfo info = entry.getValue();
+
+                Long recycleTime = idToRecycleTime.get(indexId);
+                if (recycleTime == null || currentTimeMs - recycleTime < expireMs) {
+                    continue;
+                }
+                if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                        .isTableSafeToDeleteTablet(info.getTableId())) {
+                    continue;
+                }
+                erasable.add(info);
+                if (erasable.size() >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
+                    break;
+                }
+            }
+        }
+
+        for (RecycleMaterializedIndexInfo info : erasable) {
+            long indexId = info.getIndexId();
+            try {
+                info.delete();
+            } catch (Exception e) {
+                // Leave the entry in place so the next cycle retries; do not journal a half-done erase.
+                LOG.warn("Failed to erase materialized index {} (table {}); will retry next cycle: {}",
+                        indexId, info.getTableId(), e.getMessage());
+                continue;
+            }
+            GlobalStateMgr.getCurrentState().getEditLog().logEraseMaterializedIndex(info, wal -> {
+                synchronized (this) {
+                    idToIndex.remove(indexId);
+                    idToRecycleTime.remove(indexId);
+                }
+            });
+            LOG.info("Erased materialized index {} from recycle bin. dbId: {} tableId: {}", indexId,
+                    info.getDbId(), info.getTableId());
+        }
+    }
+
+    public void replayEraseMaterializedIndex(RecycleMaterializedIndexInfo info) {
+        long indexId = info.getIndexId();
+        synchronized (this) {
+            idToIndex.remove(indexId);
+            idToRecycleTime.remove(indexId);
+        }
+        // Detach outside the monitor (delete() takes the table write lock). Idempotent and null-safe:
+        // tolerates replaying an erase for an index/partition/table no longer present.
+        info.delete();
+        LOG.info("Replayed erase materialized index {} from recycle bin", indexId);
     }
 
     public synchronized Partition getPartition(long partitionId) {
@@ -817,7 +915,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             CompletableFuture<Boolean> future = asyncDeleteForPartitions.get(partitionInfo);
             if (future == null) {
                 asyncDeleteForPartitions.put(partitionInfo,
-                        CompletableFuture.supplyAsync(partitionInfo::delete, ASYNC_REMOVE_PARTITION_EXECUTOR));
+                        CompletableFuture.supplyAsync(partitionInfo::delete, getAsyncRemovePartitionExecutor()));
             } else if (future.isDone()) {
                 try {
                     finished = future.get();
@@ -1210,11 +1308,46 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 } // end for indices
             } // end for partitions
         }
+        // Indexes parked by a reshard (idToIndex) stay installed on their live partition, so their
+        // tablets are already registered by the partition walk above / the normal image load -- no
+        // separate re-registration is needed here.
     }
 
     public void removeInvalidateReference() {
         // privilege object can be invalidated after gc
         GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
+    }
+
+    private ExecutorService getAsyncRemovePartitionExecutor() {
+        ExecutorService executor = asyncRemovePartitionExecutor;
+        if (executor == null || executor.isShutdown()) {
+            synchronized (this) {
+                executor = asyncRemovePartitionExecutor;
+                if (executor == null || executor.isShutdown()) {
+                    executor = ThreadPoolManager.newDaemonFixedThreadPool(
+                            Config.lake_remove_partition_thread_num, Integer.MAX_VALUE,
+                            "lake-remove-partition-pool", true);
+                    asyncRemovePartitionExecutor = executor;
+                }
+            }
+        }
+        return executor;
+    }
+
+    @Override
+    protected void onStopped() {
+        // Drain the async partition-delete pool to termination so isRunning (the gate's single
+        // quiescence signal) is not cleared while a delete - a destructive external operation - is
+        // still running; then null it for the lazy rebuild above. Drop the in-flight futures too:
+        // the next leader re-drives erasure from its own durable recycle-bin state.
+        ExecutorService executor = asyncRemovePartitionExecutor;
+        if (executor != null) {
+            shutdownNowAndAwaitTermination("CatalogRecycleBin.asyncRemovePartitionExecutor", executor);
+            asyncRemovePartitionExecutor = null;
+        }
+        synchronized (this) {
+            asyncDeleteForPartitions.clear();
+        }
     }
 
     @Override
@@ -1229,6 +1362,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         try {
             erasePartition(currentTimeMs);
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
+            Thread.sleep(100);
+            eraseMaterializedIndex(currentTimeMs);
             Thread.sleep(100);
             eraseTable(currentTimeMs);
             Thread.sleep(100);
@@ -1495,7 +1630,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
-                + 1 + idToPartition.size() + 1;
+                + 1 + idToPartition.size() + 1
+                + 1 + idToIndex.size();
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
 
         writer.writeInt(idToDatabase.size());
@@ -1527,6 +1663,13 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
         writer.writeJson(idToRecycleTime);
 
+        // Written last so an older FE (which stops after idToRecycleTime) still loads a newer image,
+        // and a newer FE tolerates an older image via the SRMetaBlockEOFException guard in load().
+        writer.writeInt(idToIndex.size());
+        for (RecycleMaterializedIndexInfo info : idToIndex.values()) {
+            writer.writeJson(info);
+        }
+
         writer.close();
     }
 
@@ -1547,6 +1690,17 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
         }.getType());
+
+        // Recycled materialized indexes are written after idToRecycleTime. An image produced before
+        // this field existed ends earlier, so the read throws SRMetaBlockEOFException -- treat that as
+        // "no recycled indexes" and continue.
+        try {
+            reader.readCollection(RecycleMaterializedIndexInfo.class, info -> {
+                idToIndex.put(info.getIndexId(), info);
+            });
+        } catch (SRMetaBlockEOFException e) {
+            LOG.info("No recycled materialized indexes in image (older format), skip");
+        }
 
         if (!isCheckpointThread()) {
             // add tablet in Recycle bin to TabletInvertedIndex
@@ -1582,6 +1736,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         idToTableInfo.clear();
         nameToTableInfo.clear();
         idToPartition.clear();
+        idToIndex.clear();
         physicalPartitionIdToPartitionId.clear();
         idToRecycleTime.clear();
         enableEraseLater.clear();
@@ -1615,6 +1770,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 .put("Partition", (long) idToPartition.size())
                 .put("PhysicalPartitionIndex", (long) physicalPartitionIdToPartitionId.size())
                 .put("AsyncDeletePartition", (long) asyncDeleteForPartitions.size())
+                .put("MaterializedIndex", (long) idToIndex.size())
                 .build();
     }
 
@@ -1624,6 +1780,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 Estimator.estimate(idToTableInfo.rowMap(), 20) +
                 Estimator.estimate(idToPartition, 20) +
                 Estimator.estimate(physicalPartitionIdToPartitionId, 20) +
+                Estimator.estimate(idToIndex, 20) +
                 Estimator.estimate(idToRecycleTime, 20);
     }
 }

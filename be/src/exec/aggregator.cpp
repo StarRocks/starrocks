@@ -488,6 +488,13 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _is_merge_funcs.resize(agg_size);
     _agg_fn_types = _params->agg_fn_types;
 
+    // Save the TFunction objects up front: close() walks _agg_functions/_agg_fn_ctxs and indexes _fns with
+    // the same index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
+    }
+
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
@@ -575,12 +582,6 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
-    }
-
-    // save TFunction object
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
     }
 
     // prepare for spiller
@@ -890,8 +891,12 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
                     ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
         } else {
             // if function has at least two argument, unpack const column selectively
-            // for function like corr, FE forbid second args to be const, we will always unpack const column for it
             // for function like percentile_disc, the second args is const, do not unpack it
+            // NOTE: an argument that the analyzer saw as non-constant can still be constant here,
+            // because the optimizer folds constants after analysis. Every aggregate function that
+            // reads an argument other than the first one must therefore cope with a const column
+            // (see `GetContainer` / `ColumnHelper::get_data_column`), it cannot assume the column
+            // has the concrete type of its argument.
             if (agg_expr_ctxs[j]->root()->is_constant()) {
                 _agg_input_columns[i][j] = std::move(col);
             } else {

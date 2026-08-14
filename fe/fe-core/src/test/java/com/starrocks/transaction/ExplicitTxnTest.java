@@ -30,7 +30,6 @@ import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -53,27 +52,40 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class ExplicitTxnTest {
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @BeforeAll
     public static void init() throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -83,9 +95,7 @@ public class ExplicitTxnTest {
         context.setThreadLocalInfo();
         context.setGlobalStateMgr(globalStateMgr);
 
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        UtFrameUtils.setUpForPersistTest();
 
         MockedLocalMetaStore localMetastore = new MockedLocalMetaStore(globalStateMgr, globalStateMgr.getRecycleBin(), null);
         globalStateMgr.setLocalMetastore(localMetastore);
@@ -849,5 +859,92 @@ public class ExplicitTxnTest {
         // Cleanup
         globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
         context.setTxnId(0);
+    }
+
+    @Test
+    public void testBeginWithLabelAlreadyUsedByAnotherSession() {
+        // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
+        // with the same label
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        ConnectContext first = new ConnectContext();
+        first.setThreadLocalInfo();
+        first.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        first.setExecutionId(new TUniqueId(970, 971));
+        TransactionStmtExecutor.beginStmt(first, new BeginStmt(NodePosition.ZERO, "duplicated_label"));
+        Assertions.assertFalse(first.getState().isError());
+        Assertions.assertNotEquals(0, first.getTxnId());
+
+        ConnectContext second = new ConnectContext();
+        second.setThreadLocalInfo();
+        second.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        second.setExecutionId(new TUniqueId(972, 973));
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> TransactionStmtExecutor.beginStmt(second, new BeginStmt(NodePosition.ZERO, "duplicated_label")));
+        Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+        // The rejected session must not be left inside a transaction
+        Assertions.assertEquals(0, second.getTxnId());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(first.getTxnId());
+        first.setTxnId(0);
+    }
+
+    @Test
+    public void testConcurrentBeginWithSameLabel() throws Exception {
+        // Regression test for the label uniqueness race: several sessions running
+        // `BEGIN WITH LABEL <same label>` at the same time must not all succeed. The uniqueness check and the
+        // registration of the explicit transaction state have to happen atomically, otherwise every session
+        // passes the check before any of them publishes its state.
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        final int concurrency = 8;
+        final int rounds = 5;
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        try {
+            for (int round = 0; round < rounds; round++) {
+                final String label = "concurrent_label_" + round;
+                CyclicBarrier barrier = new CyclicBarrier(concurrency);
+                AtomicInteger succeeded = new AtomicInteger();
+                AtomicInteger rejected = new AtomicInteger();
+                Queue<Long> succeededTxnIds = new ConcurrentLinkedQueue<>();
+
+                List<Future<?>> futures = new ArrayList<>(concurrency);
+                for (int i = 0; i < concurrency; i++) {
+                    final int seq = i;
+                    futures.add(executor.submit(() -> {
+                        ConnectContext context = new ConnectContext();
+                        context.setThreadLocalInfo();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setExecutionId(new TUniqueId(1000 + seq, 2000 + seq));
+
+                        // Line up all sessions so that they hit the label check together
+                        barrier.await(30, TimeUnit.SECONDS);
+                        try {
+                            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, label));
+                            succeeded.incrementAndGet();
+                            succeededTxnIds.add(context.getTxnId());
+                        } catch (SemanticException e) {
+                            Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+                            rejected.incrementAndGet();
+                        }
+                        return null;
+                    }));
+                }
+                for (Future<?> future : futures) {
+                    future.get(60, TimeUnit.SECONDS);
+                }
+
+                Assertions.assertEquals(1, succeeded.get(),
+                        "exactly one BEGIN WITH LABEL " + label + " should succeed");
+                Assertions.assertEquals(concurrency - 1, rejected.get());
+
+                for (Long txnId : succeededTxnIds) {
+                    globalTransactionMgr.clearExplicitTxnState(txnId);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }
