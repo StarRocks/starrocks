@@ -217,7 +217,6 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
-    auto workgroup = context->fragment_context()->workgroup();
     auto build_side_spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
