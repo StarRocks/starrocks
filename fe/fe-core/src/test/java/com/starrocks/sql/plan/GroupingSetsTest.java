@@ -290,10 +290,11 @@ public class GroupingSetsTest extends PlanTestBase {
                     "   from test_all_type group by rollup(t1b, t1c, t1d)";
             String plan = getFragmentPlan(sql);
             // finest grain computes sum/count instead of avg, so coarser rollup levels can be
-            // re-aggregated correctly (re-summing, not re-averaging)
+            // re-aggregated correctly (re-summing, not re-averaging); the BIGINT arg is summed as
+            // DOUBLE to match avg's own double accumulator and avoid overflow a plain BIGINT sum risks
             assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
-                    "  |  output: sum(7: t1g), count(7: t1g)\n" +
+                    "  |  output: sum(CAST(7: t1g AS DOUBLE)), count(7: t1g)\n" +
                     "  |  group by: 2: t1b, 3: t1c, 4: t1d");
             // REPEAT_NODE now runs on the already-aggregated (t1b, t1c) result, not on raw rows
             assertContains(plan, "  7:REPEAT_NODE\n" +
@@ -305,9 +306,10 @@ public class GroupingSetsTest extends PlanTestBase {
             assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(20: sum), sum(21: count)\n" +
                     "  |  group by: 17: t1b, 18: t1c, 19: GROUPING_ID");
-            // avg is recovered via division wherever it's consumed
-            assertContains(plan, "CAST(20: sum AS DOUBLE) / CAST(21: count AS DOUBLE)");
-            assertContains(plan, "CAST(24: sum AS DOUBLE) / CAST(25: count AS DOUBLE)");
+            // avg is recovered via division wherever it's consumed; sum is already DOUBLE, so only
+            // count needs the cast
+            assertContains(plan, "20: sum / CAST(21: count AS DOUBLE)");
+            assertContains(plan, "24: sum / CAST(25: count AS DOUBLE)");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
@@ -326,6 +328,25 @@ public class GroupingSetsTest extends PlanTestBase {
                     "  |  repeat: repeat 3 lines [[], [2], [2, 3], [2, 3, 4]]\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetAvgDecimal() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // avg(DECIMAL) decomposes into sum(DECIMAL)/count(DECIMAL); the synthesized sum must be
+            // rectified to the argument's concrete precision/scale rather than keeping the wildcard
+            // decimal128 return type registered on the builtin SUM signature
+            String sql = "select t1b, t1c, t1d, avg(id_decimal) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(10: id_decimal), count(10: id_decimal)\n" +
+                    "  |  group by: 2: t1b, 3: t1c, 4: t1d");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }

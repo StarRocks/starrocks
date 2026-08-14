@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -49,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.Type;
 
 import java.util.Collections;
@@ -187,15 +189,31 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 return;
             }
             ScalarOperator arg = call.getChild(0);
-            Function sumFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {arg.getType()},
+            Type argType = arg.getType();
+
+            // AVG accumulates BOOLEAN/integer inputs as a double internally (see AvgDoubleLTGuard in the
+            // BE), not as the argument's native type; decomposing via the native-typed SUM (e.g. plain
+            // BIGINT sum) would overflow in cases the original avg wouldn't, so sum over a double-cast
+            // argument instead to keep the same accumulator width. Float/decimal args already have a
+            // SUM overload with matching (or wider, for decimal) accumulation, so they're summed as-is.
+            ScalarOperator sumArg = argType.isFixedPointType() ? new CastOperator(FloatType.DOUBLE, arg, true) : arg;
+
+            Function sumFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {sumArg.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            Function countFn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] {arg.getType()},
+            Function countFn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argType},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Preconditions.checkState(sumFn instanceof AggregateFunction);
             Preconditions.checkState(countFn instanceof AggregateFunction);
 
+            if (sumArg.getType().isDecimalOfAnyVersion()) {
+                // the registered SUM signature is a wildcard decimal type; rectify it to the concrete
+                // argument precision/scale before use, same as the rollup level below and the analyzer path.
+                sumFn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) sumFn,
+                        sumArg.getType(), sumArg.getType());
+            }
+
             CallOperator sumCall = new CallOperator(FunctionSet.SUM, sumFn.getReturnType(),
-                    Lists.newArrayList(arg), sumFn);
+                    Lists.newArrayList(sumArg), sumFn);
             CallOperator countCall = new CallOperator(FunctionSet.COUNT, countFn.getReturnType(),
                     Lists.newArrayList(arg), countFn);
             ColumnRefOperator sumRef = factory.create(sumCall, sumCall.getType(), sumCall.isNullable());
