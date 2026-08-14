@@ -1240,33 +1240,55 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
         add_bigint_seg(&rs, 0, 1, "s0");
         return rs;
     };
-    EXPECT_TRUE(can_prune_rowset_segments(make_pruneable()));
+    EXPECT_TRUE(can_prune_rowset_segments(make_pruneable(), /*sort_key_arity=*/1));
 
     {
         auto rs = make_pruneable();
         rs.mutable_segment_metas(0)->set_bundle_file_offset(0); // bundled segment is pruneable
-        EXPECT_TRUE(can_prune_rowset_segments(rs));
+        EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (a) ok
     {
         auto rs = make_pruneable();
         rs.set_next_compaction_offset(1);
-        EXPECT_FALSE(can_prune_rowset_segments(rs));
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (b)
     {
         auto rs = make_pruneable();
         rs.add_segment_metas(); // extra segment lacking sort-key bounds
-        EXPECT_FALSE(can_prune_rowset_segments(rs));
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (c) missing bound on extra segment
     {
         auto rs = make_pruneable();
         rs.mutable_segment_metas(0)->clear_sort_key_max();
-        EXPECT_FALSE(can_prune_rowset_segments(rs));
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (c) missing bound
     {
         auto rs = make_pruneable();
         rs.mutable_segment_metas(0)->set_shared(true);
-        EXPECT_TRUE(can_prune_rowset_segments(rs));
+        EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (d) ok
+    {
+        // (e) bounds narrower than the current sort key (a rowset written before a metadata-only
+        // trailing sort-key ADD): not comparable with the new tablets' ranges, so not pruneable.
+        // See ComputeOwnership_narrowSegmentBoundMissesTheSiblingThatOwnsItsBoundaryRows for what
+        // pruning on them would cost.
+        auto rs = make_pruneable();
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
+        // arity 0 == "cannot tell" (a schema carrying no sort key at all) skips the check.
+        EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/0));
+    }
+    {
+        // (e) is per rowset: one narrow segment disqualifies its whole rowset, since ownership is
+        // computed per rowset.
+        TuplePB wide_bound = make_bigint_tuple_pb(5);
+        *wide_bound.add_values() = make_bigint_tuple_pb(5).values(0);
+        auto rs = make_pruneable(); // s0's bounds are arity 1
+        auto* s1 = rs.add_segment_metas();
+        s1->set_filename("s1");
+        *s1->mutable_sort_key_min() = wide_bound;
+        *s1->mutable_sort_key_max() = wide_bound;
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
+    }
 }
 
 TEST(TabletSplitterTest, ComputeOwnership_exclusive_segment_becomes_private) {
@@ -2314,7 +2336,44 @@ TEST(TabletSplitterTest, DataDrivenSplit_RejectsInheritedBoundWithWrongArity) {
     auto st = get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &out);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_corruption()) << st;
-    EXPECT_NE(std::string_view::npos, st.message().find("sort key has 2 columns")) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("!= effective sort-key arity 2")) << st;
+}
+
+// Per-segment ownership pruning compares a segment's STORED sort-key bounds against the new tablets'
+// ranges, which the projection above emits at the current arity. A pre-ADD segment's narrower bounds
+// are not comparable with them: VariantTuple::compare orders a shorter prefix-equal tuple BELOW its
+// padded form, so a segment whose max is [400] misses the sibling starting at (400, NULL) -- while
+// create_seek_range_from routes that segment's k1=400 rows to exactly that sibling (the added
+// column's read-time default is NULL here, so the projected lower bound stays inclusive). The rows
+// would be reachable from neither new tablet.
+TEST(TabletSplitterTest, ComputeOwnership_narrowSegmentBoundMissesTheSiblingThatOwnsItsBoundaryRows) {
+    // Ranges at the post-ADD arity 2: [(0,NULL), (400,NULL)) and [(400,NULL), +inf).
+    TabletRangePB lower_range;
+    *lower_range.mutable_lower_bound() = make_bigint_null_tuple_pb(0);
+    lower_range.set_lower_bound_included(true);
+    *lower_range.mutable_upper_bound() = make_bigint_null_tuple_pb(400);
+    lower_range.set_upper_bound_included(false);
+    TabletRangePB upper_range;
+    *upper_range.mutable_lower_bound() = make_bigint_null_tuple_pb(400);
+    upper_range.set_lower_bound_included(true);
+    std::vector<TabletRangePB> ranges{lower_range, upper_range};
+
+    RowsetMetadataPB rs;
+    add_bigint_seg(&rs, 0, 400, "s0"); // pre-ADD: arity-1 bounds, max == the boundary's prefix
+
+    auto own = compute_rowset_segment_ownership(rs, ranges);
+    ASSERT_TRUE(own.ok());
+    EXPECT_TRUE(own->segments[0].keep[0]);
+    EXPECT_FALSE(own->segments[0].keep[1]) << "the boundary rows' segment is dropped from their own "
+                                              "new tablet -- which is why can_prune_rowset_segments "
+                                              "refuses to prune such a rowset at all";
+
+    // The gate (predicate (e), pinned by CanPruneRowsetSegments_predicates) is what keeps those rows
+    // reachable: the rowset stays unpruned and every segment survives on every new tablet as shared.
+    // Padding the stored bounds instead would not do -- an old segment's rows read as
+    // (prefix, default), so padding its MAX with the NULL minimum understates the segment's reach
+    // whenever a post-ADD rowset contributed a boundary between (prefix, NULL) and (prefix, default).
+    EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
 }
 
 // Corrupt metadata whose sort_key_idxes points past the column list must come back as a recoverable
