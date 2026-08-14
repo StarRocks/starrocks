@@ -77,6 +77,44 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testSubqueryInWindowPartitionByAndOrderBy() throws Exception {
+        // The subquery has to be planned as an Apply/join below the window. Leaving it as a SubqueryOperator
+        // makes the FE emit a TExprNode without a node_type, which the BE rejects.
+        String sql = "select dense_rank() over (order by abs((select max(v1) from t0)))";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC\n" +
+                "  |  functions: [, dense_rank(), ]\n" +
+                "  |  order by: 8: abs ASC");
+
+        sql = "select dense_rank() over (partition by (select max(v1) from t0)) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "partition by: 8: max");
+
+        // A subquery used directly as the order by expression used to fail analysis with
+        // "slot type shouldn't be invalid", because it was translated to an INVALID-typed operator.
+        sql = "select row_number() over (order by (select max(v1) from t0)) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "order by: 8: max ASC");
+    }
+
+    @Test
+    public void testQuantifiedSubqueryInWindowPartitionByAndOrderBy() throws Exception {
+        // A quantified/existential subquery is planned together with its predicate, because that predicate is
+        // what becomes the Apply. Planning its Subquery child on its own dereferenced a null OptExprBuilder.
+        String sql = "select row_number() over (partition by v4 in (select v1 from t0) order by v4) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC");
+
+        sql = "select row_number() over (order by v4 not in (select v1 from t0)) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC");
+
+        sql = "select row_number() over (partition by exists (select v1 from t0) order by v4) from t1";
+        assertNotContains(getThriftPlan(sql), "node_type:null");
+        assertContains(getFragmentPlan(sql), "ANALYTIC");
+    }
+
+    @Test
     public void testPruneWindowColumn() throws Exception {
         String sql = "select sum(t1c) from (select t1c, lag(id_datetime, 1, '2020-01-01') over( partition by t1c)" +
                 "from test_all_type) a ;";
