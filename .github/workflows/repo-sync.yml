@@ -12,9 +12,9 @@ run-name: Repo Sync(#${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
 # Desensitize (REVERSE_SCRUB=1, StarRocks is public): the PR reads like a native upstream
 # contribution — title/body scrubbed (CelerData->StarRocks, no "(cd-sync #N)" marker, no
 # internal issue refs/hosts), and the label set is just `sync` + `SHA:<commit>` (NO
-# `cd-sync`). The reverse pipeline / pending scan identify a reverse PR by its head branch
-# `<base>-cd-sync-pr-<N>` (the internal handle, not surfaced as a title/label) and the SHA
-# label; the forward anti-loop keys on the `sync` label.
+# `cd-sync`). The reverse pipeline / pending scan / merge-kick identify a reverse PR by the
+# `sync` label (on StarRocks only the reverse sync opens `sync`-labeled PRs); the SHA label
+# is for source recovery. The head branch name is a normal internal handle (not a marker).
 #
 # Runner prerequisites (SR-side self-hosted sync runner):
 #   - /var/lib/starrocks           : target working copy (StarRocks)
@@ -167,9 +167,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           # Desensitized (REVERSE_SCRUB): keep only `sync` (forward anti-loop) + the SHA
-          # label (source recovery for serialization); DROP `cd-sync`. The reverse pipeline
-          # and pending scan identify a reverse PR by its head branch `<base>-cd-sync-pr-<N>`
-          # and the SHA label — not the `cd-sync` label or a title marker.
+          # label (source recovery for serialization); DROP `cd-sync`. The reverse pipeline,
+          # pending scan and merge-kick identify a reverse PR by the `sync` label (on
+          # StarRocks only the reverse sync opens `sync`-labeled PRs).
           PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
           # Native title (already scrubbed by get_pr_info.py): no "(cd-sync #N)" marker.
