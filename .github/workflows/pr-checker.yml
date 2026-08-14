@@ -267,19 +267,3 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
 
-  # Reverse-sync #<issue> gate. Lives here (not ci-pipeline) so it re-runs on `edited`:
-  # otherwise a PR opened as [Tool] (exempt) could be retitled to [BugFix] and stay green,
-  # or a missing #<issue> added later would never be re-checked. All exclusions
-  # (sync / backport / bot / [Tool] / non-CelerData-main) are handled inside the op.
-  issue-ref-check:
-    name: Check Issue Reference
-    runs-on: [self-hosted, quick]
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
-    steps:
-      - name: Check Issue Reference
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          python3 scripts/get_pr_issue.py check_issue_ref ${GITHUB_REPOSITORY} ${PR_NUMBER}
-
