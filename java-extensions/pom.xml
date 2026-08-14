@@ -62,12 +62,8 @@
         <kryo.version>4.0.2</kryo.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
-<<<<<<< HEAD
         <zookeeper.version>3.8.6</zookeeper.version>
-=======
-        <httpclient5.version>5.4.3</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
->>>>>>> ecd4cf99f9 ([BugFix][CVE] bump Apache HttpCore to 5.4.3 (#77753))
         <bouncycastle.version>1.84</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
     </properties>
@@ -610,14 +606,6 @@
                 <version>${lz4-java.version}</version>
             </dependency>
 
-<<<<<<< HEAD
-=======
-            <dependency>
-                <groupId>org.apache.httpcomponents.client5</groupId>
-                <artifactId>httpclient5</artifactId>
-                <version>${httpclient5.version}</version>
-            </dependency>
-
             <dependency>
                 <groupId>org.apache.httpcomponents.core5</groupId>
                 <artifactId>httpcore5</artifactId>
@@ -636,7 +624,6 @@
                 <version>${httpcore5.version}</version>
             </dependency>
 
->>>>>>> ecd4cf99f9 ([BugFix][CVE] bump Apache HttpCore to 5.4.3 (#77753))
         </dependencies>
     </dependencyManagement>
 
