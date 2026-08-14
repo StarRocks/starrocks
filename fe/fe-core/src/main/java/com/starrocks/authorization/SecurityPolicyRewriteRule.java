@@ -38,8 +38,11 @@ import java.util.stream.Collectors;
 
 public class SecurityPolicyRewriteRule {
     public static QueryStatement buildView(ConnectContext context, Relation relation, TableName tableName) {
-        if (relation instanceof TableRelation && ((TableRelation) relation).isSyncMVQuery()) {
-            return null;
+        if (relation instanceof TableRelation) {
+            TableRelation tableRelation = (TableRelation) relation;
+            if (tableRelation.isSyncMVQuery() || tableRelation.isCacheStatsQuery()) {
+                return null;
+            }
         }
 
         List<Column> columns;
