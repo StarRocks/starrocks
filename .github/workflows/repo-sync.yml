@@ -3,14 +3,18 @@ run-name: Repo Sync(#${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
 
 # Reverse sync executor: cherry-pick a CelerData open-source PR's commit onto the
 # StarRocks branch of the SAME name (main / branch-4.1 / branch-4.0 / …) and open a
-# "(cd-sync #N)" PR. Full mirror of celerdata-enterprise's forward repo-sync.yml with
+# DESENSITIZED PR. Full mirror of celerdata-enterprise's forward repo-sync.yml with
 # direction reversed (source=CelerData, target=StarRocks); like the forward, it handles
 # BOTH main->main AND branch->branch (BRANCH input drives it), so StarRocks release
 # branches receive shared-line fixes directly instead of relying on self-backport.
 # Dispatched by the CD-side reverse trigger (sync-cd-to-sr.yml -> reverse_sync_decide.sh).
-# (Only the workflow file/display name drops "cd". The "(cd-sync #N)" title suffix,
-#  the `cd-sync` label and the `-cd-sync-` branch prefix are functional reverse-direction
-#  markers the rest of the reverse pipeline is built around, so they are kept verbatim.)
+#
+# Desensitize (REVERSE_SCRUB=1, StarRocks is public): the PR reads like a native upstream
+# contribution — title/body scrubbed (CelerData->StarRocks, no "(cd-sync #N)" marker, no
+# internal issue refs/hosts), and the label set is just `sync` + `SHA:<commit>` (NO
+# `cd-sync`). The reverse pipeline / pending scan identify a reverse PR by its head branch
+# `<base>-cd-sync-pr-<N>` (the internal handle, not surfaced as a title/label) and the SHA
+# label; the forward anti-loop keys on the `sync` label.
 #
 # Runner prerequisites (SR-side self-hosted sync runner):
 #   - /var/lib/starrocks           : target working copy (StarRocks)
@@ -56,6 +60,11 @@ jobs:
       PR_ID: ${{ inputs.PR_ID }}
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
       SOURCE_REPO: ${{ inputs.SOURCE_REPO }}
+      # Desensitize the reverse PR: get_pr_info.py scrubs the title/body (drop the
+      # "(cd-sync #N)" marker, rebrand CelerData->StarRocks, strip internal issue refs /
+      # hosts) so the StarRocks PR reads like a native upstream contribution. StarRocks is
+      # public; do not leak the CelerData sync mechanism / internal PR numbers.
+      REVERSE_SCRUB: "1"
     outputs:
       assignees: ${{ steps.ori_pr_info.outputs.assignees }}
       title: ${{ steps.ori_pr_info.outputs.title }}
@@ -157,12 +166,17 @@ jobs:
         if: steps.previous-check.outputs.RES == 'True'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
+          # Desensitized (REVERSE_SCRUB): keep only `sync` (forward anti-loop) + the SHA
+          # label (source recovery for serialization); DROP `cd-sync`. The reverse pipeline
+          # and pending scan identify a reverse PR by its head branch `<base>-cd-sync-pr-<N>`
+          # and the SHA label — not the `cd-sync` label or a title marker.
+          PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
-          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
+          # Native title (already scrubbed by get_pr_info.py): no "(cd-sync #N)" marker.
+          TITLE: "${{ needs.pr-info.outputs.title }}"
           # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
           # (official template, all sections) via the file get_pr_info.py wrote in the
-          # pr-info job, plus any conflict info run_cherry_pick.sh prepended to it.
+          # pr-info job (scrubbed), plus any conflict info run_cherry_pick.sh prepended.
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
@@ -178,9 +192,9 @@ jobs:
         if: steps.previous-check.outputs.RES != 'True'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }},pending
+          PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }},pending
           HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
-          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
+          TITLE: "${{ needs.pr-info.outputs.title }}"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}

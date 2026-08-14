@@ -1,11 +1,11 @@
 name: CD SYNC CI PIPELINE
 
-# CI gate for reverse-sync PRs (title "(cd-sync #N)", label cd-sync) opened on
-# StarRocks main by repo-sync.yml. Mirror of celerdata-enterprise's
-# sync-ci-pipeline.yml, trimmed for v1: BUILD chain only (no UT), auto-merge on
-# green. Runs on [self-hosted, normal] (mirrors ci-pipeline's heavy-job pool;
-# the tiny [sync] pool is reserved for the executor + ci-sync trigger).
-# Requires SR-side secret: PAT.
+# CI gate for reverse-sync PRs (identified by head branch `<base>-cd-sync-pr-<N>`; the
+# executor desensitizes the title/label so there is no "(cd-sync #N)" / `cd-sync` marker)
+# opened on StarRocks main / branch-4.1 / branch-4.0 by repo-sync.yml. Mirror of
+# celerdata-enterprise's sync-ci-pipeline.yml, trimmed for v1: BUILD chain only (no UT),
+# auto-merge on green. Runs on [self-hosted, normal] (mirrors ci-pipeline's heavy-job pool;
+# the tiny [sync] pool is reserved for the executor + ci-sync trigger). Requires secret: PAT.
 
 on:
   pull_request_target:
@@ -14,6 +14,8 @@ on:
       - synchronize
     branches:
       - main
+      - branch-4.1
+      - branch-4.0
 
 concurrency:
   group: ${{ github.event.number }}-cd-sync-checker
@@ -53,9 +55,11 @@ jobs:
   cd-sync-checker:
     runs-on: [self-hosted, normal]
     needs: pr-label
+    # Identify a reverse-sync PR by its head branch `<base>-cd-sync-pr-<N>` — the executor
+    # DESENSITIZES the title/label (no "(cd-sync #N)" marker, no `cd-sync` label; see
+    # repo-sync.yml REVERSE_SCRUB), so the head branch is the stable discriminator.
     if: >
-      contains(github.event.pull_request.title, '(cd-sync #') &&
-      contains(needs.pr-label.outputs.labels, 'cd-sync') &&
+      contains(github.head_ref, '-cd-sync-pr-') &&
       !contains(needs.pr-label.outputs.labels, 'pending') &&
       !contains(needs.pr-label.outputs.labels, 'force-check')
     name: RUN CHECKER
@@ -282,8 +286,7 @@ jobs:
     runs-on: [self-hosted, normal]
     if: >
       always() &&
-      contains(github.event.pull_request.title, '(cd-sync #') &&
-      contains(needs.pr-label.outputs.labels, 'cd-sync') &&
+      contains(github.head_ref, '-cd-sync-pr-') &&
       !contains(needs.pr-label.outputs.labels, 'conflict') &&
       !contains(needs.pr-label.outputs.labels, 'pending') &&
       !contains(needs.pr-label.outputs.labels, 'ERROR') &&
