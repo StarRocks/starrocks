@@ -46,6 +46,8 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.Type;
 
@@ -68,7 +70,7 @@ import java.util.stream.Collectors;
  */
 public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     private static final List<String> SUPPORT_AGGREGATE_FUNCTIONS = Lists.newArrayList(FunctionSet.MAX,
-            FunctionSet.MIN, FunctionSet.SUM);
+            FunctionSet.MIN, FunctionSet.SUM, FunctionSet.AVG, FunctionSet.COUNT);
 
     public PushDownAggregateGroupingSetsRule() {
         super(RuleType.TF_PUSHDOWN_AGG_GROUPING_SET,
@@ -89,6 +91,20 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .allMatch(agg -> SUPPORT_AGGREGATE_FUNCTIONS.contains(agg.getFnName()) &&
                         !agg.isDistinct() && agg.getUsedColumns().cardinality() <= 1)) {
             return false;
+        }
+
+        if (aggregate.getPredicate() != null) {
+            // AVG is decomposed into sum/count and only recombined into a final avg value by a Project
+            // above the re-aggregation (see buildSubRepeatConsume); a HAVING predicate directly on the
+            // aggregation output can't be safely re-evaluated against the pre-divide sum/count columns,
+            // so skip push down whenever the predicate touches an AVG output column.
+            List<ColumnRefOperator> avgOutputRefs = aggregate.getAggregations().entrySet().stream()
+                    .filter(e -> FunctionSet.AVG.equals(e.getValue().getFnName()))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+            if (aggregate.getPredicate().getUsedColumns().containsAny(avgOutputRefs)) {
+                return false;
+            }
         }
 
         List<ColumnRefOperator> allRepeatRefs = repeatOperator.getRepeatColumnRef()
@@ -115,23 +131,78 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         ColumnRefFactory factory = context.getColumnRefFactory();
         int cteId = context.getCteContext().getNextCteId();
 
+        // AVG can't be re-invoked on an already-aggregated value (unlike sum/min/max), so decompose
+        // each avg(x) into sum(x)/count(x) once up-front; every builder below consults this map to
+        // know which aggregations need the sum+count treatment instead of a plain pass-through/re-agg.
+        Map<ColumnRefOperator, AvgDecomposition> avgDecompositions = buildAvgDecompositions(factory, aggregate);
+
         // cte produce and push down aggregate
         context.getCteContext().addForceCTE(cteId);
-        OptExpression cteProduce = buildCTEProduce(context, input, cteId);
+        OptExpression cteProduce = buildCTEProduce(context, input, cteId, avgDecompositions);
 
         // new grouping sets consume
         Map<ColumnRefOperator, ColumnRefOperator> consumeOutputs1 = Maps.newHashMap();
-        OptExpression subRepeatConsume = buildSubRepeatConsume(factory, consumeOutputs1, aggregate, repeat, cteId);
+        OptExpression subRepeatConsume =
+                buildSubRepeatConsume(factory, consumeOutputs1, aggregate, repeat, cteId, avgDecompositions);
 
         // select consume
         Map<ColumnRefOperator, ColumnRefOperator> consumeOutputs2 = Maps.newHashMap();
-        OptExpression selectConsume = buildSelectConsume(factory, consumeOutputs2, aggregate, repeat, cteId);
+        OptExpression selectConsume =
+                buildSelectConsume(factory, consumeOutputs2, aggregate, repeat, cteId, avgDecompositions);
 
         // union all
         OptExpression union =
                 buildUnionAll(aggregate, consumeOutputs1, subRepeatConsume, consumeOutputs2, selectConsume);
 
         return Lists.newArrayList(OptExpression.create(new LogicalCTEAnchorOperator(cteId), cteProduce, union));
+    }
+
+    /**
+     * avg(x) can't be recombined across rollup levels by re-invoking avg() on already-averaged values
+     * (unlike sum/min/max, which are self-recombining) - weighting would be wrong whenever finer groups
+     * have different sizes. So every avg(x) is computed as sum(x)/count(x) instead: the finest-grain CTE
+     * produces sum(x) and count(x), coarser rollup levels re-aggregate with sum(sum(x))/sum(count(x)),
+     * and the final avg value is recovered via a division Project wherever it's consumed.
+     */
+    public static final class AvgDecomposition {
+        final ColumnRefOperator sumRef;
+        final CallOperator sumCall;
+        final ColumnRefOperator countRef;
+        final CallOperator countCall;
+
+        private AvgDecomposition(ColumnRefOperator sumRef, CallOperator sumCall,
+                                 ColumnRefOperator countRef, CallOperator countCall) {
+            this.sumRef = sumRef;
+            this.sumCall = sumCall;
+            this.countRef = countRef;
+            this.countCall = countCall;
+        }
+    }
+
+    private Map<ColumnRefOperator, AvgDecomposition> buildAvgDecompositions(ColumnRefFactory factory,
+                                                                            LogicalAggregationOperator aggregate) {
+        Map<ColumnRefOperator, AvgDecomposition> result = Maps.newHashMap();
+        aggregate.getAggregations().forEach((colRef, call) -> {
+            if (!FunctionSet.AVG.equals(call.getFnName())) {
+                return;
+            }
+            ScalarOperator arg = call.getChild(0);
+            Function sumFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {arg.getType()},
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Function countFn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] {arg.getType()},
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Preconditions.checkState(sumFn instanceof AggregateFunction);
+            Preconditions.checkState(countFn instanceof AggregateFunction);
+
+            CallOperator sumCall = new CallOperator(FunctionSet.SUM, sumFn.getReturnType(),
+                    Lists.newArrayList(arg), sumFn);
+            CallOperator countCall = new CallOperator(FunctionSet.COUNT, countFn.getReturnType(),
+                    Lists.newArrayList(arg), countFn);
+            ColumnRefOperator sumRef = factory.create(sumCall, sumCall.getType(), sumCall.isNullable());
+            ColumnRefOperator countRef = factory.create(countCall, countCall.getType(), countCall.isNullable());
+            result.put(colRef, new AvgDecomposition(sumRef, sumCall, countRef, countCall));
+        });
+        return result;
     }
 
     private OptExpression buildUnionAll(LogicalAggregationOperator aggregate,
@@ -154,7 +225,8 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         return OptExpression.create(union, repeatConsume, selectConsume);
     }
 
-    private OptExpression buildCTEProduce(OptimizerContext context, OptExpression input, int cteId) {
+    private OptExpression buildCTEProduce(OptimizerContext context, OptExpression input, int cteId,
+                                          Map<ColumnRefOperator, AvgDecomposition> avgDecompositions) {
         OptExpression repeatInput = input.inputAt(0);
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
         LogicalRepeatOperator repeat = (LogicalRepeatOperator) repeatInput.getOp();
@@ -181,11 +253,24 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             partitionRefs = allGroupByRefs;
         }
 
-        // replace output columns
+        // replace output columns; avg(x) is computed as sum(x)/count(x) here so the finest grain still
+        // produces a correct avg (nothing rewritten yet), but the underlying sum/count are what coarser
+        // rollup levels actually need to re-aggregate correctly (see buildSubRepeatConsume).
+        Map<ColumnRefOperator, CallOperator> cteAggregations = Maps.newHashMap();
+        aggregate.getAggregations().forEach((colRef, call) -> {
+            AvgDecomposition decomposition = avgDecompositions.get(colRef);
+            if (decomposition != null) {
+                cteAggregations.put(decomposition.sumRef, decomposition.sumCall);
+                cteAggregations.put(decomposition.countRef, decomposition.countCall);
+            } else {
+                cteAggregations.put(colRef, call);
+            }
+        });
+
         LogicalAggregationOperator.Builder builder = LogicalAggregationOperator.builder();
         builder.setType(AggType.GLOBAL)
                 .setGroupingKeys(allGroupByRefs)
-                .setAggregations(aggregate.getAggregations())
+                .setAggregations(cteAggregations)
                 .setPartitionByColumns(partitionRefs);
         LogicalAggregationOperator allColumnRefsAggregate = builder.build();
         // cte produce
@@ -201,16 +286,34 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     private OptExpression buildSelectConsume(ColumnRefFactory factory,
                                              Map<ColumnRefOperator, ColumnRefOperator> outputs,
                                              LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
-                                             int cteId) {
+                                             int cteId, Map<ColumnRefOperator, AvgDecomposition> avgDecompositions) {
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         // consume
         Map<ColumnRefOperator, ColumnRefOperator> cteColumnRefs = Maps.newHashMap();
-        for (ColumnRefOperator input : aggregate.getAggregations().keySet()) {
-            ColumnRefOperator cteOutput = factory.create(input, input.getType(), input.isNullable());
-            cteColumnRefs.put(cteOutput, input);
-            outputs.put(input, cteOutput);
-            projectMap.put(cteOutput, cteOutput);
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
+            ColumnRefOperator input = entry.getKey();
+            AvgDecomposition decomposition = avgDecompositions.get(input);
+            if (decomposition != null) {
+                // finest grain already has a correct avg (sum/count are exact, no rollup happened yet),
+                // so just recompute avg = sum/count from the CTE's sum/count columns.
+                ColumnRefOperator sumConsume = factory.create(decomposition.sumRef, decomposition.sumRef.getType(),
+                        decomposition.sumRef.isNullable());
+                ColumnRefOperator countConsume = factory.create(decomposition.countRef,
+                        decomposition.countRef.getType(), decomposition.countRef.isNullable());
+                cteColumnRefs.put(sumConsume, decomposition.sumRef);
+                cteColumnRefs.put(countConsume, decomposition.countRef);
+
+                ColumnRefOperator avgOutput = factory.create(input, input.getType(), input.isNullable());
+                outputs.put(input, avgOutput);
+                projectMap.put(avgOutput,
+                        AggregatePushDownUtils.createAvgBySumCount(entry.getValue(), sumConsume, countConsume));
+            } else {
+                ColumnRefOperator cteOutput = factory.create(input, input.getType(), input.isNullable());
+                cteColumnRefs.put(cteOutput, input);
+                outputs.put(input, cteOutput);
+                projectMap.put(cteOutput, cteOutput);
+            }
         }
         for (ColumnRefOperator input : aggregate.getGroupingKeys()) {
             if (!repeat.getOutputGrouping().contains(input)) {
@@ -250,17 +353,33 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     public OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
                                                 Map<ColumnRefOperator, ColumnRefOperator> outputs,
                                                 LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
-                                                int cteId) {
+                                                int cteId, Map<ColumnRefOperator, AvgDecomposition> avgDecompositions) {
         int subGroups = repeat.getRepeatColumnRef().size() - 1;
         List<ColumnRefOperator> nullRefs = Lists.newArrayList(repeat.getRepeatColumnRef().get(subGroups));
         repeat.getRepeatColumnRef().stream().limit(subGroups).forEach(nullRefs::removeAll);
 
-        // consume
+        // consume; for avg(x), consume its sum(x)/count(x) columns instead of the (non-existent as a
+        // CTE output) avg column itself - tracked in avgSumConsume/avgCountConsume, kept out of `outputs`
+        // since `outputs` must end up holding the final recombined avg value, not an intermediate one.
+        Map<ColumnRefOperator, ColumnRefOperator> avgSumConsume = Maps.newHashMap();
+        Map<ColumnRefOperator, ColumnRefOperator> avgCountConsume = Maps.newHashMap();
         Map<ColumnRefOperator, ColumnRefOperator> cteColumnRefs = Maps.newHashMap();
         for (ColumnRefOperator input : aggregate.getAggregations().keySet()) {
-            ColumnRefOperator cteOutput = factory.create(input, input.getType(), input.isNullable());
-            cteColumnRefs.put(cteOutput, input);
-            outputs.put(input, cteOutput);
+            AvgDecomposition decomposition = avgDecompositions.get(input);
+            if (decomposition != null) {
+                ColumnRefOperator sumConsume = factory.create(decomposition.sumRef, decomposition.sumRef.getType(),
+                        decomposition.sumRef.isNullable());
+                ColumnRefOperator countConsume = factory.create(decomposition.countRef,
+                        decomposition.countRef.getType(), decomposition.countRef.isNullable());
+                cteColumnRefs.put(sumConsume, decomposition.sumRef);
+                cteColumnRefs.put(countConsume, decomposition.countRef);
+                avgSumConsume.put(input, sumConsume);
+                avgCountConsume.put(input, countConsume);
+            } else {
+                ColumnRefOperator cteOutput = factory.create(input, input.getType(), input.isNullable());
+                cteColumnRefs.put(cteOutput, input);
+                outputs.put(input, cteOutput);
+            }
         }
         for (ColumnRefOperator input : aggregate.getGroupingKeys()) {
             if (!repeat.getOutputGrouping().contains(input) && !nullRefs.contains(input)) {
@@ -307,22 +426,62 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .setPredicate(predicate)
                 .build();
 
-        // aggregate
+        // aggregate; avg(x)'s sum/count must be re-summed (never re-averaged) to stay correct across
+        // rollup levels of unequal weight, so both are tracked here and only recombined into avg by the
+        // final Project below.
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newHashMap();
+        Map<ColumnRefOperator, ColumnRefOperator> avgSumRolledUp = Maps.newHashMap();
+        Map<ColumnRefOperator, ColumnRefOperator> avgCountRolledUp = Maps.newHashMap();
         aggregate.getAggregations().forEach((k, v) -> {
-            ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
-            Function aggFunc = ExprUtils.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            AvgDecomposition decomposition = avgDecompositions.get(k);
+            if (decomposition != null) {
+                ColumnRefOperator sumConsumeRef = avgSumConsume.get(k);
+                ColumnRefOperator countConsumeRef = avgCountConsume.get(k);
 
-            Preconditions.checkState(aggFunc instanceof AggregateFunction);
-            if (k.getType().isDecimalOfAnyVersion()) {
-                aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) aggFunc, k.getType(),
-                        v.getType());
+                Function sumFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
+                        new Type[] {sumConsumeRef.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                Preconditions.checkState(sumFn instanceof AggregateFunction);
+                if (sumConsumeRef.getType().isDecimalOfAnyVersion()) {
+                    sumFn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) sumFn,
+                            sumConsumeRef.getType(), sumConsumeRef.getType());
+                }
+                ColumnRefOperator rolledUpSum =
+                        factory.create(sumConsumeRef, sumConsumeRef.getType(), sumConsumeRef.isNullable());
+                aggregations.put(rolledUpSum, new CallOperator(FunctionSet.SUM, sumConsumeRef.getType(),
+                        Lists.newArrayList(sumConsumeRef), sumFn));
+
+                Function countFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
+                        new Type[] {countConsumeRef.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                Preconditions.checkState(countFn instanceof AggregateFunction);
+                ColumnRefOperator rolledUpCount =
+                        factory.create(countConsumeRef, countConsumeRef.getType(), countConsumeRef.isNullable());
+                aggregations.put(rolledUpCount, new CallOperator(FunctionSet.SUM, countConsumeRef.getType(),
+                        Lists.newArrayList(countConsumeRef), countFn));
+
+                avgSumRolledUp.put(k, rolledUpSum);
+                avgCountRolledUp.put(k, rolledUpCount);
+            } else {
+                // sum/min/max are self-recombining (same function name); count is not - the coarser
+                // level must re-SUM the finer levels' partial counts, not re-COUNT them (which would
+                // count the number of partial-count rows instead of summing their values). Reuse the
+                // same rollup-function mapping already used by the MV-rewrite path and by pdagg.
+                String rollupFnName = AggregateFunctionRollupUtils.getRollupFunctionName(v, false);
+                String fnName = rollupFnName != null ? rollupFnName : v.getFnName();
+
+                ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
+                Function aggFunc = ExprUtils.getBuiltinFunction(fnName, new Type[] {k.getType()},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+                Preconditions.checkState(aggFunc instanceof AggregateFunction);
+                if (k.getType().isDecimalOfAnyVersion()) {
+                    aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) aggFunc,
+                            k.getType(), v.getType());
+                }
+
+                aggregations.put(x,
+                        new CallOperator(fnName, k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
+                outputs.put(k, x);
             }
-
-            aggregations.put(x,
-                    new CallOperator(v.getFnName(), k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
-            outputs.put(k, x);
         });
 
         List<ColumnRefOperator> groupings = aggregate.getGroupingKeys().stream()
@@ -346,6 +505,15 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
         aggregations.keySet().forEach(k -> projection.put(k, k));
         groupings.forEach(k -> projection.put(k, k));
+
+        avgSumRolledUp.forEach((origAvgRef, rolledUpSum) -> {
+            ColumnRefOperator rolledUpCount = avgCountRolledUp.get(origAvgRef);
+            CallOperator origAvgCall = aggregate.getAggregations().get(origAvgRef);
+            ColumnRefOperator avgOutput = factory.create(origAvgRef, origAvgRef.getType(), origAvgRef.isNullable());
+            projection.put(avgOutput,
+                    AggregatePushDownUtils.createAvgBySumCount(origAvgCall, rolledUpSum, rolledUpCount));
+            outputs.put(origAvgRef, avgOutput);
+        });
 
         for (ColumnRefOperator nullRef : nullRefs) {
             ColumnRefOperator m = factory.create(nullRef, nullRef.getType(), true);

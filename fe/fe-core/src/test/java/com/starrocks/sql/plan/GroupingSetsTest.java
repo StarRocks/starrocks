@@ -283,16 +283,97 @@ public class GroupingSetsTest extends PlanTestBase {
     }
 
     @Test
-    public void testPushDownGroupingSetErrorFn() throws Exception {
+    public void testPushDownGroupingSetAvg() throws Exception {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
         try {
-            String sql = "select t1b, t1c, t1d, count(t1g) " +
+            String sql = "select t1b, t1c, t1d, avg(t1g) " +
                     "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            // finest grain computes sum/count instead of avg, so coarser rollup levels can be
+            // re-aggregated correctly (re-summing, not re-averaging)
+            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(7: t1g), count(7: t1g)\n" +
+                    "  |  group by: 2: t1b, 3: t1c, 4: t1d");
+            // REPEAT_NODE now runs on the already-aggregated (t1b, t1c) result, not on raw rows
+            assertContains(plan, "  7:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [17], [17, 18]]");
+            // coarser rollup levels re-sum the sum/count columns, never re-average them
+            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(13: sum), count(14: count)\n" +
+                    "  |  group by: 2: t1b, 3: t1c, 4: t1d");
+            assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(20: sum), sum(21: count)\n" +
+                    "  |  group by: 17: t1b, 18: t1c, 19: GROUPING_ID");
+            // avg is recovered via division wherever it's consumed
+            assertContains(plan, "CAST(20: sum AS DOUBLE) / CAST(21: count AS DOUBLE)");
+            assertContains(plan, "CAST(24: sum AS DOUBLE) / CAST(25: count AS DOUBLE)");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetAvgWithHavingNotPushedDown() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // a HAVING predicate directly on the avg() output can't be safely re-evaluated against the
+            // pre-divide sum/count columns of a re-aggregated rollup level, so push down must not fire
+            String sql = "select t1b, t1c, t1d, avg(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d) having avg(t1g) > 10";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  1:REPEAT_NODE\n" +
                     "  |  repeat: repeat 3 lines [[], [2], [2, 3], [2, 3, 4]]\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetCount() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select t1b, t1c, t1d, count(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(sql);
+            // finest grain: an ordinary count, nothing to recombine yet
+            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: count(7: t1g)\n" +
+                    "  |  group by: 2: t1b, 3: t1c, 4: t1d");
+            // REPEAT now runs on the already-aggregated (t1b, t1c) result, not on raw rows
+            assertContains(plan, "  7:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 2 lines [[], [14], [14, 15]]");
+            // coarser rollup levels re-SUM the finer levels' partial counts, never re-COUNT them
+            assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(13: count)\n" +
+                    "  |  group by: 14: t1b, 15: t1c, 16: GROUPING_ID");
+            assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(17: count)\n" +
+                    "  |  group by: 14: t1b, 15: t1c, 16: GROUPING_ID");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetCountWithHaving() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // unlike avg, a re-summed count IS directly the correct final value (no division needed),
+            // so HAVING count(t1g) > 10 can safely push down and filter on the re-summed column.
+            String sql = "select t1b, t1c, t1d, count(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d) having count(t1g) > 10";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  10:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(17: count)\n" +
+                    "  |  group by: 14: t1b, 15: t1c, 16: GROUPING_ID\n" +
+                    "  |  having: 17: count > 10");
+            assertContains(plan, "  15:SELECT\n" +
+                    "  |  predicates: 19: count > 10");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
@@ -448,7 +529,9 @@ public class GroupingSetsTest extends PlanTestBase {
             public OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
                                                        Map<ColumnRefOperator, ColumnRefOperator> outputs,
                                                        LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
-                                                       int cteId) {
+                                                       int cteId,
+                                                       Map<ColumnRefOperator, PushDownAggregateGroupingSetsRule.AvgDecomposition>
+                                                               avgDecompositions) {
                 int subGroups = repeat.getRepeatColumnRef().size() - 1;
                 List<ColumnRefOperator> nullRefs = Lists.newArrayList(repeat.getRepeatColumnRef().get(subGroups));
                 repeat.getRepeatColumnRef().stream().limit(subGroups).forEach(nullRefs::removeAll);
