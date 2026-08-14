@@ -16,8 +16,11 @@
 
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <set>
 
+#include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
@@ -25,6 +28,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/empty_iterator.h"
+#include "storage/extends_column_utils.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -41,6 +45,8 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -1967,6 +1973,345 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_clucene_gin_index_chec
     }
 }
 #endif
+
+// ------------------------------------------------------------------------------------------------
+// JSON subfield read through an extended column, after a column-mode partial update.
+//
+// The JSONV2 path rewrite (session variable cbo_json_v2_rewrite, on by default) replaces
+// get_json_int(j, '$.x') with a read of an *extended* column: a synthetic subfield column that owns
+// no storage, carries a synthetic unique id, and points back at its root JSON column through
+// ExtendedColumnInfo. A column-mode partial update writes the new value of `j` into a .cols delta
+// column group keyed by the ROOT column's unique id, so the read must resolve the group through the
+// root id. Resolving it through the extended column's own (synthetic) id matches nothing, and the
+// subfield is then served from the base segment -- silently returning the value the update replaced.
+// ------------------------------------------------------------------------------------------------
+
+// `tag` is constant within a rowset, so the flattened `y` sub-column is dictionary-encoded -- which is
+// what makes the [_META_] dictionary-collection path below reachable.
+static std::string make_json(int64_t x, const std::string& tag) {
+    return R"({"x": )" + std::to_string(x) + R"(, "y": ")" + tag + R"("})";
+}
+
+static TabletSharedPtr create_json_tablet(std::vector<TabletSharedPtr>* tablets, int64_t tablet_id,
+                                          int32_t schema_hash) {
+    TCreateTabletReq request;
+    request.tablet_id = tablet_id;
+    request.__set_version(1);
+    request.__set_version_hash(0);
+    request.tablet_schema.schema_hash = schema_hash;
+    request.tablet_schema.short_key_column_count = 1;
+    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+    TColumn pk;
+    pk.column_name = "pk";
+    pk.__set_is_key(true);
+    pk.column_type.type = TPrimitiveType::BIGINT;
+    request.tablet_schema.columns.push_back(pk);
+
+    TColumn j;
+    j.column_name = "j";
+    j.__set_is_key(false);
+    j.__set_is_allow_null(true);
+    j.column_type.type = TPrimitiveType::JSON;
+    request.tablet_schema.columns.push_back(j);
+
+    TColumn v;
+    v.column_name = "v";
+    v.__set_is_key(false);
+    v.column_type.type = TPrimitiveType::INT;
+    request.tablet_schema.columns.push_back(v);
+
+    auto st = StorageEngine::instance()->create_tablet(request);
+    CHECK(st.ok()) << st.to_string();
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    tablets->push_back(tablet);
+    return tablet;
+}
+
+// Fills a writer context that is common to the full and the partial-update rowset below.
+static RowsetWriterContext json_writer_context(const TabletSharedPtr& tablet) {
+    RowsetWriterContext writer_context;
+    writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.tablet_id = tablet->tablet_id();
+    writer_context.tablet_schema_hash = tablet->schema_hash();
+    writer_context.partition_id = 0;
+    writer_context.rowset_path_prefix = tablet->schema_hash_path();
+    writer_context.rowset_state = COMMITTED;
+    writer_context.version.first = 0;
+    writer_context.version.second = 0;
+    writer_context.segments_overlap = NONOVERLAPPING;
+    return writer_context;
+}
+
+// Writes one row per key: (pk, {"x": x_of(pk)}, pk).
+static RowsetSharedPtr create_json_rowset(const TabletSharedPtr& tablet, const std::vector<int64_t>& keys,
+                                          const std::function<int64_t(int64_t)>& x_of, const std::string& tag) {
+    RowsetWriterContext writer_context = json_writer_context(tablet);
+    writer_context.tablet_schema = tablet->tablet_schema();
+    std::unique_ptr<RowsetWriter> writer;
+    CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
+
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+    auto cols = chunk->columns();
+    // JsonColumn::append_datum keeps only a view of the JsonValue until the chunk copies it, so the
+    // values have to stay alive until flush_chunk.
+    std::vector<JsonValue> json_values;
+    json_values.reserve(keys.size());
+    for (int64_t key : keys) {
+        json_values.emplace_back(JsonValue::parse(make_json(x_of(key), tag)).value());
+    }
+    for (size_t i = 0; i < keys.size(); i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(&json_values[i]));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)keys[i]));
+    }
+    CHECK_OK(writer->flush_chunk(*chunk));
+    return *writer->build();
+}
+
+// Column-mode partial update carrying only (pk, j), which lands as a .cols delta column group.
+static RowsetSharedPtr create_json_partial_rowset(const TabletSharedPtr& tablet, const std::vector<int64_t>& keys,
+                                                  const std::function<int64_t(int64_t)>& x_of,
+                                                  const std::shared_ptr<TabletSchema>& partial_schema,
+                                                  const std::vector<int32_t>& column_indexes, const std::string& tag) {
+    RowsetWriterContext writer_context = json_writer_context(tablet);
+    writer_context.tablet_schema = partial_schema;
+    writer_context.referenced_column_ids = column_indexes;
+    writer_context.full_tablet_schema = tablet->tablet_schema();
+    writer_context.is_partial_update = true;
+    writer_context.partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE;
+    std::unique_ptr<RowsetWriter> writer;
+    CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
+
+    auto schema = ChunkHelper::convert_schema(partial_schema);
+    auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+    auto cols = chunk->columns();
+    std::vector<JsonValue> json_values;
+    json_values.reserve(keys.size());
+    for (int64_t key : keys) {
+        json_values.emplace_back(JsonValue::parse(make_json(x_of(key), tag)).value());
+    }
+    for (size_t i = 0; i < keys.size(); i++) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(&json_values[i]));
+    }
+    CHECK_OK(writer->flush_chunk(*chunk));
+
+    RowsetSharedPtr partial_rowset = *writer->build();
+    partial_rowset->set_schema(tablet->tablet_schema());
+    return partial_rowset;
+}
+
+// Builds the access path the FE emits for get_json_int(j, '$.x'): a ROOT node named after the JSON
+// column with one FIELD child per subfield, with `extended` set on the root (ColumnAccessPath
+// .createLinearPath + setExtended on the FE side).
+static ColumnAccessPathPtr make_extended_json_path(const std::string& root_column, const std::string& field,
+                                                   const TypeDescriptor& value_type) {
+    // branch-4.1's ColumnAccessPath::create(TColumnAccessPath, ...) resolves node names by evaluating
+    // an expression, which the FE supplies but a unit test cannot easily build. Assemble the same tree
+    // directly instead: a ROOT node named after the JSON column with one FIELD child per subfield, and
+    // `extended` plus the subfield value type set on the root (what extend_schema_by_access_paths reads).
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, root_column, 0));
+    ColumnAccessPath::insert_json_path(root.get(), value_type.type, field);
+    root->set_extended(true);
+    root->set_value_type(value_type);
+    return root;
+}
+
+// Reads the tablet through the JSONV2-extended schema, exactly as OlapChunkSource does, and checks
+// the subfield column against `expected_x`. Also re-checks the whole JSON column, which reads the
+// overlay through the root column's own unique id and was therefore never affected.
+static void check_json_subfield(const TabletSharedPtr& tablet, int64_t version, size_t expected_rows,
+                                const std::function<int64_t(int64_t)>& expected_x, const std::string& expected_tag) {
+    std::vector<ColumnAccessPathPtr> paths;
+    // The extended TabletColumn keeps a raw pointer to this path, so it has to outlive the read.
+    paths.emplace_back(make_extended_json_path("j", "x", TypeDescriptor(TYPE_BIGINT)));
+    ASSERT_EQ("j.x", paths[0]->linear_path());
+    ASSERT_TRUE(paths[0]->is_extended());
+
+    // Same seed as next_uniq_id(): above every real column id, so the synthetic id cannot collide.
+    ASSIGN_OR_ABORT(auto extended_schema,
+                    extend_schema_by_access_paths(tablet->tablet_schema(),
+                                                  std::numeric_limits<int32_t>::max() - 1000000, paths));
+    ASSERT_EQ(tablet->tablet_schema()->num_columns() + 1, extended_schema->num_columns());
+    const size_t subfield_cid = extended_schema->num_columns() - 1;
+    ASSERT_TRUE(extended_schema->column(subfield_cid).is_extended());
+
+    Schema schema = ChunkHelper::convert_schema(extended_schema);
+    TabletReader reader(tablet, Version(0, version), extended_schema, schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    ASSERT_TRUE(iter != nullptr);
+
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    size_t rows = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t r = 0; r < chunk->num_rows(); r++) {
+            const int64_t pk = chunk->columns()[0]->get(r).get_int64();
+            JsonValue expected_json = JsonValue::parse(make_json(expected_x(pk), expected_tag)).value();
+            ASSERT_FALSE(chunk->columns()[1]->is_null(r)) << "pk=" << pk;
+            EXPECT_EQ(expected_json, *chunk->columns()[1]->get(r).get_json()) << "pk=" << pk;
+            ASSERT_FALSE(chunk->columns()[subfield_cid]->is_null(r)) << "pk=" << pk;
+            EXPECT_EQ(expected_x(pk), chunk->columns()[subfield_cid]->get(r).get_int64()) << "pk=" << pk;
+        }
+        rows += chunk->num_rows();
+        chunk->reset();
+    }
+    ASSERT_EQ(expected_rows, rows);
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_read_through_extended_column) {
+    const int N = 100;
+    auto tablet = create_json_tablet(&_tablets, rand(), rand());
+    auto base_x = [](int64_t pk) { return pk; };
+    auto updated_x = [](int64_t pk) { return pk + 1000; };
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{create_json_rowset(tablet, keys, base_x, "old")};
+    commit_rowsets(tablet, rowsets, version);
+    check_json_subfield(tablet, version, N, base_x, "old");
+
+    // Column-mode partial update of the JSON column only.
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset =
+            create_json_partial_rowset(tablet, keys, updated_x, partial_schema, column_indexes, "new");
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    // The update must have landed as a delta column group rather than a rewrite, otherwise the read
+    // below would exercise nothing.
+    ASSERT_GT(StorageEngine::instance()->update_manager()->get_delta_column_group_file_size_by_tablet_id(
+                      tablet->tablet_id()),
+              0);
+
+    check_json_subfield(tablet, version, N, updated_x, "new");
+}
+
+// The global dictionary for a JSON string subfield is collected by a [_META_] scan through
+// SegmentMetaCollecter, which resolves delta column groups with the same code the scan path uses. If
+// dictionary collection kept reading the base segment while the scan reads the .cols overlay, the value
+// the scan returns would be absent from the dictionary. This drives that collecter directly.
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overlay) {
+    const int N = 100;
+    auto tablet = create_json_tablet(&_tablets, rand(), rand());
+    auto x_of = [](int64_t pk) { return pk; };
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{create_json_rowset(tablet, keys, x_of, "old")};
+    commit_rowsets(tablet, rowsets, version);
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset =
+            create_json_partial_rowset(tablet, keys, x_of, partial_schema, column_indexes, "new");
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // The extended column for get_json_string(j, '$.y').
+    std::vector<ColumnAccessPathPtr> paths;
+    paths.emplace_back(make_extended_json_path("j", "y", TypeDescriptor::create_varchar_type(255)));
+    ASSIGN_OR_ABORT(auto extended_schema,
+                    extend_schema_by_access_paths(tablet->tablet_schema(),
+                                                  std::numeric_limits<int32_t>::max() - 1000000, paths));
+    const size_t subfield_cid = extended_schema->num_columns() - 1;
+    ASSERT_EQ(TYPE_VARCHAR, extended_schema->column(subfield_cid).type());
+
+    auto dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
+
+    // Find the segment that actually carries an overlay -- collecting from a segment without one would
+    // prove nothing.
+    SegmentSharedPtr overlaid_segment;
+    uint32_t overlaid_rowsetid = 0;
+    size_t overlaid_segment_idx = 0;
+    auto rowset_map = tablet->updates()->get_rowset_map();
+    ASSERT_TRUE(rowset_map != nullptr);
+    for (const auto& [rowset_id, rs] : *rowset_map) {
+        if (rs == nullptr) {
+            continue;
+        }
+        // For a primary-key tablet the delta column group is keyed by the rowset-map key (the rssid
+        // base) plus the segment index -- the same arithmetic SegmentMetaCollecter::init() does.
+        ASSERT_OK(rs->load());
+        for (size_t seg = 0; seg < rs->segments().size(); seg++) {
+            DeltaColumnGroupList dcgs;
+            TabletSegmentId tsid;
+            tsid.tablet_id = tablet->tablet_id();
+            tsid.segment_id = rowset_id + seg;
+            ASSERT_OK(dcg_loader->load(tsid, version, &dcgs));
+            if (!dcgs.empty()) {
+                overlaid_segment = rs->segments()[seg];
+                overlaid_rowsetid = rowset_id;
+                overlaid_segment_idx = seg;
+                break;
+            }
+        }
+        if (overlaid_segment != nullptr) {
+            break;
+        }
+    }
+    ASSERT_TRUE(overlaid_segment != nullptr) << "no segment carries a delta column group";
+
+    SegmentMetaCollecter collecter(overlaid_segment);
+    SegmentMetaCollecterParams params;
+    params.fields.emplace_back(META_DICT_MERGE);
+    params.field_type.emplace_back(LogicalType::TYPE_VARCHAR);
+    params.cids.emplace_back(subfield_cid);
+    params.read_page.emplace_back(true);
+    params.tablet_schema = extended_schema;
+    params.low_cardinality_threshold = 256;
+    params.use_page_cache = false;
+
+    SegmentMetaCollectOptions options;
+    options.is_primary_keys = true;
+    options.tablet_id = tablet->tablet_id();
+    // Must match the segment the collecter was constructed from: init() derives the delta column
+    // group key as pk_rowsetid + segment_id.
+    options.segment_id = overlaid_segment_idx;
+    options.version = version;
+    options.pk_rowsetid = overlaid_rowsetid;
+    options.dcg_loader = dcg_loader;
+
+    ASSERT_OK(collecter.init(&params, options));
+    ASSERT_OK(collecter.open());
+
+    // Non-nullable, matching what MetaReader builds for META_DICT_MERGE: _collect_dict_for_column only
+    // appends to the array's offsets/elements, never to a null column.
+    auto dict_column = ColumnHelper::create_column(
+            TypeDescriptor::create_array_type(TypeDescriptor::create_varchar_type(255)), false);
+    std::vector<Column*> dsts = {dict_column.get()};
+    ASSERT_OK(collecter.collect(&dsts));
+
+    std::set<std::string> words;
+    for (size_t r = 0; r < dict_column->size(); r++) {
+        // Keep the Datum alive: get_array() hands back a reference into it, so iterating
+        // dict_column->get(r).get_array() directly would read a destroyed temporary.
+        auto row = dict_column->get(r);
+        for (const auto& word : row.get_array()) {
+            words.insert(word.get_slice().to_string());
+        }
+    }
+    // Guard against a vacuous pass: if no dictionary was collected at all, the assertions below would
+    // hold for the wrong reason.
+    ASSERT_FALSE(words.empty()) << "no dictionary collected, the check below would be vacuous";
+    EXPECT_TRUE(words.count("new") > 0) << "dictionary is missing the value the scan now returns";
+    EXPECT_TRUE(words.count("old") == 0) << "dictionary still carries the pre-update value";
+}
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
                          ::testing::Values(RowsetColumnPartialUpdateParam{1}, RowsetColumnPartialUpdateParam{1024},

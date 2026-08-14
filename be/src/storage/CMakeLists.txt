@@ -24,6 +24,7 @@ set(STORAGE_FILES
     base_tablet.cpp
     decimal12.cpp
     decimal_type_info.cpp
+    extends_column_utils.cpp
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
