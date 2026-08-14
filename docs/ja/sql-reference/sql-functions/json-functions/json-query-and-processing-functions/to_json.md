@@ -1,11 +1,11 @@
 ---
 displayed_sidebar: docs
-description: "Map、Struct、またはArray値をJSON文字列に変換します。"
+description: "MapまたはStruct値をJSON文字列に変換します。"
 ---
 
 # to_json
 
-Map、Struct、または Array の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
+Map または Struct の値を JSON 文字列に変換します。入力値が NULL の場合、NULL が返されます。
 
 :::tip
 すべての JSON 関数と演算子はナビゲーションと [overview page](../overview-of-json-functions-and-operators.md) に一覧されています。
@@ -25,7 +25,7 @@ to_json(any_value)
 
 ## パラメータ
 
-`any_value`: 変換したい Map、Struct、または Array 式。入力値が無効な場合、エラーが返されます。Map または Struct のキーと値、および Array 要素には NULL を指定できます。最後の例を参照してください。
+`any_value`: 変換したい Map または Struct 式。入力値が無効な場合、エラーが返されます。Map または Struct 値の各キーと値のペアの値は nullable です。最後の例を参照してください。
 
 ## 戻り値
 
@@ -48,13 +48,6 @@ select to_json(row('asia','eu'));
 | {"col1": "asia", "col2": "eu"} |
 +--------------------------------+
 
-select to_json(array(1, null, 3));
-+------------------------------+
-| to_json(array(1, null, 3))   |
-+------------------------------+
-| [1, null, 3]                 |
-+------------------------------+
-
 select to_json(map('a', named_struct('b', 1)));
 +----------------------------------------+
 | to_json(map{'a':named_struct('b', 1)}) |
@@ -74,6 +67,5 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 - [Map data type](../../../data-types/semi_structured/Map.md)
 - [Struct data type](../../../data-types/semi_structured/STRUCT.md)
-- [Array data type](../../../data-types/semi_structured/Array.md)
 - [Map functions](../../README.md#map-functions)
 - [Struct functions](../../README.md#struct-functions)

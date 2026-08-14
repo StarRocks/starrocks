@@ -30,18 +30,6 @@ SELECT to_json(row(1, 1));
 -- result:
 {"col1": 1, "col2": 1}
 -- !result
-SELECT to_json(array(1, 2, 3));
--- result:
-[1, 2, 3]
--- !result
-SELECT to_json(array(1, NULL, 3));
--- result:
-[1, null, 3]
--- !result
-SELECT to_json(array(array(1, 2), array(3, 4)));
--- result:
-[[1, 2], [3, 4]]
--- !result
 SELECT to_json(NULL);
 -- result:
 None
