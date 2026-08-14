@@ -377,8 +377,17 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
     segment_options->dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
         segment_options->is_primary_keys = true;
+        std::shared_ptr<CompactionDelvecHolder> delvec_holder;
+        if (segment_options->lake_io_opts.hold_segments) {
+            std::lock_guard<std::mutex> l(_held_segments_mutex);
+            if (_held_delvecs == nullptr) {
+                _held_delvecs = std::make_shared<CompactionDelvecHolder>();
+            }
+            delvec_holder = _held_delvecs;
+        }
         segment_options->delvec_loader = std::make_shared<LakeDelvecLoader>(
-                _tablet_mgr, nullptr, segment_options->lake_io_opts.fill_data_cache, segment_options->lake_io_opts);
+                _tablet_mgr, nullptr, segment_options->lake_io_opts.fill_data_cache, segment_options->lake_io_opts,
+                nullptr, std::move(delvec_holder));
         segment_options->dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     }
     // The Index Delta Group (ADD INDEX fast-path) sidecar applies to ALL lake

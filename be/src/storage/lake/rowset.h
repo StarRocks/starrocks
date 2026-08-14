@@ -42,6 +42,8 @@ class SegmentReadOptions;
 
 namespace starrocks::lake {
 
+class CompactionDelvecHolder;
+
 class MetaFileBuilder;
 class TabletManager;
 class TabletWriter;
@@ -334,6 +336,9 @@ private:
     // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
     // Rowset instance, which for compaction is the whole task.
     std::vector<SegmentPtr> _held_segments;
+    // Delvec store shared by every pass's delvec loader, same lifetime and guard rules as
+    // _held_segments; created lazily on the primary-key compaction read path.
+    std::shared_ptr<CompactionDelvecHolder> _held_delvecs;
     // Segment range for large rowset split compaction.
     // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
     // Default is 0, meaning all segments are used.
