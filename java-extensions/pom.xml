@@ -61,12 +61,19 @@
         <luben.zstd.jni.version>1.5.7-15</luben.zstd.jni.version>
         <kryo.version>4.0.2</kryo.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
+<<<<<<< HEAD
         <lz4-java.version>1.11.4</lz4-java.version>
         <zookeeper.version>3.8.7</zookeeper.version>
         <snappy-java.version>1.1.10.9</snappy-java.version>
         <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
         <bouncycastle.version>1.86</bouncycastle.version>
+=======
+        <lz4-java.version>1.10.1</lz4-java.version>
+        <zookeeper.version>3.8.6</zookeeper.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
+        <bouncycastle.version>1.84</bouncycastle.version>
+>>>>>>> 2d28667 ([BugFix][CVE] bump Apache HttpCore to 5.4.3 (backport #77753) (#77801))
         <thrift.version>0.24.0</thrift.version>
     </properties>
 
@@ -622,12 +629,15 @@
             </dependency>
 
             <dependency>
+<<<<<<< HEAD
                 <groupId>org.xerial.snappy</groupId>
                 <artifactId>snappy-java</artifactId>
                 <version>${snappy-java.version}</version>
             </dependency>
 
             <dependency>
+=======
+>>>>>>> 2d28667 ([BugFix][CVE] bump Apache HttpCore to 5.4.3 (backport #77753) (#77801))
                 <groupId>org.apache.httpcomponents.core5</groupId>
                 <artifactId>httpcore5</artifactId>
                 <version>${httpcore5.version}</version>
