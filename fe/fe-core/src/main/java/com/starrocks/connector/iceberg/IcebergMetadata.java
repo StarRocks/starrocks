@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -142,6 +143,7 @@ import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
@@ -757,7 +759,25 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void dropTable(ConnectContext context, DropTableStmt stmt) {
-        Table icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+        Table icebergTable;
+        try {
+            icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+        } catch (StarRocksConnectorException | NotFoundException e) {
+            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+                throw e;
+            }
+            // The metadata file the catalog points at is gone, so the table can no longer be loaded and
+            // would stay in the metastore forever. Iceberg itself tolerates this on drop: HiveCatalog#dropTable
+            // skips the purge when the metadata cannot be read and still removes the catalog entry. Do the same
+            // here instead of requiring a loadable table to drop one. The purge is never requested on this path:
+            // without the metadata there is no way to tell which data files belong to this table.
+            LOG.warn("Metadata of iceberg table {}.{} is missing, only dropping the catalog entry",
+                    stmt.getDbName(), stmt.getTableName(), e);
+            icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), false);
+            tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
+            asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            return;
+        }
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
             icebergCatalog.dropView(context, stmt.getDbName(), stmt.getTableName());
@@ -772,6 +792,33 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+    }
+
+    /**
+     * Whether the failure was caused by a metadata file that no longer exists in the storage. Iceberg raises
+     * {@link NotFoundException} only for a file that is really absent, so an unreadable file (permission or
+     * connectivity failure) is not reported as missing. That distinction matters: the metadata of such a table
+     * may still be intact, and dropping the catalog entry would leave its data files orphaned.
+     * The exception is inspected through the whole cause chain because {@link CachingIcebergCatalog#getTable}
+     * wraps load failures into a {@link StarRocksConnectorException}.
+     */
+    private static boolean isMetadataFileMissing(Throwable throwable) {
+        return Throwables.getCausalChain(throwable).stream().anyMatch(t -> t instanceof NotFoundException);
+    }
+
+    /**
+     * Whether it is this table's own metadata that cannot be found. {@link #getTable} does more than load the
+     * table: it also analyzes the table properties, and a foreign key constraint makes it load the referenced
+     * tables through {@link PropertyAnalyzer#analyzeForeignKeyConstraint}. A missing file reported by one of
+     * those must not be read as this table being broken, or a healthy table would lose its catalog entry.
+     */
+    private boolean isTableMetadataMissing(String dbName, String tableName) {
+        try {
+            icebergCatalog.getTable(new ConnectContext(), dbName, tableName);
+            return false;
+        } catch (Exception e) {
+            return isMetadataFileMissing(e);
+        }
     }
 
     public void updateTableProperty(Database db, IcebergTable icebergTable) {

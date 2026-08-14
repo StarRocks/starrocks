@@ -169,6 +169,7 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
@@ -898,6 +899,113 @@ public class IcebergMetadataTest extends TableTestBase {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFile() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        String missingMetadata = "File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json";
+
+        // The table metadata is gone from object storage. CachingIcebergCatalog wraps the failure into a
+        // StarRocksConnectorException, so the iceberg NotFoundException only shows up in the cause chain.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException(missingMetadata));
+                minTimes = 1;
+
+                // Even though the statement asks for FORCE, the fallback never purges: the files that belong
+                // to the table cannot be listed without its metadata.
+                icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                        "iceberg_db", "table1")), null, NodePosition.ZERO), true));
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFileNotWrapped() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // With the table cache disabled the raw iceberg NotFoundException reaches IcebergMetadata.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new NotFoundException("File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json");
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                        "iceberg_db", "table1")), null, NodePosition.ZERO), false));
+    }
+
+    @Test
+    public void testDropTableKeepsFailingWhenMetadataIsUnreadable() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // Not a missing file but an unreadable one (permission / connectivity). The table pointer may still be
+        // valid, so dropping the catalog entry would orphan the data: the error must keep propagating.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new IOException("Access denied"));
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
+    }
+
+    @Test
+    public void testDropTableKeepsFailingWhenAnotherTableMetadataIsMissing() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // getTable() also analyzes the table properties, which loads the tables a foreign key constraint
+        // refers to. Here the table being dropped is healthy and one of those referenced tables is the one
+        // whose metadata is gone: dropping this table's catalog entry would throw away a working table.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException("File does not exist: oss://bucket/db/other/metadata/00000-abc.metadata.json"));
+                result = mockedNativeTableA;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
     }
 
     @Test
