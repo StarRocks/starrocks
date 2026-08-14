@@ -1500,9 +1500,12 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 const bool batch_has_overlay_unsupported_type = [&]() {
                     for (size_t i = 0; i < partial_schema.num_fields(); ++i) {
                         switch (partial_schema.field(i)->type()->type()) {
+                        // ChunkFactory::column_from_field_type() aborts outright on these.
                         case TYPE_ARRAY:
                         case TYPE_MAP:
                         case TYPE_STRUCT:
+                        // Has a flat form the overlay's update_rows does not handle; see the guard below.
+                        case TYPE_JSON:
                             return true;
                         default:
                             break;
@@ -1602,6 +1605,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 // partial_update_mode=auto SHADOW: compute the adaptive selector's recommendation and log it
                 // against the current boolean decision. NO behavior change yet -- this calibrates the cost
                 // model against production before it takes over the decision.
+                // Set when the auto selector actually drove the decision, so the write-mode histogram is
+                // emitted exactly once per (column batch, rssid) AFTER the complex-type guard below has had
+                // its say. Counting inside the selector would record the mode it *wanted*, not the mode
+                // written, and the guard's override would then add a second count for the same batch.
+                bool auto_metered = false;
                 {
                     int32_t sh_chain = 0;
                     int64_t sh_cum_k = 0;
@@ -1647,16 +1655,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                         VLOG(1) << fmt::format(
                                 "SDCG auto execute: tablet_id: {} rssid: {} K: {} M: {} chain: {} het: {} chose: {}",
                                 params.tablet->id(), rssid, K, source_num_rows, sh_chain, sig.heterogeneous, chosen);
-                        auto* sm = StorageMetrics::instance();
-                        if (want_sparse && flexible_mode) {
-                            sm->sdcg_write_mode_packed_total.increment(1);
-                        } else if (want_sparse) {
-                            sm->sdcg_write_mode_sparse_total.increment(1);
-                        } else if (flex_column) {
-                            sm->sdcg_write_mode_masked_dense_total.increment(1);
-                        } else {
-                            sm->sdcg_write_mode_dense_total.increment(1);
-                        }
+                        // Metric deferred to after the complex-type guard; see auto_metered.
+                        auto_metered = true;
                     } else {
                         // SHADOW (explicit column/flexible): log the full-picture recommendation (incl. ROW)
                         // against the actual decision; no behavior change.
@@ -1673,16 +1673,30 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 // (the K/M rule, the flexible force, and the auto cost model), because each of those can
                 // turn take_sparse back on and an earlier-only guard would be silently overridden.
                 //
-                // A sparse/packed `.spcols` layer is read back through LayeredOverlayColumnIterator, which
-                // materializes the overlay value column with ChunkFactory::column_from_field_type(). That
-                // factory ABORTS the process on ARRAY / MAP / STRUCT ("array not supported",
-                // chunk_factory.cpp:124-131) -- CHECK is fatal in release builds too, and since the fault is
-                // on the READ path, every retry re-kills the node (observed: 3/3 BEs down, no self-recovery).
-                // Writing such a layer is therefore accepted-then-fatal, so these batches must stay off the
-                // sparse path entirely.
+                // Both failure modes below are accepted-at-write and fatal-on-read, so every retry re-kills
+                // the node -- which is why the batch must stay off the sparse path rather than be detected
+                // when it is read.
                 //
-                // Fallback targets, both verified to handle these types (ArrayColumn/MapColumn/StructColumn
-                // all implement update_rows, and the overlay is read by the ordinary DCG column iterator):
+                // ARRAY / MAP / STRUCT: LayeredOverlayColumnIterator materializes the overlay value column
+                // with ChunkFactory::column_from_field_type(), which ABORTS on these ("array not supported",
+                // chunk_factory.cpp:124-131); CHECK is fatal in release builds too. Cluster-observed: 3/3
+                // BEs down, no self-recovery.
+                //
+                // JSON: the destination column, not the factory, is the problem. With the default
+                // enable_json_flat, a base segment stores JSON flat, and a subfield access path (default
+                // cbo_prune_json_subfield) makes the base iterator hand back a JsonColumn in FLAT form --
+                // rows in _flat_columns, the inherited ObjectColumn<JsonValue>::_pool EMPTY, while size()
+                // still reports N. JsonColumn overrides append/append_selective for that form but NOT
+                // update_rows, so _finalize_winners' update_rows scatters into the empty pool: SIGSEGV,
+                // whole CN down (cluster-reproduced; masked under default session settings by an unrelated
+                // planner rewrite that returns stale values instead of reading the overlay at all).
+                // NOTE the discriminator is the ALTERNATE REPRESENTATION, not ObjectColumn: BITMAP / HLL /
+                // PERCENTILE are also ObjectColumn<T> but have no second form, so their _pool is always the
+                // live storage and update_rows is correct. They are deliberately NOT listed here.
+                //
+                // Fallback targets, both verified for these types (ArrayColumn/MapColumn/StructColumn all
+                // implement update_rows; a dense `.cols` is read by the ordinary DCG column iterator, which
+                // owns the whole column, so no cross-representation update_rows occurs):
                 //   - non-flexible -> plain dense `.cols`
                 //   - flexible     -> masked-dense `.cols` (_update_source_chunk_by_upt_flexible); safe to
                 //     force because flexible+merge_condition is rejected above, so condition_idx < 0 always
@@ -1691,11 +1705,26 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 if (batch_has_overlay_unsupported_type && take_sparse) {
                     VLOG(1) << fmt::format(
                             "SDCG: forcing dense for tablet_id: {} rssid: {} -- batch carries a column type "
-                            "the sparse overlay reader cannot materialize (ARRAY/MAP/STRUCT)",
+                            "the sparse overlay reader cannot materialize (ARRAY/MAP/STRUCT/JSON)",
                             params.tablet->id(), rssid);
                     take_sparse = false;
                     flex_column = flexible_mode;
-                    StorageMetrics::instance()->sdcg_write_mode_dense_total.increment(1);
+                }
+
+                // Single write-mode accounting point: emitted once per (column batch, rssid), from the FINAL
+                // decision, so a batch the guard re-routed is counted as the mode actually written and never
+                // twice. Scoped to the auto path, which is the only path that recorded this histogram before.
+                if (auto_metered) {
+                    auto* sm = StorageMetrics::instance();
+                    if (take_sparse && flexible_mode) {
+                        sm->sdcg_write_mode_packed_total.increment(1);
+                    } else if (take_sparse) {
+                        sm->sdcg_write_mode_sparse_total.increment(1);
+                    } else if (flex_column) {
+                        sm->sdcg_write_mode_masked_dense_total.increment(1);
+                    } else {
+                        sm->sdcg_write_mode_dense_total.increment(1);
+                    }
                 }
 
                 if (take_sparse && flexible_mode) {
@@ -1986,18 +2015,27 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 // plain SPARSE_PERCOL `.spcols` overlays: their (source_rowid -> value) rows can be remapped onto the
 // compaction output via the rows mapper. Flexible/packed presence lists and a dense conflicting layer
 // are NOT handled by the simple rowid-remap replay and force a discard.
-// Unique ids of columns whose type the REPLAY reader cannot materialize. replay_sparse_overlays_onto_output
-// rebuilds every racing layer's value column with ChunkFactory::column_from_field_type() -- on BOTH its
-// SPARSE_PERCOL and its DENSE_COLS branch -- and that factory aborts the process on ARRAY / MAP / STRUCT
-// (chunk_factory.cpp:124-131). The write-side guard keeps these types out of `.spcols`, but a racing layer
-// can still be a plain dense `.cols`, so replay must reject them here as well.
+// Unique ids of columns the REPLAY path must not touch, for the same reasons the write-side guard in
+// execute() exists (see the long comment there for each type).
+//
+// Replay needs its own check for two independent reasons:
+//   1. replay_sparse_overlays_onto_output rebuilds every racing layer's value column with
+//      ChunkFactory::column_from_field_type() on BOTH its SPARSE_PERCOL and its DENSE_COLS branch, so a
+//      racing plain dense `.cols` reaches the aborting factory even though the write-side guard kept the
+//      type out of `.spcols`.
+//   2. Replay EMITS a new packed `.spcols` for the winners, so replaying a dense layer would re-introduce
+//      exactly the sparse layer the write-side guard refused to create.
+// Rejecting here yields MUST_DISCARD, which is the pre-existing safe behavior.
 static std::unordered_set<uint32_t> replay_unsupported_column_uids(const TabletSchemaPB& schema) {
     std::unordered_set<uint32_t> uids;
     for (const auto& col : schema.column()) {
+        // Keep this set IDENTICAL to the write-side guard's switch in execute(); the two enforce the
+        // same property (the overlay reader cannot materialize these) on the two paths that reach it.
         switch (string_to_logical_type(col.type())) {
         case TYPE_ARRAY:
         case TYPE_MAP:
         case TYPE_STRUCT:
+        case TYPE_JSON:
             uids.insert(static_cast<uint32_t>(col.unique_id()));
             break;
         default:

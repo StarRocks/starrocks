@@ -302,7 +302,19 @@ Status LayeredOverlayColumnIterator::_finalize_winners(const std::vector<int32_t
     // (update_rows overwrites in place either way) and now issues a single scatter instead of L.
     MutableColumnPtr src;
     std::vector<uint32_t> dst_offsets;
-    const size_t dst_size = dst->size();
+    // Use the size the write will actually be indexed against. For a NullableColumn, size() reports the
+    // NULL column's length, and update_rows scatters into the INNER data column -- so a dst whose null
+    // column is populated while its data column is still empty passes a size()-based bounds check and
+    // then writes through an empty pool. That is not hypothetical: with enable_json_flat=true the base
+    // fetch leaves a JSON dst in exactly that state, and the resulting update_rows was a SIGSEGV that
+    // took down every CN. Bound against min(outer, inner) so the check sees the column the write lands in.
+    const size_t dst_size = [&]() {
+        size_t s = dst->size();
+        if (dst->is_nullable()) {
+            s = std::min(s, down_cast<const NullableColumn*>(dst)->data_column()->size());
+        }
+        return s;
+    }();
     for (size_t rel = 0; rel < n; ++rel) {
         const int32_t li = winner_layer[rel];
         if (li < 0) {

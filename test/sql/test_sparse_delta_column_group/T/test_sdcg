@@ -96,23 +96,27 @@ drop database test_sdcg_gin force;
 create database test_sdcg_ctype;
 use test_sdcg_ctype;
 update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
--- Force the sparse decision to be REACHED on a tiny table. Without these two knobs the row-count
--- and ratio thresholds alone would keep this update dense, and the complex-type guard would never
--- be exercised here.
-update information_schema.be_configs set value = "2" where name = "sdcg_sparse_min_segment_rows";
-update information_schema.be_configs set value = "0.9" where name = "sdcg_dense_threshold";
-CREATE TABLE t (pk BIGINT NOT NULL, a ARRAY<INT>, c2 BIGINT)
+-- 70000 base rows keeps the sparse decision reachable under the DEFAULT thresholds
+-- (M >= sdcg_sparse_min_segment_rows 65536, K/M < sdcg_dense_threshold 0.3, K < sdcg_sparse_max_rows),
+-- so this case does not have to mutate cluster-global tuning knobs -- knobs that a mid-case abort
+-- would leave skewed for every later case.
+CREATE TABLE t (pk BIGINT NOT NULL, a ARRAY<INT>, j JSON, c2 BIGINT)
 PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
-insert into t values (1,[1,2,3],100),(2,[1,2,3],200),(3,[1,2,3],300),(4,[1,2,3],400),(5,[1,2,3],500);
+insert into t select generate_series, [1,2,3], parse_json('{"x":1}'), generate_series from table(generate_series(1, 70000));
 sync;
--- A sparse `.spcols` layer cannot carry ARRAY/MAP/STRUCT: the overlay reader materializes value
--- columns with ChunkFactory::column_from_field_type(), which aborts the process on those types.
--- The write path must fall back to dense. Before the guard existed this load was accepted and the
--- SELECT below killed every BE.
+-- ARRAY: the sparse overlay reader materializes value columns with
+-- ChunkFactory::column_from_field_type(), which aborts the process on ARRAY/MAP/STRUCT. The write path
+-- must fall back to dense; before the guard this load was accepted and the SELECT below killed every BE.
 shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,a" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_array.json ${url}/api/test_sdcg_ctype/t/_stream_load
 sync;
 -- projected to scalars so the assertion does not depend on ARRAY display formatting
-select pk, array_length(a), a[1], c2 from t order by pk;
-update information_schema.be_configs set value = "65536" where name = "sdcg_sparse_min_segment_rows";
-update information_schema.be_configs set value = "0.3" where name = "sdcg_dense_threshold";
+select pk, array_length(a), a[1], c2 from t where pk <= 3 order by pk;
+-- JSON: a flat JSON destination keeps its rows in _flat_columns with the ObjectColumn pool empty, and
+-- JsonColumn does not override update_rows, so the overlay scatter wrote through an empty pool (SIGSEGV).
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,j" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_json.json ${url}/api/test_sdcg_ctype/t/_stream_load
+sync;
+-- Session-scoped, so nothing leaks to later cases. It is required: with the default rewrite the planner
+-- answers from a path that never reads the overlay, which both hides the crash and returns stale values.
+set cbo_json_v2_rewrite = false;
+select pk, get_json_int(j, '$.x'), c2 from t where pk <= 3 order by pk;
 drop database test_sdcg_ctype force;
