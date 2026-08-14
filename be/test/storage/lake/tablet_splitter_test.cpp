@@ -59,7 +59,10 @@ static VariantTuple make_int_tuple(int64_t value) {
     return tuple;
 }
 
-static TabletMetadataPtr make_pk_order_by_metadata() {
+// Returns a mutable handle: some tests keep tweaking the metadata (parent range, rowset stats)
+// after construction, which TabletMetadataPtr's `const` element type would forbid. It converts
+// implicitly to TabletMetadataPtr at the call sites that only read it.
+static std::shared_ptr<TabletMetadataPB> make_pk_order_by_metadata() {
     auto metadata = std::make_shared<TabletMetadataPB>();
     metadata->set_id(100);
     metadata->set_version(10);
