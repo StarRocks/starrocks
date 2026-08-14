@@ -34,7 +34,6 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -65,7 +64,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
     @Override
     public boolean matches(InsertStmt insertStmt, SelectRelation selectRelation) {
         Relation from = selectRelation.getRelation();
-        return isMappableProjection(selectRelation)
+        return hasSupportedProjectionShape(selectRelation)
                 && from instanceof TableRelation
                 && !(from instanceof FileTableFunctionRelation)
                 && isPlainTableReference((TableRelation) from);
@@ -128,14 +127,14 @@ final class TablePreSplitSource implements InsertPreSplitSource {
 
     /**
      * Verifies the projection is a bare {@code SELECT *} (single star, no
-     * qualifier / EXCLUDE / alias) OR a list of bare column references
-     * ({@code SlotRef}), with no DISTINCT and no
-     * GROUP BY / HAVING / ORDER BY / LIMIT. A WHERE clause is allowed (gated
-     * separately). Any expression projection, qualified / excluded star, or
-     * row-changing clause would decouple the sampled row-set from what the load
-     * writes.
+     * qualifier / EXCLUDE / alias) or an explicit list without stars, with no
+     * DISTINCT and no GROUP BY / HAVING / ORDER BY / LIMIT. A WHERE clause is
+     * allowed (gated separately). Expressions in the explicit list are checked
+     * later by {@link InsertSelectSourceColumns}: only target columns needed for
+     * partitioning and range distribution must be direct source-column refs, and
+     * an expression may reference nothing beyond the resolved source relation.
      */
-    private static boolean isMappableProjection(SelectRelation selectRelation) {
+    private static boolean hasSupportedProjectionShape(SelectRelation selectRelation) {
         SelectList selectList = selectRelation.getSelectList();
         if (selectList == null || selectList.isDistinct()) {
             return false;
@@ -151,7 +150,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
             }
         } else {
             for (SelectListItem item : items) {
-                if (item.isStar() || !(item.getExpr() instanceof SlotRef)) {
+                if (item.isStar()) {
                     return false;
                 }
             }
