@@ -20,6 +20,9 @@ set partial_update_mode = 'column';
 update tab1 set j = parse_json('{"x": 9, "y": "bbb"}') where pk = 1;
 set partial_update_mode = 'auto';
 select pk, get_json_int(j, '$.x'), get_json_string(j, '$.y'), cast(j as varchar) from tab1 order by pk;
+-- A predicate on the overlaid subfield must match the updated row too, not just the projection.
+select pk from tab1 where get_json_string(j, '$.y') = 'bbb' order by pk;
+select pk from tab1 where get_json_int(j, '$.x') = 9 order by pk;
 set cbo_json_v2_rewrite = false;
 select pk, get_json_int(j, '$.x'), get_json_string(j, '$.y') from tab1 order by pk;
 set cbo_json_v2_rewrite = true;

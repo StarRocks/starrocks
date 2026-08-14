@@ -34,6 +34,15 @@ select pk, get_json_int(j, '$.x'), get_json_string(j, '$.y'), cast(j as varchar)
 1	9	bbb	{"x": 9, "y": "bbb"}
 2	2	aaa	{"x": 2, "y": "aaa"}
 -- !result
+-- A predicate on the overlaid subfield must match the updated row too, not just the projection.
+select pk from tab1 where get_json_string(j, '$.y') = 'bbb' order by pk;
+-- result:
+1
+-- !result
+select pk from tab1 where get_json_int(j, '$.x') = 9 order by pk;
+-- result:
+1
+-- !result
 set cbo_json_v2_rewrite = false;
 -- result:
 -- !result
