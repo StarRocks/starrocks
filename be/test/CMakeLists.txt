@@ -134,6 +134,7 @@ set(EXEC_FILES
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
         ./exec/repeat_node_test.cpp
+        ./exec/set_hash_set_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/tablet_sink_sender_range_test.cpp
