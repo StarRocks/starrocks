@@ -18,27 +18,8 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD:be/src/storage/decimal_type_info.h
 TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale);
 
 std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value);
-=======
-// The unique id under which `column`'s data is actually stored, which is the id a delta column group
-// is keyed by (see DeltaColumnGroup::get_column_idx).
-//
-// An extended column is a JSON subfield materialized by the JSONV2 path rewrite (the column appended
-// by extend_schema_by_access_paths above). It owns no storage: it is derived from its root JSON
-// column at read time, and the unique id it carries is synthetic, allocated above every real column
-// id so that it can never collide with one. Looking a delta column group up by that synthetic id
-// therefore always misses, so the subfield would be read from the base segment and silently return
-// the value a column-mode partial update has already replaced. Resolve to the root column instead.
-inline ColumnUID storage_column_uid(const TabletColumn& column) {
-    const auto* extended_info = column.extended_info();
-    if (extended_info != nullptr && extended_info->source_column_uid >= 0) {
-        return extended_info->source_column_uid;
-    }
-    return column.unique_id();
-}
->>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759)):be/src/storage/extends_column_utils.h
 
 } // namespace starrocks

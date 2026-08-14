@@ -24,12 +24,8 @@
 #include "column/datum.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
-<<<<<<< HEAD
 #include "runtime/global_dict/config.h"
-=======
-#include "fs/fs_factory.h"
 #include "storage/extends_column_utils.h"
->>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759))
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
