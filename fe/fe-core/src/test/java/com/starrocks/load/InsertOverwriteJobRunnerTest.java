@@ -169,6 +169,84 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+    public void testDropUnusedDynamicOverwriteTempPartitions() {
+        // Sampling and the load use different source snapshots, so a pre-created temporary
+        // partition can end up with no rows and never be promoted. Only this transaction's
+        // leftovers may be dropped -- another concurrent overwrite owns the rest.
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                301L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        job.setTxnId(42L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getTempPartitions()).thenReturn(Lists.newArrayList(
+                mockPartitionNamed("txn42_p20260101"),
+                mockPartitionNamed("txn7_p20260101"),
+                mockPartitionNamed("p20260101")));
+
+        runner.dropUnusedDynamicOverwriteTempPartitions(table);
+
+        Mockito.verify(table).dropTempPartition("txn42_p20260101", true);
+        Mockito.verify(table, Mockito.never()).dropTempPartition("txn7_p20260101", true);
+        Mockito.verify(table, Mockito.never()).dropTempPartition("p20260101", true);
+    }
+
+    @Test
+    public void testDropUnusedDynamicOverwriteTempPartitionsSkipsNonDynamicJob() {
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                302L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        job.setTxnId(42L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        OlapTable table = Mockito.mock(OlapTable.class);
+
+        runner.dropUnusedDynamicOverwriteTempPartitions(table);
+
+        Mockito.verifyNoInteractions(table);
+    }
+
+    @Test
+    public void testGetDynamicOverwriteTempPartitionsFallsBackToPrefixScan() {
+        // The transaction state is gone (here: never existed), which is exactly the case that used
+        // to lose the pre-created partitions. The prefix scan must still find this transaction's
+        // temporary partitions so GC can drop them.
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                303L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        job.setTxnId(4242L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getTempPartitions()).thenReturn(Lists.newArrayList(
+                mockPartitionNamed("txn4242_p20260101"),
+                mockPartitionNamed("txn4243_p20260101")));
+
+        Assertions.assertEquals(Lists.newArrayList("txn4242_p20260101"),
+                runner.getDynamicOverwriteTempPartitions(table));
+    }
+
+    @Test
+    public void testGetDynamicOverwriteTempPartitionsBeforePrepare() {
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                304L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        OlapTable table = Mockito.mock(OlapTable.class);
+
+        Assertions.assertTrue(runner.getDynamicOverwriteTempPartitions(table).isEmpty());
+        Mockito.verifyNoInteractions(table);
+    }
+
+    private static Partition mockPartitionNamed(String name) {
+        Partition partition = Mockito.mock(Partition.class);
+        Mockito.when(partition.getName()).thenReturn(name);
+        return partition;
+    }
+
+    @Test
     public void testInsertOverwriteAbortsWhenTableStateNotNormal() throws Exception {
         // Guards against the race where an overwrite passes analysis while the table is NORMAL,
         // then the table state flips (e.g. an ALTER submits) before the job's prepare() runs.

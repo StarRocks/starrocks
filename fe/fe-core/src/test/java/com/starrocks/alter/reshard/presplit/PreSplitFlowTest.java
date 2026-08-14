@@ -212,6 +212,36 @@ public class PreSplitFlowTest {
     }
 
     @Test
+    public void dynamicOverwriteFlowSkipsIneligibleTargets() {
+        // Same automatic-partition gate as dispatch(), plus the transaction-id guard: a dynamic
+        // overwrite names its temporary partitions after the transaction, so there is nothing to
+        // pre-create without one.
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+
+        record Case(String name, OlapTable table, long txnId) {
+        }
+        List<Case> cases = List.of(
+                new Case("unpartitioned", mockTable(false, true), 42L),
+                new Case("manually partitioned", mockTable(true, false), 42L),
+                new Case("no overwrite transaction", mockTable(true, true), 0L));
+
+        for (Case testCase : cases) {
+            try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                    MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                    MockedStatic<TabletPreSplitCoordinator> coordinator =
+                            Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+                PreSplitFlow.runDynamicOverwriteFlow(database, testCase.table(), prepared,
+                        LoadKind.INSERT_FROM_TABLE, () -> false, mock(ConnectContext.class), testCase.txnId());
+
+                grouper.verifyNoInteractions();
+                coordinator.verifyNoInteractions();
+            }
+        }
+    }
+
+    @Test
     public void dispatchSkipsManuallyPartitioned() {
         // Partitioned + supportedAutomaticPartition() returns false (manual list/range
         // partitions) -> the hoisted automatic-partition gate skips before either submit.

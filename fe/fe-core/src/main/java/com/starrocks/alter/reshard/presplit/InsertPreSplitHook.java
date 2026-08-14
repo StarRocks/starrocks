@@ -175,10 +175,21 @@ public final class InsertPreSplitHook {
         if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
             return false;
         }
-        if (insertStmt.getProperties() != null && !insertStmt.getProperties().isEmpty()) {
-            return false;
-        }
-        return true;
+        return !carriesLoadProperties(insertStmt);
+    }
+
+    /**
+     * Whether the statement was written with a {@code PROPERTIES(...)} clause, which can change the
+     * row set the load writes (max_filter_ratio, strict_mode, ...) relative to what the sampler saw.
+     *
+     * <p>Deliberately not {@code getProperties().isEmpty()}: {@code InsertAnalyzer#analyzeProperties}
+     * fills that map with the session defaults for max_filter_ratio / strict_mode / timeout, so after
+     * analysis it is never empty. {@link #passesCommonPreFilters} runs before analysis and would not
+     * notice, but {@link #passesDynamicOverwritePreFilters} runs after it and would reject every
+     * statement. Both ask the parse-time question so the two gates cannot drift apart.
+     */
+    private static boolean carriesLoadProperties(InsertStmt insertStmt) {
+        return !insertStmt.getUserSpecifiedPropertyKeys().isEmpty();
     }
 
     private static boolean passesDynamicOverwritePreFilters(
@@ -195,7 +206,7 @@ public final class InsertPreSplitHook {
         if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
             return false;
         }
-        return insertStmt.getProperties() == null || insertStmt.getProperties().isEmpty();
+        return !carriesLoadProperties(insertStmt);
     }
 
     /**

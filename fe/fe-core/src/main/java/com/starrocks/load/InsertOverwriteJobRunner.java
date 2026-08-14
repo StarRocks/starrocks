@@ -575,7 +575,7 @@ public class InsertOverwriteJobRunner {
      * both after FE restart and when pre-split created a temporary partition before the BE reported it
      * through the dynamic-partition RPC.
      */
-    private List<String> getDynamicOverwriteTempPartitions(OlapTable targetTable) {
+    List<String> getDynamicOverwriteTempPartitions(OlapTable targetTable) {
         if (job.getTxnId() <= 0) {
             LOG.info("dynamic overwrite job {} cancelled before prepare phase, no temp partitions to clean up",
                     job.getJobId());
@@ -937,7 +937,7 @@ public class InsertOverwriteJobRunner {
      * transaction state and therefore is not promoted. Drop every transaction-scoped temporary
      * partition left after the successful replacement.
      */
-    private void dropUnusedDynamicOverwriteTempPartitions(OlapTable targetTable) {
+    void dropUnusedDynamicOverwriteTempPartitions(OlapTable targetTable) {
         if (!job.isDynamicOverwrite() || job.getTxnId() <= 0) {
             return;
         }
