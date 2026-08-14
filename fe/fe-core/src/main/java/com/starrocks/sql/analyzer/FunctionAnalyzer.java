@@ -153,6 +153,21 @@ public class FunctionAnalyzer {
                         fnName + " function 's second parameter and third parameter must be constant",
                         functionCallExpr.getPos());
             }
+
+            // gram_num is read on the BE as a raw non-nullable INT constant column, with no type or
+            // null check. It is read twice: by ngram_search itself, and -- more dangerously -- by
+            // VectorizedFunctionCallExpr::split_normal_string_to_ngram() while evaluating an NGRAMBF
+            // index in the storage layer, which is reached before ordinary expression evaluation.
+            // "constant" alone is not enough there: a constant of another type (e.g. a JSON
+            // expression) or a constant NULL is a ConstColumn over something that is not an
+            // Int32Column, and reading it crashes the BE. Require a positive integer constant.
+            Expr gramNumExpr = functionCallExpr.getChild(2);
+            Optional<Long> gramNum = extractIntegerValue(gramNumExpr);
+            if (!gramNum.isPresent() || gramNum.get() <= 0 || gramNum.get() > Integer.MAX_VALUE) {
+                throw new SemanticException(
+                        fnName + " function 's third parameter must be a constant positive integer",
+                        gramNumExpr.getPos());
+            }
         }
         Function fn = functionCallExpr.getFn();
         if (fn instanceof AggStateCombinator) {
