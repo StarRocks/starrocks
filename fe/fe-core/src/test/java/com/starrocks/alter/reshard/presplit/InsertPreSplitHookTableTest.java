@@ -54,6 +54,8 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
@@ -197,8 +199,9 @@ public class InsertPreSplitHookTableTest {
         // INSERT PROPERTIES(strict_mode=true) ... — load properties are only validated by
         // InsertAnalyzer.analyzeProperties after this hook, so pre-splitting for a statement that
         // may fail property validation is wrong. Skip conservatively when any property is present.
+        // The gate reads the parse-time key set, not getProperties(), which the analyzer overwrites.
         InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getProperties()).thenReturn(Map.of("strict_mode", "true"));
+        when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("strict_mode"));
 
         assertHookDoesNotDelegate(() ->
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
@@ -639,6 +642,134 @@ public class InsertPreSplitHookTableTest {
             flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
                     any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
                     eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookDispatchesWithAnalyzerFilledProperties() throws Exception {
+        // This hook is the one pre-split entry point that runs AFTER analysis, so getProperties()
+        // has already been filled with the session defaults InsertAnalyzer#analyzeProperties adds
+        // to every INSERT. Gating on that map instead of the parse-time key set made the whole
+        // dynamic-overwrite path a silent no-op on a real cluster.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "0.0", "timeout", "14400"));
+            when(fixture.insertStmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of());
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsUserSpecifiedProperties() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("max_filter_ratio"));
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsNonDynamicStatement() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(false);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsWithoutOverwriteJob() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(false);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsWithoutTransactionId() throws Exception {
+        // The caller has not opened the overwrite transaction yet, so there is no txn prefix to
+        // name the temporary partitions after.
+        assertDynamicOverwriteHookSkips(0L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsExplain() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.isExplain()).thenReturn(true);
+            when(stmt.getExplainLevel()).thenReturn(ExplainLevel.COSTS);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsPreSetStatementTransaction() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.getTxnId()).thenReturn(99L);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsTargetPartitionSpec() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.isSpecifyPartitionNames()).thenReturn(true);
+        });
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.isStaticKeyPartitionInsert()).thenReturn(true);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsExplicitSessionTransaction() throws Exception {
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.context.getTxnId()).thenReturn(7L);
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookSwallowsUnexpectedFailure() throws Exception {
+        // Fail-safe contract: the load must still run when the hook throws.
+        InsertStmt stmt = mock(InsertStmt.class);
+        when(stmt.isDynamicOverwrite()).thenThrow(new IllegalStateException("boom"));
+
+        Assertions.assertDoesNotThrow(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                stmt, mockConnectContextWithSessionPreSplit(true), 42L));
+    }
+
+    /** Applies {@code stubs} to the fixture's statement and asserts the flow is never entered. */
+    private static void assertDynamicOverwriteHookSkips(
+            long overwriteTransactionId, Consumer<InsertStmt> stubs) throws Exception {
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            stubs.accept(fixture.insertStmt);
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                    fixture.insertStmt, fixture.context, overwriteTransactionId);
+
+            flow.verifyNoInteractions();
         }
     }
 
