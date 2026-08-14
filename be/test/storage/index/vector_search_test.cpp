@@ -2322,6 +2322,37 @@ TEST_F(VectorResidualPrefilterTest, exact_rescan_batches_discontinuous_candidate
     EXPECT_EQ(batch_sizes, (std::vector<size_t>{4096, 1}));
 }
 
+TEST_F(VectorResidualPrefilterTest, exact_rescan_keeps_long_candidate_ranges_separate) {
+    double saved = config::vector_index_brute_selectivity_threshold;
+    config::vector_index_brute_selectivity_threshold = 1.0;
+    DeferOp restore_threshold([&] { config::vector_index_brute_selectivity_threshold = saved; });
+
+    std::vector<size_t> batch_sizes;
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("SegmentIterator::_exact_search_over_candidates:batch", [&](void* arg) {
+        const auto* batch = static_cast<const SparseRange<>*>(arg);
+        batch_sizes.push_back(batch->span_size());
+    });
+    sync_point->EnableProcessing();
+    DeferOp restore_sync_point([&] {
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+
+    ResidualCaseConfig cfg;
+    cfg.num_rows = 8194;
+    cfg.filter_col_modulo = 1000;
+    cfg.min_filter_col = 0;
+    std::unique_ptr<ColumnPredicate> pred(new_column_lt_predicate(get_type_info(TYPE_INT), 2, "20"));
+    ResidualCaseResult res;
+    run_residual_case(single_node_tree(pred.get()), /*above_predicate=*/false, &res,
+                      /*pred_col_late_mat=*/false, &cfg);
+
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+    EXPECT_EQ(res.search_ns, 0) << "sparse-ratio gate should have short-circuited the search";
+    EXPECT_EQ(batch_sizes, (std::vector<size_t>(9, 20)));
+}
+
 TEST_F(VectorResidualPrefilterTest, cosine_metric_survives_exact_rescan) {
     // Regression for the PRE-path metric bug: is_cosine_similarity used to be initialized ONLY by
     // _setup_brute_force_fallback (the BRUTE route), so the exact-rescan paths reached from PRE (the
