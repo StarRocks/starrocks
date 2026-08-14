@@ -230,7 +230,7 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
             @Override
-            protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+            protected boolean hasCommittedNotVisible(long partitionId) {
                 return false;
             }
         };
@@ -244,8 +244,8 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
             @Override
-            protected boolean hasCommittedNotVisibleTxn(Partition partition) {
-                return true;
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return partitionId == 10L;
             }
         };
         OlapTable table = Mockito.mock(OlapTable.class);
@@ -261,7 +261,7 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
             @Override
-            protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+            protected boolean hasCommittedNotVisible(long partitionId) {
                 return false;
             }
         };
