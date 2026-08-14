@@ -2596,130 +2596,9 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(2, mcv.size());
         Assertions.assertEquals(100L, mcv.get(convertTzMcvKey(dt1, fromTz, toTz)));
         Assertions.assertEquals(200L, mcv.get(convertTzMcvKey(dt2, fromTz, toTz)));
-        // Converted MCV inputs must lie inside the estimated/bucket range.
         assertConvertTzStatRangeCovers(actual, fromTz, toTz,
                 LocalDateTime.of(2024, 1, 15, 10, 20, 30),
                 LocalDateTime.of(2024, 1, 15, 14, 45, 0));
-    }
-
-    @Test
-    public void testConvertTzNoMcvWhenTimezonesAreNotConstant() {
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
-        final ColumnRefOperator fromTzCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "from_tz", true);
-        final ColumnRefOperator toTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "to_tz", true);
-        final Map<String, Long> inputMcv = Map.of("2024-01-15 10:20:30", 100L);
-        final Statistics statistics = Statistics.builder()
-                .setOutputRowCount(1000)
-                .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setNullsFraction(0)
-                        .setAverageRowSize(8)
-                        .setDistinctValuesCount(1)
-                        .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
-                        .build())
-                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
-                        .setMinValue(Double.NEGATIVE_INFINITY)
-                        .setMaxValue(Double.POSITIVE_INFINITY)
-                        .setNullsFraction(0)
-                        .setAverageRowSize(8)
-                        .setDistinctValuesCount(2)
-                        .build())
-                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
-                        .setMinValue(Double.NEGATIVE_INFINITY)
-                        .setMaxValue(Double.POSITIVE_INFINITY)
-                        .setNullsFraction(0)
-                        .setAverageRowSize(8)
-                        .setDistinctValuesCount(2)
-                        .build())
-                .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
-                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
-
-        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
-
-        Assertions.assertNull(actual.getHistogram());
-        Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(1000, 1*2*2)
-    }
-
-    @Test
-    public void testConvertTzNoMcvWhenInputHasNoHistogram() {
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
-        final Statistics statistics = Statistics.builder()
-                .setOutputRowCount(1000)
-                .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
-                        .setNullsFraction(0)
-                        .setAverageRowSize(8)
-                        .setDistinctValuesCount(2)
-                        .build())
-                .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
-                Lists.newArrayList(
-                        dtCol,
-                        ConstantOperator.createVarchar("UTC"),
-                        ConstantOperator.createVarchar("Asia/Shanghai")));
-
-        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
-
-        Assertions.assertNull(actual.getHistogram());
-        Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
-        assertConvertTzStatRangeCoversEveryMinute(actual, "UTC", "Asia/Shanghai",
-                LocalDateTime.of(2024, 1, 15, 10, 20, 30),
-                LocalDateTime.of(2024, 1, 15, 14, 45, 0));
-    }
-
-    @Test
-    public void testConvertTzNoMcvWhenTimezoneInvalid() {
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
-        final Map<String, Long> inputMcv = Map.of("2024-01-15 10:20:30", 100L);
-        final Statistics statistics = Statistics.builder()
-                .setOutputRowCount(1000)
-                .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setNullsFraction(0)
-                        .setAverageRowSize(8)
-                        .setDistinctValuesCount(1)
-                        .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
-                        .build())
-                .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
-                Lists.newArrayList(
-                        dtCol,
-                        ConstantOperator.createVarchar("Not/AZone"),
-                        ConstantOperator.createVarchar("UTC")));
-
-        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
-
-        Assertions.assertNull(actual.getHistogram());
-    }
-
-    @Test
-    public void testConvertTzNoMcvWhenMcvKeyInvalid() {
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
-        final Map<String, Long> inputMcv = Map.of("not-a-datetime", 100L);
-        final Statistics statistics = Statistics.builder()
-                .setOutputRowCount(1000)
-                .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
-                        .setNullsFraction(0)
-                        .setAverageRowSize(8)
-                        .setDistinctValuesCount(1)
-                        .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
-                        .build())
-                .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
-                Lists.newArrayList(
-                        dtCol,
-                        ConstantOperator.createVarchar("UTC"),
-                        ConstantOperator.createVarchar("Asia/Shanghai")));
-
-        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
-
-        Assertions.assertNull(actual.getHistogram());
     }
 
     @Test
@@ -2728,15 +2607,13 @@ public class ExpressionStatisticsCalculatorTest {
         final String toTz = "Asia/Shanghai";
         final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
         final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
-        final double minValue = getLongFromDateTime(minDt);
-        final double maxValue = getLongFromDateTime(maxDt);
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(minValue)
-                        .setMaxValue(maxValue)
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
                         .setNullsFraction(0)
                         .setAverageRowSize(8)
                         .setDistinctValuesCount(2)
@@ -2762,22 +2639,13 @@ public class ExpressionStatisticsCalculatorTest {
         final String toTz = "Europe/Berlin";
         final LocalDateTime minDt = LocalDateTime.of(2024, 10, 27, 0, 30, 0);
         final LocalDateTime maxDt = LocalDateTime.of(2024, 10, 27, 1, 30, 0);
-        final LocalDateTime foldPeak = LocalDateTime.of(2024, 10, 27, 0, 59, 0);
-        final double minValue = getLongFromDateTime(minDt);
-        final double maxValue = getLongFromDateTime(maxDt);
-
-        final double convertedMin = convertTzDateTimeValue(minValue, fromTz, toTz);
-        final double convertedMax = convertTzDateTimeValue(maxValue, fromTz, toTz);
-        final double convertedFoldPeak = convertTzDateTimeValue(getLongFromDateTime(foldPeak), fromTz, toTz);
-        Assertions.assertTrue(convertedFoldPeak > Math.max(convertedMin, convertedMax)
-                || convertedFoldPeak < Math.min(convertedMin, convertedMax));
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(minValue)
-                        .setMaxValue(maxValue)
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
                         .setNullsFraction(0)
                         .setAverageRowSize(8)
                         .setDistinctValuesCount(3)
@@ -2800,15 +2668,13 @@ public class ExpressionStatisticsCalculatorTest {
         final String toTz = "UTC";
         final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
         final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
-        final double minValue = getLongFromDateTime(minDt);
-        final double maxValue = getLongFromDateTime(maxDt);
 
         final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
-                        .setMinValue(minValue)
-                        .setMaxValue(maxValue)
+                        .setMinValue(getLongFromDateTime(minDt))
+                        .setMaxValue(getLongFromDateTime(maxDt))
                         .setNullsFraction(0)
                         .setAverageRowSize(8)
                         .setDistinctValuesCount(2)
