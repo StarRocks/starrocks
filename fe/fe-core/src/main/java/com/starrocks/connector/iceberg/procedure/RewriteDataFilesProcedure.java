@@ -167,7 +167,19 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
     private IcebergRewriteDataJob newRewriteJob(VelocityContext velCtx, boolean writeRowLineage, boolean rewriteAll,
                                                 long minFileSizeBytes, long batchSize, long batchParallelism,
                                                 ConnectContext context, AlterTableStmt stmt) {
-        return new IcebergRewriteDataJob(buildInsertSelectSql(velCtx, writeRowLineage), rewriteAll,
+        // The filter selects which files are rewritten; it must not filter rows inside those files, otherwise the
+        // non-matching rows of a partially matched file are dropped when the whole file is removed at commit time.
+        // Planning keeps the filter (so file pruning still applies), execution drops it and rewrites whole files.
+        // This mirrors Iceberg's own `TableScan.ignoreResiduals()`.
+        String planningSql = buildInsertSelectSql(velCtx, writeRowLineage);
+        VelocityContext execVelCtx = new VelocityContext();
+        execVelCtx.put("catalogName", velCtx.get("catalogName"));
+        execVelCtx.put("dbName", velCtx.get("dbName"));
+        execVelCtx.put("tableName", velCtx.get("tableName"));
+        execVelCtx.put("partitionFilterSql", null);
+        String executionSql = buildInsertSelectSql(execVelCtx, writeRowLineage);
+        boolean hasPartitionFilter = velCtx.get("partitionFilterSql") != null;
+        return new IcebergRewriteDataJob(planningSql, executionSql, hasPartitionFilter, rewriteAll,
                 minFileSizeBytes, batchSize, batchParallelism, writeRowLineage, context, stmt);
     }
 
