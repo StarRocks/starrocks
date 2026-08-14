@@ -25,6 +25,7 @@
 #endif
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -1774,6 +1775,8 @@ protected:
         bool tag_global_dict = false;     // activate a global dictionary on tag (cid 3) so _rewrite_predicates
                                           // rewrites a delete predicate on tag into a global-dict-code predicate
         bool with_runtime_filter = false; // register an (unarrived) pushdown RF -> must route to BRUTE
+        int num_rows = 8;
+        int filter_col_modulo = 0; // positive -> filter_col = rowid % filter_col_modulo
         // Storage delete predicates (DELETE ... WHERE on a DUP table). When set, they must be pre-applied
         // before the ANN top-k narrowing, so the search ranks live rows only. Empty -> no delete.
         DisjunctivePredicates delete_predicates;
@@ -1809,14 +1812,15 @@ protected:
                            bool pred_col_late_mat = false, const ResidualCaseConfig* cfg_in = nullptr) {
         const ResidualCaseConfig default_cfg;
         const ResidualCaseConfig& cfg = cfg_in != nullptr ? *cfg_in : default_cfg;
-        const int N = 8;
+        const int N = cfg.num_rows;
+        ASSERT_TRUE(cfg.vecs.empty() || cfg.vecs.size() == N);
         std::vector<int64_t> ids(N);
         std::vector<std::vector<float>> vecs(N);
         std::vector<int32_t> filt(N);
         for (int i = 0; i < N; i++) {
             ids[i] = i;
             vecs[i] = cfg.vecs.empty() ? std::vector<float>{static_cast<float>(i), 0.f, 0.f, 0.f} : cfg.vecs[i];
-            filt[i] = i;
+            filt[i] = cfg.filter_col_modulo > 0 ? i % cfg.filter_col_modulo : i;
         }
 
         // write segment (id, vector, filter_col)
@@ -2285,6 +2289,37 @@ TEST_F(VectorResidualPrefilterTest, sparse_ratio_short_circuits_search) {
     run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
     EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite ratio gate";
+}
+
+TEST_F(VectorResidualPrefilterTest, exact_rescan_batches_discontinuous_candidates) {
+    double saved = config::vector_index_brute_selectivity_threshold;
+    config::vector_index_brute_selectivity_threshold = 1.0;
+    DeferOp restore_threshold([&] { config::vector_index_brute_selectivity_threshold = saved; });
+
+    std::vector<size_t> batch_sizes;
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("SegmentIterator::_exact_search_over_candidates:batch", [&](void* arg) {
+        const auto* batch = static_cast<const SparseRange<>*>(arg);
+        batch_sizes.push_back(batch->span_size());
+    });
+    sync_point->EnableProcessing();
+    DeferOp restore_sync_point([&] {
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+
+    ResidualCaseConfig cfg;
+    cfg.num_rows = 8194;
+    cfg.filter_col_modulo = 2;
+    cfg.min_filter_col = 1;
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "1"));
+    ResidualCaseResult res;
+    run_residual_case(single_node_tree(pred.get()), /*above_predicate=*/false, &res,
+                      /*pred_col_late_mat=*/false, &cfg);
+
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{1, 3, 5}));
+    EXPECT_EQ(res.search_ns, 0) << "sparse-ratio gate should have short-circuited the search";
+    EXPECT_EQ(batch_sizes, (std::vector<size_t>{4096, 1}));
 }
 
 TEST_F(VectorResidualPrefilterTest, cosine_metric_survives_exact_rescan) {

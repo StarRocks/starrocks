@@ -27,6 +27,7 @@
 
 #include "base/format.h"
 #include "base/simd/simd.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
@@ -3530,32 +3531,36 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     roaring::Roaring survivors;
     SparseRange<> rows = roaring2range(candidates);
     for (auto it = rows.new_iterator(); it.has_more();) {
-        Range<> r = it.next(4096);
+        SparseRange<> batch;
+        it.next_range(4096, &batch);
+        TEST_SYNC_POINT_CALLBACK("SegmentIterator::_exact_search_over_candidates:batch", &batch);
+
         MutableColumnPtr col = ChunkFactory::column_from_field(*field);
         // next_batch reads from the current page and does not seek internally; position first.
-        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
-        SparseRange<> sub;
-        sub.add(r);
-        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(sub, col.get()));
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(batch.begin()));
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(batch, col.get()));
         auto dist = _brute_force_distance_column(col.get());
         const auto& dvals = dist->get_data();
-        const uint32_t bn = r.end() - r.begin();
-        for (uint32_t i = 0; i < bn; i++) {
-            const float d = dvals[i];
-            const rowid_t rid = r.begin() + i;
-            if (has_range) {
-                if (!within_vector_range(d, range, ascending)) {
-                    continue;
-                }
-                _vector_index_ctx->id2distance_map[rid] = d;
-                survivors.add(rid);
-            } else if (k > 0) {
-                topk.push(Cand{d, rid});
-                if (topk.size() > k) {
-                    topk.pop();
+        size_t distance_idx = 0;
+        for (auto row_it = batch.new_iterator(); row_it.has_more();) {
+            Range<> r = row_it.next(4096);
+            for (rowid_t rid = r.begin(); rid < r.end(); ++rid) {
+                const float d = dvals[distance_idx++];
+                if (has_range) {
+                    if (!within_vector_range(d, range, ascending)) {
+                        continue;
+                    }
+                    _vector_index_ctx->id2distance_map[rid] = d;
+                    survivors.add(rid);
+                } else if (k > 0) {
+                    topk.push(Cand{d, rid});
+                    if (topk.size() > k) {
+                        topk.pop();
+                    }
                 }
             }
         }
+        DCHECK_EQ(distance_idx, dvals.size());
     }
     if (!has_range) {
         while (!topk.empty()) {
