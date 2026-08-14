@@ -68,16 +68,17 @@ SELECT count(*) FROM (SELECT cast(n as bigint) AS k FROM fact) x JOIN [broadcast
 160
 -- !result
 SELECT
-  sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
-            AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
-           THEN 1 ELSE 0 END) AS local_in_filter_ops,
-  sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) AS bloom_delivered_ops
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
 FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p;
 -- result:
-0	2
+no	yes
 -- !result
 function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT u, count(*) c FROM fact GROUP BY u) x JOIN [broadcast] dim d ON x.u = d.u", "probe runtime filters")
 -- result:
@@ -88,16 +89,17 @@ SELECT count(*) FROM (SELECT u, count(*) c FROM fact GROUP BY u) x JOIN [broadca
 40
 -- !result
 SELECT
-  sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
-            AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
-           THEN 1 ELSE 0 END) AS local_in_filter_ops,
-  sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) AS bloom_delivered_ops
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
 FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p;
 -- result:
-1	3
+yes	yes
 -- !result
 function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT * FROM (SELECT id, u, first_value(id) OVER (PARTITION BY u ORDER BY id) rz FROM fact) t WHERE rz > 0) x JOIN [broadcast] dim d ON x.u = d.u", "0:OlapScanNode")
 -- result:
@@ -108,16 +110,17 @@ SELECT count(*) FROM (SELECT * FROM (SELECT id, u, first_value(id) OVER (PARTITI
 40000
 -- !result
 SELECT
-  sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
-            AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
-           THEN 1 ELSE 0 END) AS local_in_filter_ops,
-  sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) AS bloom_delivered_ops
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
 FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p;
 -- result:
-0	2
+no	yes
 -- !result
 SET enable_global_late_materialization = true;
 -- result:
@@ -147,16 +150,17 @@ SELECT f.id, f.u, f.d FROM fact f JOIN [broadcast] dim d ON f.id = d.id ORDER BY
 10	U2	D1
 -- !result
 SELECT
-  sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
-            AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
-           THEN 1 ELSE 0 END) AS local_in_filter_ops,
-  sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) AS bloom_delivered_ops
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
 FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p;
 -- result:
-2	2
+yes	yes
 -- !result
 SET enable_global_late_materialization = false;
 -- result:
@@ -184,16 +188,17 @@ SELECT count(*) FROM fact f JOIN [broadcast] dim d ON f.u = d.u;
 40000
 -- !result
 SELECT
-  sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
-            AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
-           THEN 1 ELSE 0 END) AS local_in_filter_ops,
-  sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) AS bloom_delivered_ops
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
 FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p;
 -- result:
-2	2
+yes	yes
 -- !result
 SET cbo_enable_low_cardinality_optimize = false;
 -- result:

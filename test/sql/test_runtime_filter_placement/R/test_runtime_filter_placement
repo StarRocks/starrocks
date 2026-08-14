@@ -111,52 +111,52 @@ SELECT count(*) FROM big JOIN [broadcast] small ON big.k1 = small.k1;
 -- result:
 800
 -- !result
-SELECT count(1) AS ops_with_local_in_filter FROM (
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
 WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
   AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
 -- result:
-2
+yes
 -- !result
 SELECT count(*) FROM (SELECT k1, k2 FROM big GROUP BY GROUPING SETS ((k1), (k1, k2))) a JOIN [broadcast] small ON a.k1 = small.k1;
 -- result:
 80
 -- !result
-SELECT count(1) AS ops_with_local_in_filter FROM (
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
 WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
   AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
 -- result:
-1
+yes
 -- !result
 SELECT count(*) FROM big JOIN [broadcast] small ON big.v > small.v AND big.k1 = small.k1;
 -- result:
 764
 -- !result
-SELECT count(1) AS ops_with_local_in_filter FROM (
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
 WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
   AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
 -- result:
-2
+yes
 -- !result
 SELECT count(*) FROM big JOIN [shuffle] small ON big.k1 = small.k1;
 -- result:
 800
 -- !result
-SELECT count(1) AS ops_with_bloom_filter_delivered FROM (
+SELECT if(count(1) > 0, "yes", "no") AS bloom_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
 WHERE trim(line) LIKE "- RuntimeFilterDesc: %";
 -- result:
-2
+yes
 -- !result
 DROP DATABASE test_runtime_filter_placement;
 -- result:

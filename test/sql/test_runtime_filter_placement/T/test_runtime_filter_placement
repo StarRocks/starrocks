@@ -100,13 +100,15 @@ SET enable_multicolumn_global_runtime_filter = true;
 --------------------------------------------------------------------------------
 -- Part 2: does a LOCAL runtime in-filter actually reach an operator?
 --
--- Each block reports how many operators bound at least one local in-filter. A placement
--- suppressed by mistake shows up here as a smaller number and nowhere else.
+-- Each block reports whether any operator bound a local in-filter. A placement suppressed by
+-- mistake flips it to \"no\" and shows up nowhere else. Deliberately not a count: the number of
+-- operators holding a filter moves with the backend count, the fragment-instance count and
+-- whether a scan decomposes into a separate prepare operator.
 --------------------------------------------------------------------------------
 
 -- Broadcast join: the probe-side scan must pick the in-filter up.
 SELECT count(*) FROM big JOIN [broadcast] small ON big.k1 = small.k1;
-SELECT count(1) AS ops_with_local_in_filter FROM (
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
@@ -115,7 +117,7 @@ WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
 
 -- GROUPING SETS puts a REPEAT below the join; repeat_operator consumes local in-filters.
 SELECT count(*) FROM (SELECT k1, k2 FROM big GROUP BY GROUPING SETS ((k1), (k1, k2))) a JOIN [broadcast] small ON a.k1 = small.k1;
-SELECT count(1) AS ops_with_local_in_filter FROM (
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
@@ -124,7 +126,7 @@ WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
 
 -- A nested-loop join; nljoin_probe_operator consumes local in-filters.
 SELECT count(*) FROM big JOIN [broadcast] small ON big.v > small.v AND big.k1 = small.k1;
-SELECT count(1) AS ops_with_local_in_filter FROM (
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
@@ -134,7 +136,7 @@ WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
 -- The global bloom filter reaches the probe scan. Assert only that it was delivered, never
 -- how many rows it removed: that races with the wait timeout.
 SELECT count(*) FROM big JOIN [shuffle] small ON big.k1 = small.k1;
-SELECT count(1) AS ops_with_bloom_filter_delivered FROM (
+SELECT if(count(1) > 0, "yes", "no") AS bloom_filter_delivered FROM (
   SELECT unnest AS line FROM (values(1))t(v)
   JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
 ) p
