@@ -55,6 +55,7 @@
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/extends_column_utils.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
@@ -1911,13 +1912,20 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
                                                                                     FileEncryptionInfo* encryption_info,
                                                                                     ColumnAccessPath* path) {
     // build column iter from delta column group
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(storage_column_uid(column)));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
         if (encryption_info != nullptr && dcg_segment->encryption_info()) {
             *encryption_info = *dcg_segment->encryption_info();
+        }
+        if (column.is_extended()) {
+            // The .cols segment holds the root JSON column, never the synthetic subfield column, so go
+            // through the `_or_default` entry point: it dispatches on is_extended() and rebuilds the
+            // subfield from the root column this segment does hold. new_column_iterator() would look
+            // the synthetic id up directly and fail with NotFound.
+            return dcg_segment->new_column_iterator_or_default(column, path);
         }
         return dcg_segment->new_column_iterator(column, path);
     }
@@ -4466,6 +4474,11 @@ Status SegmentIterator::_apply_bitmap_index() {
 
         RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
                                                       this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            // NOTE: deliberately the column's OWN unique id, not storage_column_uid(). An extended
+            // column (JSON subfield) owns no bitmap index, so this misses every delta column group and
+            // then finds no reader in the base segment either -- the column ends up unindexed, which is
+            // what we want. Substituting the root column's id here would apply the JSON column's index
+            // to a subfield predicate. Only the value-read path resolves through the root id.
             const ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
@@ -4557,6 +4570,9 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         }
 
         ColumnId cid = pair.first;
+        // Same as _apply_bitmap_index: deliberately the column's OWN unique id. An extended column
+        // (JSON subfield) owns no inverted index, so this resolves to no index rather than to the root
+        // JSON column's one. Only the value-read path uses storage_column_uid().
         ColumnUID ucid = cid_2_ucid[cid];
 
         IndexReadOptions index_opts;
