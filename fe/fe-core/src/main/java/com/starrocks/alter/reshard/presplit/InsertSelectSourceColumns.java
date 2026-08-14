@@ -30,11 +30,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Resolves the full target-&gt;source column-name map (lower-cased target name -&gt; source column
- * name, total over the target's non-generated base columns) for a parsed
+ * Resolves the target-&gt;source column-name map (lower-cased target name -&gt; source column
+ * name) for directly mapped outputs of a parsed
  * {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}. The sampler uses
  * the map to project any index's sort key (base or rollup) and the partition columns by their
- * source-table column names.
+ * source-table column names. Non-key target columns may be arbitrary expressions and are omitted
+ * from the map.
  *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
@@ -105,28 +106,42 @@ final class InsertSelectSourceColumns {
         } else {
             List<String[]> outputs = new ArrayList<>(items.size());
             for (SelectListItem item : items) {
-                if (item.isStar() || !(item.getExpr() instanceof SlotRef slotRef)) {
+                if (item.isStar()) {
                     return null;
                 }
-                if (slotRef.getTblName() != null
-                        && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
+                String outputName = item.getAlias();
+                String sourceName = null;
+                if (item.getExpr() instanceof SlotRef slotRef) {
+                    if (slotRef.getTblName() != null
+                            && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
+                        return null;
+                    }
+                    sourceName = sourceColumnMap.get(slotRef.getColName().toLowerCase());
+                    if (sourceName == null) {
+                        return null;
+                    }
+                    if (outputName == null) {
+                        outputName = slotRef.getColName();
+                    }
+                } else if (byName && outputName == null) {
+                    // The target position of an expression is unknown for BY NAME without an alias.
                     return null;
                 }
-                String sourceName = sourceColumnMap.get(slotRef.getColName().toLowerCase());
-                if (sourceName == null) {
-                    return null;
-                }
-                String outputName = item.getAlias() != null ? item.getAlias() : slotRef.getColName();
                 outputs.add(new String[] {outputName, sourceName});
             }
             if (byName) {
+                Set<String> outputNames = new HashSet<>();
                 for (String[] output : outputs) {
-                    if (targetToSource.put(output[0].toLowerCase(), output[1]) != null) {
+                    String targetName = output[0].toLowerCase();
+                    if (!outputNames.add(targetName)) {
                         return null;   // duplicate output name
+                    }
+                    if (output[1] != null) {
+                        targetToSource.put(targetName, output[1]);
                     }
                 }
                 // Exact-set match: output names must be exactly the target non-generated columns.
-                if (!targetToSource.keySet().equals(targetNames(targetCols))) {
+                if (!outputNames.equals(targetNames(targetCols))) {
                     return null;
                 }
             } else {
@@ -134,7 +149,10 @@ final class InsertSelectSourceColumns {
                     return null;
                 }
                 for (int i = 0; i < targetCols.size(); i++) {
-                    targetToSource.put(targetCols.get(i).getName().toLowerCase(), outputs.get(i)[1]);
+                    String sourceName = outputs.get(i)[1];
+                    if (sourceName != null) {
+                        targetToSource.put(targetCols.get(i).getName().toLowerCase(), sourceName);
+                    }
                 }
             }
         }

@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
@@ -87,6 +88,14 @@ public class InsertSelectSourceColumnsTest {
 
     private static SelectListItem bareItem(String colName) {
         return bareItem(colName, null, null);
+    }
+
+    private static SelectListItem expressionItem(String alias) {
+        SelectListItem item = mock(SelectListItem.class);
+        when(item.isStar()).thenReturn(false);
+        when(item.getExpr()).thenReturn(mock(FunctionCallExpr.class));
+        when(item.getAlias()).thenReturn(alias);
+        return item;
     }
 
     private static SelectRelation bareRelation(SelectListItem... items) {
@@ -472,24 +481,84 @@ public class InsertSelectSourceColumnsTest {
     }
 
     @Test
-    public void expressionItemReturnsNull() {
-        // SELECT k+1 -> getExpr() not SlotRef -> null
+    public void expressionOnNonKeyByPositionMapsRequiredColumns() {
+        // target [k, v]; SELECT k, parse_json(v) -> only k is needed by the sampler.
         List<Column> cols = Arrays.asList(col("k"), col("v"));
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        // Create an item whose getExpr() returns a non-SlotRef expression
-        SelectListItem item = mock(SelectListItem.class);
-        when(item.isStar()).thenReturn(false);
-        when(item.getExpr()).thenReturn(mock(com.starrocks.sql.ast.expression.FunctionCallExpr.class));
-
-        SelectList list = mock(SelectList.class);
-        when(list.getItems()).thenReturn(Collections.singletonList(item));
-        SelectRelation rel = mock(SelectRelation.class);
-        when(rel.getSelectList()).thenReturn(list);
+        SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null));
 
         Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k"), result);
+    }
+
+    @Test
+    public void expressionOnSortKeyByPositionReturnsNull() {
+        List<Column> cols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        SelectRelation rel = bareRelation(expressionItem(null), bareItem("v"));
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false), rel,
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void expressionOnPartitionColumnByPositionReturnsNull() {
+        List<Column> cols = Arrays.asList(col("k"), col("dt"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null), bareItem("v"));
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false), rel,
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.singletonList(col("dt")));
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void expressionOnNonKeyByNameUsesAlias() {
+        List<Column> cols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        SelectRelation rel = bareRelation(bareItem("k"), expressionItem("v"));
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(true), rel,
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k"), result);
+    }
+
+    @Test
+    public void expressionByNameWithoutAliasReturnsNull() {
+        List<Column> cols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null));
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());

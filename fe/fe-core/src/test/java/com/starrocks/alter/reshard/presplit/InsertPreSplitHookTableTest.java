@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
@@ -254,16 +255,17 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testExpressionProjectionShortCircuits() throws Exception {
-        // INSERT INTO t SELECT col + 1 FROM src — a non-SlotRef expression item.
+    public void testExpressionProjectionMatchesTableSourceShape() {
+        // Expressions are accepted at the shape gate. prepare() later verifies
+        // that every key needed by sampling is still a direct source-column ref.
         SelectListItem exprItem = mock(SelectListItem.class);
         when(exprItem.isStar()).thenReturn(false);
         when(exprItem.getExpr()).thenReturn(mock(FunctionCallExpr.class));
 
-        InsertStmt stmt = insertStmtWithQueryRelation(
-                selectRelationWithSelectList(selectListOf(exprItem), mock(TableRelation.class)));
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        SelectRelation selectRelation = selectRelationWithSelectList(
+                selectListOf(exprItem), plainTableRelation());
+
+        Assertions.assertTrue(new TablePreSplitSource().matches(mock(InsertStmt.class), selectRelation));
     }
 
     @Test
@@ -529,6 +531,26 @@ public class InsertPreSplitHookTableTest {
                     "no WHERE clause must yield a null predicate SQL");
             Assertions.assertSame(fixture.sourceTable, scanContext.sourceTable(),
                     "scan context must carry the resolved OLAP source table");
+        }
+    }
+
+    @Test
+    public void prepareAllowsExpressionOnNonKeyColumn() throws Exception {
+        // target [k, v]; SELECT k, parse_json(v) FROM src. The sampler only needs
+        // target key k, so the value expression is intentionally absent from the map.
+        try (SourceFixture fixture = sourceFixture()) {
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectListItem expression = mock(SelectListItem.class);
+            when(expression.isStar()).thenReturn(false);
+            when(expression.getExpr()).thenReturn(mock(FunctionCallExpr.class));
+            SelectList projection = selectListOf(bareColumnItem("k"), expression);
+            when(selectRelation.getSelectList()).thenReturn(projection);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals(Map.of("k", "k"), scanContext.targetToSourceColumnNames());
         }
     }
 
@@ -885,6 +907,15 @@ public class InsertPreSplitHookTableTest {
         SelectList selectList = mock(SelectList.class);
         when(selectList.getItems()).thenReturn(List.of(items));
         return selectList;
+    }
+
+    private static SelectListItem bareColumnItem(String columnName) {
+        SlotRef slotRef = mock(SlotRef.class);
+        when(slotRef.getColName()).thenReturn(columnName);
+        SelectListItem item = mock(SelectListItem.class);
+        when(item.isStar()).thenReturn(false);
+        when(item.getExpr()).thenReturn(slotRef);
+        return item;
     }
 
     private static InsertStmt insertStmtWithQueryRelation(QueryRelation queryRelation) {
