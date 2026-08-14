@@ -1001,6 +1001,21 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testListShardPreservesClientException() throws StarClientException {
+        StarClientException expectedException = new StarClientException(StatusCode.NOT_EXIST, "arbitrary message");
+        new Expectations(client) {
+            {
+                client.listShard("1", Lists.newArrayList(999L), StarOSAgent.DEFAULT_WORKER_GROUP_ID, true);
+                result = expectedException;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> starosAgent.listShard(999L));
+        Assertions.assertSame(expectedException, exception.getCause());
+    }
+
+    @Test
     public void testUpdateWorkerGroupExcepted() throws StarClientException {
         long workerGroupId = 10086;
         Map<String, String> properties = new HashMap<>();

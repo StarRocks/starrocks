@@ -817,7 +817,8 @@ public class StarOSAgent {
             shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
                                          true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
-            throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
+            throw new DdlException(
+                    String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()), e);
         }
         return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
