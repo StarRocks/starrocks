@@ -3530,9 +3530,17 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
 
     roaring::Roaring survivors;
     SparseRange<> rows = roaring2range(candidates);
+    // Keep the dense materialized vectors small enough to remain cache-friendly. A fixed row count
+    // makes high-dimensional vectors create multi-megabyte batches and can cost more than it saves.
+    constexpr size_t kMaxExactFallbackBatchRows = 4096;
+    constexpr size_t kExactFallbackBatchBytes = 64 * 1024;
+    const size_t vector_row_bytes =
+            std::max<size_t>(1, _opts.vector_search_option->query_vector.size() * sizeof(float));
+    const size_t batch_rows =
+            std::clamp(kExactFallbackBatchBytes / vector_row_bytes, size_t{1}, kMaxExactFallbackBatchRows);
     for (auto it = rows.new_iterator(); it.has_more();) {
         SparseRange<> batch;
-        it.next_range(4096, &batch);
+        it.next_range(static_cast<rowid_t>(batch_rows), &batch);
         TEST_SYNC_POINT_CALLBACK("SegmentIterator::_exact_search_over_candidates:batch", &batch);
 
         MutableColumnPtr col = ChunkFactory::column_from_field(*field);
@@ -3543,7 +3551,7 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
         const auto& dvals = dist->get_data();
         size_t distance_idx = 0;
         for (auto row_it = batch.new_iterator(); row_it.has_more();) {
-            Range<> r = row_it.next(4096);
+            Range<> r = row_it.next(static_cast<rowid_t>(batch_rows));
             for (rowid_t rid = r.begin(); rid < r.end(); ++rid) {
                 const float d = dvals[distance_idx++];
                 if (has_range) {
