@@ -18,7 +18,9 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/binary_column.h"
 #include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "column/serde/column_array_serde.h"
 #include "common/stack_util.h"
@@ -37,7 +39,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
-#include "storage/primary_index.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -918,31 +919,65 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
         return Status::OK();
     }
 
+    // Resolve a per-key accessor WITHOUT materializing a Slice array. Building one (e.g. via
+    // PrimaryIndex::build_persistent_keys) would cost ~16 bytes per key on top of the already-resident
+    // decoded column -- ~160 MB for a 10M-key delete -- and would not be counted in _memory_usage. That
+    // is worst exactly on the large-delete path, whose prebuilt tombstone sstable exists to bound
+    // publish memory in the first place.
     const size_t num_keys = deletes->size();
-    Buffer<Slice> key_slices;
-    key_slices.reserve(num_keys);
-    // A non-binary PK column is fixed width, so every key is type_size() bytes; build_persistent_keys
-    // ignores the size argument for the binary case.
-    ASSIGN_OR_RETURN(const Slice* keys,
-                     PrimaryIndex::build_persistent_keys(*deletes, deletes->type_size(), 0, num_keys, &key_slices));
+    const Column* data_column = ColumnHelper::get_data_column(deletes);
+    const LargeBinaryColumn* large_binary_column = nullptr;
+    const BinaryColumn* binary_column = nullptr;
+    const uint8_t* fixed_width_data = nullptr;
+    size_t fixed_width_key_size = 0;
+    if (data_column->is_large_binary()) {
+        large_binary_column = down_cast<const LargeBinaryColumn*>(data_column);
+    } else if (data_column->is_binary()) {
+        binary_column = down_cast<const BinaryColumn*>(data_column);
+    } else {
+        // A non-binary PK column is fixed width: keys sit back to back, type_size() bytes each.
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        fixed_width_data = visitor.result();
+        fixed_width_key_size = data_column->type_size();
+    }
+    auto key_at = [&](size_t i) -> Slice {
+        if (large_binary_column != nullptr) {
+            return large_binary_column->get_slice(i);
+        }
+        if (binary_column != nullptr) {
+            return binary_column->get_slice(i);
+        }
+        return Slice(fixed_width_data + i * fixed_width_key_size, fixed_width_key_size);
+    };
 
     const Slice lower(seek_range.seek_key);
     const Slice upper(seek_range.stop_key);
-    Filter selection(num_keys, 1);
-    size_t num_kept = 0;
+    // The selection buffer is allocated lazily, on the first out-of-range key. A tablet whose del file
+    // is entirely inside its own range -- every non-split tablet, and any child that owns all the keys
+    // it was handed -- therefore pays no allocation at all, only the comparisons.
+    Filter selection;
+    size_t num_dropped = 0;
     for (size_t i = 0; i < num_keys; i++) {
+        const Slice key = key_at(i);
         // [seek_key, stop_key): lower inclusive, upper exclusive (see SstSeekRange).
-        const bool in_range = (seek_range.seek_key.empty() || keys[i].compare(lower) >= 0) &&
-                              (seek_range.stop_key.empty() || keys[i].compare(upper) < 0);
-        selection[i] = in_range ? 1 : 0;
-        num_kept += in_range ? 1 : 0;
+        const bool in_range = (seek_range.seek_key.empty() || key.compare(lower) >= 0) &&
+                              (seek_range.stop_key.empty() || key.compare(upper) < 0);
+        if (in_range) {
+            continue;
+        }
+        if (selection.empty()) {
+            selection.assign(num_keys, 1);
+        }
+        selection[i] = 0;
+        ++num_dropped;
     }
-    if (num_kept == num_keys) {
-        // Nothing to drop: leave the column untouched so the common (non-split) case pays no copy.
+    if (num_dropped == 0) {
+        // Nothing to drop: no selection buffer was ever allocated, and the column is untouched.
         return Status::OK();
     }
     deletes->filter(selection);
-    VLOG(2) << "clip_deletes_to_tablet_range tablet:" << params.metadata->id() << " kept " << num_kept << " of "
+    VLOG(2) << "clip_deletes_to_tablet_range tablet:" << params.metadata->id() << " dropped " << num_dropped << " of "
             << num_keys << " delete keys";
     return Status::OK();
 }
