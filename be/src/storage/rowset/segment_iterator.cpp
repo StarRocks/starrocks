@@ -27,7 +27,6 @@
 
 #include "base/format.h"
 #include "base/simd/simd.h"
-#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
@@ -3530,53 +3529,35 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
 
     roaring::Roaring survivors;
     SparseRange<> rows = roaring2range(candidates);
-    // Batch only very short ranges: longer contiguous reads already have good cache locality, while
-    // materializing them into a larger discontinuous batch can cost more than it saves. Also bound the
-    // dense vector bytes so high-dimensional vectors do not create multi-megabyte batches.
-    constexpr size_t kMaxExactFallbackBatchRows = 4096;
-    constexpr size_t kExactFallbackBatchBytes = 64 * 1024;
-    constexpr size_t kMaxAverageRangeRowsToBatch = 8;
-    const size_t vector_row_bytes =
-            std::max<size_t>(1, _opts.vector_search_option->query_vector.size() * sizeof(float));
-    const size_t batch_rows =
-            std::clamp(kExactFallbackBatchBytes / vector_row_bytes, size_t{1}, kMaxExactFallbackBatchRows);
-    const bool batch_discontinuous_ranges =
-            rows.size() > 1 && rows.span_size() <= rows.size() * kMaxAverageRangeRowsToBatch;
     for (auto it = rows.new_iterator(); it.has_more();) {
-        SparseRange<> batch;
-        if (batch_discontinuous_ranges) {
-            it.next_range(static_cast<rowid_t>(batch_rows), &batch);
-        } else {
-            batch.add(it.next(kMaxExactFallbackBatchRows));
-        }
-        TEST_SYNC_POINT_CALLBACK("SegmentIterator::_exact_search_over_candidates:batch", &batch);
-
+        Range<> r = it.next(4096);
         MutableColumnPtr col = ChunkFactory::column_from_field(*field);
-        // next_batch reads from the current page and does not seek internally; position first.
-        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(batch.begin()));
-        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(batch, col.get()));
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
+        // Array row ordinals are rowid_t, but their flattened element ordinals are 64-bit and can
+        // exceed UINT32_MAX. Do not wrap this contiguous row range in SparseRange<rowid_t>: the Array
+        // iterator would truncate the element range before passing it to the element iterator.
+        size_t rows_to_read = r.span_size();
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(&rows_to_read, col.get()));
+        DCHECK_EQ(rows_to_read, r.span_size());
         auto dist = _brute_force_distance_column(col.get());
         const auto& dvals = dist->get_data();
-        size_t distance_idx = 0;
-        for (auto row_it = batch.new_iterator(); row_it.has_more();) {
-            Range<> r = row_it.next(kMaxExactFallbackBatchRows);
-            for (rowid_t rid = r.begin(); rid < r.end(); ++rid) {
-                const float d = dvals[distance_idx++];
-                if (has_range) {
-                    if (!within_vector_range(d, range, ascending)) {
-                        continue;
-                    }
-                    _vector_index_ctx->id2distance_map[rid] = d;
-                    survivors.add(rid);
-                } else if (k > 0) {
-                    topk.push(Cand{d, rid});
-                    if (topk.size() > k) {
-                        topk.pop();
-                    }
+        const uint32_t bn = r.end() - r.begin();
+        for (uint32_t i = 0; i < bn; i++) {
+            const float d = dvals[i];
+            const rowid_t rid = r.begin() + i;
+            if (has_range) {
+                if (!within_vector_range(d, range, ascending)) {
+                    continue;
+                }
+                _vector_index_ctx->id2distance_map[rid] = d;
+                survivors.add(rid);
+            } else if (k > 0) {
+                topk.push(Cand{d, rid});
+                if (topk.size() > k) {
+                    topk.pop();
                 }
             }
         }
-        DCHECK_EQ(distance_idx, dvals.size());
     }
     if (!has_range) {
         while (!topk.empty()) {
