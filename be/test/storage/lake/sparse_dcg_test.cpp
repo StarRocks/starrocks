@@ -43,6 +43,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/flexible_partial_update.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/delta_writer.h"
@@ -1588,6 +1589,72 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_discards_when_replay_disabled
         }
         EXPECT_EQ(k * 4, c2[k]) << "c2 key " << k;
     }
+}
+
+// Conflict classification must REFUSE to replay a racing overlay layer that carries a column type the
+// replay reader cannot materialize.
+//
+// This is the second half of the complex-type guard, and it is not redundant with the write-side half:
+// replay_sparse_overlays_onto_output rebuilds every racing layer's value column with
+// ChunkFactory::column_from_field_type() on BOTH its SPARSE_PERCOL and its DENSE_COLS branch, and it
+// re-emits the winners as a packed `.spcols`. So a racing DENSE `.cols` on a complex column reaches the
+// aborting factory (and would re-introduce a sparse layer) even though the write side never wrote one.
+// Falling back to MUST_DISCARD is the pre-existing safe behavior.
+//
+// Written against classify_conflict directly rather than through a full compaction: the shared fixture
+// is fixed to INT columns, and the property under test is purely a function of (schema, dcg, version).
+TEST_F(LakeSparseDcgTest, test_conflict_classification_refuses_complex_typed_racing_layer) {
+    // A racing DENSE `.cols` overlay on rssid 0, at a version NEWER than the compaction's input.
+    auto make_metadata = [](const std::string& value_type) {
+        TabletMetadata meta;
+        meta.set_id(1);
+        auto* schema = meta.mutable_schema();
+        auto* pk = schema->add_column();
+        pk->set_unique_id(0);
+        pk->set_name("pk");
+        pk->set_type("BIGINT");
+        pk->set_is_key(true);
+        auto* v = schema->add_column();
+        v->set_unique_id(1);
+        v->set_name("v");
+        v->set_type(value_type);
+        v->set_is_key(false);
+
+        auto* rowset = meta.add_rowsets();
+        rowset->set_id(0);
+        rowset->add_segment_metas()->set_filename("seg0.dat");
+
+        auto& dcg = (*meta.mutable_dcg_meta()->mutable_dcgs())[0];
+        dcg.add_column_files("0_1.cols");
+        dcg.add_versions(9);
+        dcg.add_file_kinds(DENSE_COLS);
+        dcg.add_unique_column_ids()->add_column_ids(1);
+        return meta;
+    };
+
+    TxnLogPB_OpCompaction op;
+    op.add_input_rowsets(0);
+    op.set_compact_version(5); // the layer at v9 races this compaction
+
+    // Baseline: a scalar value column IS replayable -- without this arm the two assertions below would
+    // also pass on a build that classified everything as MUST_DISCARD.
+    EXPECT_EQ(CompactionConflictKind::REPLAYABLE_DCG,
+              CompactionUpdateConflictChecker::classify_conflict(op, make_metadata("BIGINT")));
+
+    EXPECT_EQ(CompactionConflictKind::MUST_DISCARD,
+              CompactionUpdateConflictChecker::classify_conflict(op, make_metadata("ARRAY")))
+            << "an ARRAY racing layer would abort the node inside the replay reader";
+    EXPECT_EQ(CompactionConflictKind::MUST_DISCARD,
+              CompactionUpdateConflictChecker::classify_conflict(op, make_metadata("JSON")))
+            << "a JSON racing layer would be re-emitted as a packed .spcols the reader cannot scatter into";
+
+    // A layer OLDER than the compaction input is not a conflict at all, for any type -- the guard must
+    // not turn unrelated history into a discard.
+    TxnLogPB_OpCompaction late;
+    late.add_input_rowsets(0);
+    late.set_compact_version(20);
+    EXPECT_EQ(CompactionConflictKind::NONE,
+              CompactionUpdateConflictChecker::classify_conflict(late, make_metadata("ARRAY")));
 }
 
 } // namespace starrocks::lake
