@@ -462,6 +462,14 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
   - 当将物化视图从 `INCREMENTAL` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
 - `refresh_mode` 为 `INCREMENTAL` 的物化视图不支持指定分区刷新。`INCREMENTAL` 类型的物化视图，如果尝试指定分区刷新，会抛出异常。
 
+#### 排序键
+
+`refresh_mode` 为 `INCREMENTAL` 的物化视图是以内部 Row ID 列为主键的主键表，因此 `ORDER BY` 定义的是独立的排序键，不会成为主键的一部分。
+
+- 对于哈希分布或随机分布的物化视图，排序键即 `ORDER BY` 指定的列。
+- 对于 Range 分布的物化视图，**不支持 `ORDER BY`**：排序键决定 Tablet 的区间边界，必须与主键相同，而该主键列无法由用户指定。如需排序键，请显式指定 `DISTRIBUTED BY HASH(...)`。
+- 如果省略 `ORDER BY`，物化视图按其主键排序。
+
 #### 支持的增量算子
 
 增量刷新仅支持基表的追加（append-only）操作。如果在基表上执行了不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`），当 `refresh_mode` 设置为 `INCREMENTAL` 时，物化视图刷新将失败。
