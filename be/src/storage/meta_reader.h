@@ -182,12 +182,6 @@ private:
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     std::vector<bool> _is_default_value_column_by_cid;
     const SegmentMetaCollecterParams* _params = nullptr;
-<<<<<<< HEAD
-    std::unique_ptr<RandomAccessFile> _read_file;
-=======
-    int32_t _tablet_id;
-    int32_t _rss_id;
->>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759))
     OlapReaderStatistics _stats;
     // For delta column group
     DeltaColumnGroupList _dcgs;

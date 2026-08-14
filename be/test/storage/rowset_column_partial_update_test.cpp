@@ -20,24 +20,15 @@
 #include <memory>
 #include <set>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
 #include "column/column_helper.h"
->>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759))
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-<<<<<<< HEAD
 #include "storage/column_predicate.h"
 #include "storage/empty_iterator.h"
-=======
 #include "storage/extends_column_utils.h"
->>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759))
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -53,14 +44,9 @@
 #include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-<<<<<<< HEAD
 #include "testutil/assert.h"
-=======
-#include "storage_primitive/column_predicate_factory.h"
-#include "storage_primitive/empty_iterator.h"
-#include "storage_primitive/union_iterator.h"
-#include "types/json_value.h"
->>>>>>> 169e83ea38 ([BugFix] Resolve the delta column group of an extended column through its root column (#77759))
+#include "util/defer_op.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -2067,7 +2053,7 @@ static RowsetSharedPtr create_json_rowset(const TabletSharedPtr& tablet, const s
     CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
 
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-    auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+    auto chunk = ChunkHelper::new_chunk(schema, keys.size());
     auto cols = chunk->columns();
     // JsonColumn::append_datum keeps only a view of the JsonValue until the chunk copies it, so the
     // values have to stay alive until flush_chunk.
@@ -2100,7 +2086,7 @@ static RowsetSharedPtr create_json_partial_rowset(const TabletSharedPtr& tablet,
     CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
 
     auto schema = ChunkHelper::convert_schema(partial_schema);
-    auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+    auto chunk = ChunkHelper::new_chunk(schema, keys.size());
     auto cols = chunk->columns();
     std::vector<JsonValue> json_values;
     json_values.reserve(keys.size());
@@ -2171,7 +2157,7 @@ static void check_json_subfield(const TabletSharedPtr& tablet, int64_t version, 
     auto iter = create_tablet_iterator(reader, schema);
     ASSERT_TRUE(iter != nullptr);
 
-    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t rows = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
