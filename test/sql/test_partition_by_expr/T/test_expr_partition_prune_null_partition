@@ -22,3 +22,57 @@ select count(*) from (
         (select * from partition_unixtime_null where ts > 1196440219)
         union all (select * from partition_unixtime_null where not (ts > 1196440219))
         union all (select * from partition_unixtime_null where (ts > 1196440219) is null)) t;
+-- the hole is not from_unixtime-specific: any partition function that returns NULL for a valid
+-- input reaches it. years_add overflows past the maximum date and returns NULL for '9999-12-31'.
+CREATE TABLE partition_years_add_null (
+        id bigint,
+        d date
+)
+PARTITION BY years_add(d, 1);
+insert into partition_years_add_null values(1, '2021-01-01'),(2, '2021-01-01'),(3, '2022-06-01');
+insert into partition_years_add_null values(-1, '9999-12-31'),(-2, '9999-12-31');
+insert into partition_years_add_null(id) values(9);
+select count(*) from partition_years_add_null;
+-- the overflowing rows satisfy the predicate, so pruning must keep the NULL partition
+select id, d from partition_years_add_null where d > '2022-01-01' order by id;
+select id, d from partition_years_add_null where not (d <= '2022-01-01') order by id;
+select id, d from partition_years_add_null where (d > '2022-01-01') is null order by id;
+select count(*) from (
+        (select * from partition_years_add_null where d > '2022-01-01')
+        union all (select * from partition_years_add_null where not (d > '2022-01-01'))
+        union all (select * from partition_years_add_null where (d > '2022-01-01') is null)) t;
+-- str_to_date returns NULL for an input it cannot parse, which lands in the NULL partition the
+-- same way -- and 'not-a-date' still compares greater than '2022-01-01' as a string
+CREATE TABLE partition_str_to_date_null (
+        id bigint,
+        d varchar(64)
+)
+PARTITION BY str_to_date(d, '%Y-%m-%d');
+insert into partition_str_to_date_null values(1, '2021-01-01'),(2, '2021-01-01'),(3, '2022-06-01');
+insert into partition_str_to_date_null values(-1, 'not-a-date'),(-2, 'not-a-date');
+insert into partition_str_to_date_null(id) values(9);
+select count(*) from partition_str_to_date_null;
+select id, d from partition_str_to_date_null where d > '2022-01-01' order by id;
+select id, d from partition_str_to_date_null where not (d <= '2022-01-01') order by id;
+select id, d from partition_str_to_date_null where (d > '2022-01-01') is null order by id;
+select count(*) from (
+        (select * from partition_str_to_date_null where d > '2022-01-01')
+        union all (select * from partition_str_to_date_null where not (d > '2022-01-01'))
+        union all (select * from partition_str_to_date_null where (d > '2022-01-01') is null)) t;
+-- months_add overflows the same way, so the whole date-arithmetic family is covered
+CREATE TABLE partition_months_add_null (
+        id bigint,
+        d date
+)
+PARTITION BY months_add(d, 1);
+insert into partition_months_add_null values(1, '2021-01-01'),(2, '2021-01-01'),(3, '2022-06-01');
+insert into partition_months_add_null values(-1, '9999-12-31'),(-2, '9999-12-31');
+insert into partition_months_add_null(id) values(9);
+select count(*) from partition_months_add_null;
+select id, d from partition_months_add_null where d > '2022-01-01' order by id;
+select id, d from partition_months_add_null where not (d <= '2022-01-01') order by id;
+select id, d from partition_months_add_null where (d > '2022-01-01') is null order by id;
+select count(*) from (
+        (select * from partition_months_add_null where d > '2022-01-01')
+        union all (select * from partition_months_add_null where not (d > '2022-01-01'))
+        union all (select * from partition_months_add_null where (d > '2022-01-01') is null)) t;
