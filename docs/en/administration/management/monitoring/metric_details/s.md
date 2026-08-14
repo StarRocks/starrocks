@@ -213,11 +213,35 @@ description: "Alphabetical s"
 - Type: Instantaneous
 - Description: Number of resource groups assigned to each memory pool.
 
+## `starrocks_be_pipe_connector_scan_expected_worker_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of worker threads the scan executors for external tables are currently supposed to run, summed over all resource groups. It follows configuration and resource group changes right away, so comparing it with `starrocks_be_pipe_connector_scan_worker_threads` tells whether the executors are fully staffed.
+
+## `starrocks_be_pipe_connector_scan_worker_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of worker threads that are actually alive in the scan executors for external tables, summed over all resource groups. A value below `starrocks_be_pipe_connector_scan_expected_worker_threads` means workers were lost and not replaced, so fewer scan tasks are consumed than configured. Exceeding it is normal and transient, as workers leave a shrunken executor only once they wake up.
+
 ## `starrocks_be_pipe_prepare_pool_queue_len`
 
 - Unit: Count
 - Type: Instantaneous
 - Description: Instantaneous value of pipeline prepare thread pool task queue length.
+
+## `starrocks_be_pipe_scan_expected_worker_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of worker threads the scan executors for internal tables are currently supposed to run, summed over all resource groups. It follows configuration and resource group changes right away, so comparing it with `starrocks_be_pipe_scan_worker_threads` tells whether the executors are fully staffed.
+
+## `starrocks_be_pipe_scan_worker_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of worker threads that are actually alive in the scan executors for internal tables, summed over all resource groups. A value below `starrocks_be_pipe_scan_expected_worker_threads` means workers were lost and not replaced, so fewer scan tasks are consumed than configured. Exceeding it is normal and transient, as workers leave a shrunken executor only once they wake up.
 
 ## `starrocks_be_priority_exec_state_report_active_threads`
 
@@ -363,7 +387,7 @@ Each metric includes the following outputs:
 - **`<metric_name>_count`**: The total number of transactions recorded for this phase, for example, `starrocks_fe_txn_total_latency_ms_count`.
 
 All transaction metrics share the following labels:
-- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups).
+- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups).
 - `is_leader`: Indicates whether the reporting FE node is the Leader. Only the Leader FE (`is_leader="true"`) reports actual metric values. Followers will have `is_leader="false"` and report no data.
 
 ## `starrocks_fe_query_resource_group`

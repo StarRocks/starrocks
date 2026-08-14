@@ -35,6 +35,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     range_test.cpp
     merge_iterator_test.cpp
     roaring2range_test.cpp
+    runtime_filter_predicate_test.cpp
     row_source_mask_buffer_test.cpp
     row_source_mask_test.cpp
     storage_value_types_test.cpp
@@ -47,6 +48,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
 
 set(STORAGE_PRIMITIVE_TEST_LINK_LIBS
     StoragePrimitive
+    ExecPrimitive
     Expr
     Runtime
     ChunkCore

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "File external table is a special type of external table."
 ---
@@ -18,13 +19,13 @@ This feature is supported from StarRocks v2.5.
 
 ## Limits
 
-- File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query catalogs created in the cluster.
+- File external tables must be created in databases within the [default_catalog](./catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query catalogs created in the cluster.
 - Only Parquet, ORC, Avro, RCFile, and SequenceFile data files are supported.
 - You can only use file external tables to query data in the target data file. Data write operations such as INSERT, DELETE, and DROP are not supported.
 
 ## Prerequisites
 
-Before you create a file external table, you must configure your StarRocks cluster so that StarRocks can access the external storage system where the target data file is stored. The configurations required for a file external table are the same as those required for a Hive catalog, except that you do not need to configure a metastore. See [Hive catalog - Integration preparations](../data_source/catalog/hive_catalog.md#integration-preparations) for more information about configurations.
+Before you create a file external table, you must configure your StarRocks cluster so that StarRocks can access the external storage system where the target data file is stored. The configurations required for a file external table are the same as those required for a Hive catalog, except that you do not need to configure a metastore. See [Hive catalog - Integration preparations](./catalog/hive_catalog.md#integration-preparations) for more information about configurations.
 
 ## Create a database (Optional)
 
@@ -131,7 +132,7 @@ If you need to access a data file stored in AWS S3, configure the following auth
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.|
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage
 

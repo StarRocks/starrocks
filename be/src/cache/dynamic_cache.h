@@ -164,13 +164,26 @@ public:
         _release(entry);
     }
 
-    // Atomically refresh an entry's expiration deadline while releasing the
-    // caller's pin. This avoids racing clear_expired() with an unlocked update
-    // to Entry::_expire_ms.
-    void release_with_expire_time(Entry* entry, int64_t expire_ms) {
-        std::lock_guard<Lock> lg(_lock);
-        entry->_expire_ms = expire_ms;
-        _release(entry);
+    // Release the caller's pin and restore the capacity limit when this makes
+    // the entry evictable. Victims are destroyed after releasing _lock so their
+    // destructors may safely re-enter the cache.
+    bool release_with_expire_time_evict_if_over_capacity(Entry* entry, int64_t expire_ms) {
+        std::vector<Entry*> victims;
+        {
+            std::lock_guard<Lock> lg(_lock);
+            entry->_expire_ms = expire_ms;
+            const bool last_external_pin = entry->_ref.load(std::memory_order_relaxed) == 2;
+            _release(entry);
+            if (last_external_pin && _size > _capacity) {
+                _evict(_capacity, &victims);
+            }
+        }
+
+        const bool evicted = !victims.empty();
+        for (Entry* entry : victims) {
+            delete entry;
+        }
+        return evicted;
     }
 
     // remove an object get/get_or_create'ed earlier

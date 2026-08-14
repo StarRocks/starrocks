@@ -20,7 +20,6 @@
 #include <memory>
 #include <sstream>
 
-#include "base/orlp/pdqsort.h"
 #include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/array_view_column.h"
@@ -168,6 +167,98 @@ private:
     Status _error_status{};
 };
 
+// Merge the adjacent sorted runs [lo, mid) and [mid, hi) of `data` in place, through `buffer`.
+template <typename Compare>
+static void merge_adjacent_runs(std::vector<uint32_t>& data, std::vector<uint32_t>& buffer, size_t lo, size_t mid,
+                                size_t hi, Compare comp) {
+    size_t left = lo;
+    size_t right = mid;
+    size_t out = lo;
+    while (left < mid && right < hi) {
+        // Only take from the right run when it strictly precedes the left one, so that
+        // equivalent elements keep their relative order.
+        buffer[out++] = comp(data[right], data[left]) ? data[right++] : data[left++];
+    }
+    while (left < mid) {
+        buffer[out++] = data[left++];
+    }
+    while (right < hi) {
+        buffer[out++] = data[right++];
+    }
+    std::copy(buffer.begin() + lo, buffer.begin() + hi, data.begin() + lo);
+}
+
+// Sort `data` with a comparator that CANNOT be trusted to be a strict weak ordering.
+//
+// validate_strict_weak_ordering() below only samples a bounded number of elements, so a
+// lambda that misbehaves on values outside that sample still reaches the sort. Introsort
+// family algorithms (pdqsort, std::sort) rely on the ordering to terminate the unguarded
+// scans of their partition loops; with an inconsistent comparator those scans walk off both
+// ends of the range and read and write out of bounds, which corrupts the heap and crashes
+// the BE, sometimes only much later when an unrelated allocation is freed. std::stable_sort
+// is no safer: both of its paths start with std::__insertion_sort, whose
+// __unguarded_linear_insert has the same unbounded scan.
+//
+// A natural merge sort only ever indexes inside [0, num), so an inconsistent comparator can
+// at worst produce an arbitrary permutation of the input - never memory unsafety.
+//
+// It first splits the range into maximal runs and then merges those pairwise, rather than
+// unconditionally running every merge level over runs of width 1, 2, 4 ... That matters
+// because every comparison evaluates a lambda through the expression engine and so dominates
+// everything else here: pdqsort finishes already sorted input in a linear number of
+// comparisons, and without run detection this would spend n*log(n) of them on the same input
+// and regress a common case of array_sort.
+template <typename Compare>
+static void merge_sort_indices(std::vector<uint32_t>& data, std::vector<uint32_t>& buffer,
+                               std::vector<size_t>& run_starts, Compare comp) {
+    const size_t num = data.size();
+    if (num < 2) {
+        return;
+    }
+    buffer.resize(num);
+
+    // Split into maximal runs, reversing the descending ones. A run is only extended over a
+    // strict descent, so no two of its elements are equivalent and reversing it cannot
+    // reorder equivalent elements. Already sorted input yields a single run and no merging.
+    run_starts.clear();
+    for (size_t pos = 0; pos < num;) {
+        run_starts.emplace_back(pos);
+        size_t end = pos + 1;
+        if (end < num && comp(data[end], data[pos])) {
+            while (end + 1 < num && comp(data[end + 1], data[end])) {
+                ++end;
+            }
+            std::reverse(data.begin() + pos, data.begin() + end + 1);
+        } else {
+            while (end + 1 < num && !comp(data[end + 1], data[end])) {
+                ++end;
+            }
+        }
+        pos = end + 1;
+    }
+    // Sentinel, so that run i spans [run_starts[i], run_starts[i + 1]).
+    run_starts.emplace_back(num);
+
+    // Merge adjacent runs pairwise until a single run covers the whole range. Each pass
+    // rewrites `run_starts` in place; the write index trails the read index, so it never
+    // clobbers a boundary the pass still needs.
+    while (run_starts.size() > 2) {
+        const size_t num_runs = run_starts.size() - 1;
+        size_t out = 0;
+        size_t i = 0;
+        for (; i + 1 < num_runs; i += 2) {
+            merge_adjacent_runs(data, buffer, run_starts[i], run_starts[i + 1], run_starts[i + 2], comp);
+            run_starts[out++] = run_starts[i];
+        }
+        if (i < num_runs) {
+            // Odd run at the end, carried into the next pass as it is.
+            run_starts[out++] = run_starts[i];
+        }
+        run_starts[out++] = num;
+        run_starts.resize(out);
+    }
+}
+
 StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
                                                               const Column* data_column) {
     const auto& element_col = down_cast<const ArrayColumn*>(data_column)->elements_column();
@@ -214,6 +305,10 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
         }
     }
 
+    // Scratch space for the merge sort, reused across rows.
+    std::vector<uint32_t> merge_buffer;
+    std::vector<size_t> merge_run_starts;
+
     // Process each row
     for (size_t row = 0; row < num_rows; ++row) {
         // if Array column comes from ConstColumn, always use the first offsets
@@ -239,9 +334,11 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
         std::vector<uint32_t> indices(array_size);
         std::iota(indices.begin(), indices.end(), 0);
 
-        // Sort using comparator lambda
-        pdqsort(indices.begin(), indices.end(),
-                [&comparator](uint32_t i, uint32_t j) { return comparator.compare(i, j); });
+        // Sort using comparator lambda. The comparator is user supplied and may violate the
+        // strict weak ordering the validation below could not rule out, so the sort must stay
+        // in bounds no matter what it returns - see merge_sort_indices().
+        merge_sort_indices(indices, merge_buffer, merge_run_starts,
+                           [&comparator](uint32_t i, uint32_t j) { return comparator.compare(i, j); });
         // Check for any errors during comparison
         RETURN_IF_ERROR(comparator.error_status());
 
@@ -334,12 +431,6 @@ Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, 
         return Status::OK();
     }
 
-    // Create a temporary array column with just the unique elements for validation
-    auto validation_elements = element_col->clone_empty();
-    for (size_t idx : unique_indices) {
-        validation_elements->append(*element_col, idx, 1);
-    }
-
     const vector<SlotId>& argument_ids = lambda_func->get_lambda_arguments_ids();
     DCHECK(argument_ids.size() == 2);
 
@@ -353,14 +444,17 @@ Status ArraySortLambdaExpr::validate_strict_weak_ordering(ExprContext* context, 
     // Use SortComparator for validation
     SortComparator comparator(context, lambda_func, element_col, one_row_chunk);
     comparator.set_argument_ids(argument_ids);
-    comparator.set_array_start(0); // Elements start at index 0 in validation array
+    comparator.set_array_start(0); // unique_indices are absolute positions in element_col
 
-    // Helper function to compare two elements by their indices in unique_indices
+    // Helper function to compare two elements by their indices in unique_indices.
+    // Note the indirection through unique_indices: the checks below must run on the DISTINCT
+    // elements that were selected, not on the first few physical elements of the column.
     auto compare = [&](size_t i, size_t j) -> StatusOr<bool> {
         if (!comparator.error_status().ok()) {
             return comparator.error_status();
         }
-        bool result = comparator.compare(static_cast<uint32_t>(i), static_cast<uint32_t>(j));
+        bool result =
+                comparator.compare(static_cast<uint32_t>(unique_indices[i]), static_cast<uint32_t>(unique_indices[j]));
         if (!comparator.error_status().ok()) {
             return comparator.error_status();
         }

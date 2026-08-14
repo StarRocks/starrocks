@@ -14,8 +14,11 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.scheduler.history.TaskRunHistoryTable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -23,6 +26,11 @@ import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,6 +79,60 @@ public class SimpleExecutorTest {
 
         SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL);
         executor.executeDML(INSERT_SQL);
+    }
+
+    /**
+     * Serving-path internal queries (e.g. filling information_schema.materialized_views, lookup_string)
+     * must be bounded by the outer user query's remaining query_timeout, not the 1h
+     * statistic_collect_query_timeout. Background callers (no outer query) keep the old fallback.
+     */
+    @Test
+    public void testOuterRemainingQueryTimeoutS() throws Exception {
+        // No outer user-query context: fall back to statistic_collect_query_timeout (old behavior).
+        ConnectContext.remove();
+        assertEquals((int) Config.statistic_collect_query_timeout, SimpleExecutor.outerRemainingQueryTimeoutS());
+
+        // Outer query with query_timeout=300s started ~100s ago -> remaining ~200s.
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        ctx.getSessionVariable().setQueryTimeoutS(300);
+        ctx.setStartTime(Instant.now().minusSeconds(100));
+        int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
+        assertTrue(remaining > 190 && remaining <= 200, "remaining=" + remaining);
+
+        // Budget already exhausted (started ~400s ago, budget 300s) -> <= 0, so the caller can time out.
+        ctx.setStartTime(Instant.now().minusSeconds(400));
+        assertTrue(SimpleExecutor.outerRemainingQueryTimeoutS() <= 0);
+
+        ConnectContext.remove();
+    }
+
+    /**
+     * The internal task_run_history read (fired while filling information_schema.materialized_views /
+     * SHOW MATERIALIZED VIEWS) must inherit the OUTER user query's remaining query_timeout, not the
+     * default statistic_collect_query_timeout (1h).
+     */
+    @Test
+    public void testInternalTaskRunHistoryReadUsesOuterQueryTimeout() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        ctx.getSessionVariable().setQueryTimeoutS(300);
+        ctx.setStartTime(Instant.now());
+
+        int[] capturedTimeout = {-1};
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+                capturedTimeout[0] = queryTimeoutSeconds;
+                return Collections.emptyList();
+            }
+        };
+
+        new TaskRunHistoryTable().lookupLastJobOfTasks("db", Collections.singleton("mvTask"));
+        ConnectContext.remove();
+
+        // Inherited the outer query_timeout (~300s), not statistic_collect_query_timeout (3600s).
+        assertTrue(capturedTimeout[0] > 290 && capturedTimeout[0] <= 300, "timeout=" + capturedTimeout[0]);
     }
 
     private static void mockStatementFailure(String errorMessage) {

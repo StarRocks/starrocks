@@ -76,7 +76,7 @@ SELECT * FROM FILES
 >
 > 上記のコマンドで `AAA` と `BBB` にあなたの認証情報を置き換えてください。任意の有効な `aws.s3.access_key` と `aws.s3.secret_key` を使用できます。オブジェクトは任意の AWS 認証済みユーザーによって読み取り可能です。
 
-この例では、IAM ユーザー認証方法と StarRocks テーブルと同じスキーマを持つ Parquet ファイルを使用しています。他の認証方法や CREATE PIPE の使用法についての詳細は、[Authenticate to AWS resources](../../../../integrations/authenticate_to_aws_resources.md) および [FILES](../../../sql-functions/table-functions/files.md) を参照してください。
+この例では、IAM ユーザー認証方法と StarRocks テーブルと同じスキーマを持つ Parquet ファイルを使用しています。他の認証方法や CREATE PIPE の使用法についての詳細は、[Authenticate to AWS resources](../../../../integrations/csp_auth/authenticate_to_aws_resources.md) および [FILES](../../../sql-functions/table-functions/files.md) を参照してください。
 
 ## 参考文献
 

@@ -187,6 +187,25 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
     }
 }
 
+Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                                    uint32_t del_rssid, const FileMetaPB& del_sst_meta,
+                                    const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
+    // Shared-data primary-key tablets always use LakePersistentIndex. Keep the cast defensive so a broken
+    // initialization invariant fails explicitly instead of dereferencing the wrong implementation.
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index == nullptr) {
+        return Status::InternalError("bulk_erase requires a cloud-native LakePersistentIndex.");
+    }
+    Buffer<Slice> keys;
+    std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
+    ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    RETURN_IF_ERROR(lake_persistent_index->bulk_erase(pks.size(), vkeys,
+                                                      reinterpret_cast<IndexValue*>(old_values.data()), del_rssid,
+                                                      del_sst_meta, del_sst_range, version));
+    old_values_to_deletes(old_values, deletes);
+    return Status::OK();
+}
+
 int32_t LakePrimaryIndex::current_fileset_index() const {
     if (_persistent_index == nullptr) {
         return -1;
@@ -306,14 +325,8 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             std::lock_guard<std::mutex> l(*context_ptr->mutex);
             context_ptr->status->update(st);
 
-            // Collect rows to delete: extract segment ID and row ID from old_values
-            // Format: old_value = (segment_id << 32) | row_id
             if (context_ptr->status->ok()) {
-                for (unsigned long old : slot->old_values) {
-                    if (old != NullIndexValue) {
-                        (*context_ptr->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    }
-                }
+                old_values_to_deletes(slot->old_values, context_ptr->deletes);
             }
         };
 

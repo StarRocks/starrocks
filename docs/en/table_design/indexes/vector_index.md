@@ -125,7 +125,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 
 ##### index_build_threshold
 
-- **Default**: 10000 (determined by the BE configuration item [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold))
+- **Default**: 10000 (determined by the BE configuration item [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold))
 - **Required**: No
 - **Description**: Row-count threshold that triggers the vector index build. If the number of rows written is smaller than this threshold, the vector index is not built and searches fall back to brute-force scan. It must be an integer greater than or equal to `1`. For IVFPQ indexes, the value must also be greater than or equal to `nlist`, because IVFPQ k-means training requires at least `nlist` vectors. DDL statements that violate this constraint are rejected.
 
@@ -135,7 +135,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Required**: No
 - **Description**: Index build mode for shared-data clusters. Valid values:
   - `sync`: Builds the index during data writes. Queries can use the index immediately, at the cost of higher load latency.
-  - `async`: Builds the index in the background after the write finishes. Until the build completes, queries over the affected segments automatically fall back to brute-force search. Use [`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) to select the build warehouse and [`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) to control load-tail dispatch delay.
+  - `async`: Builds the index in the background after the write finishes. Until the build completes, queries over the affected segments automatically fall back to brute-force search. Use [`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) to select the build warehouse and [`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) to control load-tail dispatch delay.
 
 ##### M
 
