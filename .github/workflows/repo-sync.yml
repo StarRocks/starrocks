@@ -72,7 +72,7 @@ jobs:
     # sync-normal = the parallel-safe glue pool (mirror of the forward's sync-normal);
     # both sync-sr machines carry it. The bare `sync` label was retired from these
     # machines (it belongs to the legacy forward-trigger glue runners).
-    runs-on: [self-hosted, sync-normal]
+    runs-on: [self-hosted, sync-normal, ubuntu]
     env:
       PR_ID: ${{ inputs.PR_ID }}
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
