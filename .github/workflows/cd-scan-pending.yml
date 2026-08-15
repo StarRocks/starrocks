@@ -24,11 +24,12 @@ jobs:
 
   scan-pending-cd-pr:
     name: SCAN PENDING CD-SYNC PRS
-    # [sync, ubuntu] — NOT bare [sync]: the legacy [sync]-only runners (forward ci-sync
-    # trigger glue) have no /var/lib/elastic-service, which is exactly how the only prior
-    # run of this workflow failed (2026-08-04, landed on such a runner). The reverse-sync
-    # prereqs live on the sg-ubuntu-sync-sr machines only.
-    runs-on: [self-hosted, sync, ubuntu]
+    # sync-normal (mirror of the forward sync-scan-pending's pool) — NOT bare [sync]:
+    # the legacy [sync]-only runners (forward ci-sync trigger glue) have no
+    # /var/lib/elastic-service, which is exactly how the only prior run of this workflow
+    # failed (2026-08-04, landed on such a runner). The reverse-sync prereqs live on the
+    # sg-ubuntu-sync-sr machines, which carry sync-normal.
+    runs-on: [self-hosted, sync-normal]
     if: github.repository == 'StarRocks/starrocks'
     steps:
       - name: scan
