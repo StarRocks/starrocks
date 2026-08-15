@@ -1096,8 +1096,7 @@ under the License.
             <!-- Transitively supplies the COS client stack at the versions it was
                  released with: cos_api-bundle, chdfs_hadoop_plugin_network,
                  cos-sts-java and ofs-sdk-definition. Do not redeclare them here;
-                 bumping this one version is enough (also update the cos_api-bundle
-                 waiver filename in trivy.yaml). -->
+                 bumping this one version is enough -->
             <dependency>
                 <groupId>com.qcloud.cos</groupId>
                 <artifactId>hadoop-cos</artifactId>
