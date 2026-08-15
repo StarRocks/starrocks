@@ -523,6 +523,30 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset
     EXPECT_EQ(2, child.segment_metas_size());
 }
 
+// A rowset that kept its segments must not report zero rows. With the kNo siblings zeroed outright,
+// the owning sibling can be the one whose index draws no remainder, and then every sibling reads as
+// empty. Floor the share at 1 so the statistic never contradicts the payload.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_segment_carrying_rowset_never_reports_zero_rows) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(1);
+    rowset.set_data_size(512);
+    rowset.add_segment_metas()->set_filename("seg_a");
+
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kYes);
+        EXPECT_EQ(1, child.segment_metas_size());
+        EXPECT_EQ(1, child.num_rows()) << "split_index=" << i;
+    }
+
+    // The floor is scoped to the payload: a sibling the classifier ruled out carries no segments, so
+    // its zero stands.
+    RowsetMetadataPB dropped = rowset;
+    update_rowset_data_stats(&dropped, /*split_count=*/4, /*split_index=*/1, RangeOverlap::kNo);
+    EXPECT_EQ(0, dropped.segment_metas_size());
+    EXPECT_EQ(0, dropped.num_rows());
+}
+
 // kUnknown (no sort-key bounds to classify with) keeps the pre-existing apportionment byte for byte,
 // including the zeros -- there is nothing better to do without reading the data.
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_unknown_overlap_keeps_legacy) {
