@@ -20,9 +20,7 @@
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/dynamic_message.h>
-#include <google/protobuf/io/zero_copy_stream.h>
 #include <gtest/gtest.h>
-#include <json2pb/pb_to_json.h>
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
@@ -42,6 +40,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/url_coding.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "http/action/lake/dump_tablet_metadata_serializer.h"
@@ -61,8 +60,9 @@ extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view)
 
 namespace starrocks::lake {
 namespace dump_tablet_metadata_internal {
+bool contains_encryption_metadata(const google::protobuf::Message& message);
 void redact_encryption_metadata(google::protobuf::Message* message, std::set<std::string>* redacted_fields);
-}
+} // namespace dump_tablet_metadata_internal
 
 namespace {
 
@@ -224,31 +224,6 @@ TabletMetadataPB metadata_with_all_encryption_fields(std::vector<std::string>* s
     return metadata;
 }
 
-class RefusingOutputStream final : public google::protobuf::io::ZeroCopyOutputStream {
-public:
-    bool Next(void** data, int* size) override {
-        if (_granted) {
-            _refused = true;
-            return false;
-        }
-        _granted = true;
-        *data = _buffer.data();
-        *size = static_cast<int>(_buffer.size());
-        _byte_count += *size;
-        return true;
-    }
-
-    void BackUp(int count) override { _byte_count -= count; }
-    int64_t ByteCount() const override { return _byte_count; }
-    bool refused() const { return _refused; }
-
-private:
-    std::array<char, 8> _buffer{};
-    int64_t _byte_count = 0;
-    bool _granted = false;
-    bool _refused = false;
-};
-
 TEST(DumpTabletMetadataSerializerTest, RedactsEveryReachableEncryptionFieldWithoutMutatingInput) {
     std::vector<std::string> secrets;
     TabletMetadataPB metadata = metadata_with_all_encryption_fields(&secrets);
@@ -363,6 +338,8 @@ TEST(DumpTabletMetadataSerializerTest, RedactionMatchesFieldNameRegardlessOfScal
     ASSERT_NE(nullptr, nested_secret);
     ASSERT_NE(nullptr, nested_safe);
 
+    EXPECT_FALSE(dump_tablet_metadata_internal::contains_encryption_metadata(*message));
+
     reflection->SetString(message.get(), text_secret, "future-string-secret");
     reflection->AddInt64(message.get(), repeated_secret, 9007199254740993LL);
     auto* matching_message = reflection->MutableMessage(message.get(), message_secret);
@@ -371,8 +348,12 @@ TEST(DumpTabletMetadataSerializerTest, RedactionMatchesFieldNameRegardlessOfScal
     ordinary_message->GetReflection()->SetString(ordinary_message, nested_secret, "nested-secret");
     ordinary_message->GetReflection()->SetString(ordinary_message, nested_safe, "keep");
 
+    EXPECT_TRUE(dump_tablet_metadata_internal::contains_encryption_metadata(*message));
+
     std::set<std::string> redacted_fields;
     dump_tablet_metadata_internal::redact_encryption_metadata(message.get(), &redacted_fields);
+
+    EXPECT_FALSE(dump_tablet_metadata_internal::contains_encryption_metadata(*message));
 
     EXPECT_FALSE(reflection->HasField(*message, text_secret));
     EXPECT_EQ(0, reflection->FieldSize(*message, repeated_secret));
@@ -427,33 +408,20 @@ TEST(DumpTabletMetadataSerializerTest, AppliesCapToCompleteEnvelopeAtExactBounda
     EXPECT_EQ(baseline, over);
 }
 
-TEST(DumpTabletMetadataSerializerTest, RejectsSinkRefusalEvenWhenJson2pbReportsSuccess) {
-    TabletMetadataPB metadata;
-    metadata.set_id(123456789);
-    metadata.set_version(987654321);
-    json2pb::Pb2JsonOptions options;
-    options.pretty_json = false;
-    RefusingOutputStream refusing_stream;
-    std::string error;
-    const bool converted = json2pb::ProtoMessageToJson(metadata, &refusing_stream, options, &error);
-    EXPECT_TRUE(converted) << error;
-    EXPECT_TRUE(refusing_stream.refused());
-
-    constexpr size_t kEnvelopePrefixBytes = sizeof("{\"metadata\":") - 1;
-    constexpr size_t kConverterGrantBytes = 8;
-    auto result = serialize_dump_tablet_metadata(metadata, kEnvelopePrefixBytes + kConverterGrantBytes);
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_capacity_limit_exceeded()) << result.status();
-}
-
 class DumpTabletMetadataActionTest : public testing::Test {
 protected:
     void SetUp() override {
+        _saved_memory_limit = config::lake_dump_tablet_metadata_per_request_memory_limit_bytes;
+        _saved_json_limit = config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes;
+        _saved_max_concurrency = config::lake_dump_tablet_metadata_max_concurrency;
+        config::lake_dump_tablet_metadata_per_request_memory_limit_bytes = 256LL << 20;
+        config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 32LL << 20;
+        config::lake_dump_tablet_metadata_max_concurrency = 1;
         _root = "/tmp/starrocks-dump-tablet-metadata-action-" + std::to_string(getpid());
         (void)fs::remove_all(_root);
         ASSERT_OK(fs::create_directories(join_path(_root, kMetadataDirectoryName)));
         _provider = std::make_shared<FixedLocationProvider>(_root);
-        _tablet_manager = std::make_unique<TabletManager>(_provider, 1 << 20);
+        _tablet_manager = std::make_unique<TabletManager>(_provider, 1LL << 30);
         s_injected_send_reply = capture_reply;
     }
 
@@ -462,6 +430,9 @@ protected:
         _tablet_manager.reset();
         _provider.reset();
         (void)fs::remove_all(_root);
+        config::lake_dump_tablet_metadata_per_request_memory_limit_bytes = _saved_memory_limit;
+        config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = _saved_json_limit;
+        config::lake_dump_tablet_metadata_max_concurrency = _saved_max_concurrency;
     }
 
     void put_metadata(int64_t tablet_id, int64_t version) {
@@ -476,6 +447,9 @@ protected:
     std::string _root;
     std::shared_ptr<FixedLocationProvider> _provider;
     std::unique_ptr<TabletManager> _tablet_manager;
+    int64_t _saved_memory_limit = 0;
+    int64_t _saved_json_limit = 0;
+    int32_t _saved_max_concurrency = 0;
 };
 
 TEST_F(DumpTabletMetadataActionTest, RejectsEveryInputOutsideTheExactCacheReadContractBeforeAdmission) {
@@ -548,7 +522,7 @@ TEST_F(DumpTabletMetadataActionTest, ReturnsDirectlyCachedRequestedMetadataAndSe
     ASSERT_EQ(0, action.on_header(request.request.get()));
     action.handle(request.request.get());
 
-    EXPECT_EQ(HttpStatus::OK, g_response_status);
+    ASSERT_EQ(HttpStatus::OK, g_response_status);
     rapidjson::Document document;
     ASSERT_FALSE(document.Parse(g_response_body.data(), g_response_body.size()).HasParseError()) << g_response_body;
     ASSERT_TRUE(document.IsObject());
@@ -562,6 +536,95 @@ TEST_F(DumpTabletMetadataActionTest, ReturnsDirectlyCachedRequestedMetadataAndSe
     EXPECT_FALSE(document.HasMember("is_bundle"));
     EXPECT_EQ(std::string::npos, g_response_body.find('\n'));
     expect_diagnostic_headers(request.ev_req);
+}
+
+TEST_F(DumpTabletMetadataActionTest, DoesNotApplyRetiredProtobufSizeLimit) {
+    constexpr int64_t kTabletId = 11979;
+    constexpr int64_t kVersion = 23;
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(kVersion);
+    metadata->GetReflection()
+            ->MutableUnknownFields(metadata.get())
+            ->AddLengthDelimited(9999, std::string(17 << 20, 'x'));
+    ASSERT_GT(metadata->ByteSizeLong(), 16 << 20);
+    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
+                                                        metadata);
+    ASSERT_NE(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
+                               _tablet_manager->tablet_metadata_location(kTabletId, kVersion)));
+    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
+    auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
+
+    ASSERT_EQ(0, action.on_header(request.request.get()));
+    action.handle(request.request.get());
+
+    ASSERT_EQ(HttpStatus::OK, g_response_status);
+    rapidjson::Document document;
+    ASSERT_FALSE(document.Parse(g_response_body.data(), g_response_body.size()).HasParseError()) << g_response_body;
+    EXPECT_EQ(kTabletId, document["metadata"]["id"].GetInt64());
+    EXPECT_EQ(kVersion, document["metadata"]["version"].GetInt64());
+}
+
+TEST_F(DumpTabletMetadataActionTest, SnapshotsMutableJsonLimitForEachRequest) {
+    constexpr int64_t kTabletId = 11979;
+    constexpr int64_t kVersion = 23;
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(kVersion);
+    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
+                                                        metadata);
+    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
+
+    config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 1024;
+    auto admitted = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
+    ASSERT_EQ(0, action.on_header(admitted.request.get()));
+    config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 1;
+    action.handle(admitted.request.get());
+    EXPECT_EQ(HttpStatus::OK, g_response_status);
+
+    admitted.request.reset();
+    auto limited = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
+    ASSERT_EQ(0, action.on_header(limited.request.get()));
+    action.handle(limited.request.get());
+    EXPECT_EQ(HttpStatus::BAD_REQUEST, g_response_status);
+    EXPECT_EQ(R"({"code":"METADATA_TOO_LARGE","message":"tablet metadata exceeds a diagnostic limit"})",
+              g_response_body);
+}
+
+TEST_F(DumpTabletMetadataActionTest, RejectsNonPositiveResourceConfigurationWithoutAdmissionLeak) {
+    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
+    enum class ConfigUnderTest { kMemory, kJson, kConcurrency };
+    for (const auto config_under_test :
+         {ConfigUnderTest::kMemory, ConfigUnderTest::kJson, ConfigUnderTest::kConcurrency}) {
+        config::lake_dump_tablet_metadata_per_request_memory_limit_bytes = 256LL << 20;
+        config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 32LL << 20;
+        config::lake_dump_tablet_metadata_max_concurrency = 1;
+        switch (config_under_test) {
+        case ConfigUnderTest::kMemory:
+            config::lake_dump_tablet_metadata_per_request_memory_limit_bytes = 0;
+            break;
+        case ConfigUnderTest::kJson:
+            config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 0;
+            break;
+        case ConfigUnderTest::kConcurrency:
+            config::lake_dump_tablet_metadata_max_concurrency = 0;
+            break;
+        }
+
+        auto rejected = valid_request(&action);
+        EXPECT_EQ(-1, action.on_header(rejected.request.get()));
+        EXPECT_EQ(HttpStatus::SERVICE_UNAVAILABLE, g_response_status);
+        EXPECT_EQ(R"({"code":"DIAGNOSTIC_UNAVAILABLE","message":"tablet metadata diagnostic is unavailable"})",
+                  g_response_body);
+        EXPECT_EQ(nullptr, rejected.request->handler_ctx());
+
+        config::lake_dump_tablet_metadata_per_request_memory_limit_bytes = 256LL << 20;
+        config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes = 32LL << 20;
+        config::lake_dump_tablet_metadata_max_concurrency = 1;
+        auto accepted = valid_request(&action);
+        EXPECT_EQ(0, action.on_header(accepted.request.get()));
+        EXPECT_NE(nullptr, accepted.request->handler_ctx());
+    }
 }
 
 TEST_F(DumpTabletMetadataActionTest, ReturnsCacheScopeErrorWhenDurableMetadataIsNotCached) {
@@ -607,8 +670,9 @@ TEST_F(DumpTabletMetadataActionTest, ReturnsDiagnosticUnavailableWhenNoTabletMan
             ::testing::ExitedWithCode(0), "");
 }
 
-TEST_F(DumpTabletMetadataActionTest, HoldsAdmissionUntilRequestFreeAndDoesNotQueue) {
+TEST_F(DumpTabletMetadataActionTest, AppliesMutableConcurrencyLimitToNewAdmissionsUntilRequestFree) {
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
+    config::lake_dump_tablet_metadata_max_concurrency = 1;
     auto first = std::make_unique<SyntheticRequest>(valid_request(&action));
     ASSERT_EQ(0, action.on_header(first->request.get()));
     action.handle(first->request.get());
@@ -617,16 +681,30 @@ TEST_F(DumpTabletMetadataActionTest, HoldsAdmissionUntilRequestFreeAndDoesNotQue
     auto second = valid_request(&action);
     EXPECT_EQ(-1, action.on_header(second.request.get()));
     EXPECT_EQ(HttpStatus::SERVICE_UNAVAILABLE, g_response_status);
-    EXPECT_EQ(R"({"code":"DIAGNOSTIC_BUSY","message":"another tablet metadata diagnostic is active"})",
+    EXPECT_EQ(R"({"code":"DIAGNOSTIC_BUSY","message":"tablet metadata diagnostic concurrency limit is reached"})",
               g_response_body);
     EXPECT_EQ(nullptr, second.request->handler_ctx());
     expect_diagnostic_headers(second.ev_req);
     EXPECT_TRUE(logs.sink().contains("result=DIAGNOSTIC_BUSY", "elapsed_ms="));
 
+    config::lake_dump_tablet_metadata_max_concurrency = 2;
+    auto third = std::make_unique<SyntheticRequest>(valid_request(&action));
+    EXPECT_EQ(0, action.on_header(third->request.get()));
+    EXPECT_NE(nullptr, third->request->handler_ctx());
+
+    config::lake_dump_tablet_metadata_max_concurrency = 1;
+    auto fourth = valid_request(&action);
+    EXPECT_EQ(-1, action.on_header(fourth.request.get()));
+    EXPECT_EQ(HttpStatus::SERVICE_UNAVAILABLE, g_response_status);
+
     first.reset();
-    auto third = valid_request(&action);
-    EXPECT_EQ(0, action.on_header(third.request.get()));
-    EXPECT_NE(nullptr, third.request->handler_ctx());
+    auto fifth = valid_request(&action);
+    EXPECT_EQ(-1, action.on_header(fifth.request.get()));
+
+    third.reset();
+    auto sixth = valid_request(&action);
+    EXPECT_EQ(0, action.on_header(sixth.request.get()));
+    EXPECT_NE(nullptr, sixth.request->handler_ctx());
 }
 
 } // namespace

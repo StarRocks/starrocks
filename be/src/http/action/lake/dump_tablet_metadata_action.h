@@ -14,7 +14,9 @@
 
 #pragma once
 
-#include "base/concurrency/concurrent_limiter.h"
+#include <atomic>
+#include <cstdint>
+
 #include "gutil/macros.h"
 #include "platform/http/http_handler.h"
 
@@ -43,7 +45,7 @@ public:
 
 private:
     TabletManager* _tablet_manager;
-    ConcurrentLimiter _limiter{1};
+    std::atomic<int32_t> _active_requests{0};
 };
 
 } // namespace starrocks::lake

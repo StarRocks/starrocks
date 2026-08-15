@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "http/action/lake/dump_tablet_metadata_serializer.h"
@@ -38,10 +39,6 @@
 namespace starrocks::lake {
 namespace {
 
-constexpr uint64_t kMaxLogicalMetadataBytes = 16ULL << 20;
-constexpr size_t kMaxResponseBytes = 32ULL << 20;
-constexpr int64_t kMaxTrackedMemoryBytes = 256LL << 20;
-
 constexpr std::string_view kInvalidArgumentBody =
         R"({"code":"INVALID_ARGUMENT","message":"invalid diagnostic request"})";
 constexpr std::string_view kMetadataNotCachedBody =
@@ -51,7 +48,7 @@ constexpr std::string_view kMetadataTooLargeBody =
 constexpr std::string_view kDiagnosticUnavailableBody =
         R"({"code":"DIAGNOSTIC_UNAVAILABLE","message":"tablet metadata diagnostic is unavailable"})";
 constexpr std::string_view kBusyBody =
-        R"({"code":"DIAGNOSTIC_BUSY","message":"another tablet metadata diagnostic is active"})";
+        R"({"code":"DIAGNOSTIC_BUSY","message":"tablet metadata diagnostic concurrency limit is reached"})";
 constexpr std::string_view kCorruptMetadataBody =
         R"({"code":"CORRUPT_METADATA","message":"tablet metadata is corrupt"})";
 constexpr std::string_view kSerializationFailedBody =
@@ -60,9 +57,16 @@ constexpr std::string_view kSerializationFailedBody =
 struct DumpTabletMetadataRequestContext {
     int64_t tablet_id = 0;
     int64_t version = 0;
-    ConcurrentLimiterGuard admission;
+    int64_t memory_limit_bytes = 0;
+    int64_t json_size_limit_bytes = 0;
+    std::atomic<int32_t>* active_requests = nullptr;
 
     DumpTabletMetadataRequestContext() = default;
+    ~DumpTabletMetadataRequestContext() {
+        if (active_requests != nullptr) {
+            active_requests->fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
     DumpTabletMetadataRequestContext(const DumpTabletMetadataRequestContext&) = delete;
     DumpTabletMetadataRequestContext& operator=(const DumpTabletMetadataRequestContext&) = delete;
 };
@@ -102,6 +106,17 @@ bool parse_positive_decimal(std::string_view value, int64_t* result) {
     return true;
 }
 
+bool try_acquire_admission(std::atomic<int32_t>* active_requests, int32_t max_concurrency) {
+    int32_t active = active_requests->load(std::memory_order_relaxed);
+    while (active < max_concurrency) {
+        if (active_requests->compare_exchange_weak(active, active + 1, std::memory_order_acq_rel,
+                                                   std::memory_order_relaxed)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Status validate_metadata_identity(const TabletMetadataPB& metadata, int64_t tablet_id, int64_t version) {
     if (metadata.id() != tablet_id || metadata.version() != version) {
         return Status::Corruption("tablet metadata identity does not match the diagnostic request");
@@ -122,7 +137,7 @@ StatusOr<TabletMetadataPtr> read_exact_metadata(TabletManager* tablet_manager, i
 Status run_pipeline(HttpRequest* req, TabletManager* tablet_manager,
                     const DumpTabletMetadataRequestContext& request_context, PipelineStage* stage) {
     MemTracker* prior_tracker = CurrentThread::mem_tracker();
-    MemTracker request_tracker(kMaxTrackedMemoryBytes, "dump_tablet_metadata",
+    MemTracker request_tracker(request_context.memory_limit_bytes, "dump_tablet_metadata",
                                RuntimeEnv::GetInstance()->process_mem_tracker());
     SCOPED_THREAD_LOCAL_MEM_SETTER(&request_tracker, true);
 
@@ -136,16 +151,16 @@ Status run_pipeline(HttpRequest* req, TabletManager* tablet_manager,
         return metadata_or.status();
     }
     auto metadata = std::move(metadata_or).value();
-    if (metadata->ByteSizeLong() > kMaxLogicalMetadataBytes) {
-        return Status::CapacityLimitExceed("tablet metadata protobuf exceeds the diagnostic size limit");
-    }
 
     *stage = PipelineStage::kSerialize;
-    auto json_or = serialize_dump_tablet_metadata(*metadata, kMaxResponseBytes);
+    auto json_or =
+            serialize_dump_tablet_metadata(*metadata, static_cast<size_t>(request_context.json_size_limit_bytes));
     if (!json_or.ok()) {
         return json_or.status();
     }
     auto response = std::move(json_or).value();
+    CurrentThread::current().mem_tracker_ctx_shift();
+    RETURN_IF_ERROR(request_tracker.check_mem_limit("tablet metadata diagnostic request"));
     add_diagnostic_headers(req);
     {
         CurrentThreadMemTrackerSetter restore_caller_tracker(prior_tracker);
@@ -194,7 +209,14 @@ int DumpTabletMetadataAction::on_header(HttpRequest* req) {
     auto context = std::make_unique<DumpTabletMetadataRequestContext>();
     context->tablet_id = tablet_id;
     context->version = version;
-    if (!context->admission.set_limiter(&_limiter)) {
+    context->memory_limit_bytes = config::lake_dump_tablet_metadata_per_request_memory_limit_bytes;
+    context->json_size_limit_bytes = config::lake_dump_tablet_metadata_per_request_json_size_limit_bytes;
+    const int32_t max_concurrency = config::lake_dump_tablet_metadata_max_concurrency;
+    if (context->memory_limit_bytes <= 0 || context->json_size_limit_bytes <= 0 || max_concurrency <= 0) {
+        send_json(req, HttpStatus::SERVICE_UNAVAILABLE, kDiagnosticUnavailableBody);
+        return -1;
+    }
+    if (!try_acquire_admission(&_active_requests, max_concurrency)) {
         send_json(req, HttpStatus::SERVICE_UNAVAILABLE, kBusyBody);
         const auto elapsed_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
@@ -202,6 +224,7 @@ int DumpTabletMetadataAction::on_header(HttpRequest* req) {
                   << " result=DIAGNOSTIC_BUSY elapsed_ms=" << elapsed_ms << " busy=true";
         return -1;
     }
+    context->active_requests = &_active_requests;
 
     req->set_handler_ctx(context.release());
     return 0;
