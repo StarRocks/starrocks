@@ -692,15 +692,11 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
         return;
     }
 
-    // kYes: this sibling may own rows, so never hand it an empty rowset -- the appliers would drop
-    // it and those rows would vanish while the transaction still reported success. Rounding up to 1
-    // can over-count by at most (split_count - 1) rows per rowset, and only for a rowset with fewer
-    // rows than the split count; an over-counted stat merely skews compaction scoring, whereas
-    // under-counting to zero destroys data. kUnknown keeps the pre-existing behavior exactly.
-    const bool never_empty = (overlap == RangeOverlap::kYes);
-    auto apportion = [split_count, split_index, never_empty](int64_t value) {
-        const int64_t scaled = value / split_count + (split_index < value % split_count ? 1 : 0);
-        return (never_empty && value > 0) ? std::max<int64_t>(1, scaled) : scaled;
+    // kYes / kUnknown: spread the source's counters over the siblings. These are statistics only --
+    // the appliers decide a rowset's presence from its segments, so a zero here costs accuracy in
+    // compaction scoring and `SHOW`, never data.
+    auto apportion = [split_count, split_index](int64_t value) {
+        return value / split_count + (split_index < value % split_count ? 1 : 0);
     };
 
     if (rowset->has_num_rows()) {

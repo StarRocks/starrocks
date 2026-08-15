@@ -466,24 +466,25 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to
     EXPECT_EQ(1, child.num_dels());
 }
 
-// A sibling that MAY own the rowset's rows must never be apportioned an empty rowset: both txn log
-// appliers drop a rowset whose num_rows is 0 (NonPrimaryKeyTxnLogApplier::apply_write_log requires
-// num_rows > 0 || has_delete_predicate; PrimaryKeyTxnLogApplier::apply_write_log returns early on
-// the same condition), so the rows of a cross-published write would vanish while the transaction
-// still reported VISIBLE.
-
-TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_never_zeroes_an_overlapping_rowset) {
-    // 1 row split 4 ways: the plain apportionment gives index 0 one row and indexes 1..3 zero.
+// kYes carries no special apportionment: the appliers key a rowset's presence off its segments, so a
+// sibling that may own rows is not harmed by drawing a zero share of a counter. This used to round up
+// to 1 to keep the rowset alive, which over-counted by up to split_count - 1 rows.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset_apportions_plainly) {
+    // 1 row split 4 ways: index 0 gets the row, indexes 1..3 get zero, and the sum stays exact.
     RowsetMetadataPB rowset;
     rowset.set_num_rows(1);
     rowset.set_data_size(512);
 
+    std::vector<int64_t> rows;
+    int64_t total_rows = 0;
     for (int i = 0; i < 4; ++i) {
         RowsetMetadataPB child = rowset;
         update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kYes);
-        EXPECT_GE(child.num_rows(), 1) << "split_index " << i << " may own rows and must not be emptied";
-        EXPECT_GE(child.data_size(), 1) << "split_index " << i;
+        rows.push_back(child.num_rows());
+        total_rows += child.num_rows();
     }
+    EXPECT_THAT(rows, ::testing::ElementsAre(1, 0, 0, 0));
+    EXPECT_EQ(1, total_rows) << "the siblings' shares must still sum to the source";
 }
 
 // A sibling PROVEN to own none of the keys gets a true zero, so the appliers drop the rowset for it
@@ -517,8 +518,8 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_unknown_overlap_ke
     EXPECT_THAT(rows, ::testing::ElementsAre(1, 0, 0, 0));
 }
 
-// With num_rows >= split_count every sibling is already non-zero, so the never-empty rule is a no-op
-// and the totals still conserve exactly.
+// The apportionment conserves exactly: the siblings' shares sum to the source, for every overlap
+// classification.
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_when_rows_exceed_split_count) {
     RowsetMetadataPB rowset;
     rowset.set_num_rows(10);

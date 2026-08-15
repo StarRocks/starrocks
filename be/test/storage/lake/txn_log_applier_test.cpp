@@ -185,6 +185,38 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
     EXPECT_EQ(0, meta->rowsets(0).num_rows());
 }
 
+// The single-log path must agree with the batch path above: a cross published rowset arrives with
+// num_rows apportioned across the siblings, so a sibling holding this tablet's rows can legitimately
+// see 0. Keying presence off that count drops the segments and the rows are gone while the
+// transaction reports success.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogZeroNumRowsKeepsSegments) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10120);
+    auto meta = build_non_pk_metadata(10120);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10120, 30, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
+    TxnLogVector logs{log};
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size()) << "a rowset carrying segments must be attached whatever num_rows says";
+    EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, meta->rowsets(0).num_rows()) << "the apportioned statistic is kept as-is";
+}
+
+// The counterpart: nothing to attach when the op really is empty.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogNoSegmentsAttachesNothing) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10121);
+    auto meta = build_non_pk_metadata(10121);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10121, 31, /*num_rows=*/0, /*data_size=*/0, {});
+    TxnLogVector logs{log};
+    Status st = applier->apply(logs);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);

@@ -579,8 +579,14 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        if (op_write.dels_meta_size() == 0 && op_write.rowset().num_rows() == 0 &&
-            !op_write.rowset().has_delete_predicate()) {
+        // Presence is decided by what the op carries, never by num_rows. On a cross publish that
+        // count is apportioned per sibling, so a rowset whose segments hold this tablet's rows can
+        // still arrive with num_rows == 0; keying the skip off it drops those segments and the rows
+        // vanish while the transaction reports success. Everywhere else the two agree: a writer that
+        // produced no rows produces no segments either, so this is not a behaviour change for an
+        // ordinary publish.
+        if (op_write.rowset().segment_metas_size() == 0 && op_write.dels_meta_size() == 0 &&
+            op_write.del_ssts_size() == 0 && !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
@@ -1120,7 +1126,10 @@ private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
-        if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
+        // Carries data if it carries segments -- see the note on the primary-key applier: num_rows is
+        // apportioned per sibling on a cross publish and must not decide whether the rowset exists.
+        if (op_write.has_rowset() &&
+            (op_write.rowset().segment_metas_size() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());
