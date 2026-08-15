@@ -120,8 +120,8 @@ public class ProfileSerializerTest {
         summary.addInfoString(ProfileManager.QUERY_ID, "query-roundtrip-001");
         summary.addInfoString(ProfileManager.SQL_STATEMENT, "SELECT 1");
         summary.addInfoString(ProfileManager.QUERY_STATE, "EOF");
-        summary.addInfoString(ProfileManager.START_TIME, "2024-01-01 00:00:00");
-        summary.addInfoString(ProfileManager.END_TIME, "2024-01-01 00:00:01");
+        summary.addInfoString(ProfileManager.START_TIME, "2024-01-01 00:00:00 (+08:00)");
+        summary.addInfoString(ProfileManager.END_TIME, "2024-01-01 00:00:01 (+08:00)");
         summary.addInfoString(ProfileManager.TOTAL_TIME, "1s500ms");
         summary.addInfoString(ProfileManager.USER, "root");
         summary.addInfoString(ProfileManager.DEFAULT_DB, "tpch");

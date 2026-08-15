@@ -1,0 +1,19 @@
+-- name: test_lake_add_index_fallback @cloud
+create database lake_idx_fb_${uuid0};
+use lake_idx_fb_${uuid0};
+
+-- GIN is intentionally out of scope for the fast path; it must fall back to
+-- the regular schema-change path (which also succeeds, just without IDG).
+CREATE TABLE t1 (
+    k1 int,
+    v1 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+
+insert into t1 values (1, 'hello world'), (2, 'starrocks lake'), (3, 'fast path index');
+
+ALTER TABLE t1 ADD INDEX idx_gin(v1) USING GIN ("parser" = "english");
+function: wait_alter_table_finish()
+select count(*) from t1;
+
+drop database lake_idx_fb_${uuid0};

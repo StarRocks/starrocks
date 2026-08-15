@@ -18,12 +18,15 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.sample.SampleInfo;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class SampleQueryJob extends HyperQueryJob {
     private final PartitionSampler sampler;
@@ -40,7 +43,14 @@ public class SampleQueryJob extends HyperQueryJob {
     protected List<String> buildQuerySQL() {
         int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
 
-        List<List<ColumnStats>> partColumns = Lists.partition(columnStats, parts);
+        // Isolate wide string columns to bound per-query Exchange memory; batch the rest.
+        long threshold = Config.statistics_large_string_column_merge_threshold;
+        Map<Boolean, List<ColumnStats>> partitioned = columnStats.stream()
+                .collect(Collectors.partitioningBy(s -> threshold > 0 && isWideStringColumn(s, threshold)));
+        List<ColumnStats> wideColumns = partitioned.get(true);
+        List<ColumnStats> normalColumns = partitioned.get(false);
+        List<List<ColumnStats>> normalPartColumns = Lists.partition(normalColumns, parts);
+
         List<String> sampleSQLs = Lists.newArrayList();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
@@ -52,10 +62,16 @@ public class SampleQueryJob extends HyperQueryJob {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }
-            for (List<ColumnStats> stats : partColumns) {
-                String sql = HyperStatisticSQLs.buildSampleSQL(db, table, partition, stats, sampler,
-                        HyperStatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE);
-                sampleSQLs.add(sql);
+
+            // wide columns: one SQL per column
+            for (ColumnStats wideCol : wideColumns) {
+                sampleSQLs.add(HyperStatisticSQLs.buildSampleSQL(db, table, partition,
+                        List.of(wideCol), sampler, HyperStatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE));
+            }
+            // normal columns: batched by parts
+            for (List<ColumnStats> batch : normalPartColumns) {
+                sampleSQLs.add(HyperStatisticSQLs.buildSampleSQL(db, table, partition,
+                        batch, sampler, HyperStatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE));
             }
         }
         return sampleSQLs;

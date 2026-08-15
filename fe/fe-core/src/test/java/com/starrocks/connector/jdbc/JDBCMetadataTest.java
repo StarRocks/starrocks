@@ -20,9 +20,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
@@ -39,7 +41,10 @@ import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -60,6 +65,12 @@ public class JDBCMetadataTest {
     DatabaseMetaData metaData;
     @Mocked
     PreparedStatement preparedStatement;
+    @Mocked
+    Statement statement;
+    @Mocked
+    ResultSet queryResultSet;
+    @Mocked
+    ResultSetMetaData queryResultSetMetaData;
     MockResultSet partitionsInfoTablesResult;
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -372,15 +383,26 @@ public class JDBCMetadataTest {
     }
 
     @Test
-    public void testGetTableSetsCommentFromMetadata() throws SQLException {
-        // Prepare a TABLES result set with REMARKS for tbl1
+    public void testGetTableDoesNotFetchComment() throws SQLException {
+        // getTable() must not populate the comment — keep its hot path single
+        // round-trip (getColumns only). Comment fetch is deferred to
+        // getTableComment(). No getTables() mock is set for "tbl1" here so any
+        // unintended REMARKS round-trip in the lambda would also surface via the
+        // returned table's empty comment.
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals("", table.getComment());
+    }
+
+    @Test
+    public void testGetTableCommentReadsRemarks() throws SQLException {
         MockResultSet tablesWithRemarks = new MockResultSet("tables_with_remarks");
         tablesWithRemarks.addColumn("TABLE_NAME", Arrays.asList("tbl1"));
         tablesWithRemarks.addColumn("REMARKS", Arrays.asList("jdbc table comment"));
 
         new Expectations() {
             {
-                // getColumns is already mocked in setUp; here we only need to mock getTables for a single table
                 connection.getMetaData().getTables("test", null, "tbl1", new String[] {"TABLE", "VIEW"});
                 result = tablesWithRemarks;
                 minTimes = 0;
@@ -388,9 +410,86 @@ public class JDBCMetadataTest {
         };
 
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-        Assertions.assertNotNull(table);
-        Assertions.assertEquals("jdbc table comment", table.getComment());
+        String comment = jdbcMetadata.getTableComment(new ConnectContext(), "test", "tbl1");
+        Assertions.assertEquals("jdbc table comment", comment);
+    }
+
+    @Test
+    public void testGetTableFromQuery() throws SQLException {
+        String passThroughQuery = "SELECT 1 AS id, payload ? 'k' AS name FROM docs";
+        String metadataQuery = "SELECT * FROM (" + passThroughQuery + ") starrocks_query WHERE 1 = 0";
+
+        new Expectations() {
+            {
+                connection.createStatement();
+                result = statement;
+                minTimes = 1;
+
+                statement.executeQuery(metadataQuery);
+                result = queryResultSet;
+                minTimes = 1;
+
+                queryResultSet.getMetaData();
+                result = queryResultSetMetaData;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnCount();
+                result = 2;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(1);
+                result = Types.INTEGER;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(1);
+                result = "INTEGER";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(1);
+                result = 4;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(1);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(1);
+                result = "id";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(1);
+                result = ResultSetMetaData.columnNoNulls;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(2);
+                result = Types.VARCHAR;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(2);
+                result = "VARCHAR";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(2);
+                result = 20;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(2);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(2);
+                result = "name";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(2);
+                result = ResultSetMetaData.columnNullable;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", passThroughQuery + ";");
+        Assertions.assertInstanceOf(JDBCTable.class, table);
+        JDBCTable jdbcTable = (JDBCTable) table;
+        Assertions.assertTrue(jdbcTable.isQueryTable());
+        Assertions.assertEquals("(" + passThroughQuery + ") starrocks_query", jdbcTable.getCatalogTableName());
+        Assertions.assertEquals(2, jdbcTable.getFullSchema().size());
+        Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
+        Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));
+        Assertions.assertEquals(Types.VARCHAR, jdbcTable.getOriginalJdbcColumnTypes().get("name"));
+        Assertions.assertEquals(IntegerType.INT, jdbcTable.getFullSchema().get(0).getType());
+        Assertions.assertEquals("name", jdbcTable.getFullSchema().get(1).getName());
+        Assertions.assertEquals(TypeFactory.createVarcharType(20), jdbcTable.getFullSchema().get(1).getType());
     }
 
     @Test
@@ -909,4 +1008,218 @@ public class JDBCMetadataTest {
             Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Row-count cache & getTableStatistics tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testGetTableStatisticsCacheDisabledReturnsDefault() {
+        // Row-count cache is always built regardless of jdbc_meta_cache_enable.
+        // Cold start (nothing loaded yet) must return default_statistics_output_row_count immediately.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "false");
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        Statistics stats = jdbcMetadata.getTableStatistics(
+                null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount());
+    }
+
+    @Test
+    public void testGetTableStatisticsColdStartReturnsDefault() throws Exception {
+        // On first call with cache enabled and no prior load, return default and trigger async load.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+        props.put("jdbc_meta_cache_expire_sec", "600");
+
+        // Row-count query returns a future value of 5_000_000, but the first planning
+        // call happens before the async load completes → must see the default.
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(5_000_000L));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Cold start: cache is empty → returns default_statistics_output_row_count.
+        Statistics stats = jdbcMetadata.getTableStatistics(
+                null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Cold start must return default without blocking");
+    }
+
+    @Test
+    public void testGetTableStatisticsReturnsCachedRowCount() throws Exception {
+        // After the async load completes, the second call should return the real row count.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+        props.put("jdbc_meta_cache_expire_sec", "600");
+
+        long expectedRowCount = 3_000_000L;
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(expectedRowCount));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger cold start (fires async load).
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        // Wait for the background load to finish (max 3 s).
+        long deadline = System.currentTimeMillis() + 3000;
+        Statistics stats = null;
+        while (System.currentTimeMillis() < deadline) {
+            stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                    java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+            if ((long) stats.getOutputRowCount() != Config.default_statistics_output_row_count) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+
+        Assertions.assertNotNull(stats);
+        Assertions.assertEquals(expectedRowCount, (long) stats.getOutputRowCount(),
+                "After async load completes, should return real row count");
+    }
+
+    @Test
+    public void testLoadRowCountFallsBackOnNegativeOne() throws Exception {
+        // Dialect returns -1 (unsupported) → loadRowCount must store default, not -1.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+        props.put("jdbc_meta_cache_expire_sec", "600");
+
+        // preparedStatement.executeQuery() returns an empty ResultSet (no row) → getTableRowCount returns -1.
+        MockResultSet emptyResult = new MockResultSet("empty");
+        emptyResult.addColumn("table_rows", Arrays.asList());
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = emptyResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger load and wait.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Thread.sleep(500);
+
+        Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        // Empty result set → getTableRowCount returns -1 → loadRowCount stores default.
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Row count should fall back to default when dialect returns -1 (unsupported)");
+    }
+
+    @Test
+    public void testBaseSchemaResolverGetTableRowCountReturnsNegativeOne() throws Exception {
+        // OracleSchemaResolver inherits the default JDBCSchemaResolver.getTableRowCount() which returns -1.
+        JDBCSchemaResolver resolver = new OracleSchemaResolver();
+        long count = resolver.getTableRowCount(connection, "anydb", "anytable");
+        Assertions.assertEquals(-1L, count);
+    }
+
+    @Test
+    public void testLoadRowCountExceptionFallsBackToDefault() throws Exception {
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = new SQLException("simulated connection error");
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger async load; the loader will throw and fall into the catch block.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Thread.sleep(500);
+
+        Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Exception in loadRowCount must fall back to default_statistics_output_row_count");
+    }
+
+    @Test
+    public void testRefreshTableInvalidatesRowCountCache() throws Exception {
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+
+        long expectedRowCount = 7_000_000L;
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(expectedRowCount));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger async load and wait for real row count to be cached.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        long deadline = System.currentTimeMillis() + 3000;
+        Statistics stats = null;
+        while (System.currentTimeMillis() < deadline) {
+            stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                    java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+            if ((long) stats.getOutputRowCount() != Config.default_statistics_output_row_count) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+        Assertions.assertNotNull(stats);
+        Assertions.assertEquals(expectedRowCount, (long) stats.getOutputRowCount(),
+                "Row count should be loaded from cache after async load completes");
+
+        // Invalidate via refreshTable — covers rowCountCache.synchronous().invalidate().
+        jdbcMetadata.refreshTable("test", jdbcTable, null, false);
+
+        // Cache entry evicted → next call is cold start → returns default.
+        Statistics afterRefresh = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) afterRefresh.getOutputRowCount(),
+                "After refreshTable, row-count cache entry must be invalidated");
+    }
+
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and manage bitmap indexes in StarRocks to accelerate equality and range queries on low-cardinality columns."
 keywords: ['suoyin']
 sidebar_position: 20
 ---

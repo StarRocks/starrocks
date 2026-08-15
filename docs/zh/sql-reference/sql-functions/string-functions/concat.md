@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将多个字符串连接成一个字符串。"
 ---
 
 # concat

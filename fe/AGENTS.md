@@ -252,6 +252,84 @@ import com.starrocks.catalog.OlapTable;  // Internal!
 - No business logic or FE internals
 - Can be used by any module
 
+### Database and Table Locks
+
+FE metadata access goes through `com.starrocks.common.util.concurrent.lock.Locker`. There are two lock-acquisition styles; **new code should default to the intensive path**.
+
+```java
+// AVOID as the default choice: full DB-scope lock. WRITE blocks every op
+// on every table in the DB; READ blocks every DDL in the DB and every
+// concurrent ALTER on any table. Still the right answer for a few cases
+// (see rubric below); the @Deprecated marker on Locker.java reflects
+// "prefer the intensive path unless you have a specific reason".
+locker.lockDatabase(dbId, LockType.READ /* or WRITE */);
+
+// PREFERRED for table-scoped work: IS/IX on the DB + READ/WRITE on
+// listed tables. Unrelated tables in the same DB proceed without
+// blocking.
+locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+locker.lockTablesWithIntensiveDbLock(dbId, List.of(tblId1, tblId2), LockType.WRITE);
+
+// Or via try-with-resources:
+try (AutoCloseableLock ignore =
+        new AutoCloseableLock(new Locker(), dbId, List.of(tableId), LockType.READ)) {
+    ...
+}
+
+// THIRD VARIANT: plain IS on the DB. Use when you only need the list of
+// tables in the DB to be stable (IS blocks CREATE/DROP since they take
+// DB WRITE) but want to allow concurrent ALTER on other tables (IS does
+// not block IX). Typically paired with a per-table intensive READ for
+// each table's internal state - see TabletScheduler.java:2114 for the
+// canonical split-design example.
+locker.lockDatabase(dbId, LockType.INTENTION_SHARED);
+try {
+    List<Table> snapshot = db.getTables();
+    // ... then per-table:
+    //   locker.lockTableWithIntensiveDbLock(dbId, t.getId(), LockType.READ);
+} finally {
+    locker.unLockDatabase(dbId, LockType.INTENTION_SHARED);
+}
+```
+
+**Decision rubric:**
+
+| Critical section does... | Use |
+|--------------------------|-----|
+| Mutates `Database.idToTable` / `nameToTable` / `fullQualifiedName` / `exist` / quotas | Plain `lockDatabase(WRITE)` |
+| Iterates `db.getTables()` AND reads per-table internal state (partitions, schema, replicas) over an unbounded table set | Plain `lockDatabase(READ)` - blocks both DB-WRITE (CREATE/DROP TABLE) and IX (concurrent ALTER on individual tables) for the full walk |
+| Reads / mutates only specific known tables | Intensive path (`lockTable[s]WithIntensiveDbLock`) |
+| Snapshot a bounded table list then per-table work | Outer `lockDatabase(IS)` for the list snapshot (IS still blocks CREATE/DROP since they take DB WRITE) + inner per-table intensive READ for each table's state (see `TabletScheduler.java:2114` for the model) |
+
+Key conflict-matrix facts (from `LockType.java`): **IS blocks DB-WRITE** (so CREATE/DROP TABLE wait), **but IS does NOT block IX** (so concurrent ALTER on other tables can proceed). Plain READ blocks both. The choice between IS and READ for iteration is about whether you also need to freeze per-table internal state, not about whether create/drop is prevented.
+
+**Anti-pattern**: lock acquisition inside `try {}`. If `lockX()` throws, the `finally` tries to release a never-acquired lock, which itself throws (e.g. `"lock not held"`); that secondary exception then suppresses the original cause, making the failure hard to diagnose. Always acquire **before** the `try`:
+
+```java
+// BAD
+Locker locker = new Locker();
+try {
+    locker.lockDatabase(dbId, LockType.READ);
+    ...
+} finally { locker.unLockDatabase(dbId, LockType.READ); }
+
+// GOOD
+Locker locker = new Locker();
+locker.lockDatabase(dbId, LockType.READ);
+try { ... } finally { locker.unLockDatabase(dbId, LockType.READ); }
+```
+
+`try (AutoCloseableLock ...)` is safe by design - the resource is never assigned if construction throws.
+
+**When evaluating an existing WRITE site**, trace **where the mutation actually lands**. A site that looked like NECESSARY (WRITE) on first read (`StarMgrMetaSyncer.syncTableColocationInfo`) turned out to only need IS+table-READ because the real mutation went through `ColocateTableIndex`'s own writeLock. "The comment says we need WRITE" is not the rubric.
+
+**References:**
+
+- `fe/fe-core/.../common/util/concurrent/lock/` - framework + `LockType` conflict matrix.
+- System view `fe_locks` (`docs/en/sql-reference/sys/fe_locks.md`) - inspect live holders.
+- Metric `HISTO_SLOW_LOCK_WAIT_TIME_MS` - track contention.
+- Test helpers in `fe/fe-core/src/test/java/com/starrocks/common/lock/` (`LockTestUtils`, `LockTask`, `LockThread`, `LockResult`) - use these when writing concurrency tests for a relaxation.
+
 ## Common Patterns
 
 ### Status and Error Handling
@@ -472,6 +550,7 @@ Example: `[Feature] Add support for PIVOT clause in SQL`
 - [ ] Added/updated unit tests in `fe/fe-core/src/test/`
 - [ ] No new checkstyle violations
 - [ ] AST nodes remain immutable (no setters added)
+- [ ] **If acquiring a metadata lock**: justified against the rubric in "Database and Table Locks"; default to the intensive path; no new `lockDatabase` calls without explicit reason
 - [ ] **If config changed**: Updated `docs/en/administration/management/FE_configuration.md`
 - [ ] **If metrics changed**: Updated `docs/en/administration/management/monitoring/metrics.md`
 

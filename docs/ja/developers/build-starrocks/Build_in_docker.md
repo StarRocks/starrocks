@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Docker 開発イメージを使用して StarRocks ソースコードをコンパイルする方法。"
 ---
 
 # Docker を使用して StarRocks をコンパイルする
@@ -8,37 +9,43 @@ displayed_sidebar: docs
 
 ## 概要
 
-StarRocks は、Ubuntu 22.04 と CentOS 7.9 の両方に対応した開発環境イメージを提供しています。このイメージを使用すると、Docker コンテナを起動して、その中で StarRocks をコンパイルできます。
+StarRocks は、Ubuntu（22.04 および 24.04）、CentOS 7.9、および Rocky Linux 9 に対応した開発環境イメージを提供しています。このイメージを使用すると、Docker コンテナを起動して、その中で StarRocks をコンパイルできます。
+
+:::note
+
+v4.2 以降、開発環境は以下のように変更されます。
+
+- CentOS 7 は 2024 年 6 月 30 日に End-of-Life を迎えたため、そのビルドディストリビューションは廃止され、Rocky Linux 9 に置き換えられます。CentOS 7 イメージは v4.1 以前のバージョンでのみ利用可能です。
+- Ubuntu 開発環境は Ubuntu 22.04（v4.1 以前）から Ubuntu 24.04（v4.2 以降）にアップグレードされます。イメージ名 `starrocks/dev-env-ubuntu` は変更されません。
+
+:::
 
 ### StarRocks のバージョンと DEV ENV イメージ
 
 StarRocks の異なるブランチは、[StarRocks Docker Hub](https://hub.docker.com/u/starrocks) で提供されている異なる開発環境イメージに対応しています。
 
-- Ubuntu 22.04 の場合:
+- Ubuntu の場合（v4.1 以前は 22.04、v4.2 以降は 24.04）:
 
   | **ブランチ名** | **イメージ名**                        |
   | -------------- | ------------------------------------- |
   | main           | starrocks/dev-env-ubuntu:latest       |
+  | branch-4.1     | starrocks/dev-env-ubuntu:4.1-latest   |
+  | branch-4.0     | starrocks/dev-env-ubuntu:4.0-latest   |
   | branch-3.5     | starrocks/dev-env-ubuntu:3.5-latest   |
-  | branch-3.4     | starrocks/dev-env-ubuntu:3.4-latest   |
-  | branch-3.3     | starrocks/dev-env-ubuntu:3.3-latest   |
-  | branch-3.2     | starrocks/dev-env-ubuntu:3.2-latest   |
-  | branch-3.1     | starrocks/dev-env-ubuntu:3.1-latest   |
-  | branch-3.0     | starrocks/dev-env-ubuntu:3.0-latest   |
-  | branch-2.5     | starrocks/dev-env-ubuntu:2.5-latest   |
 
-- CentOS 7.9 の場合:
+- CentOS 7.9 の場合（v4.1 以前。v4.2 以降は廃止）:
 
   | **ブランチ名** | **イメージ名**                         |
   | -------------- | -------------------------------------- |
-  | main           | starrocks/dev-env-centos7:latest       |
+  | branch-4.1     | starrocks/dev-env-centos7:4.1-latest   |
+  | branch-4.0     | starrocks/dev-env-centos7:4.0-latest   |
   | branch-3.5     | starrocks/dev-env-centos7:3.5-latest   |
-  | branch-3.4     | starrocks/dev-env-centos7:3.4-latest   |
-  | branch-3.3     | starrocks/dev-env-centos7:3.3-latest   |
-  | branch-3.2     | starrocks/dev-env-centos7:3.2-latest   |
-  | branch-3.1     | starrocks/dev-env-centos7:3.1-latest   |
-  | branch-3.0     | starrocks/dev-env-centos7:3.0-latest   |
-  | branch-2.5     | starrocks/dev-env-centos7:2.5-latest   |
+
+- Rocky Linux 9 の場合（v4.2 以降）:
+
+  | **ブランチ名** | **イメージ名**                  |
+  | -------------- | ------------------------------- |
+  | main           | starrocks/dev-env-rocky9:latest |
 
 ## 前提条件
 
@@ -50,7 +57,7 @@ StarRocks をコンパイルする前に、以下の要件を満たしている�
 
 - **ソフトウェア**
 
-  - マシンは Ubuntu 22.04 または CentOS 7.9 で動作している必要があります。
+  - マシンは Ubuntu 22.04 または 24.04、CentOS 7.9、または Rocky Linux 9 で動作している必要があります。
   - Docker がマシンにインストールされており、バージョンは少なくとも v20.10.10 である必要があります。
 
 ## ステップ 1: イメージをダウンロードする

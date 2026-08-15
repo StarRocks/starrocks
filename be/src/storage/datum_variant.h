@@ -19,7 +19,7 @@
 #include "column/copied_datum.h"
 #include "column/datum_convert.h"
 #include "fmt/format.h"
-#include "storage/type_info_allocator_adapter.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/type_descriptor.h"
 

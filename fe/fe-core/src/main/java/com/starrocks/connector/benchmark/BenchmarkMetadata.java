@@ -76,7 +76,7 @@ public class BenchmarkMetadata implements ConnectorMetadata {
         if (columns == null) {
             return null;
         }
-        return new BenchmarkTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, normalizedDbName,
+        return new BenchmarkTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName, normalizedDbName,
                 normalizedTableName, columns, config);
     }
 }

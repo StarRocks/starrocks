@@ -450,9 +450,9 @@ public class AlterMVJobExecutorEditLogTest {
 
     @Test
     public void testVisitModifyTablePropertiesClauseMvRefreshModeNormalCase() throws Exception {
-        // Test PROPERTIES_MV_REFRESH_MODE - valid values: AUTO, PCT, FULL, INCREMENTAL
-        // Use FULL as it doesn't have additional constraints like AUTO/INCREMENTAL
-        testPropertyNormalCase(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "FULL");
+        // Test PROPERTIES_MV_REFRESH_MODE - valid values: AUTO, PCT, INCREMENTAL
+        // Use PCT as it doesn't have additional constraints like AUTO/INCREMENTAL
+        testPropertyNormalCase(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "PCT");
     }
 
     @Test

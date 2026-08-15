@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "基于远端存储系统创建用于存储数据快照的仓库以备份和恢复数据。"
 keywords: ['beifen']
 ---
 

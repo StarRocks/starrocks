@@ -42,6 +42,13 @@ struct VariantSegment {
 
     const std::string& get_key() const { return key; }
     int get_index() const { return index; }
+
+    // Two segments are equal when they have the same kind and the same key / index.
+    bool operator==(const VariantSegment& rhs) const {
+        if (kind != rhs.kind) return false;
+        return is_object() ? key == rhs.key : index == rhs.index;
+    }
+    bool operator!=(const VariantSegment& rhs) const { return !(*this == rhs); }
 };
 
 // A parsed variant path: a sequence of VariantSegments.
@@ -85,6 +92,19 @@ struct VariantPath {
     //
     // The returned string can always be re-parsed by VariantPathParser::parse_shredded_path().
     std::optional<std::string> to_shredded_path() const;
+
+    // Returns true if every segment of *this matches the corresponding leading segment
+    // of `other` AND `other` has at least one additional segment.
+    // Example: ["a","b"].is_strict_prefix_of(["a","b","c"]) == true
+    //          ["a","b"].is_strict_prefix_of(["a","b"])      == false
+    bool is_strict_prefix_of(const VariantPath& other) const;
+
+    // Returns true if *this is a strict prefix of `other`, or if the two paths are equal.
+    // Used to decide whether a shredded-field node lies on the path to (or at) a requested leaf.
+    // Example: ["a","b"].is_ancestor_or_same(["a","b","c"]) == true  (strict prefix)
+    //          ["a","b"].is_ancestor_or_same(["a","b"])      == true  (equal)
+    //          ["a","b"].is_ancestor_or_same(["a"])          == false
+    bool is_ancestor_or_same(const VariantPath& other) const;
 
     // Seek into a variant using the parsed segments, starting at seg_offset.
     // Returns a non-owning row ref. Call to_owned() when retained storage is required.

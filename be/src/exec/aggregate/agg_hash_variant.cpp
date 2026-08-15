@@ -342,11 +342,20 @@ size_t AggHashMapVariant::size() const {
 }
 
 bool AggHashMapVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    // TODO: think about two-level hashmap
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash maps (SmallFixedSizeHashMap for TINYINT/BOOL/SMALLINT
+    // and the low-card-dict uint8 variant) have a hard-coded full keyspace
+    // and never rehash, so streaming/spill paths should only fall back when
+    // the array is actually full -- not at the 87.5% growth-heuristic
+    // threshold used by phmap.
+    return visit([increasement](const auto& hash_map_with_key) {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        const size_t size = hash_map_with_key->hash_map.size() + increasement;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            return size > HashMap::hash_table_size;
+        }
+        const size_t capacity = hash_map_with_key->hash_map.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -358,9 +367,18 @@ size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
-        return sizeof(typename decltype(hash_map_with_key->hash_map)::key_type) *
-                       hash_map_with_key->hash_map.capacity() +
-               pool->total_allocated_bytes();
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        size_t hash_map_bytes;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            // SmallFixedSizeHashMap pre-allocates a dense pointer array; the
+            // SMALLINT path is ~512 KiB and must be reported as such, not as
+            // sizeof(KeyType) * capacity.
+            hash_map_bytes = HashMap::bucket_byte_size();
+        } else {
+            hash_map_bytes = sizeof(typename HashMap::key_type) * hash_map_with_key->hash_map.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_map_bytes + pool_bytes;
     });
 }
 
@@ -432,10 +450,17 @@ size_t AggHashSetVariant::size() const {
 }
 
 bool AggHashSetVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash sets (SmallFixedSizeHashSet for TINYINT/BOOL/SMALLINT)
+    // never rehash; only fall back when the array is actually full.
+    return visit([increasement](const auto& hash_set_with_key) {
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        const size_t size = hash_set_with_key->hash_set.size() + increasement;
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
+            return size > HashSet::hash_table_size;
+        }
+        const size_t capacity = hash_set_with_key->hash_set.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -447,9 +472,15 @@ size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
-        return sizeof(typename decltype(hash_set_with_key->hash_set)::key_type) *
-                       hash_set_with_key->hash_set.capacity() +
-               pool->total_allocated_bytes();
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        size_t hash_set_bytes;
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
+            hash_set_bytes = HashSet::bucket_byte_size();
+        } else {
+            hash_set_bytes = sizeof(typename HashSet::key_type) * hash_set_with_key->hash_set.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_set_bytes + pool_bytes;
     });
 }
 

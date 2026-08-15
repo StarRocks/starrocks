@@ -56,7 +56,14 @@ public class InvertedIndexParams {
         /**
          * Gram num for the dictionary of builtin inverted index.
          */
-        DICT_GRAM_NUM("-1");
+        DICT_GRAM_NUM("-1"),
+
+        /**
+         * Whether to lowercase tokens.
+         * Only effective for imp_lib=builtin & parser=english.
+         */
+        LOWER_CASE("true");
+
 
         private final String defaultValue;
         private boolean needDefault = false;

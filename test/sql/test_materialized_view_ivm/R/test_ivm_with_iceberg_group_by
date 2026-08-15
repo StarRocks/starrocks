@@ -1,0 +1,97 @@
+-- name: test_ivm_with_iceberg_group_by
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table bug_base (
+  k int,
+  v bigint
+);
+-- result:
+-- !result
+insert into bug_base values (1, 10), (2, 20), (3, 30), (1, 11);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.bug_base;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+-- result:
+4
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k, v;
+-- result:
+1	10
+1	11
+2	20
+3	30
+-- !result
+SELECT k, count(*) FROM test_mv1 GROUP BY k ORDER BY k;
+-- result:
+1	2
+2	1
+3	1
+-- !result
+SELECT k FROM test_mv1 GROUP BY k ORDER BY k;
+-- result:
+1
+2
+3
+-- !result
+SELECT DISTINCT k FROM test_mv1 ORDER BY k;
+-- result:
+1
+2
+3
+-- !result
+SELECT k, sum(v) FROM test_mv1 GROUP BY k HAVING sum(v) >= 20 ORDER BY k;
+-- result:
+1	21
+2	20
+3	30
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.bug_base force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

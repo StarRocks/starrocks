@@ -24,6 +24,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -102,6 +103,12 @@ public class CachedPartitionTraits extends DefaultTraits {
         });
         stats.incr(cacheKey);
         return Optional.ofNullable(result).map(x -> (T) x).orElse(defaultSupplier.get());
+    }
+
+    @Override
+    public void setPinnedVersionRange(TvrVersionRange range) {
+        super.setPinnedVersionRange(range);
+        delegate.setPinnedVersionRange(range);
     }
 
     @Override

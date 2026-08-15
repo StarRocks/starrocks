@@ -18,9 +18,9 @@
 
 #include "column/schema.h"
 #include "common/status.h"
-#include "storage/edit_version.h"
 #include "storage/persistent_index.h"
 #include "storage/rowset/segment.h"
+#include "storage_primitive/edit_version.h"
 
 namespace starrocks {
 

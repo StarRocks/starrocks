@@ -82,7 +82,7 @@ starrocks_setup_darwin_build_env() {
     local bundled_java_home=""
 
     export STARROCKS_ENV_QUIET=1
-    . "${STARROCKS_HOME}/build-mac/env_macos.sh"
+    . "${STARROCKS_HOME}/build-support/darwin_build_env.sh"
 
     unset STARROCKS_GCC_HOME
 
@@ -158,11 +158,16 @@ starrocks_validate_darwin_thirdparty() {
         fi
     done
 
+    # libgrpc.a / libgrpc++.a: be/cmake_modules/ThirdParty.cmake does
+    # find_package(gRPC CONFIG REQUIRED) against ${tp_installed}/lib/cmake/grpc.
+    # Failing here gives a clear rebuild-thirdparty error up front.
     local required_libs=(
         "libprotobuf.a"
         "librocksdb.a"
         "libglog.a"
         "libbrpc.a"
+        "libgrpc.a"
+        "libgrpc++.a"
     )
     local required_lib=""
     for required_lib in "${required_libs[@]}"; do
@@ -172,17 +177,20 @@ starrocks_validate_darwin_thirdparty() {
         fi
     done
 
+    # gRPC is built from source as a static archive (libgrpc.a / libgrpc++.a)
+    # and consumed via ${tp_installed}/lib/cmake/grpc/gRPCConfig.cmake, matching
+    # the Linux flow. Only list dylibs that Homebrew still provides.
     local required_darwin_dylibs=(
-        "libgrpc.dylib"
-        "libgrpc++.dylib"
         "libkrb5support.dylib"
         "libkrb5.dylib"
         "libcom_err.dylib"
         "libk5crypto.dylib"
         "libgssapi_krb5.dylib"
         "libsasl2.dylib"
-        "libxml2.dylib"
     )
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" != "1" ]]; then
+        required_darwin_dylibs+=("libxml2.dylib")
+    fi
     local required_darwin_dylib=""
     for required_darwin_dylib in "${required_darwin_dylibs[@]}"; do
         if [[ ! -e "${tp_installed}/lib/${required_darwin_dylib}" &&
@@ -230,10 +238,26 @@ starrocks_validate_darwin_thirdparty() {
 
 starrocks_resolve_getopt_bin() {
     local gnu_getopt_prefix=""
+    local getopt_candidate=""
+    local getopt_test_status=0
 
     if ! starrocks_is_darwin; then
         echo "getopt"
         return 0
+    fi
+
+    getopt_candidate="$(command -v getopt 2>/dev/null || true)"
+    if [[ -n "${getopt_candidate}" ]]; then
+        # util-linux/enhanced getopt returns 4 for -T. BSD getopt does not.
+        if "${getopt_candidate}" -T >/dev/null 2>&1; then
+            getopt_test_status=0
+        else
+            getopt_test_status=$?
+        fi
+        if [[ "${getopt_test_status}" -eq 4 ]]; then
+            echo "${getopt_candidate}"
+            return 0
+        fi
     fi
 
     if command -v brew >/dev/null 2>&1; then

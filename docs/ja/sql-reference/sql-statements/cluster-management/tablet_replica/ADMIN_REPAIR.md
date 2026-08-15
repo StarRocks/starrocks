@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN REPAIR は、指定されたテーブルまたはパーティションの修復を試行します。"
 ---
 
 # ADMIN REPAIR

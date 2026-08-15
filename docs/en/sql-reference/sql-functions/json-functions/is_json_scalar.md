@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns whether a JSON value is a scalar (not an object or array)."
 ---
 
 # `is_json_scalar`

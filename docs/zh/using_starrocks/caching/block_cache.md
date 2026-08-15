@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 存算分离集群中配置和使用 Data Cache，将远程存储的数据块缓存到本地磁盘以加速查询。"
 sidebar_position: 20
 toc_max_heading_level: 2
 keywords: ['huan cun']
@@ -28,11 +29,11 @@ import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 ### 缓存路径
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path)（在存算分离集群中，此项用于指定用于缓存数据的根路径。）
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path)（在存算分离集群中，此项用于指定用于缓存数据的根路径。）
 
 ### 缓存使用磁盘容量
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 
 ## 查看 Data Cache 状态
 
@@ -52,6 +53,15 @@ import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
   SHOW COMPUTE NODES;
   ```
 
+## 检查查询是否命中 Data Cache
+
+您可以通过分析 Query Profile 中的以下指标来检查查询是否命中 Data Cache：
+
+- `CompressedBytesReadRemote`：系统从远程存储系统读取的数据大小。
+- `IOTimeRemote`：系统从远程存储系统读取数据所花费的 I/O 时间。
+
+如果这些值不为零，则表明该查询未命中 Data Cache，系统必须从远程存储系统读取数据。
+
 ## 监控 Data Cache
 
 StarRocks 提供了多种监控 Data Cache 的指标。
@@ -63,7 +73,7 @@ StarRocks 提供了多种监控 Data Cache 的指标。
 - [虚拟机部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Kubernetes 部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
 
-有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/Monitor_and_Alert.md)。
+有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/monitoring.md)。
 
 ### 重要指标
 

@@ -101,6 +101,10 @@ uint64_t HashUtil::xx_hash3_64(const void* key, int32_t len, uint64_t seed) {
     return XXH3_64bits_withSeed(key, len, seed);
 }
 
+uint32_t HashUtil::xx_hash32(const void* key, int32_t len, uint32_t seed) {
+    return XXH32(key, len, seed);
+}
+
 uint64_t HashUtil::xx_hash64(const void* key, int32_t len, uint64_t seed) {
     return XXH64(key, len, seed);
 }

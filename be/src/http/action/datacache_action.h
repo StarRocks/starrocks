@@ -23,7 +23,7 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
@@ -38,6 +38,8 @@ public:
     ~DataCacheAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
 private:
     bool _check_request(HttpRequest* req);

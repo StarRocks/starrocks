@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列を2つの区切り文字でキーと値のペアに分割し、マップを返します。"
 ---
 
 # str_to_map

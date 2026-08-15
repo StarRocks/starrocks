@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "table_constraintsはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # table_constraints

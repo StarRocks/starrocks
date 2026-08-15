@@ -97,6 +97,13 @@ message TabletSchemaPB {
     repeated TabletIndexPB table_indices = 14;
     optional int32 compression_level = 15 [default=-1];
     optional PrimaryKeyEncodingTypePB primary_key_encoding_type = 16;
+    // Indexes that were removed from `table_indices` but whose payload may
+    // still be embedded in existing segment footers (e.g. a legacy NGRAMBF
+    // written before the lake IDG fast path existed). Readers consult this
+    // list to avoid reinterpreting the stale footer payload after a
+    // metadata-only DROP INDEX. Compaction that rewrites the segment
+    // eventually obsoletes the entry.
+    repeated TabletIndexPB dropped_table_indices = 17;
     optional int64 id = 50;
 }
 

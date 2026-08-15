@@ -1,0 +1,2 @@
+# phmap (third-party): keep only naming checks.
+Checks: '-*,readability-identifier-naming'

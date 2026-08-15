@@ -80,37 +80,31 @@ public class FeNameFormat {
                 "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
     }
 
+    // Shared validation for identifier names: rejects empty or characters not matching the format regex.
+    // The format regex also encodes the length bound, so callers do not pass a separate length.
+    // wrongNameArgs are the message args for wrongNameError.
+    private static void checkName(String name, String regex,
+                                  ErrorCode wrongNameError, Object... wrongNameArgs) {
+        if (Strings.isNullOrEmpty(name) || !name.matches(regex)) {
+            ErrorReport.reportSemanticException(wrongNameError, wrongNameArgs);
+        }
+    }
+
     // The length of db name is 256.
     public static void checkDbName(String dbName) {
-        if (Strings.isNullOrEmpty(dbName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
-
-        if (!dbName.matches(DB_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
+        checkName(dbName, DB_NAME_REGEX, ErrorCode.ERR_WRONG_DB_NAME, dbName);
     }
 
     public static void checkNamespace(String dbName) {
-        if (Strings.isNullOrEmpty(dbName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
-
-        if (!dbName.matches(ICEBERG_NAMESPACE_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
+        checkName(dbName, ICEBERG_NAMESPACE_REGEX, ErrorCode.ERR_WRONG_DB_NAME, dbName);
     }
 
     public static void checkTableName(String tableName) {
-        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(TABLE_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        checkName(tableName, TABLE_NAME_REGEX, ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
     }
 
     public static void checkPartitionName(String partitionName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(partitionName) || !partitionName.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
-        }
+        checkName(partitionName, COMMON_NAME_REGEX, ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
 
         if (partitionName.startsWith(FORBIDDEN_PARTITION_NAME)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
@@ -122,19 +116,9 @@ public class FeNameFormat {
     }
 
     public static void checkColumnName(String columnName, boolean isPartitionColumn) {
-        if (Strings.isNullOrEmpty(columnName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        }
-        String pattern;
-        if (RunMode.isSharedNothingMode()) {
-            pattern = SHARED_NOTHING_COLUMN_NAME_REGEX;
-        } else {
-            pattern = SHARED_DATE_COLUMN_NAME_REGEX;
-        }
-
-        if (!columnName.matches(pattern)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        }
+        String pattern = RunMode.isSharedNothingMode()
+                ? SHARED_NOTHING_COLUMN_NAME_REGEX : SHARED_DATE_COLUMN_NAME_REGEX;
+        checkName(columnName, pattern, ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
 
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
@@ -193,8 +177,6 @@ public class FeNameFormat {
     }
 
     public static void checkCommonName(String type, String name) {
-        if (Strings.isNullOrEmpty(name) || !name.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);
-        }
+        checkName(name, COMMON_NAME_REGEX, ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);
     }
 }

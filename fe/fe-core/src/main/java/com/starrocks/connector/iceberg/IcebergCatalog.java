@@ -19,7 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -278,17 +278,6 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new HashMap<>();
     }
 
-    /**
-     * Check if this catalog uses vended credentials for table access.
-     * When vended credentials are used, caching tables may cause issues
-     * because credentials expire before the cache TTL.
-     *
-     * @return true if vended credentials are enabled
-     */
-    default boolean isVendedCredentialsEnabled() {
-        return false;
-    }
-
     default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(context, ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
@@ -358,6 +347,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                                     UNPARTITIONED_EQUALITY_DELETE_FILE_COUNT_COLUMN_INDEX,
                                     EMPTY_PARTITION_NAME);
                             partition = new Partition(lastUpdated, version);
+                            partition.setRecordCount(readPartitionLong(row, UNPARTITIONED_RECORD_COUNT_COLUMN_INDEX));
+                            partition.setPositionDeleteRecordCount(
+                                    readPartitionLong(row, UNPARTITIONED_POSITION_DELETE_RECORD_COUNT_COLUMN_INDEX));
+                            partition.setEqualityDeleteRecordCount(
+                                    readPartitionLong(row, UNPARTITIONED_EQUALITY_DELETE_RECORD_COUNT_COLUMN_INDEX));
                             break;
                         }
                     }
@@ -416,6 +410,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                                     PARTITION_EQUALITY_DELETE_FILE_COUNT_COLUMN_INDEX,
                                     partitionName);
                             Partition partition = new Partition(lastUpdated, version, specId);
+                            partition.setRecordCount(readPartitionLong(row, PARTITION_RECORD_COUNT_COLUMN_INDEX));
+                            partition.setPositionDeleteRecordCount(
+                                    readPartitionLong(row, PARTITION_POSITION_DELETE_RECORD_COUNT_COLUMN_INDEX));
+                            partition.setEqualityDeleteRecordCount(
+                                    readPartitionLong(row, PARTITION_EQUALITY_DELETE_RECORD_COUNT_COLUMN_INDEX));
                             partitionMap.put(partitionName, partition);
                         }
                     }
@@ -425,6 +424,20 @@ public interface IcebergCatalog extends MemoryTrackable {
             }
         }
         return partitionMap;
+    }
+
+    // Reads a long column (e.g. record_count, *_delete_record_count) from a PARTITIONS metadata-table row.
+    // Returns -1 (unknown) on any absence/error, so callers degrade gracefully rather than failing.
+    private long readPartitionLong(StructLike row, int columnIndex) {
+        if (row == null) {
+            return -1;
+        }
+        try {
+            Long recordCount = row.get(columnIndex, Long.class);
+            return recordCount == null ? -1 : recordCount;
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private long getPartitionLastUpdatedTime(IcebergTable icebergTable, StructLike row,
@@ -532,7 +545,7 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     default List<String> listPartitionNames(IcebergTable icebergTable,
-                                            ConnectorMetadatRequestContext requestContext,
+                                            ConnectorMetadataRequestContext requestContext,
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 
@@ -545,6 +558,9 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
     }
 
+    /**
+     * Get partition info by names using the current (live) snapshot.
+     */
     default List<Partition> getPartitionsByNames(IcebergTable icebergTable,
                                                  ExecutorService executorService,
                                                  List<String> partitionNames) {
@@ -553,7 +569,18 @@ public interface IcebergCatalog extends MemoryTrackable {
         if (nativeTable.currentSnapshot() != null) {
             snapshotId = nativeTable.currentSnapshot().snapshotId();
         }
+        return getPartitionsByNames(icebergTable, snapshotId, executorService, partitionNames);
+    }
 
+    /**
+     * Get partition info by names at a specific snapshot.
+     * @param snapshotId the Iceberg snapshot ID to read partitions from, or -1 for current snapshot
+     */
+    default List<Partition> getPartitionsByNames(IcebergTable icebergTable,
+                                                 long snapshotId,
+                                                 ExecutorService executorService,
+                                                 List<String> partitionNames) {
+        Table nativeTable = icebergTable.getNativeTable();
         // Call public method so subclasses can override and optimize this method.
         Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
         if (nativeTable.spec().isUnpartitioned()) {

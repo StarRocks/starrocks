@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <random>
 #include <thread>
@@ -24,13 +25,16 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptors.h"
@@ -39,9 +43,9 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -86,7 +90,8 @@ protected:
 
     void do_block_merger(bool use_profile);
 
-    constexpr static const char* const kTestDirectory = "test_lake_async_delta_writer";
+    // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+    inline static const std::string kTestDirectory = "test_lake_async_delta_writer_" + std::to_string(getpid());
 
     int64_t _partition_id;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -205,14 +210,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
-    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
 
@@ -225,7 +230,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(2 * kChunkSize, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {
@@ -407,14 +412,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(kNumThreads * kChunksPerThread * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
-    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
 
@@ -427,7 +432,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(opts.chunk_size, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {
@@ -677,7 +682,7 @@ void LakeAsyncDeltaWriterTest::do_block_merger(bool use_profile) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -723,7 +728,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -781,7 +786,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_race_with_finish_submit_merge_task) 
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multiple times to generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -847,7 +852,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch flush_latch(10);
     // flush multiple times to generate spill blocks
     int64_t old_val = config::write_buffer_size;

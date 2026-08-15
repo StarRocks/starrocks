@@ -1,0 +1,70 @@
+-- name: test_spill_join_with_empty_partition
+CREATE TABLE `hj_build` (
+  `k` bigint(20) NULL COMMENT "",
+  `c01` bigint(20) NULL COMMENT "",
+  `c02` bigint(20) NULL COMMENT "",
+  `c03` bigint(20) NULL COMMENT "",
+  `c04` bigint(20) NULL COMMENT "",
+  `c05` bigint(20) NULL COMMENT "",
+  `c06` bigint(20) NULL COMMENT "",
+  `c07` bigint(20) NULL COMMENT "",
+  `c08` bigint(20) NULL COMMENT "",
+  `c09` bigint(20) NULL COMMENT "",
+  `c10` bigint(20) NULL COMMENT "",
+  `c11` bigint(20) NULL COMMENT "",
+  `c12` bigint(20) NULL COMMENT "",
+  `c13` bigint(20) NULL COMMENT "",
+  `c14` bigint(20) NULL COMMENT "",
+  `c15` bigint(20) NULL COMMENT "",
+  `c16` bigint(20) NULL COMMENT "",
+  `c17` bigint(20) NULL COMMENT "",
+  `c18` bigint(20) NULL COMMENT "",
+  `c19` bigint(20) NULL COMMENT "",
+  `c20` bigint(20) NULL COMMENT "",
+  `c21` bigint(20) NULL COMMENT "",
+  `c22` bigint(20) NULL COMMENT "",
+  `c23` bigint(20) NULL COMMENT "",
+  `c24` bigint(20) NULL COMMENT "",
+  `c25` bigint(20) NULL COMMENT "",
+  `c26` bigint(20) NULL COMMENT "",
+  `c27` bigint(20) NULL COMMENT "",
+  `c28` bigint(20) NULL COMMENT "",
+  `c29` bigint(20) NULL COMMENT "",
+  `c30` bigint(20) NULL COMMENT "",
+  `c31` bigint(20) NULL COMMENT "",
+  `c32` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+
+CREATE TABLE `hj_probe` (
+  `k` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+insert into hj_probe values (1);
+insert into hj_build values ( 1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1 );
+
+set enable_spill = true;
+set spillable_operator_mask = 1;
+set spill_revocable_max_bytes = 1;
+set disable_join_reorder = true;
+set pipeline_dop = 1;
+
+
+
+select b.c01,b.c02,b.c03,b.c04,b.c05,b.c06,b.c07,b.c08, b.c09,b.c10,b.c11,b.c12,b.c13,b.c14,b.c15,b.c16, b.c17,b.c18,b.c19,b.c20,b.c21,b.c22,b.c23,b.c24, b.c25,b.c26,b.c27,b.c28,b.c29,b.c30,b.c31,b.c32 from hj_probe p right join hj_build b on p.k = b.k;

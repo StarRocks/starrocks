@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "hll_union_agg 将多个 HLL 类型数据合并成一个 HLL，基于 HyperLogLog 算法实现。"
 ---
 
 # hll_union_agg

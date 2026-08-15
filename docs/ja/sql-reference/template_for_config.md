@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE/BE パラメーターと変数をコード内で追加・変更・削除する際のドキュメント記述テンプレート。"
 unlisted: True
 ---
 

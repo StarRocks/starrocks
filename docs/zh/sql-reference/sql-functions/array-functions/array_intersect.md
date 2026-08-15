@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回多个同类型数组的交集。"
 ---
 
 # array_intersect

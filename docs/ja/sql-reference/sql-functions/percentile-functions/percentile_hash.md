@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DOUBLE値をPERCENTILE値として構築します。"
 ---
 
 # percentile_hash

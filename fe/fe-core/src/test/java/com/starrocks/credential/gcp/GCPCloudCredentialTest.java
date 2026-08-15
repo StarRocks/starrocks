@@ -56,11 +56,35 @@ public class GCPCloudCredentialTest {
         Configuration conf = new Configuration();
         credential.applyToConfiguration(conf);
 
-        assertNull(conf.get("fs.gs.auth.type"));
+        assertEquals(GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER,
+                conf.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
+        assertEquals(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL,
+                conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
+        assertEquals(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL,
+                conf.get(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY));
+        assertEquals("true", conf.get(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY));
         assertNull(conf.get("fs.gs.auth.service.account.email"));
         assertEquals("ya29.access-token",
                 conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY));
         assertTrue(credential.validate());
+    }
+
+    @Test
+    public void testAccessTokenDropsImpersonation() {
+        GCPCloudCredential credential = new GCPCloudCredential(
+                "", false,
+                "", "", "",
+                "impersonated@project.iam.gserviceaccount.com",
+                "ya29.access-token", "2026-12-31T00:00:00Z");
+
+        Configuration conf = new Configuration();
+        credential.applyToConfiguration(conf);
+
+        assertNull(conf.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY));
+        assertEquals(GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER,
+                conf.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
+        assertEquals("ya29.access-token",
+                conf.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY));
     }
 
     @Test

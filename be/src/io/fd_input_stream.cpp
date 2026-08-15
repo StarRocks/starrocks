@@ -21,12 +21,12 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
-#include "io/core/io_error.h"
-#include "io_profiler.h"
+#include "io/io_error.h"
+#include "io/io_profiler.h"
 
 #ifdef USE_STAROS
-#include "fslib/metric_key.h"
-#include "metrics/metrics.h"
+#include <fslib/metric_key.h>
+#include <metrics/metrics.h>
 #endif
 
 #ifdef USE_STAROS

@@ -14,8 +14,12 @@
 
 package com.starrocks.connector.iceberg.io;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
@@ -27,8 +31,12 @@ import org.junit.jupiter.api.Test;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
@@ -122,6 +130,82 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
+    public void testDisableSharedFileSystemCache() throws StarRocksException {
+        Map<String, String> vended = new HashMap<>();
+        vended.put(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_token");
+
+        // vended-credentials-enabled=false yields no credential properties at all, so it matches none
+        // of the branches in buildConfFromProperties. That is the path that failed in production.
+        Map<String, String> noCredential = new HashMap<>();
+
+        Assertions.assertTrue(buildConf(vended, "abfss://c@a.dfs.core.windows.net/p")
+                .getBoolean("fs.abfss.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "abfss://c@a.dfs.core.windows.net/p")
+                .getBoolean("fs.abfss.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "abfs://c@a.dfs.core.windows.net/p")
+                .getBoolean("fs.abfs.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "wasbs://c@a.blob.core.windows.net/p")
+                .getBoolean("fs.wasbs.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "gs://bucket/p")
+                .getBoolean("fs.gs.impl.disable.cache", false));
+        Assertions.assertTrue(buildConf(noCredential, "adl://a.azuredatalakestore.net/p")
+                .getBoolean("fs.adl.impl.disable.cache", false));
+
+        // s3* is served by S3FileIO and never reaches HadoopFileIO. oss/cosn do reach it and do carry
+        // their credential in the Configuration, but bypassing the cache leaks an unclosed FileSystem
+        // per call - enough to exhaust FE threads on an oss-backed workload - so they are left alone
+        // until the cache can be keyed on the credential instead.
+        Assertions.assertFalse(buildConf(noCredential, "s3a://bucket/p")
+                .getBoolean("fs.s3a.impl.disable.cache", false));
+        Assertions.assertFalse(buildConf(noCredential, "oss://bucket/p")
+                .getBoolean("fs.oss.impl.disable.cache", false));
+        Assertions.assertFalse(buildConf(noCredential, "cosn://bucket/p")
+                .getBoolean("fs.cosn.impl.disable.cache", false));
+        Assertions.assertFalse(buildConf(noCredential, "hdfs://nn/p")
+                .getBoolean("fs.hdfs.impl.disable.cache", false));
+    }
+
+    @Test
+    public void testSchemeLessPathUsesDefaultFs() throws StarRocksException {
+        // Hadoop's Path keeps a scheme-less location as-is, so getScheme() is null. FileSystem.get()
+        // resolves such a path through fs.defaultFS and consults the flag only after that, so the flag
+        // has to follow the default scheme.
+        String schemeLess = "/warehouse/db/t/metadata/v1.metadata.json";
+
+        Assertions.assertFalse(buildConf(new HashMap<>(), schemeLess)
+                .getBoolean("fs.file.impl.disable.cache", false));
+
+        IcebergCachingFileIO onAzureDefaultFs = new IcebergCachingFileIO();
+        Configuration baseConf = new Configuration();
+        baseConf.set("fs.defaultFS", "abfss://c@a.dfs.core.windows.net");
+        onAzureDefaultFs.setConf(baseConf);
+
+        Assertions.assertTrue(onAzureDefaultFs.buildConfFromProperties(new HashMap<>(), schemeLess)
+                .getBoolean("fs.abfss.impl.disable.cache", false));
+    }
+
+    @Test
+    public void testFallThroughConfKeepsBaseValues() throws StarRocksException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        Configuration baseConf = new Configuration();
+        baseConf.set("fs.azure.account.auth.type.account.dfs.core.windows.net", "OAuth");
+        cachingFileIO.setConf(baseConf);
+
+        Configuration configuration =
+                cachingFileIO.buildConfFromProperties(new HashMap<>(), "abfss://c@account.dfs.core.windows.net/p");
+
+        Assertions.assertEquals("OAuth",
+                configuration.get("fs.azure.account.auth.type.account.dfs.core.windows.net"));
+        Assertions.assertTrue(configuration.getBoolean("fs.abfss.impl.disable.cache", false));
+    }
+
+    private static Configuration buildConf(Map<String, String> properties, String path) throws StarRocksException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        return cachingFileIO.buildConfFromProperties(properties, path);
+    }
+
+    @Test
     public void testBuildGCSConfFromProperties() throws StarRocksException {
         Map<String, String> properties = new HashMap<>();
         String accessToken = "access_token";
@@ -129,12 +213,22 @@ public class IcebergCachingFileIOTest {
         String path = "gs://iceberg_gcp/iceberg_catalog/path/1/2";
 
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
-        cachingFileIO.setConf(new Configuration());
+        Configuration baseConf = new Configuration();
+        baseConf.set(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY,
+                "impersonated@project.iam.gserviceaccount.com");
+        cachingFileIO.setConf(baseConf);
         Configuration configuration = cachingFileIO.buildConfFromProperties(properties, path);
         String token = configuration.get("fs.gs.temporary.access.token");
         Assertions.assertEquals(accessToken, token);
         Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
                 configuration.get("fs.gs.auth.access.token.provider.impl"));
+        Assertions.assertEquals(GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER,
+                configuration.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
+        Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
+                configuration.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
+        Assertions.assertEquals("true", configuration.get(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY));
+        // catalog-level impersonation must not ride on top of the vended token
+        Assertions.assertNull(configuration.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY));
     }
 
     @Test
@@ -158,6 +252,230 @@ public class IcebergCachingFileIOTest {
                 return (SerializableSupplier<Configuration>) () -> confToSerialize;
             });
         });
+    }
+
+    /**
+     * Proves the disk-cache overflow bug in TwoLevelContentCache.
+     *
+     * The diskCache weigher assigns weight=0 to pinned entries (useCount > 0).
+     * When a reader pins an entry via computeIfPresent, Caffeine re-weighs it
+     * to 0, "freeing" that capacity in its accounting. New files are then
+     * admitted to fill the freed space. After the reader unpins, Caffeine
+     * re-weighs back to the real size — but the extra files are already on disk.
+     *
+     * Result: physical disk usage = DISK_CACHE_CAPACITY + sum(pinned file sizes).
+     */
+    @Test
+    public void testDiskCacheWeigherAllowsOverflowWhenPinned() {
+        // FakeEntry mirrors the fields of DiskCacheEntry that the weigher inspects.
+        class FakeEntry {
+            final long length;
+            int useCount;
+
+            FakeEntry(long length) {
+                this.length = length;
+                this.useCount = 0;
+            }
+
+            void pin() {
+                useCount++;
+            }
+            void unpin() {
+                useCount--;
+            }
+        }
+
+        final long CAPACITY = 100; // bytes
+        List<String> evicted = new ArrayList<>();
+
+        // Exact weigher logic copied from TwoLevelContentCache:
+        // pinned entries weigh 0, unpinned entries weigh their actual byte length.
+        Cache<String, FakeEntry> cache = Caffeine.newBuilder()
+                .maximumWeight(CAPACITY)
+                .weigher((Weigher<String, FakeEntry>) (k, v) ->
+                        v.useCount == 0 ? (int) Math.min(v.length, Integer.MAX_VALUE) : 0)
+                .evictionListener((k, v, cause) -> evicted.add((String) k))
+                .build();
+
+        // Step 1: put file A (60 bytes). Caffeine accounts 60/100.
+        FakeEntry a = new FakeEntry(60);
+        cache.put("A", a);
+        cache.cleanUp();
+        Assertions.assertEquals(1, cache.estimatedSize(), "A should be in cache");
+
+        // Step 2: a query starts reading A — pin it.
+        // computeIfPresent mutates useCount in-place; Caffeine re-weighs the entry.
+        // New weight = 0, so Caffeine now believes 0/100 bytes are in use.
+        cache.asMap().computeIfPresent("A", (k, v) -> {
+            v.pin();
+            return v;
+        });
+        cache.cleanUp();
+
+        // Step 3: add file B (60 bytes). Caffeine sees 0 + 60 = 60 ≤ 100 → admitted.
+        FakeEntry b = new FakeEntry(60);
+        cache.put("B", b);
+        cache.cleanUp();
+
+        // Step 4: add file C (60 bytes). Caffeine sees 0 + 60 + 60 = 120 > 100 → evicts B.
+        FakeEntry c = new FakeEntry(60);
+        cache.put("C", c);
+        cache.cleanUp();
+
+        // Caffeine did the right thing from its perspective: evicted B to stay within capacity.
+        Assertions.assertTrue(evicted.contains("B"), "Caffeine should have evicted B to respect capacity");
+
+        // But A (60 bytes) is still on disk with weight=0 — Caffeine doesn't count it.
+        // Actual bytes on disk = A(60) + C(60) = 120, which exceeds CAPACITY(100).
+        long actualBytesOnDisk = cache.asMap().values().stream()
+                .mapToLong(e -> e.length)
+                .sum();
+
+        Assertions.assertTrue(actualBytesOnDisk > CAPACITY,
+                "BUG CONFIRMED: actual disk usage (" + actualBytesOnDisk + " bytes) exceeds " +
+                "DISK_CACHE_CAPACITY (" + CAPACITY + " bytes) because pinned entry A " +
+                "has weight=0 in Caffeine's accounting while still occupying disk space.");
+    }
+
+    /**
+     * Proves the fix: with the corrected weigher (always weigh by actual length),
+     * Caffeine's accounting stays accurate even when entries are pinned.
+     * Total disk usage never exceeds DISK_CACHE_CAPACITY.
+     */
+    @Test
+    public void testFixedWeigherRespectsCapacity() {
+        class FakeEntry {
+            final long length;
+            int useCount;
+
+            FakeEntry(long length) {
+                this.length = length;
+                this.useCount = 0;
+            }
+
+            void pin() {
+                useCount++;
+            }
+            void unpin() {
+                useCount--;
+            }
+        }
+
+        final long CAPACITY = 100;
+        List<String> evicted = new ArrayList<>();
+
+        // FIXED weigher: always weigh by actual length, regardless of useCount.
+        Cache<String, FakeEntry> cache = Caffeine.newBuilder()
+                .maximumWeight(CAPACITY)
+                .weigher((Weigher<String, FakeEntry>) (k, v) ->
+                        (int) Math.min(v.length, Integer.MAX_VALUE))
+                .evictionListener((k, v, cause) -> evicted.add((String) k))
+                .build();
+
+        // Step 1: put file A (60 bytes). Weight = 60. Cache: 60/100 used.
+        FakeEntry a = new FakeEntry(60);
+        cache.put("A", a);
+        cache.cleanUp();
+
+        // Step 2: pin A. With fixed weigher, weight stays 60. Cache still 60/100 used.
+        cache.asMap().computeIfPresent("A", (k, v) -> {
+            v.pin();
+            return v;
+        });
+        cache.cleanUp();
+
+        // Step 3: add B (60 bytes). Caffeine sees 60 + 60 = 120 > 100 → evicts A or B.
+        FakeEntry b = new FakeEntry(60);
+        cache.put("B", b);
+        cache.cleanUp();
+
+        // Actual bytes remaining in cache must not exceed CAPACITY.
+        long actualBytesOnDisk = cache.asMap().values().stream()
+                .mapToLong(e -> e.length)
+                .sum();
+
+        Assertions.assertTrue(actualBytesOnDisk <= CAPACITY,
+                "FIXED: actual disk usage (" + actualBytesOnDisk + " bytes) should not exceed " +
+                "DISK_CACHE_CAPACITY (" + CAPACITY + " bytes).");
+    }
+
+    /**
+     * Demonstrates the orphan-file regression introduced when the weigher fix was first applied.
+     *
+     * With the corrected weigher (real weight for pinned entries), Caffeine can evict a pinned
+     * entry under pressure. The eviction listener skips file deletion because useCount > 0 at
+     * that moment. The old close() used computeIfPresent, which found no entry after eviction,
+     * so unpin() and file deletion never ran — leaving an orphan file on disk forever.
+     *
+     * The fix: DiskCacheSeekableInputStream captures the DiskCacheEntry reference at open time
+     * and unpins directly on it. When the last reader closes, if the entry is no longer in cache,
+     * it deletes the orphan file immediately.
+     *
+     * This test models that sequence with FakeEntry to verify the close-time cleanup logic.
+     */
+    @Test
+    public void testOrphanFileCleanedUpWhenLastStreamClosesAfterEviction() {
+        class FakeEntry {
+            final long length;
+            final AtomicInteger useCount = new AtomicInteger(0);
+
+            FakeEntry(long length) {
+                this.length = length;
+            }
+        }
+
+        final long CAPACITY = 100;
+        AtomicBoolean deleteCalledForA = new AtomicBoolean(false);
+
+        Cache<String, FakeEntry> cache = Caffeine.newBuilder()
+                .maximumWeight(CAPACITY)
+                .weigher((Weigher<String, FakeEntry>) (k, v) ->
+                        (int) Math.min(v.length, Integer.MAX_VALUE))
+                .evictionListener((k, v, cause) -> {
+                    if (((FakeEntry) v).useCount.get() > 0) {
+                        // mirrors eviction listener: skip delete while pinned
+                    } else {
+                        if ("A".equals(k)) {
+                            deleteCalledForA.set(true);
+                        }
+                    }
+                })
+                .build();
+
+        // Step 1: cache entry A (60 bytes) and pin it (simulating an open stream).
+        FakeEntry a = new FakeEntry(60);
+        cache.put("A", a);
+        cache.cleanUp();
+        cache.asMap().computeIfPresent("A", (k, v) -> {
+            v.useCount.incrementAndGet();
+            return v;
+        });
+
+        // Step 2: add B (60 bytes) — forces Caffeine to evict A to respect capacity.
+        // Eviction listener fires with useCount=1 > 0 → skips delete → orphan.
+        FakeEntry b = new FakeEntry(60);
+        cache.put("B", b);
+        cache.cleanUp();
+
+        // A is now evicted and not in cache, delete was NOT called by the eviction listener.
+        Assertions.assertNull(cache.getIfPresent("A"), "A should have been evicted");
+        Assertions.assertFalse(deleteCalledForA.get(), "Delete should not fire from eviction listener while pinned");
+
+        // Step 3: simulate close() with the fix applied.
+        // Only delete when current == null (evicted, no replacement).
+        int remaining = a.useCount.decrementAndGet();
+        if (remaining == 0) {
+            FakeEntry current = cache.asMap().get("A");
+            if (current == null) {
+                // mirrors the orphan cleanup in DiskCacheSeekableInputStream.close()
+                deleteCalledForA.set(true);
+            }
+        }
+
+        // Verify: cleanup triggered immediately when the last reader closed.
+        Assertions.assertTrue(deleteCalledForA.get(),
+                "Orphaned file for evicted-while-pinned entry A should be cleaned up on stream close");
+        Assertions.assertEquals(0, a.useCount.get(), "useCount should reach 0 after close");
     }
 
 }

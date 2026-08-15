@@ -16,6 +16,7 @@ package com.starrocks.clone;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.junit.jupiter.api.Assertions;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 public class TabletCheckerTest {
@@ -131,4 +133,48 @@ public class TabletCheckerTest {
     }
 
     private static SystemInfoService systemInfoService;
+
+    private Backend aliveBackend(long id) {
+        Backend be = new Backend(id, "127.0.0.1", 9050);
+        be.setAlive(true);
+        return be;
+    }
+
+    private Backend deadBackend(long id) {
+        // Defaults: isAlive=false, status non-OK (so isAvailable=false),
+        // lastUpdateMs=0 (well past any tolerate window).
+        return new Backend(id, "127.0.0.1", 9050);
+    }
+
+    /**
+     * Defensive aliveness helper used by callers (e.g. ColocateTableBalancer.matchGroups) when
+     * tablet_sched_disable_colocate_balance is on and bucketSeq may retain dead BE references.
+     */
+    @Test
+    public void testHasEnoughAliveBackendsInBucketSeq() {
+        long be1 = 10001L;
+        long be2 = 10002L;
+        long be3 = 10003L;
+        Set<Long> backendsSet = Sets.newHashSet(be1, be2, be3);
+
+        SystemInfoService infoService = Mockito.mock(SystemInfoService.class);
+        Mockito.when(infoService.getBackend(be1)).thenReturn(aliveBackend(be1));
+        Mockito.when(infoService.getBackend(be2)).thenReturn(aliveBackend(be2));
+        Mockito.when(infoService.getBackend(be3)).thenReturn(aliveBackend(be3));
+
+        Assertions.assertTrue(
+                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 3, infoService),
+                "all alive — bucket seq satisfies replication");
+
+        // Mark be2 dead; survivors no longer cover replicationNum=3.
+        Mockito.when(infoService.getBackend(be2)).thenReturn(deadBackend(be2));
+        Assertions.assertFalse(
+                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 3, infoService),
+                "one dead — should fall below the replication threshold");
+
+        // With a relaxed threshold the survivors are still enough.
+        Assertions.assertTrue(
+                TabletChecker.hasEnoughAliveBackendsInBucketSeq(backendsSet, 2, infoService),
+                "two survivors cover replicationNum=2");
+    }
 }

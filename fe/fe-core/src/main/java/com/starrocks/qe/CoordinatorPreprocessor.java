@@ -31,6 +31,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
@@ -149,12 +150,15 @@ public class CoordinatorPreprocessor {
     private WorkerProvider.Factory newWorkerProviderFactory() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         boolean skipBlackList = sessionVariable.isSkipBlackList();
-        
+
         if (RunMode.isSharedDataMode()) {
+            BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy =
+                    sessionVariable.getBlacklistBackupRoutingPolicy();
             if (skipBlackList) {
-                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory();
+                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory(
+                        blacklistBackupRoutingPolicy);
             } else {
-                return new DefaultSharedDataWorkerProvider.Factory();
+                return new DefaultSharedDataWorkerProvider.Factory(blacklistBackupRoutingPolicy);
             }
         } else {
             if (skipBlackList) {
@@ -285,6 +289,18 @@ public class CoordinatorPreprocessor {
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();
         }
+        // Reset bucket-aware state too. BucketAwareBackendSelector reads/writes
+        // colocatedAssignment.seqToScanRange directly, and its `scanRanges.put(scanId, ...)`
+        // only overwrites entries for buckets that appear in the current incremental batch.
+        // Buckets that were present in a previous batch but absent from the current one keep
+        // their stale scan ranges, so those files get re-emitted to the freshly-reset
+        // instance.node2ScanRanges and BE ends up scanning them once per follow-up batch.
+        // seqToWorkerId must be preserved: a bucket's worker assignment has to remain stable
+        // across batches so the bucket's data keeps landing on the same BE.
+        ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
+        if (colocatedAssignment != null) {
+            colocatedAssignment.getSeqToScanRange().clear();
+        }
         fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
     }
 
@@ -334,13 +350,13 @@ public class CoordinatorPreprocessor {
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(rgName);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(connect, rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(workgroupId);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(connect, workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -350,7 +366,7 @@ public class CoordinatorPreprocessor {
         }
 
         if (resourceGroup == null) {
-            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(connect, ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         if (resourceGroup != null) {

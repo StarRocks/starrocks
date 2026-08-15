@@ -19,36 +19,38 @@
 namespace starrocks {
 
 FSOptions::FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-                     const ResultFileOptions* result_file_options, const TUploadReq* upload,
+                     const THdfsProperties* hdfs_properties, int hdfs_write_buffer_size_kb, const TUploadReq* upload,
                      const TDownloadReq* download, const TCloudConfiguration* cloud_configuration,
                      std::unordered_map<std::string, std::string> fs_options)
         : scan_range_params(scan_range_params),
           export_sink(export_sink),
-          result_file_options(result_file_options),
+          hdfs_properties(hdfs_properties),
           upload(upload),
           download(download),
           cloud_configuration(cloud_configuration),
+          hdfs_write_buffer_size_kb(hdfs_write_buffer_size_kb),
           _fs_options(std::move(fs_options)) {}
 
-FSOptions::FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
+FSOptions::FSOptions() : FSOptions(nullptr, nullptr, nullptr, 0, nullptr, nullptr, nullptr) {}
 
 FSOptions::FSOptions(const TBrokerScanRangeParams* scan_range_params)
-        : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr, nullptr) {}
+        : FSOptions(scan_range_params, nullptr, nullptr, 0, nullptr, nullptr, nullptr) {}
 
 FSOptions::FSOptions(const TExportSink* export_sink)
-        : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr, nullptr) {}
+        : FSOptions(nullptr, export_sink, nullptr, 0, nullptr, nullptr, nullptr) {}
 
-FSOptions::FSOptions(const ResultFileOptions* result_file_options)
-        : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr, nullptr) {}
+FSOptions::FSOptions(const THdfsProperties* hdfs_properties, int hdfs_write_buffer_size_kb)
+        : FSOptions(nullptr, nullptr, hdfs_properties, hdfs_write_buffer_size_kb, nullptr, nullptr, nullptr) {}
 
-FSOptions::FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr, nullptr) {}
+FSOptions::FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, 0, upload, nullptr, nullptr) {}
 
-FSOptions::FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
+FSOptions::FSOptions(const TDownloadReq* download)
+        : FSOptions(nullptr, nullptr, nullptr, 0, nullptr, download, nullptr) {}
 
 FSOptions::FSOptions(const TCloudConfiguration* cloud_configuration)
-        : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
+        : FSOptions(nullptr, nullptr, nullptr, 0, nullptr, nullptr, cloud_configuration) {}
 
 FSOptions::FSOptions(const std::unordered_map<std::string, std::string>& fs_options)
-        : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
+        : FSOptions(nullptr, nullptr, nullptr, 0, nullptr, nullptr, nullptr, fs_options) {}
 
 } // namespace starrocks

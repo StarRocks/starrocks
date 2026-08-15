@@ -17,7 +17,6 @@
 #include "cache/cache_metrics.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "gen_cpp/DataCache_types.h"
-#include "storage/store_path.h"
 
 namespace starrocks {
 
@@ -50,7 +49,7 @@ public:
 #ifdef USE_STAROS
     // for each dir in `store_paths`, get each corresponding dir in `starlet_cache_dir`
     static StatusOr<std::vector<std::string>> get_corresponding_starlet_cache_dir(
-            const std::vector<StorePath>& store_paths, const std::string& starlet_cache_dir);
+            const std::vector<std::string>& store_paths, const std::string& starlet_cache_dir);
 #endif
 };
 

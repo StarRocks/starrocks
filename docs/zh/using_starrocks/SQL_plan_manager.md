@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use SQL Plan Manager in StarRocks to bind fixed query plans to SQL statements, preventing plan changes and stabilizing performance."
 sidebar_position: 11
 ---
 

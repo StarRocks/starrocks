@@ -65,6 +65,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.QueryRuntimeProfile.LOAD_CHANNEL_PROFILE_NAME;
+import static com.starrocks.qe.scheduler.QueryRuntimeProfile.PER_TABLE_SCAN_STATS_PROFILE_NAME;
 
 public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
@@ -252,6 +253,10 @@ public class ExplainAnalyzer {
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
             // TODO support analyze load channel profile
             if (LOAD_CHANNEL_PROFILE_NAME.equals(fragmentProfile.getName())) {
+                continue;
+            }
+            // PerTableScanStats is an aggregated sibling, not a fragment.
+            if (PER_TABLE_SCAN_STATS_PROFILE_NAME.equals(fragmentProfile.getName())) {
                 continue;
             }
 
@@ -478,6 +483,10 @@ public class ExplainAnalyzer {
         Counter maxDriverTotalTime = null;
         for (Pair<RuntimeProfile, Boolean> fragmentProfileKv : executionProfile.getChildList()) {
             RuntimeProfile fragmentProfile = fragmentProfileKv.first;
+            if (LOAD_CHANNEL_PROFILE_NAME.equals(fragmentProfile.getName())
+                    || PER_TABLE_SCAN_STATS_PROFILE_NAME.equals(fragmentProfile.getName())) {
+                continue;
+            }
             for (Pair<RuntimeProfile, Boolean> pipelineProfileKv : fragmentProfile.getChildList()) {
                 RuntimeProfile pipelineProfile = pipelineProfileKv.first;
                 Counter driverTotalTime = pipelineProfile.getMaxCounter("DriverTotalTime");
@@ -1121,6 +1130,25 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "DefaultChunkBufferCapacity");
         popIndent();
 
+        appendDetailLine("VectorIndex:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndex");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexLoad");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexCacheLookup");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexCacheHit");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexCacheMiss");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexFileOpenAndGetSize");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexFileRead");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexDeserialize");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexSearcherCreate");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexSearch");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorANNSearch");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorResultProcess");
+        // Legacy names kept visible for profiles produced during rolling upgrades.
+        appendMetric(uniqueMetrics, nodeInfo, "ProcessVectorDistanceAndIdTime");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorSearchTime");
+        popIndent();
+
         appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getScanKnownMetrics());
 
         popIndent(); // main indent
@@ -1751,7 +1779,10 @@ public class ExplainAnalyzer {
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",
                 "CreateSegmentIter", "GetDelVec", "GetDeltaColumnGroup", "GetRowsets", "ReadPKIndex",
-                "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
+                "VectorIndex", "VectorIndexLoad", "VectorIndexCacheLookup", "VectorIndexFileOpenAndGetSize",
+                "VectorIndexFileRead", "VectorIndexDeserialize", "VectorIndexSearcherCreate",
+                "VectorIndexCacheHit", "VectorIndexCacheMiss", "VectorIndexSearch", "VectorANNSearch",
+                "VectorResultProcess", "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
                 "PushdownAccessPaths", "PushdownPredicates"
         );
     }

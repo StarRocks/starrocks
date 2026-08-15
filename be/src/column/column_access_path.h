@@ -14,13 +14,15 @@
 
 #pragma once
 
+#include <functional>
+#include <limits>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
 
-#include "column/column.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -28,8 +30,6 @@
 namespace starrocks {
 
 class Field;
-class ObjectPool;
-class RuntimeState;
 
 /*
  * Used to describe the access path of the subfield, it's like a file path.
@@ -41,11 +41,13 @@ class RuntimeState;
  */
 class ColumnAccessPath {
 public:
-    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TColumnAccessPath& column_path, RuntimeState* state,
-                                                              ObjectPool* pool);
+    using PathResolver = std::function<StatusOr<std::string>(const TColumnAccessPath&)>;
 
-    Status init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
-                ObjectPool* pool);
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TColumnAccessPath& column_path,
+                                                              const PathResolver& path_resolver);
+
+    Status init(const std::string& parent_path, const TColumnAccessPath& column_path,
+                const PathResolver& path_resolver);
 
     static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
                                                               const std::string& path, uint32_t index,

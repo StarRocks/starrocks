@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "GROUP BY"
+description: "The GROUP BY clause is often used with aggregate functions."
 ---
 
 # GROUP BY

@@ -1,14 +1,12 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "Query Cache を使用した SQL クエリパフォーマンス最適化とキャッシング機能。"
 ---
 
 # SQL クエリ
 
 このトピックでは、SQL に関するよくある質問への回答を提供します。
-
-## マテリアライズドビューを作成するときに "fail to allocate memory." というエラーが発生する
-
-この問題を解決するには、**be.conf** ファイルの `memory_limitation_per_thread_for_schema_change` パラメータの値を増やしてください。このパラメータは、スキームを変更するために単一のタスクに割り当てられる最大ストレージを指します。最大ストレージのデフォルト値は 2 GB です。
 
 ## StarRocks はクエリ結果のキャッシュをサポートしていますか？
 
@@ -83,7 +81,7 @@ MERGE:
 
 ## BE ログと FE ログが占めるディスクスペースを削減するにはどうすればよいですか？
 
-ログレベルと対応するパラメータを調整します。詳細は [Parameter Configuration](../administration/management/BE_configuration.md) を参照してください。
+ログレベルと対応するパラメータを調整します。詳細は [Parameter Configuration](../administration/configuration/BE_parameters/BE_parameters.md) を参照してください。
 
 ## レプリケーション数を変更しようとすると "table *** is colocate table, cannot change replicationNum" というエラーが発生する
 

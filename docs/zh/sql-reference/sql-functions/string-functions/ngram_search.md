@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算两个字符串的ngram相似度。"
 ---
 
 # ngram_search

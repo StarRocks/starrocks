@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP RESOURCE GROUP removes a specified resource group."
 keywords: ['ziyuanzu'] 
 ---
 

@@ -105,6 +105,14 @@ public class ParseUtil {
         }
     }
 
+    public static double analyzeDoubleValue(String value) throws AnalysisException {
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("invalid number: " + value);
+        }
+    }
+
     public static boolean parseBooleanValue(String value, String name) {
         if (value.equalsIgnoreCase("ON")
                 || value.equalsIgnoreCase("TRUE")

@@ -34,12 +34,15 @@
 
 #include "common/thread/threadpool.h"
 
+#include <bvar/bvar.h>
+
 #include <limits>
 #include <ostream>
 
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_thread_fwd.h"
 #include "common/logging.h"
 #include "common/stack_util.h"
 #include "common/system/cpu_info.h"
@@ -50,6 +53,10 @@
 #include "gutil/sysinfo.h"
 
 namespace starrocks {
+
+namespace {
+bvar::Adder<int64_t> g_threadpool_task_exception_total("threadpool_task_exception_total");
+} // namespace
 
 using std::string;
 using strings::Substitute;
@@ -426,10 +433,37 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     int inactive_threads = _num_threads + _num_threads_pending_start - _active_threads;
     int additional_threads = static_cast<int>(_queue.size()) + threads_from_this_submit - inactive_threads;
     bool need_a_thread = false;
+    bool sole_thread = false;
     if (additional_threads > 0 &&
         _num_threads + _num_threads_pending_start < _max_threads.load(std::memory_order_acquire)) {
         need_a_thread = true;
         _num_threads_pending_start++;
+        sole_thread = (_num_threads + _num_threads_pending_start == 1);
+    }
+
+    // When this submit needs to create the very first thread for the pool
+    // (sole_thread == true), create it while still holding the lock and BEFORE
+    // enqueuing the task.
+    //
+    // Why create before enqueue?
+    //   If thread creation fails and no threads exist, the caller receives an
+    //   error and performs its own cleanup (e.g. counting down a latch). If the
+    //   task were already in the queue, a later successful submit could spawn a
+    //   thread that picks up the orphaned task, executing it against already-
+    //   destroyed state — a use-after-free.
+    //
+    // Why hold the lock during thread creation?
+    //   If we released the lock, a concurrent submitter could see our
+    //   _num_threads_pending_start and assume a thread is available, enqueue
+    //   its task without creating a thread, and then have that task stranded
+    //   if our create_thread() fails. The pool has zero threads here, so no
+    //   worker is blocked waiting for this lock.
+    if (sole_thread) {
+        Status status = create_thread();
+        if (!status.ok()) {
+            _num_threads_pending_start--;
+            return status;
+        }
     }
 
     TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:replace_task", &r);
@@ -462,15 +496,11 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     }
     unique_lock.unlock();
 
-    if (need_a_thread) {
+    if (need_a_thread && !sole_thread) {
         Status status = create_thread();
         if (!status.ok()) {
             unique_lock.lock();
             _num_threads_pending_start--;
-            if (_num_threads + _num_threads_pending_start == 0) {
-                // If we have no threads, we can't do any work.
-                return status;
-            }
             // If we failed to create a thread, but there are still some other
             // worker threads, log a warning message and continue.
             LOG(ERROR) << "Thread pool failed to create thread: " << status.to_string() << "\n" << get_stack_trace();
@@ -569,7 +599,7 @@ void ThreadPool::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuU
 
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
-    auto current_thread = Thread::current_thread();
+    auto* current_thread = Thread::current_thread();
     InsertOrDie(&_threads, current_thread);
     DCHECK_GT(_num_threads_pending_start, 0);
     _num_threads++;
@@ -640,36 +670,48 @@ void ThreadPool::dispatch_thread() {
         l.unlock();
 
         MonoTime start_time = MonoTime::Now();
-        // Execute the task
-        // Catch all exceptions to prevent thread pool crash. Individual tasks should handle
-        // exceptions and convert them to Status where appropriate (e.g., RPC handlers).
+        // Execute the task.
         //
-        // IMPORTANT: This catch block only prevents the thread pool from crashing. It does NOT
-        // guarantee exception safety of the task itself. Tasks should use RAII (e.g., ClosureGuard,
-        // DeferOp, lock_guard) to ensure resources are properly cleaned up even when exceptions
-        // are thrown. If a task is not exception-safe, catching the exception here may leave the
-        // system in an inconsistent state (e.g., leaked resources, held locks, corrupted data).
+        // Whether an exception thrown by the task is swallowed is selected by
+        // enable_threadpool_catch_task_exception, default false.
         //
-        // The task's destructor will be called via task.runnable.reset() below, which should
-        // clean up any RAII-managed resources. However, non-RAII resources must be managed by
-        // the task itself.
-        try {
+        // The flag deliberately selects between "there is an enclosing catch clause" and
+        // "there is none" rather than between two behaviours inside a single catch clause,
+        // and the difference is observable. A catch(...) always matches, so its mere presence
+        // makes phase 1 of unwinding find a handler and phase 2 run cleanups on the way out:
+        // DeferOp and task destructors execute, and any CountDownLatch they release lets a
+        // waiter proceed - and possibly report success - before a rethrow from inside the
+        // handler could abort the process. With no enclosing catch clause the exception finds
+        // no handler and terminates at the throw point without unwinding, so no completion
+        // signal is ever delivered. Only the latter is the fail-stop behaviour we want by
+        // default, so the flag must be tested here and not inside a catch block.
+        if (!config::enable_threadpool_catch_task_exception) {
             task.runnable->run();
-        } catch (const std::bad_alloc& e) {
-            LOG(ERROR) << "Thread pool task failed with std::bad_alloc in pool '" << _name << "': " << e.what() << "\n"
-                       << get_stack_trace();
-            // Continue execution to avoid thread pool crash. The task's destructor will be
-            // called below to clean up RAII-managed resources.
-        } catch (const std::exception& e) {
-            LOG(ERROR) << "Thread pool task failed with exception in pool '" << _name << "': " << e.what() << "\n"
-                       << get_stack_trace();
-            // Continue execution to avoid thread pool crash. The task's destructor will be
-            // called below to clean up RAII-managed resources.
-        } catch (...) {
-            LOG(ERROR) << "Thread pool task failed with unknown exception in pool '" << _name << "\n"
-                       << get_stack_trace();
-            // Continue execution to avoid thread pool crash. The task's destructor will be
-            // called below to clean up RAII-managed resources.
+        } else {
+            // Catching here only prevents the worker thread from dying. It does NOT make the
+            // task exception safe: a task that signals completion from a DeferOp or from its
+            // destructor while its result write is skipped will be reported to its waiter as
+            // success, because an unset Status/StatusPB reads as OK. That combination silently
+            // produces wrong results rather than a failure, which is why this is opt-in.
+            //
+            // The task's destructor runs via task.runnable.reset() below and cleans up
+            // RAII-managed resources; non-RAII resources must be managed by the task itself.
+            try {
+                task.runnable->run();
+            } catch (const std::bad_alloc& e) {
+                LOG(ERROR) << "Thread pool task failed with std::bad_alloc in pool '" << _name << "': " << e.what()
+                           << "\n"
+                           << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
+            } catch (const std::exception& e) {
+                LOG(ERROR) << "Thread pool task failed with exception in pool '" << _name << "': " << e.what() << "\n"
+                           << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
+            } catch (...) {
+                LOG(ERROR) << "Thread pool task failed with unknown exception in pool '" << _name << "\n"
+                           << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
+            }
         }
         current_thread->inc_finished_tasks();
 
@@ -733,6 +775,11 @@ void ThreadPool::dispatch_thread() {
 }
 
 Status ThreadPool::create_thread() {
+    Status status;
+    TEST_SYNC_POINT_CALLBACK("ThreadPool::create_thread", &status);
+    if (!status.ok()) {
+        return status;
+    }
     return Thread::create("thread pool", _name, &ThreadPool::dispatch_thread, this, nullptr);
 }
 

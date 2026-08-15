@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中配置和使用 Query Cache 在内存中存储聚合结果，提升高并发聚合查询的 QPS 和降低延迟。"
 sidebar_position: 10
 keywords: ['huan cun']
 ---

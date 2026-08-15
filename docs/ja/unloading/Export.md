@@ -1,5 +1,7 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
+description: "EXPORT ステートメントを使用して StarRocks テーブルデータを CSV ファイルとして HDFS またはオブジェクトストレージにエクスポートします。"
 ---
 
 # EXPORT を使用したデータのエクスポート

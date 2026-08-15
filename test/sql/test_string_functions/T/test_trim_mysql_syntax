@@ -1,0 +1,50 @@
+-- name: test_trim_mysql_syntax
+-- description: MySQL-compatible TRIM([{BOTH|LEADING|TRAILING}] [remstr] FROM str)
+
+CREATE DATABASE IF NOT EXISTS test_trim_mysql_syntax_db;
+USE test_trim_mysql_syntax_db;
+
+-- whitespace forms (no remstr) route to trim/ltrim/rtrim
+SELECT TRIM('  bar   ');
+SELECT TRIM(BOTH FROM '  bar  ');
+SELECT TRIM(LEADING FROM '  bar');
+SELECT TRIM(TRAILING FROM 'bar  ');
+
+-- single-char remstr (substring == char-set here)
+SELECT TRIM(BOTH 'x' FROM 'xxxbarxxx');
+SELECT TRIM(LEADING 'x' FROM 'xxxbarxxx');
+SELECT TRIM(TRAILING 'x' FROM 'xxxbarxxx');
+SELECT TRIM('x' FROM 'xxxbarxxx');
+
+-- multi-char remstr: substring removed as a whole unit, repeatedly
+SELECT TRIM(TRAILING 'xyz' FROM 'barxxyz');
+SELECT TRIM(TRAILING 'xyz' FROM 'barxxyzxyz');
+SELECT TRIM(LEADING 'ab' FROM 'ababfoo');
+SELECT TRIM(BOTH 'ab' FROM 'abfooab');
+
+-- empty remstr is a no-op
+SELECT TRIM(BOTH '' FROM 'abc');
+
+-- non-reserved keyword still usable as an identifier
+SELECT leading FROM (SELECT 1 AS leading) t;
+
+-- column reference for `str`: exercise the non-constant BinaryColumn path in substr_trim_impl,
+-- including NULL propagation when `str` is NULL.
+CREATE TABLE t_trim_src(id INT, c VARCHAR(65533), c2 VARCHAR(65533))
+        DUPLICATE KEY(id)
+        DISTRIBUTED BY HASH(id)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+INSERT INTO t_trim_src VALUES
+    (1, 'xxxbarxxx', 'xyz'),
+    (2, 'xyzfooxyz', 'abc'),
+    (3, NULL,        'def');
+SELECT TRIM(LEADING 'x' FROM c) FROM t_trim_src ORDER BY id;
+SELECT TRIM(TRAILING 'xyz' FROM c) FROM t_trim_src ORDER BY id;
+SELECT TRIM('x' FROM c) FROM t_trim_src ORDER BY id;
+
+-- expression input for `str`
+SELECT TRIM(LEADING 'xyz' FROM concat(c, c2)) FROM t_trim_src WHERE c IS NOT NULL ORDER BY id;
+
+-- NULL `str` literal propagates to NULL (MySQL: TRIM('x' FROM NULL) = NULL)
+SELECT TRIM('x' FROM CAST(NULL AS STRING));

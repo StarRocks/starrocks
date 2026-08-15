@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Suspends or resumes a pipe to pause or continue its in-progress data loading jobs."
 ---
 
 # SUSPEND or RESUME PIPE

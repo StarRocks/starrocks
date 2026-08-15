@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期对应的月份名称。"
 ---
 
 # monthname

@@ -21,13 +21,18 @@
 
 namespace starrocks {
 class TExecDebugOption;
-enum class EnumDebugAction { WAIT };
+enum class EnumDebugAction { WAIT, BLOCK_SOURCE_OPERATOR, BLOCK_SINK_OPERATOR };
 
 struct DebugAction {
     int node_id;
     EnumDebugAction action;
     int value;
     bool is_wait_action() const { return action == EnumDebugAction::WAIT; }
+    bool is_block_source_action() const { return action == EnumDebugAction::BLOCK_SOURCE_OPERATOR; }
+    bool is_block_sink_action() const { return action == EnumDebugAction::BLOCK_SINK_OPERATOR; }
+    bool is_pipeline_break_action() const {
+        return is_wait_action() || is_block_source_action() || is_block_sink_action();
+    }
 };
 
 class DebugActionMgr {

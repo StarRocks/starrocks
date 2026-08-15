@@ -21,8 +21,9 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
-class SlotDescriptor;
+class Column;
 class ColumnIterator;
+class SlotDescriptor;
 bool is_virtual_column(const std::string_view col_name);
 StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaCSPtr& schema,
                                                              const std::vector<SlotDescriptor*>& slots);

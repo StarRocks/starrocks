@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a time value into the number of seconds."
 ---
 
 # time_to_sec

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力されたマップの和集合を返します。"
 ---
 
 # map_concat

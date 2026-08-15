@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの日付式の年差を返します（expr1 − expr2）。"
 ---
 
 # years_diff

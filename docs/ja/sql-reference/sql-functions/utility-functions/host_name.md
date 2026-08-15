@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "計算が実行されているノードのホスト名を取得します。"
 ---
 
 # host_name

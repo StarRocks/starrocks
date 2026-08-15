@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a bitmap to a Base64-encoded string."
 ---
 
 # bitmap_to_base64

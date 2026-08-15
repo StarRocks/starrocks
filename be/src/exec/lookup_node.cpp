@@ -17,13 +17,13 @@
 #include <protocol/TDebugProtocol.h>
 
 #include "base/failpoint/fail_point.h"
-#include "exec/exec_node.h"
+#include "exec/exec_env.h"
+#include "exec/lookup_stream_mgr.h"
 #include "exec/pipeline/lookup_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "runtime/exec_env.h"
-#include "runtime/lookup_stream_mgr.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -65,7 +65,8 @@ StatusOr<pipeline::OpFactories> LookUpNode::decompose_to_pipeline(pipeline::Pipe
         tuple_ids.emplace_back(tuple_id);
     }
     auto state = runtime_state();
-    auto dispatch_mgr = state->exec_env()->lookup_dispatcher_mgr();
+    auto* query_execution_services = state->query_execution_services();
+    auto dispatch_mgr = query_execution_services->runtime->lookup_dispatcher_mgr;
     auto dispatcher = dispatch_mgr->create_dispatcher(state->query_id(), id(), tuple_ids, _num_peer_fetchers);
 
     int32_t max_io_tasks = context->degree_of_parallelism();

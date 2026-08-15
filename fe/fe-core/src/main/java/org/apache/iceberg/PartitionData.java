@@ -18,6 +18,8 @@
  */
 package org.apache.iceberg;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.avro.specific.SpecificData;
@@ -40,8 +42,28 @@ import java.util.stream.Stream;
 public class PartitionData
         implements IndexedRecord, StructLike, SpecificData.SchemaConstructable, Serializable {
 
+    // Avro schema is a pure function of the partition struct, so it is safe to share across
+    // instances. Bounded so an unfamiliar set of struct shapes cannot pin schemas forever; an
+    // evicted entry just rebuilds on next use.
+    private static final Cache<Types.StructType, CachedSchema> SCHEMA_CACHE =
+            Caffeine.newBuilder().maximumSize(1024).build();
+
+    private static CachedSchema cachedSchemaFor(Types.StructType partitionType) {
+        return SCHEMA_CACHE.get(partitionType, CachedSchema::new);
+    }
+
     static Schema partitionDataSchema(Types.StructType partitionType) {
-        return AvroSchemaUtil.convert(partitionType, PartitionData.class.getName());
+        return cachedSchemaFor(partitionType).schema;
+    }
+
+    private static final class CachedSchema {
+        private final Schema schema;
+        private final String stringSchema;
+
+        CachedSchema(Types.StructType partitionType) {
+            this.schema = AvroSchemaUtil.convert(partitionType, PartitionData.class.getName());
+            this.stringSchema = schema.toString();
+        }
     }
 
     private final Types.StructType partitionType;
@@ -70,8 +92,9 @@ public class PartitionData
         this.partitionType = partitionType;
         this.size = partitionType.fields().size();
         this.data = new Object[size];
-        this.schema = partitionDataSchema(partitionType);
-        this.stringSchema = schema.toString();
+        CachedSchema cached = cachedSchemaFor(partitionType);
+        this.schema = cached.schema;
+        this.stringSchema = cached.stringSchema;
     }
 
     /** Copy constructor */

@@ -18,7 +18,7 @@ JDK_NAME="OpenJDK17U-jdk_aarch64_mac_hotspot_17.0.13_11.tar.gz"
 JDK_SOURCE="jdk-17.0.13+11"
 JDK_MD5SUM="03cca86e04125f01b1f3ac3bdd132305"
 
-# Keep Darwin source-package versions aligned with the historical build-mac flow.
+# Keep Darwin source-package versions aligned with the root macOS build flow.
 BOOST_DOWNLOAD="https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.gz"
 BOOST_NAME="boost_1_86_0.tar.gz"
 BOOST_SOURCE="boost_1_86_0"
@@ -34,7 +34,7 @@ HYPERSCAN_NAME="vectorscan-5.4.12.tar.gz"
 HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.12"
 HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
 
-DARWIN_UNSUPPORTED_PACKAGES="starcache tenann pprof clucene"
+DARWIN_UNSUPPORTED_PACKAGES="starcache tenann pprof"
 
 darwin_is_unsupported_package() {
     local package_name

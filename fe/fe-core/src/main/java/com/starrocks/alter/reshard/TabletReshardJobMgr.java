@@ -14,14 +14,17 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.common.hash.Hashing;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -40,9 +43,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProcessable {
+public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TabletReshardJobMgr.class);
 
     @SerializedName(value = "tabletReshardJobs")
@@ -50,6 +55,58 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
     // Original tablet id -> resharding tablet info
     protected final Map<Long, ReshardingTabletInfo> reshardingTabletInfos = Maps.newConcurrentMap();
+
+    // Colocate checker: invoked from this manager's tick. Holds only a small per-leader,
+    // in-memory placement-convergence negative cache (non-journaled). Owns no
+    // thread of its own — shares this manager's scheduler cadence
+    // ({@code tablet_reshard_job_scheduler_interval_ms}) and self-gates on shared-data-mode,
+    // leader status, and empty unstable-groups before doing any real work.
+    private final ColocateChecker colocateChecker = new ColocateChecker();
+
+    // Per-table edge-triggered latch that stops the size-based auto-split trigger from re-issuing a
+    // deterministic split that made no progress: a tablet dominated by a single distribution-key value
+    // is un-splittable, so BE returns the identical-tablet fallback and the tablet stays over threshold.
+    // Reuses the generic mechanism the colocate checker uses for its alignment-job storm; keyed on the
+    // table's convergence signature (tablet ranges + dataVersion + a split-plan fingerprint of
+    // target_size / max_split_count / computed count), so a successful split, a load, or a reshard-config
+    // change re-arms it while the no-progress fallback (only visibleVersion moves; size/config unchanged)
+    // does not. Touched only from
+    // the single reshard scheduler tick (triggerTabletReshard), never from the concurrent
+    // addReshardCandidate producers, so no synchronization is needed; cleared on leader demotion.
+    private final TableAlignmentLatch sizeSplitLatch = new TableAlignmentLatch();
+
+    // Coalescible reshard candidate for one table, marked by both the publish path and the periodic
+    // TabletStatMgr scan: the largest tablet (split) and the smallest adjacent fresh-pair sum (merge).
+    // Long.MAX_VALUE is the "no merge" identity, so a split-only publish mark and a split+merge periodic
+    // mark compose by (max, min) regardless of arrival order. Self-contained (carries db/table id) so
+    // the drain needs no side key. Transient (not persisted): leader failover falls back to the scan.
+    private record ReshardCandidate(long dbId, long tableId,
+                                    long maxTabletSize, long minAdjacentTabletPairSize) {
+    }
+
+    // tableId (globally unique) -> coalesced reshard candidate awaiting a drain evaluation.
+    private final Map<Long, ReshardCandidate> reshardCandidates = new ConcurrentHashMap<>();
+
+    // Enqueue a table for a reshard evaluation, carrying the signals its caller already computed so the
+    // drain triggers without re-walking the table. Both the write-locked publish path (split-only:
+    // minAdjacentTabletPairSize = Long.MAX_VALUE) and the periodic scan (split+merge) mark here;
+    // concurrent marks for the same table coalesce by (max, min) before the next drain. Callers need
+    // only supply the signals (and gate on leader/eligibility for their own reasons); the split/merge
+    // actionability decision lives here, so non-actionable signals are dropped and never queued.
+    public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
+        if (!isLeaderAdmissionOpen()) {
+            return;
+        }
+        // Keep the queue empty in the common (no-reshard) case; the drain re-checks authoritatively.
+        if (!TabletReshardUtils.needSplit(maxTabletSize) && !TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
+            return;
+        }
+        reshardCandidates.merge(tableId,
+                new ReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize),
+                (existing, incoming) -> new ReshardCandidate(existing.dbId(), existing.tableId(),
+                        Math.max(existing.maxTabletSize(), incoming.maxTabletSize()),
+                        Math.min(existing.minAdjacentTabletPairSize(), incoming.minAdjacentTabletPairSize())));
+    }
 
     public TabletReshardJobMgr() {
         super("tablet-reshard-job-mgr", Config.tablet_reshard_job_scheduler_interval_ms);
@@ -76,10 +133,11 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         return reshardingTabletInfo.getReshardingTablet();
     }
 
-    public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+    public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
             throws StarRocksException {
         TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
+        return job;
     }
 
     public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
@@ -92,13 +150,85 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         addTabletReshardJob(job);
     }
 
+    // 64-bit fingerprint of the requested split plan: the raw reshard-config knobs plus the max
+    // tablet's computed split count. Folding the raw configs guarantees any admin config change
+    // re-arms the size-split latch even when calcSplitCount is capped at max_split_count; the computed
+    // count also captures a max-tablet size-band crossing. murmur3 (matching ColocateChecker) avoids
+    // the 32-bit Objects.hash collision that could hide a config change.
+    @VisibleForTesting
+    static long splitPlanSignature(long maxTabletSize) {
+        return Hashing.murmur3_128().newHasher()
+                .putLong(Config.tablet_reshard_target_size)
+                .putInt(Config.tablet_reshard_max_split_count)
+                .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
+                .hash().asLong();
+    }
+
+    /**
+     * Reshard-trigger decision. The sole caller is {@link #drainReshardCandidates()}, which feeds the
+     * signals that both the publish path and the periodic TabletStatMgr scan supplied via
+     * {@link #addReshardCandidate}. Self-gates on leader/admission, cloud-native range distribution,
+     * and NORMAL table state; the authoritative NORMAL re-check happens in the job factory under its
+     * own lock.
+     */
+    private void triggerTabletReshard(Database db, OlapTable table,
+                                      long maxTabletSize, long minAdjacentTabletPairSize) {
+        if (!isLeaderAdmissionOpen()) {
+            return;
+        }
+        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
+            return;
+        }
+        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+            return;
+        }
+        try {
+            long tableId = table.getId();
+            if (TabletReshardUtils.needSplit(maxTabletSize)) {
+                long signature = ColocateChecker.tableConvergenceSignature(db, table,
+                        splitPlanSignature(maxTabletSize));
+                TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
+                if (decision.fire()) {
+                    TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause());
+                    sizeSplitLatch.recordFired(tableId, signature, job.getJobId(), decision.nextAbortRetries());
+                    LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
+                            db.getFullName(), table.getName(), maxTabletSize);
+                } else if (sizeSplitLatch.claimSuppressionLog(tableId)) {
+                    LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout "
+                                    + "(tablet not splittable); suppressing further split jobs until its data changes",
+                            db.getFullName(), table.getName());
+                }
+                return;
+            }
+            // Below the split threshold: drop any stale suppression so future growth re-arms, and bound the map.
+            sizeSplitLatch.forgetTable(tableId);
+            if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
+                createTabletReshardJob(db, table, new MergeTabletClause());
+                LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
+                        db.getFullName(), table.getName(), minAdjacentTabletPairSize);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to create tablet reshard job for table {}.{}.",
+                    db.getFullName(), table.getName(), e);
+        }
+    }
+
+    private boolean isLeaderAdmissionOpen() {
+        return GlobalStateMgr.getCurrentState().isLeader()
+                && GlobalStateMgr.getCurrentState().isLeaderWorkAdmissionOpen();
+    }
+
     public void addTabletReshardJob(TabletReshardJob tabletReshardJob) throws StarRocksException {
         checkTabletReshardJob(tabletReshardJob);
 
-        TabletReshardJob existingJob = tabletReshardJobs.putIfAbsent(tabletReshardJob.getJobId(), tabletReshardJob);
-        if (existingJob != null) {
-            throw new StarRocksException("Tablet reshard job is already existed. " + existingJob);
-        }
+        // Reserve the table before the job becomes visible to the scheduler. If the table is not
+        // reservable (e.g. busy with another reshard job or other DDL), init() throws here and the
+        // job is never queued, instead of being admitted and then forced to abort at execution time.
+        tabletReshardJob.init();
+
+        // jobId is generated by GlobalStateMgr.getNextId() (monotonic, never reused), so plain put
+        // is safe — a collision would indicate an id-generator bug and is not handled defensively.
+        tabletReshardJobs.put(tabletReshardJob.getJobId(), tabletReshardJob);
 
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(tabletReshardJob);
 
@@ -164,9 +294,71 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         reshardingTabletInfos.remove(tabletId);
     }
 
+    // tabletReshardJobs is persistent (@SerializedName, save/load via image) and
+    // reshardingTabletInfos is also serialized through writer.writeJson(this), so neither
+    // map should be cleared on demotion - the next leader resumes those jobs from the same
+    // maps. Default onStopped() is sufficient.
+
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
+        // The LeaderDaemon lease gate already skips this tick on a demoted node; this admission
+        // re-check also covers the activation window (lease valid before leader-work admission opens):
+        // neither runTabletReshardJobs() nor ColocateChecker.runOneCycle() self-gates on leader/admission,
+        // and both create reshard jobs that journal via the non-throwing logJsonObject path, so a
+        // non-admitted node must drop pending candidates and skip the tick.
+        if (!isLeaderAdmissionOpen()) {
+            reshardCandidates.clear();
+            sizeSplitLatch.clear();
+            return;
+        }
+        colocateChecker.runOneCycle();
+        drainReshardCandidates();
         runTabletReshardJobs();
+    }
+
+    @VisibleForTesting
+    void runAfterCatalogReadyForTest() {
+        runAfterLeaseValid();
+    }
+
+    @VisibleForTesting
+    int getReshardCandidateCount() {
+        return reshardCandidates.size();
+    }
+
+    @VisibleForTesting
+    boolean hasSizeSplitLatch(long tableId) {
+        return sizeSplitLatch.hasRecordedAttempt(tableId);
+    }
+
+    @VisibleForTesting
+    void clearSizeSplitLatchForTest() {
+        sizeSplitLatch.clear();
+    }
+
+    private void drainReshardCandidates() {
+        if (reshardCandidates.isEmpty()) {
+            return;
+        }
+        // Snapshot the keys; remove each atomically so a concurrent re-mark is re-evaluated next tick.
+        for (Long tableId : new ArrayList<>(reshardCandidates.keySet())) {
+            ReshardCandidate candidate = reshardCandidates.remove(tableId);
+            if (candidate == null) {
+                continue;
+            }
+            // db and table lookups are not atomic; the guard is conservative — a dropped db/table is
+            // simply skipped this cycle, and its stale size-split latch entry is reclaimed so a
+            // re-created table re-arms cleanly.
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(candidate.dbId());
+            Table table = db == null ? null : GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(candidate.dbId(), candidate.tableId());
+            if (!(table instanceof OlapTable)) {
+                sizeSplitLatch.forgetTable(tableId);
+                continue;
+            }
+            triggerTabletReshard(db, (OlapTable) table,
+                    candidate.maxTabletSize(), candidate.minAdjacentTabletPairSize());
+        }
     }
 
     private void checkTabletReshardJob(TabletReshardJob tabletReshardJob) throws StarRocksException {
@@ -195,8 +387,11 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
                 continue;
             }
 
-            // Job is done, remove expired job
-            if (job.isExpired()) {
+            // Job is done, remove expired job once no automated cluster snapshot still covers the
+            // pre-reshard state it retains (the parent/source tablets). Keeping the job keeps
+            // isTableSafeToDeleteTablet() reporting the table's tablets as unsafe to reclaim.
+            if (job.isExpired() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .isDeletionSafeToExecute(job.getFinishedTimeMs())) {
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId(), wal -> {
                     iterator.remove();
                 });

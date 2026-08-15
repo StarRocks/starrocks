@@ -17,6 +17,10 @@
 #include <aws/core/Aws.h>
 #include <aws/core/client/ClientConfiguration.h>
 
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include "base/random/random.h"
 #include "fs/credential/cloud_configuration.h"
 #include "fs/fs.h"
@@ -30,6 +34,14 @@ namespace starrocks {
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options);
 void close_s3_clients();
 
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_s3_file_system_provider(int priority = 10);
+
+} // namespace fs
+
 class S3ClientFactory {
 public:
     using ClientConfiguration = Aws::Client::ClientConfiguration;
@@ -39,8 +51,10 @@ public:
     using AWSCloudConfigurationPtr = std::shared_ptr<AWSCloudConfiguration>;
 
     static S3ClientFactory& instance() {
-        static S3ClientFactory obj;
-        return obj;
+        // Process-lifetime by design: cached clients are closed explicitly before AWS SDK teardown.
+        // Destroying this singleton during static teardown can race with SDK cleanup.
+        static auto* obj = new S3ClientFactory();
+        return *obj;
     }
 
     // Indicates the different S3 operation of using the client.
@@ -76,7 +90,7 @@ public:
 
     // Only use for UT
     bool find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
-                                               AWSCloudConfiguration* cloud_config = nullptr) {
+                                               AWSCloudConfiguration* = nullptr) {
         return _find_client_cache_keys_by_config_TEST(config);
     }
 
@@ -94,17 +108,20 @@ private:
         bool operator==(const ClientCacheKey& rhs) const;
     };
 
-    constexpr static int kMaxItems = 8;
-
     // Only use for UT
     bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
                                                 AWSCloudConfiguration* cloud_config = nullptr);
 
+    // Insert a newly created client into the cache. |max_items| is the runtime-mutable cache
+    // capacity snapshotted by the caller for the current creation. Random victims are evicted
+    // until the cache stays within capacity, so lowering the capacity shrinks the cache over
+    // subsequent insertions. Caller must hold |_lock|.
+    void _put_client(const ClientCacheKey& client_cache_key, const S3ClientPtr& client, size_t max_items);
+
     std::mutex _lock;
-    int _items{0};
-    // _client_cache_keys[i] is the client cache key of |_clients[i].
-    ClientCacheKey _client_cache_keys[kMaxItems];
-    S3ClientPtr _clients[kMaxItems];
+    // _client_cache_keys[i] is the client cache key of _clients[i]; the two vectors stay in sync.
+    std::vector<ClientCacheKey> _client_cache_keys;
+    std::vector<S3ClientPtr> _clients;
     Random _rand;
 };
 

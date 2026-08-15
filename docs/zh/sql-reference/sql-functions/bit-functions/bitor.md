@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回两个数值的按位 OR 运算结果。"
 ---
 
 # bitor

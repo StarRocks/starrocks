@@ -17,12 +17,12 @@
 #include <memory>
 
 #include "common/status.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/source_operator.h"
-#include "exec/workgroup/scan_task_queue.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/scan_task.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "exec/lookup_stream_mgr.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "runtime/descriptors_fwd.h"
-#include "runtime/lookup_stream_mgr.h"
 
 namespace starrocks::pipeline {
 

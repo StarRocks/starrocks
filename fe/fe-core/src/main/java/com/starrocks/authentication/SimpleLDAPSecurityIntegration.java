@@ -31,6 +31,7 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
     public static final String AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD = "authentication_ldap_simple_bind_root_pwd";
     public static final String AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN = "authentication_ldap_simple_bind_base_dn";
     public static final String AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR = "authentication_ldap_simple_user_search_attr";
+    public static final String AUTHENTICATION_LDAP_SIMPLE_BIND_DN_PATTERN = "authentication_ldap_simple_bind_dn_pattern";
 
     public SimpleLDAPSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
@@ -58,6 +59,8 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
                 Config.authentication_ldap_simple_bind_base_dn);
         String ldapUserSearchAttr = propertyMap.getOrDefault(AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR,
                 Config.authentication_ldap_simple_user_search_attr);
+        String ldapBindDnPattern = propertyMap.getOrDefault(AUTHENTICATION_LDAP_SIMPLE_BIND_DN_PATTERN,
+                Config.authentication_ldap_simple_bind_dn_pattern);
 
         return new LDAPAuthProvider(ldapServerHost,
                 ldapServerPort,
@@ -68,6 +71,7 @@ public class SimpleLDAPSecurityIntegration extends SecurityIntegration {
                 ldapBindRootPwd,
                 ldapBindBaseDn,
                 ldapUserSearchAttr,
-                null);
+                null,
+                ldapBindDnPattern);
     }
 }

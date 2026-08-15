@@ -144,8 +144,9 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     }
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(col_result),
-                                      down_cast<const NullableColumn*>(arg0.get())->null_column());
+        auto null_column = NullColumn::static_pointer_cast(
+                Column::mutate(down_cast<const NullableColumn*>(arg0.get())->null_column()));
+        return NullableColumn::create(std::move(col_result), std::move(null_column));
     } else {
         return col_result;
     }
@@ -339,7 +340,7 @@ StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, co
     auto values = col_map->values_column();
     if (values->is_map()) {
         const Columns map_values = {std::move(values)};
-        values = distinct_map_keys(context, map_values).value();
+        ASSIGN_OR_RETURN(values, distinct_map_keys(context, map_values));
     }
 
     Filter filter(keys->size(), 1);

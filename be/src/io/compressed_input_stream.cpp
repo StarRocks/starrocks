@@ -14,8 +14,8 @@
 
 #include "io/compressed_input_stream.h"
 
+#include "base/compression/stream_decompressor.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/stream_decompressor.h"
 
 namespace starrocks::io {
 
@@ -104,6 +104,15 @@ Status CompressedInputStream::skip(int64_t n) {
         }
     }
     return Status::OK();
+}
+
+// Out-of-line so gcov can attribute coverage to a concrete `.cpp` line.
+IoStatsSnapshot CompressedInputStream::get_io_stats_snapshot() const {
+    return _source_stream->get_io_stats_snapshot();
+}
+
+IoStatsSnapshot CompressedSeekableInputStream::get_io_stats_snapshot() const {
+    return _source->get_io_stats_snapshot();
 }
 
 } // namespace starrocks::io

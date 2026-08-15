@@ -15,7 +15,9 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 
 #include <bthread/bthread.h>
+#include <fmt/std.h>
 
+#include <cerrno>
 #include <cstddef>
 #include <mutex>
 #include <string_view>
@@ -23,11 +25,14 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
+#include "exec/pipeline/query_context.h"
 #include "fmt/core.h"
-#include "runtime/exec_env.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks::pipeline {
 
@@ -81,7 +86,7 @@ DeferOp<std::function<void()>> SinkBuffer::defer_notify() {
     return DeferOp<std::function<void()>>([this]() {
         _observable.notify_sink_observers();
         if (bthread_self()) {
-            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+            CHECK(tls_thread_status.mem_tracker() == RuntimeEnv::GetInstance()->process_mem_tracker());
         }
     });
 }
@@ -244,7 +249,21 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
-    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+    // Cancel all in-flight RPCs. Without this, a cancelled fragment keeps waiting until these RPCs drain.
+    // bthread_id_list_reset() may call on_error() callback of valid call ids, which may lead to deadlock if the thread
+    // is still holding the lock. So the lock-and-swap idiom is used. See bRPC comments (id.h) for more details.
+    for (auto& [_, sink_context] : _sink_ctxs) {
+        bthread_id_list_t tmplist;
+        bthread_id_list_init(&tmplist, 0, 0);
+        {
+            std::lock_guard cids_guard(sink_context->in_flight_rpc_cids_mutex);
+            bthread_id_list_swap(&tmplist, &sink_context->in_flight_rpc_cids);
+        }
+        bthread_id_list_reset(&tmplist, ECANCELED);
+        bthread_id_list_destroy(&tmplist);
+    }
+
+    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
@@ -399,10 +418,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        auto failed_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                         std::string_view rpc_error_msg) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto query_ctx_weak = _fragment_ctx->runtime_state()->query_ctx()->weak_from_this();
+
+        auto failed_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                         std::string_view rpc_error_msg) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -411,21 +432,21 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
                     fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
                                 print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
-            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
+            cancel_fragment_context(_fragment_ctx, Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         };
 
-        auto success_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                          const PTransmitChunkResult& result) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto success_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                          const PTransmitChunkResult& result) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -434,11 +455,11 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             if (!status.ok()) {
                 _is_finishing = true;
-                _fragment_ctx->cancel(status);
+                cancel_fragment_context(_fragment_ctx, status);
 
                 const auto& dest_addr = context.dest_addrs;
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",
@@ -465,6 +486,16 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         set_ignore_overcrowded_for_query(closure->cntl);
+
+        // The call id must be obtained before launching the RPC, as per bRPC doc.
+        const auto call_id = closure->cntl.call_id();
+        {
+            std::lock_guard cids_guard(context.in_flight_rpc_cids_mutex);
+            // Do not cancel eos request, because eos request is the last request to be sent, and it must be sent to the destination.
+            if (!request.params->eos()) {
+                bthread_id_list_add(&context.in_flight_rpc_cids, call_id);
+            }
+        }
 
         return _send_rpc(closure, request);
     }

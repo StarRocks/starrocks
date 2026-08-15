@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力値をビットマップ値から削除し、結果セットを返します。"
 ---
 
 # bitmap_remove

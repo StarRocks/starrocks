@@ -626,7 +626,6 @@ public class ComputeNodeTest {
         // Generate a series of hbResponses in the following order
         // Leader:   OK | OK | ERR | OK | ERR | ERR | OK | ERR | ERR | ERR | OK
         // Follower:  N |  N |  Y  |  Y |  Y  |  Y  |  Y |  Y  |  Y  |   Y | Y
-        List<BackendHbResponse> hbResponses = new ArrayList<>();
         List<TStatusCode> statusCodes = List.of(
                 TStatusCode.OK,
                 TStatusCode.OK,

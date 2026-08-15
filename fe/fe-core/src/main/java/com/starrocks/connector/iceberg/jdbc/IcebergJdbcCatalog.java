@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_JDBC_CATALOG_NAME;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.iceberg.CatalogProperties.WAREHOUSE_LOCATION;
 
@@ -93,8 +94,11 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
                     ICEBERG_CUSTOM_PROPERTIES_PREFIX + WAREHOUSE_LOCATION));
         }
 
-        this.delegate = (JdbcCatalog) CatalogUtil.loadCatalog(JdbcCatalog.class.getName(), name, copiedProperties, conf);
+        String jdbcCatalogName = copiedProperties.getOrDefault(ICEBERG_JDBC_CATALOG_NAME, name);
+        copiedProperties.remove(ICEBERG_JDBC_CATALOG_NAME);
 
+        this.delegate = (JdbcCatalog) CatalogUtil.loadCatalog(
+                JdbcCatalog.class.getName(), jdbcCatalogName, copiedProperties, conf);
     }
 
 
@@ -169,7 +173,7 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
     public Database getDB(ConnectContext context, String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
-        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override

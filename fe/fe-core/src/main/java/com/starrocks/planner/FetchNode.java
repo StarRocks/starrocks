@@ -21,6 +21,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFetchNode;
 import com.starrocks.thrift.TNodesInfo;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -56,6 +57,24 @@ public class FetchNode extends PlanNode {
 
     public PlanNodeId getTargetNodeId() {
         return targetNodeId;
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        // Global late materialization defers the wide columns to a lookup fragment that
+        // PlanFragmentBuilder moves into preExecutedFragments. That fragment is not a child of
+        // this node -- it is referenced by node id alone -- so normalizeSubTree() never reaches
+        // it, and neither the columns it fetches nor its own scan and predicates can enter the
+        // digest. The scan below here reads only row positions, identically whichever column the
+        // query ultimately wants, so nothing else distinguishes two plans that defer different
+        // columns either: they would share a cache key and the first to run would decide the
+        // second's answer.
+        //
+        // Normalizing this node alone would not be enough -- the lookup fragment would still be
+        // invisible -- so the fragment is marked uncacheable instead. Late materialization is a
+        // performance optimization, so the cost is losing the cache for these plans, not a wrong
+        // answer.
+        normalizer.setUncacheable(true);
     }
 
     @Override

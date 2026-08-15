@@ -1,12 +1,13 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the logarithm of a number to a specified base (or radix)."
 ---
 
 # log
 
 
 
-Calculates the logarithm of a number to a specified base (or radix). If the base is not specified, this function is equivalent to [ln](../math-functions/ln.md).
+Calculates the logarithm of a number to a specified base (or radix). If the base is not specified, this function is equivalent to [ln](./ln.md).
 
 ## Syntax
 
@@ -16,7 +17,7 @@ log([base,] arg)
 
 ## Parameters
 
-- `base`: Optional. The base. Only DOUBLE data type is supported. If this parameter is not specified, this function is equivalent to [ln](../math-functions/ln.md).
+- `base`: Optional. The base. Only DOUBLE data type is supported. If this parameter is not specified, this function is equivalent to [ln](./ln.md).
 
 > **NOTE**
 >

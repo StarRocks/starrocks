@@ -208,6 +208,30 @@ public class AlterHandlerTest {
     }
 
     /**
+     * After onStopped() shuts down the AlterReplicaTask executor, a subsequent start() must
+     * rebuild it so that handleFinishAlterTask submissions accepted by the next leader land
+     * on a fresh pool rather than throwing RejectedExecutionException forever.
+     */
+    @Test
+    public void testStartRebuildsExecutorAfterOnStopped() throws Exception {
+        java.util.concurrent.ThreadPoolExecutor poolBeforeStop =
+                (java.util.concurrent.ThreadPoolExecutor) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(handler, "executor", true);
+        org.apache.commons.lang3.reflect.MethodUtils.invokeMethod(handler, true, "onStopped");
+        Assertions.assertTrue(poolBeforeStop.isShutdown(),
+                "executor must be shut down on demotion so AlterReplicaTask workers exit");
+
+        handler.start();
+        java.util.concurrent.ThreadPoolExecutor poolAfterRestart =
+                (java.util.concurrent.ThreadPoolExecutor) org.apache.commons.lang3.reflect.FieldUtils
+                        .readField(handler, "executor", true);
+        Assertions.assertNotSame(poolBeforeStop, poolAfterRestart,
+                "start() must rebuild the executor after demotion");
+        Assertions.assertFalse(poolAfterRestart.isShutdown());
+        handler.setStop();
+    }
+
+    /**
      * Helper method to create a mock AlterJobV2 with specified properties.
      */
     private AlterJobV2 createMockJob(long jobId, long tableId, long txnId, AlterJobV2.JobState state) {

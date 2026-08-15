@@ -51,7 +51,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -394,9 +393,19 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(node.getName().toSql());
 
+        if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
+            sqlBuilder.append(" ");
+            sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        }
+
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {
+                // Temporary and formal partitions are separate namespaces, so dropping the qualifier
+                // does not merely lose formatting: it names a different partition.
+                if (node.getPartitionNames().isTemp()) {
+                    sqlBuilder.append(" TEMPORARY");
+                }
                 sqlBuilder.append(" PARTITION (");
                 sqlBuilder.append(partitionNames.stream().map(c -> "`" + c + "`")
                         .collect(Collectors.joining(", ")));
@@ -459,7 +468,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         sqlBuilder.append("(");
         sqlBuilder.append(
                 Optional.ofNullable(tableFunction.getChildExpressions())
-                        .orElse(Collections.emptyList()).stream().map(this::visit)
+                        .orElse(tableFunction.getFunctionParams().exprs()).stream().map(this::visit)
                         .collect(Collectors.joining(",")));
         sqlBuilder.append(")");
         sqlBuilder.append(")"); // TABLE(
@@ -493,7 +502,13 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     public String visitArrayExpr(ArrayExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
         Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        sb.append(type.toString());
+        // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
+        // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
+        // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
+        // the original did not have, which changes function overload resolution on the way back in.
+        if (type.equals(node.getType())) {
+            sb.append(type.toString());
+        }
         sb.append('[');
         sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
         sb.append(']');
@@ -580,9 +595,9 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     @Override
-    public String visitValues(ValuesRelation node, Void scope) {
+    protected String visitValueRows(ValuesRelation node) {
         if (!options.isEnableDigest()) {
-            return super.visitValues(node, scope);
+            return super.visitValueRows(node);
         }
 
         if (node.isNullValues()) {
@@ -599,6 +614,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append(rowBuilder);
         }
         return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitValues(ValuesRelation node, Void scope) {
+        if (!options.isEnableDigest()) {
+            return super.visitValues(node, scope);
+        }
+        // The digest form is deliberately unparenthesized and keeps only the first row.
+        return visitValueRows(node);
     }
 
     @Override

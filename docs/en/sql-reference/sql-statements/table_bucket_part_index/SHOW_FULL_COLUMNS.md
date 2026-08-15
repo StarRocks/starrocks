@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW FULL COLUMNS is used to show content in columns from specified tables."
 ---
 
 # SHOW FULL COLUMNS

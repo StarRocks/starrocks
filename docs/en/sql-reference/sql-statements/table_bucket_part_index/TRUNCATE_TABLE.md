@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TRUNCATE TABLE is used to truncate the specified table and partition data."
 ---
 
 # TRUNCATE TABLE

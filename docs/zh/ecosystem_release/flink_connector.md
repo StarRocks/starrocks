@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Flink 的发布说明和更新日志。"
 ---
 
 # Flink connector 版本发布
@@ -30,10 +31,10 @@ displayed_sidebar: docs
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -42,6 +43,24 @@ displayed_sidebar: docs
 ## 发布记录
 
 ### 1.2
+
+#### 1.2.15
+
+发布日期：2026年6月18日
+
+##### 新增特性
+
+- 新增对多表事务 Stream Load 的支持。[#487](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/487)
+
+##### 功能优化
+
+- Merge Commit 支持记录数据质量错误消息。[#484](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/484)
+
+##### 错误修复
+
+- 修复多表事务的并发性问题：对每张表的导入操作进行串行化，并协调跨表提交。[#491](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/491)
+- 当处于 PREPARE 状态的滞留事务回滚失败时，回退到 FE 取消 API。[#488](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/488)
+- 在构建列语句时，DEFAULT 子句中不再对 CURRENT_TIMESTAMP 进行引号处理。[#486](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/486)
 
 #### 1.2.14
 

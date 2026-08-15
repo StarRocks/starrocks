@@ -60,7 +60,8 @@ enum TDataSinkType {
     MULTI_OLAP_TABLE_SINK,
     SPLIT_DATA_STREAM_SINK,
     NOOP_SINK,
-    ICEBERG_DELETE_SINK
+    ICEBERG_DELETE_SINK,
+    ICEBERG_ROW_DELTA_SINK
 }
 
 enum TResultSinkType {
@@ -242,11 +243,26 @@ struct TOlapTableSink {
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
     34: optional bool is_multi_statements_txn
+    // Shared-data only: FE-controlled switch that tells each target CN to elect
+    // a per-partition coordinator for combined_txn_log collection instead of the
+    // legacy "sender_id == 0 collects all" rule. FE only sets this to true once
+    // it knows every target CN supports the mode (rolling-upgrade interlock).
+    35: optional bool enable_lake_per_partition_coordinator_txn_log
 }
 
 struct TSchemaTableSink {
     1: optional string table
     2: optional Descriptors.TNodesInfo nodes_info
+}
+
+enum TIcebergWriteMode {
+    APPEND,
+    // Iceberg row-delta UPDATE layout:
+    //   [_file, _pos, data_col1, ..., data_colN]
+    ROW_DELTA_UPDATE,
+    // Iceberg row-delta mixed-operation layout:
+    //   [_file, _pos, data_col1, ..., data_colN, op_code]
+    ROW_DELTA_MIXED
 }
 
 struct TIcebergTableSink {
@@ -260,6 +276,15 @@ struct TIcebergTableSink {
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
     9: optional string data_location
+    // write mode: ROW_DELTA_UPDATE for pure UPDATE, ROW_DELTA_MIXED for MERGE-style
+    // mixed routing (delete / update / insert / no-op)
+    10: optional TIcebergWriteMode write_mode
+    // Codec for position-delete files. `compression_type` is the codec for data
+    // files. Each sink populates only the field(s) it actually writes:
+    //   IcebergTableSink    (data only)   → compression_type
+    //   IcebergDeleteSink   (delete only) → delete_compression_type
+    //   IcebergRowDeltaSink (both)        → both
+    11: optional Types.TCompressionType delete_compression_type
 }
 
 struct THiveTableSink {

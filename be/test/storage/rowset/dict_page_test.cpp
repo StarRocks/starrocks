@@ -20,7 +20,9 @@
 #include <iostream>
 #include <limits>
 
+#include "column/chunk_factory.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/util/debug_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/binary_plain_page.h"
@@ -97,19 +99,18 @@ public:
         ASSERT_EQ(data_num, page_decoder.count());
 
         // check values
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkFactory::column_from_field_type(Type, false);
         size_t decode_size = data_num;
         status = page_decoder.next_batch(&decode_size, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(data_num, decode_size);
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < decode_size; i++) {
-            if (data[i] != decoded[i]) {
+            if (data[i] != values[i]) {
                 if constexpr (std::is_same_v<int128_t, CppType>) {
                     FAIL() << "Fail at index " << i;
                 } else {
-                    FAIL() << "Fail at index " << i << " inserted=" << data[i] << " got=" << decoded[i];
+                    FAIL() << "Fail at index " << i << " inserted=" << data[i] << " got=" << values[i];
                 }
             }
         }
@@ -122,21 +123,20 @@ public:
         ASSERT_TRUE(status.ok()) << status.to_string();
         // 2000 - 100
         ASSERT_EQ(data_num - 100, decode_size);
-        values = reinterpret_cast<const CppType*>(column->raw_data());
-        decoded = (CppType*)values;
+        const auto values2 = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < decode_size; i++) {
-            if (data[i + 100] != decoded[i]) {
+            if (data[i + 100] != values2[i]) {
                 if constexpr (std::is_same_v<int128_t, CppType>) {
                     FAIL() << "Fail at index " << i;
                 } else {
-                    FAIL() << "Fail at index " << i << " inserted=" << data[i + 100] << " got=" << decoded[i];
+                    FAIL() << "Fail at index " << i << " inserted=" << data[i + 100] << " got=" << values2[i];
                 }
             }
         }
 
         ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
         ASSERT_EQ(0, page_decoder.current_index());
-        column = ChunkHelper::column_from_field_type(Type, false);
+        column = ChunkFactory::column_from_field_type(Type, false);
         SparseRange<> read_range;
         read_range.add(Range<>(0, 2));
         read_range.add(Range<>(4, 7));
@@ -374,18 +374,17 @@ TEST_F(DictPageTest, TestLargeDataSize) {
         page_decoder.set_dict_decoder(dict_page_decoder.get());
 
         // check values
-        auto column = ChunkHelper::column_from_field_type(TYPE_BIGINT, false);
+        auto column = ChunkFactory::column_from_field_type(TYPE_BIGINT, false);
         size_t page_start_id = page_start_ids[i];
         size_t page_size = page_start_ids[i + 1] - page_start_id;
         size_t decode_size = page_size;
         st = page_decoder.next_batch(&decode_size, column.get());
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(page_size, decode_size);
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<TYPE_BIGINT>::get_data(column);
         for (int j = page_start_id; j < page_start_ids[i + 1]; j++) {
-            if (decoded[j - page_start_id] != j) {
-                FAIL() << "Fail at index " << i << " inserted=" << j << " got=" << decoded[j - page_start_id];
+            if (values[j - page_start_id] != j) {
+                FAIL() << "Fail at index " << i << " inserted=" << j << " got=" << values[j - page_start_id];
             }
         }
     }

@@ -36,6 +36,7 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
@@ -63,7 +64,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -244,45 +245,29 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                     List<Runnable> appliers,
                                     ConnectContext context) {
         String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
-        // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
-        MaterializedView.RefreshMode currentRefreshMode =
+        MaterializedView.RefreshMode targetMode =
                 MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
-        if (currentRefreshMode.isIncrementalOrAuto()) {
-            ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
-            if ((mvDefinedQueryParseNode instanceof QueryStatement queryStatement)) {
-                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
+        MaterializedView.RefreshMode originalMode = materializedView.getCurrentRefreshMode();
 
-                Optional<IVMAnalyzer.IVMAnalyzeResult> result;
-                try {
-                    result = ivmAnalyzer.rewrite(
-                            MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
-                } catch (SemanticException e) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
-                            mvRefreshMode, e.getMessage());
-                }
-                if (result.isEmpty()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " because the materialized view is not eligible for %s refresh mode",
-                            mvRefreshMode, mvRefreshMode);
-                }
-                // if materialized's original refresh mode is not auto or ivm, throw exception
-                if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " only support alter original incremental/auto based materialized view",
-                            mvRefreshMode);
-                }
-                currentRefreshMode = result.get().currentRefreshMode();
-            } else {
-                throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
-            }
+        // Cross-mode ALTER is not supported. The recovery path for changing refresh_mode is
+        // drop-and-recreate. Same-mode ALTER is allowed and behaves as a no-op (modulo the
+        // applier below, which keeps the persisted property and the in-memory mode in sync).
+        if (originalMode != targetMode) {
+            throw new SemanticException(
+                    "Altering refresh_mode from %s to %s is not supported. " +
+                            "Please drop and re-create the materialized view if a mode change is required.",
+                    originalMode, targetMode);
         }
 
-        MaterializedView.RefreshMode finalCurrentRefreshMode = currentRefreshMode;
-        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)) {
+        // Trigger applier when either the persisted property or the in-memory current mode
+        // would change. Comparing only the persisted string would miss cases where the two
+        // are out of sync (e.g. mode promoted internally without rewriting the property).
+        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)
+                || materializedView.getCurrentRefreshMode() != targetMode) {
             appliers.add(() -> {
                 tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
                 tableProperty.setMvRefreshMode(mvRefreshMode);
-                materializedView.setCurrentRefreshMode(finalCurrentRefreshMode);
+                materializedView.setCurrentRefreshMode(targetMode);
             });
         }
     }
@@ -1051,6 +1036,66 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     }
 
     @Override
+    public Void visitReorderColumnsClause(ReorderColumnsClause clause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        SortKeyResolution sortKey = resolveSortKey(mv, clause.getColumnsByPos());
+        List<Integer> sortKeyIdxes = sortKey.sortKeyIdxes();
+        List<Integer> sortKeyUniqueIds = sortKey.sortKeyUniqueIds();
+        // NOTE: this visitor already runs under the MV table WRITE lock taken by
+        // AlterJobExecutor.visitAlterMaterializedViewStatement -- do NOT wrap another AutoCloseableLock/
+        // Locker here (a second Locker instance is not reentrant and would self-deadlock).
+        ErrorReport.wrapWithRuntimeException(() ->
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                        .submitMvSortKeyRewriteJob(db, mv, sortKeyIdxes, sortKeyUniqueIds));
+        return null;
+    }
+
+    /**
+     * Result of {@link #resolveSortKey}: the resolved sort-key column positions and (possibly empty)
+     * unique ids.
+     */
+    private record SortKeyResolution(List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
+    }
+
+    /**
+     * Resolve ORDER BY column names to positions (and, if every resolved column carries a stable unique
+     * id, their unique ids) in the MV's base schema, in a single pass. Mirrors the column-matching loop
+     * and unique-id accumulation in {@code SchemaChangeHandler#processModifySortKeyColumn}; existence/
+     * duplicate/keysType checks are already enforced by
+     * {@code AlterMVClauseAnalyzerVisitor#visitReorderColumnsClause}. If any resolved column's unique id
+     * is not stable, the returned unique ids are empty (the job then derives the sort key from
+     * {@code sortKeyIdxes} alone).
+     */
+    private static SortKeyResolution resolveSortKey(MaterializedView mv, List<String> orderBy) {
+        List<Column> baseSchema = mv.getSchemaByIndexMetaId(mv.getBaseIndexMetaId());
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        List<Integer> sortKeyUniqueIds = Lists.newArrayList();
+        boolean useSortKeyUniqueId = true;
+        for (String colName : orderBy) {
+            int sortKeyIdx = -1;
+            for (int i = 0; i < baseSchema.size(); i++) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(colName)) {
+                    sortKeyIdx = i;
+                    break;
+                }
+            }
+            if (sortKeyIdx < 0) {
+                throw new SemanticException("ORDER BY column '" + colName + "' does not exist "
+                        + "in materialized view '" + mv.getName() + "'");
+            }
+            sortKeyIdxes.add(sortKeyIdx);
+            int uniqueId = baseSchema.get(sortKeyIdx).getUniqueId();
+            if (useSortKeyUniqueId && uniqueId > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                sortKeyUniqueIds.add(uniqueId);
+            } else {
+                useSortKeyUniqueId = false;
+                sortKeyUniqueIds.clear();
+            }
+        }
+        return new SortKeyResolution(sortKeyIdxes, sortKeyUniqueIds);
+    }
+
+    @Override
     public Void visitRefreshSchemeClause(RefreshSchemeClause refreshSchemeDesc, ConnectContext context) {
         try {
             MaterializedView materializedView = (MaterializedView) table;
@@ -1185,9 +1230,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
-    /**
-     * Inactive the materialized view and its related materialized views.
-     */
     private static void doInactiveMaterializedViewRecursive(MaterializedView mv, String reason,
                                                             boolean isClearVersionMap,
                                                             Set<MvId> visited) {
@@ -1437,13 +1479,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv == null) {
             return;
         }
-        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
-        // write edit log
+        inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
+    // or failover instead of reverting to active until the next refresh re-detects the condition.
+    public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
         AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                 mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
-            // inactive related mv
-            mv.setInactiveAndReason(inactiveReason);
-        });
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log,
+                wal -> mv.setInactiveAndReason(inactiveReason));
     }
 }

@@ -109,4 +109,14 @@ public class ColocatePropertyInfoTest {
         ColocatePropertyInfo info2 = ColocatePropertyInfo.of("group1:col1,col2");
         Assertions.assertEquals(info1.hashCode(), info2.hashCode());
     }
+
+    @Test
+    public void testGetColocateGroupName() {
+        Assertions.assertEquals("group1", ColocatePropertyInfo.getColocateGroupName("group1"));
+        Assertions.assertEquals("group1", ColocatePropertyInfo.getColocateGroupName("group1:col1,col2"));
+        Assertions.assertEquals("grp1", ColocatePropertyInfo.getColocateGroupName("grp1:tenant_id"));
+        Assertions.assertEquals("group1", ColocatePropertyInfo.getColocateGroupName(" group1 : col1,col2"));
+        Assertions.assertNull(ColocatePropertyInfo.getColocateGroupName(null));
+        Assertions.assertEquals("", ColocatePropertyInfo.getColocateGroupName(""));
+    }
 }

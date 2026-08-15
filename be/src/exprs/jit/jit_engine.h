@@ -19,7 +19,6 @@
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include <cstdint>
 #include <memory>

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HAVING clause filters aggregate function results rather than row data."
 sidebar_label: "HAVING"
 ---
 

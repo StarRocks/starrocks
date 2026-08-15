@@ -17,77 +17,24 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
-set(EXPR_CORE_FILES
-  arithmetic_expr.cpp
-  function_context.cpp
-  expr_context.cpp
-  expr.cpp
-  array_element_expr.cpp
-  array_expr.cpp
-  base64.cpp
-  bit_functions.cpp
-  binary_predicate.cpp
-  bitmap_functions.cpp
-  cast_nested.cpp
-  cast_expr.cpp
-  cast_expr_array.cpp
-  cast_expr_struct.cpp
-  case_expr.cpp
-  cast_expr_json.cpp
-  cast_expr_map.cpp
-  chunk_predicate_evaluator.cpp
-  column_ref.cpp
-  compound_predicate.cpp
-  condition_expr.cpp
-  encryption_functions.cpp
-  es_functions.cpp
-  expr_factory.cpp
-  expr_executor.cpp
-  function_helper.cpp
-  gin_functions.cpp
-  grouping_sets_functions.cpp
-  hash_functions.cpp
-  hyperloglog_functions.cpp
-  info_func.cpp
-  in_const_predicate.cpp
-  in_predicate.cpp
-  is_null_predicate.cpp
-  jsonpath.cpp
-  lambda_function.cpp
-  like_predicate.cpp
-  literal.cpp
-  math_functions.cpp
-  map_expr.cpp
-  map_element_expr.cpp
-  map_functions.cpp
-  match_expr.cpp
-  placeholder_ref.cpp
-  regexp_split.cpp
-  struct_functions.cpp
-  subfield_expr.cpp
-  table_function/json_each.cpp
-  time_functions.cpp
-  variant_path_reader.cpp
-  variant_functions.cpp
-)
-
-if(STARROCKS_JIT_ENABLE)
-  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
-      jit/ir_helper.cpp
-      jit/expr_jit_codegen.cpp)
-endif()
-
-ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC RuntimeCore)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(EXPR_FILES
+  agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
+  agg/combinator/agg_state_utils.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_sum_map1.cpp
+  agg/factory/aggregate_resolver_sum_map2.cpp
+  agg/factory/aggregate_resolver_sum_map3.cpp
   agg/factory/aggregate_resolver_boolean.cpp
   agg/factory/aggregate_resolver_hypothesis_testing.cpp
   agg/factory/aggregate_resolver_minmaxany.cpp
+  agg/factory/aggregate_resolver_maxminby1.cpp
+  agg/factory/aggregate_resolver_maxminby2.cpp
+  agg/factory/aggregate_resolver_maxminby3.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp
   agg/factory/aggregate_resolver_distinct.cpp
@@ -95,48 +42,111 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
-  agg/combinator/agg_state_utils.cpp
-  binary_functions.cpp
-  expr_factory_exprs_extension.cpp
-  table_function/table_function_factory.cpp
-  table_function/list_rowsets.cpp
+  arithmetic_expr.cpp
+  function_context.cpp
+  expr_context.cpp
+  expr.cpp
+  sort_exec_exprs.cpp
+  array_element_expr.cpp
+  array_expr.cpp
+  ai_functions.cpp
   array_functions.cpp
-  arrow_function_call.cpp
-  dictmapping_expr.cpp
-  find_in_set.cpp
+  array_map_expr.cpp
+  array_sort_lambda_expr.cpp
+  binary_functions.cpp
+  bit_functions.cpp
+  binary_predicate.cpp
+  bitmap_functions.cpp
+  cast_nested.cpp
+  cast_expr.cpp
+  cast_expr_g1.cpp
+  cast_expr_g2.cpp
+  cast_expr_g3.cpp
+  cast_expr_array.cpp
+  cast_expr_struct.cpp
+  case_expr.cpp
+  case_expr_g1.cpp
+  case_expr_g2.cpp
+  case_expr_g3.cpp
+  cast_expr_json.cpp
+  cast_expr_map.cpp
+  chunk_predicate_evaluator.cpp
+  column_ref.cpp
+  column_access_path_resolver.cpp
+  compound_predicate.cpp
+  condition_expr.cpp
+  encryption_functions.cpp
+  es_functions.cpp
+  expr_factory.cpp
+  expr_executor.cpp
   function_call_expr.cpp
+  function_helper.cpp
+  find_in_set.cpp
   geo_functions.cpp
+  gin_functions.cpp
+  grouping_sets_functions.cpp
+  hash_functions.cpp
+  http_request_functions.cpp
+  hyperloglog_functions.cpp
+  info_func.cpp
   inet_aton.cpp
+  in_const_predicate.cpp
+  in_predicate.cpp
+  is_null_predicate.cpp
+  hyper_json_transformer.cpp
   json_functions.cpp
+  jsonpath.cpp
+  lambda_function.cpp
+  like_predicate.cpp
+  literal.cpp
   locate.cpp
+  math_functions.cpp
+  map_expr.cpp
+  map_apply_expr.cpp
+  map_element_expr.cpp
+  map_functions.cpp
+  match_expr.cpp
+  ngram.cpp
+  placeholder_ref.cpp
   percentile_functions.cpp
+  regexp_split.cpp
   split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
-  utility_functions.cpp
+  struct_functions.cpp
+  subfield_expr.cpp
+  substring_index.cpp
+  table_function/json_each.cpp
+  table_function/table_function_factory.cpp
+  time_functions.cpp
+  udf/java/java_udf.cpp
+  udf/java/java_udf_context.cpp
+  udf/java/java_udf_reflection.cpp
+  udf/java/java_data_converter.cpp
+  udf/java/arrow_udf_jni.cpp
+  udf/java/jni_arrow_func_call_stub.cpp
+  udf/python/env.cpp
+  udf/python/callstub.cpp
+  udf/udf_call_stub.cpp
+  variant_path_reader.cpp
+  variant_functions.cpp
+  arrow_function_call.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
-  array_map_expr.cpp
-  array_sort_lambda_expr.cpp
-  map_apply_expr.cpp
-  substring_index.cpp
-  dict_query_expr.cpp
-  dictionary_get_expr.cpp
-  ngram.cpp
-  ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
   set(EXPR_FILES ${EXPR_FILES}
+      jit/ir_helper.cpp
+      jit/expr_jit_codegen.cpp
       jit/expr_jit_rewriter.cpp
       jit/expr_jit_pass.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)
-
 endif()
 
-ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore)
+ADD_BE_LIB(Expr ${EXPR_FILES})
+target_link_libraries(Expr PUBLIC Runtime ColumnSortCore Platform Geo)

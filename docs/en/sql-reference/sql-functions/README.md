@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.5
+description: "StarRocks offers a rich set of functions to facilitate data queries and analysis."
 ---
 
 # Functions

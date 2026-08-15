@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将字节数转换为带有适当单位（B、KB、MB、GB、TB、PB、EB）的易读字符串。"
 ---
 
 # format_bytes

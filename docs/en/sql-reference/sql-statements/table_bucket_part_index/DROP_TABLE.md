@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP TABLE is used to delete a table."
 ---
 
 # DROP TABLE

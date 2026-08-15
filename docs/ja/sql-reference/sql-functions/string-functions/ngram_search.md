@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの文字列のngram類似度を計算します。"
 ---
 
 # ngram_search

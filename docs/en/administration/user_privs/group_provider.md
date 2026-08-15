@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+description: "Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems."
 ---
 
 # Authenticate User Groups
@@ -156,6 +157,17 @@ Specifies how to extract the user identifier from the member attribute value. Yo
 - **When `ldap_user_search_attr` is not configured**, the system uses the complete DN directly as user identifier, and uses the DN recorded during authentication as key during group search.
 
 This design enables LDAP Group Provider to adapt to different LDAP environments, especially complex environments like Microsoft AD.
+
+:::
+
+:::tip
+
+**Interaction with `authentication_ldap_simple_bind_dn_pattern`**
+
+When using DN pattern authentication (e.g., `uid=${USER}@abc.com,ou=People,dc=example,dc=com`) where the `${USER}` substitution is embedded within a larger attribute value:
+
+- **Recommended**: Do not configure `ldap_user_search_attr`. The system will use the complete DN for group matching, which avoids extraction errors.
+- **If you must configure it**: Use a regex that extracts only the username portion. For example, if the DN pattern is `uid=${USER}@abc.com,ou=People,dc=example,dc=com`, set `ldap_user_search_attr` to `uid=([^,@]+)@abc.com` to extract only the `${USER}` part. A simple `uid` or `uid=([^,]+)` would incorrectly extract `alice@abc.com` instead of `alice`.
 
 :::
 

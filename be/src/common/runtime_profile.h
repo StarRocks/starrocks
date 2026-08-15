@@ -42,11 +42,11 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
-#include <thread>
 #include <unordered_set>
 #include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/phmap/phmap.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -466,12 +466,10 @@ public:
     // Clean all the counters except saved_names
     void remove_counters(const std::set<std::string>& saved_names);
 
-    // Helper to append to the "ExecOption" info string.
-    void append_exec_option(const std::string& option) { add_info_string("ExecOption", option); }
-
     // Adds a string to the runtime profile.  If a value already exists for 'key',
     // the value will be updated.
-    void add_info_string(const std::string& key, const std::string& value = "");
+    void add_info_string(std::string_view key, std::string_view value = {});
+    void add_info_string_if_not_exists(std::string_view key, std::string_view value);
 
     // Creates and returns a new EventSequence (owned by the runtime
     // profile) - unless a timer with the same 'key' already exists, in
@@ -479,9 +477,9 @@ public:
     // TODO: EventSequences are not merged by Merge()
     EventSequence* add_event_sequence(const std::string& key);
 
-    // Returns a pointer to the info string value for 'key'.  Returns NULL if
+    // Returns a pointer to the info string value for 'key'.  Returns std::nullopt if
     // the key does not exist.
-    std::string* get_info_string(const std::string& key);
+    std::optional<std::string> get_info_string(std::string_view key);
 
     // Copy all the string infos from src profile
     void copy_all_info_strings_from(RuntimeProfile* src_profile);
@@ -620,7 +618,7 @@ private:
     ChildVector _children;
     mutable std::mutex _children_lock; // protects _child_map and _children
 
-    typedef std::map<std::string, std::string> InfoStrings;
+    using InfoStrings = phmap::flat_hash_map<std::string, std::string>;
     InfoStrings _info_strings;
 
     // Keeps track of the order in which InfoStrings are displayed when printed
@@ -805,6 +803,8 @@ private:
             RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
 #define ADD_CHILD_TIMER(profile, name, parent) \
     (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) \
+    (profile)->add_derived_counter(name, type, __VA_ARGS__, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
@@ -836,6 +836,7 @@ private:
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) (RuntimeProfile::Counter*)NULL
 #define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent) (RuntimeProfile::Counter*)NULL
 #define ADD_CHILD_TIMER(profile, name, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) (RuntimeProfile::DerivedCounter*)NULL
 #define ADD_THREAD_COUNTERS(profile, prefix) (RuntimeProfile::ThreadCounters*)NULL
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) (RuntimeProfile::Counter*)NULL
 #define SCOPED_THREAD_COUNTER_MEASUREMENT(c)

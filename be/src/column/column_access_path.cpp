@@ -15,56 +15,42 @@
 #include "column/column_access_path.h"
 
 #include <cstddef>
+#include <sstream>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "column/column.h"
-#include "column/column_helper.h"
 #include "column/field.h"
-#include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/expr_factory.h"
+#include "fmt/format.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
-Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
-                              ObjectPool* pool) {
+namespace {
+
+std::pair<std::string_view, std::string_view> split_flat_json_path(std::string_view path) {
+    size_t pos = path.find('.');
+    if (pos == std::string_view::npos) {
+        return {path, {}};
+    }
+    return {path.substr(0, pos), path.substr(pos + 1)};
+}
+
+} // namespace
+
+Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAccessPath& column_path,
+                              const PathResolver& path_resolver) {
     _type = column_path.type;
     _from_predicate = column_path.from_predicate;
     _extended = column_path.extended;
 
-    ExprContext* expr_ctx = nullptr;
-    // Todo: may support late materialization? to compute path by other column predicate
-    RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, column_path.path, &expr_ctx, state));
-    if (!expr_ctx->root()->is_constant()) {
-        return Status::InternalError("error column access constant path.");
-    }
-
-    RETURN_IF_ERROR(expr_ctx->prepare(state));
-    RETURN_IF_ERROR(expr_ctx->open(state));
-    ASSIGN_OR_RETURN(ColumnPtr column, expr_ctx->evaluate(nullptr));
-
-    if (column->is_null(0)) {
-        return Status::InternalError("error column access null path.");
-    }
-
-    const Column* data = ColumnHelper::get_data_column(column.get());
-    if (!data->is_binary()) {
-        return Status::InternalError("error column access string path.");
-    }
-
-    Slice slice = ColumnHelper::as_raw_column<BinaryColumn>(data)->get_slice(0);
-    _path = slice.to_string();
+    ASSIGN_OR_RETURN(_path, path_resolver(column_path));
     _absolute_path = parent_path + _path;
 
     if (column_path.__isset.type_desc) {
@@ -73,7 +59,7 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
 
     for (const auto& child : column_path.children) {
         ColumnAccessPathPtr child_path = std::make_unique<ColumnAccessPath>();
-        RETURN_IF_ERROR(child_path->init(_absolute_path + ".", child, state, pool));
+        RETURN_IF_ERROR(child_path->init(_absolute_path + ".", child, path_resolver));
         _children.emplace_back(std::move(child_path));
     }
 
@@ -231,9 +217,9 @@ const std::string ColumnAccessPath::to_string() const {
 }
 
 StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TColumnAccessPath& column_path,
-                                                                     RuntimeState* state, ObjectPool* pool) {
+                                                                     const PathResolver& path_resolver) {
     auto path = std::make_unique<ColumnAccessPath>();
-    RETURN_IF_ERROR(path->init("", column_path, state, pool));
+    RETURN_IF_ERROR(path->init("", column_path, path_resolver));
     return path;
 }
 
@@ -259,7 +245,7 @@ ColumnAccessPath* insert_json_path_impl(const std::string& path, ColumnAccessPat
         return root;
     }
 
-    auto [key_view, next] = JsonFlatPath::split_path(path);
+    auto [key_view, next] = split_flat_json_path(path);
     auto key = std::string(key_view);
     auto child = root->get_child(key);
     if (child == nullptr) {

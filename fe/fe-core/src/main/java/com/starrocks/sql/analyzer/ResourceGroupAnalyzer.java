@@ -65,7 +65,9 @@ public class ResourceGroupAnalyzer {
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
                 if (key.equalsIgnoreCase(ResourceGroup.USER)) {
-                    if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
+                    try {
+                        FeNameFormat.checkUserName(value);
+                    } catch (SemanticException e) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
                                         ExprToSql.toSql(eqPred)));
@@ -402,6 +404,12 @@ public class ResourceGroupAnalyzer {
                         "'exclusive_cpu_cores','exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit'," +
                         "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
                         "'spill_mem_limit_threshold','warehouses') should be specified");
+            }
+
+            List<String> warehouses = tempResourceGroup.getWarehouses();
+            if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && warehouses != null && !warehouses.isEmpty()) {
+                throw new SemanticException(
+                        String.format("cannot set non-empty warehouses for builtin resource group [%s]", name));
             }
         }
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将以弧度表示的角度x转换为度数。"
 ---
 
 # degrees

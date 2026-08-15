@@ -57,8 +57,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.MergeTabletClause;
-import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -95,15 +93,14 @@ public class TabletStatMgr extends FrontendDaemon {
         super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
+    // Note this stamp says only that a cycle ENDED, not that it collected anything: it is advanced
+    // unconditionally below, including for a cycle whose stat RPCs all failed. Its one remaining
+    // consumer, StatisticsCalcUtils, uses it for a cardinality estimate, where being wrong costs a
+    // worse plan. The exact-COUNT(*) fold used to consult it too, through workTimeIsMustAfter(), and
+    // served stale rows as an exact answer; it now asks the tablets to prove which version their
+    // counts cover (see Tablet#getRowCountAtVersion), and that method is gone with its last caller.
     public LocalDateTime getLastWorkTimestamp() {
         return lastWorkTimestamp;
-    }
-
-    public boolean workTimeIsMustAfter(LocalDateTime time) {
-        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
-            return false;
-        }
-        return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 
     @Override
@@ -141,6 +138,14 @@ public class TabletStatMgr extends FrontendDaemon {
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
+                // Reshard is leader-only (TabletStatMgr runs on all FEs), and only for cloud-native
+                // range-distribution tables. This gates the parallelism-floor lookup (a StarMgr RPC),
+                // the adjacency walk, and the reshard trigger — none of which should run on followers.
+                boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
+                        && olapTable.isCloudNativeTableOrMaterializedView()
+                        && olapTable.isRangeDistribution();
+                int parallelismFloor = reshardEligible
+                        ? TabletReshardUtils.safeComputeParallelismFloor(table.getId()) : 0;
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -150,9 +155,17 @@ public class TabletStatMgr extends FrontendDaemon {
                             for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                     IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
+                                List<Tablet> tablets = index.getTablets();
+                                // Only an index above the parallelism floor contributes the merge signal
+                                // (minAdjacentTabletPairSize); otherwise auto-merge could shrink it below the
+                                // tablet count pre-split established for parallelism (and would churn empty
+                                // merge jobs every cycle). Split detection (maxTabletSize) is never gated.
+                                // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
+                                // inside an admitted job, so the floor holds even for manual size-based merges.
+                                boolean eligibleForMerge = tablets.size() > parallelismFloor;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
-                                for (Tablet tablet : index.getTablets()) {
+                                for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
@@ -161,7 +174,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                         prevFreshTabletSize = -1L;
                                         continue;
                                     }
-                                    if (prevFreshTabletSize >= 0) {
+                                    if (prevFreshTabletSize >= 0 && eligibleForMerge) {
                                         minAdjacentTabletPairSize = Math.min(minAdjacentTabletPairSize,
                                                 prevFreshTabletSize + dataSize);
                                     }
@@ -201,42 +214,19 @@ public class TabletStatMgr extends FrontendDaemon {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 }
 
-                // Trigger tablet reshard
-                if (GlobalStateMgr.getCurrentState().isLeader()) {
-                    triggerTabletReshard(db, olapTable, maxTabletSize, minAdjacentTabletPairSize);
+                // Emit a reshard candidate with the signals computed above; addReshardCandidate drops
+                // non-actionable signals and the TabletReshardJobMgr drain owns job creation. This
+                // periodic scan is the fallback for the publish-driven path, so unlike publish it
+                // carries the merge signal too.
+                if (reshardEligible) {
+                    GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize);
                 }
             }
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
         lastWorkTimestamp = LocalDateTime.now();
-    }
-
-    private static void triggerTabletReshard(Database db, OlapTable table,
-                                             long maxTabletSize, long minAdjacentTabletPairSize) {
-        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
-            return;
-        }
-
-        try {
-            if (TabletReshardUtils.needSplit(maxTabletSize)) {
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
-                        db, table, new SplitTabletClause());
-                LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
-                        db.getFullName(), table.getName(), maxTabletSize);
-                return;
-            }
-
-            if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
-                        db, table, new MergeTabletClause());
-                LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
-                        db.getFullName(), table.getName(), minAdjacentTabletPairSize);
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to create tablet reshard job for table {}.{}.",
-                    db.getFullName(), table.getName(), e);
-        }
     }
 
     private void updateLocalTabletStat() {
@@ -279,10 +269,16 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
             // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
+            // The BE serves get_tablet_stat from a snapshot it rebuilds only every
+            // tablet_stat_cache_update_interval_second (300s by default), so a successful RPC does
+            // NOT mean the numbers are current. The reported version says which tablet version they
+            // describe; a BE too old to report it leaves 0, which keeps exact-count callers on the
+            // safe (meta scan) path.
             replica.updateStat(
                     entry.getValue().getData_size(),
                     entry.getValue().getRow_num(),
-                    entry.getValue().getVersion_count()
+                    entry.getValue().getVersion_count(),
+                    entry.getValue().isSetVersion() ? entry.getValue().getVersion() : 0L
             );
         }
     }
@@ -482,7 +478,10 @@ public class TabletStatMgr extends FrontendDaemon {
                         for (TabletStat stat : response.tabletStats) {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
-                            tablet.setRowCount(stat.numRows);
+                            // The CN computes these strictly from the version we asked for
+                            // (LakeServiceImpl::get_tablet_stats -> get_tablet_metadata(id, version)),
+                            // so the requested version is exactly what the numbers describe.
+                            tablet.setRowCount(stat.numRows, version);
                             tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }

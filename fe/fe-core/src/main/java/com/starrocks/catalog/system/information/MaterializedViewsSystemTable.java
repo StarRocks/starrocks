@@ -32,8 +32,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowMaterializedViewStatus;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -106,6 +109,15 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("CREATOR", TypeFactory.createVarcharType(64))
                         .column("LAST_REFRESH_PROCESS_TIME", DateType.DATETIME)
                         .column("LAST_REFRESH_JOB_ID", TypeFactory.createVarcharType(64))
+                        .column("LAST_REFRESH_TIME", DateType.DATETIME)
+                        .column("WAREHOUSE", TypeFactory.createVarcharType(128))
+                        .column("REFRESH_MODE", TypeFactory.createVarcharType(16))
+                        .column("REFRESH_TRIGGER", TypeFactory.createVarcharType(24))
+                        .column("REFRESH_POLICY", TypeFactory.createVarcharType(256))
+                        .column("RESOURCE_GROUP", TypeFactory.createVarcharType(128))
+                        .column("QUERY_REWRITE_STATUS_REASON", TypeFactory.createVarcharType(32))
+                        .column("LAST_FRESHNESS_CONFIRMED_AT", DateType.DATETIME)
+                        .column("BASE_TABLE_REFRESH_VERSION_TIMES", TypeFactory.createVarcharType(1024))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 
@@ -168,6 +180,14 @@ public class MaterializedViewsSystemTable extends SystemTable {
             TListMaterializedViewStatusResult result = query(params, context);
             return result.getMaterialized_views().stream().map(this::infoToScalar).collect(Collectors.toList());
         } catch (Exception e) {
+            // Propagate query_timeout (see ShowMaterializedViewStatus.listMaterializedViewStatus): when the
+            // outer query's time budget is exhausted the whole materialized_views query should time out
+            // rather than silently returning an empty/partial result.
+            if (SimpleExecutor.outerRemainingQueryTimeoutS() <= 0) {
+                throw new StarRocksPlannerException(
+                        "querying information_schema.materialized_views exceeded query_timeout",
+                        ErrorType.INTERNAL_ERROR);
+            }
             LOG.warn("Failed to query materialized views", e);
             // Return empty result if query failed
             return Lists.newArrayList();

@@ -42,16 +42,16 @@ ARG GROUP=starrocks
 ARG MINIMAL
 
 # TODO: switch to `openjdk-##-jre` when the starrocks core is ready.
-RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="openjdk-17-jdk curl vim tree net-tools less pigz rclone" ; fi && \
+RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="openjdk-21-jdk curl vim tree net-tools less pigz rclone" ; fi && \
         apt-get update -y && apt-get install -y --no-install-recommends \
-        openjdk-17-jdk mysql-client tzdata locales netcat-traditional tini libssl-dev $OPTIONAL_PKGS && \
+        openjdk-21-jdk mysql-client tzdata locales netcat-traditional tini libssl-dev $OPTIONAL_PKGS && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
         rm -rf /var/lib/apt/lists/*
-RUN touch /.dockerenv ; ARCH=`uname -m` && cd /lib/jvm && \
-    if [ "$ARCH" = "aarch64" ] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
-ENV JAVA_HOME=/lib/jvm/java-17-openjdk
+RUN touch /.dockerenv && cd /lib/jvm && \
+    ln -s java-21-openjdk-$(dpkg --print-architecture) java-21-openjdk
+ENV JAVA_HOME=/lib/jvm/java-21-openjdk
 
 WORKDIR $STARROCKS_ROOT
 

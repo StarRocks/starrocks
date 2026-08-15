@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Obtains the current date and returns a value of the DATE type."
 ---
 
 # curdate,current_date

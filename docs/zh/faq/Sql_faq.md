@@ -1,14 +1,10 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "StarRocks SQL 查询常见问题。"
 ---
 
 # 查询常见问题
-
-## 构建物化视图失败：fail to allocate memory
-
-修改 `be.conf` 中的`memory_limitation_per_thread_for_schema_change`。
-
-该参数表示单个 schema change 任务允许占用的最大内存，默认大小 2G。修改完成后，需重启 BE 使配置生效。
 
 ## StarRocks 会缓存查询结果吗？
 
@@ -115,7 +111,7 @@ client连接的时候加上`-A`参数，比如 `mysql -uroot -h127.0.0.1 -P8867 
 
 ## BE 和 FE 日志文件太多，怎么处理？
 
-调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/management/FE_configuration.md)。
+调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/configuration/FE_parameters/FE_parameters.md)。
 
 ## 更改副本数失败：table lineorder is colocate table, cannot change replicationNum
 

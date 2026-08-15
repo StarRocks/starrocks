@@ -18,24 +18,26 @@
 
 #include "base/time/time.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/json_column.h"
+#include "column/raw_data_visitor.h"
+#include "column/sorting/sorting.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
-#include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {
@@ -178,7 +180,7 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.insert_time_ns, MonotonicMicros() - start_time); });
     ADD_COUNTER_RELAXED(_stats.insert_count, 1);
     if (_chunk == nullptr) {
-        _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
+        _chunk = ChunkFactory::new_chunk(*_vectorized_schema, 0);
     }
 
     bool is_column_with_row = false;
@@ -228,6 +230,17 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
                 dest->append(*full_row_col.get());
             }
         }
+    }
+
+    // The buffer accumulates across inserts and is only measured against its budget afterwards, so
+    // it can end up holding more than a column can address with uint32 offsets even when every
+    // chunk that went into it was fine on its own. Everything downstream -- the flushed segment and
+    // the apply that reads it back -- inherits the wrapped offsets, so stop here instead.
+    if (auto st = _chunk->capacity_limit_reached(); !st.ok()) {
+        return Status::CapacityLimitExceed(fmt::format(
+                "memtable of tablet {} is too large to flush: {}. Reduce the number of rows per batch, or the size "
+                "of the string/array values in it.",
+                _tablet_id, st.message()));
     }
 
     if (chunk.has_rows()) {
@@ -306,14 +319,30 @@ Status MemTable::finalize() {
                 _aggregator_bytes_usage = 0;
                 return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
-            if (_has_op_slot) {
+            if (_has_op_slot && !_sink->keep_op_column()) {
                 // TODO(cbl): mem_tracker
                 ChunkPtr upserts;
                 RETURN_IF_ERROR(_split_upserts_deletes(_result_chunk, &upserts, &_deletes));
                 if (_result_chunk != upserts) {
                     _result_chunk = upserts;
                 }
+            } else if (_has_op_slot && !_merge_condition.empty()) {
+                // The op-aware spill path (keep_op_column) skips _split_upserts_deletes, which is where a
+                // DELETE combined with a merge condition is rejected. Enforce the same rejection here so
+                // such a load fails consistently instead of the spill merge silently applying the delete.
+                size_t op_column_id = _result_chunk->num_columns() - 1;
+                RawDataVisitor visitor;
+                RETURN_IF_ERROR(_result_chunk->get_column_by_index(op_column_id)->accept(&visitor));
+                const auto* ops = visitor.result();
+                for (size_t i = 0; i < _result_chunk->num_rows(); i++) {
+                    if (ops[i] == TOpType::DELETE) {
+                        return Status::InternalError(fmt::format(
+                                "memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
+                    }
+                }
             }
+            // When the sink keeps the __op column (spill path), _result_chunk retains __op and is not
+            // split here; the sink resolves the upsert/delete order during its merge (see flush()).
             if (_keys_type == KeysType::PRIMARY_KEYS) {
                 std::vector<ColumnId> primary_key_idxes(_vectorized_schema->num_key_fields());
                 for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
@@ -342,8 +371,8 @@ Status MemTable::finalize() {
     _chunk.reset();
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
-    StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
-    StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->memtable_finalize_task_total.increment(1);
+    StorageMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
@@ -367,6 +396,10 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
         if (_deletes) {
             RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size,
                                                             slot_idx));
+        } else if (_has_op_slot && _sink->keep_op_column()) {
+            // Spill path: _result_chunk still carries the trailing __op column; the sink spills it and
+            // resolves upsert/delete order during the merge.
+            RETURN_IF_ERROR(_sink->flush_chunk_with_op(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         } else {
             RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         }
@@ -377,11 +410,11 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
     ADD_COUNTER_RELAXED(_stats.flush_memory_size, memory_usage());
     ADD_COUNTER_RELAXED(_stats.flush_disk_size, io_stat.write_bytes);
 
-    StarRocksMetrics::instance()->memtable_flush_total.increment(1);
-    StarRocksMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
-    StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
+    StorageMetrics::instance()->memtable_flush_total.increment(1);
+    StorageMetrics::instance()->memtable_flush_duration_us.increment(_stats.flush_time_ns / 1000);
+    StorageMetrics::instance()->memtable_flush_io_time_us.increment(_stats.io_time_ns / 1000);
+    StorageMetrics::instance()->memtable_flush_memory_bytes_total.increment(_stats.flush_memory_size);
+    StorageMetrics::instance()->memtable_flush_disk_bytes_total.increment(_stats.flush_disk_size);
     VLOG(2) << "memtable of tablet " << _tablet_id << " flush duration: " << _stats.flush_time_ns / 1000 << "us, "
             << "io time: " << _stats.io_time_ns / 1000 << "us, memory bytes: " << _stats.flush_memory_size
             << ", disk bytes: " << _stats.flush_disk_size;
@@ -483,7 +516,9 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
     size_t nrows = src->num_rows();
-    auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(op_column->accept(&visitor));
+    const auto* ops = visitor.result();
     size_t ndel = 0;
     for (size_t i = 0; i < nrows; i++) {
         ndel += (ops[i] == TOpType::DELETE);

@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -144,7 +144,7 @@ public class InsertPartitionEstimatorTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = Lists.newArrayList();  // Empty partition list
                 minTimes = 0;
 
@@ -462,7 +462,7 @@ public class InsertPartitionEstimatorTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = Lists.newArrayList("p1", "p2");
                 minTimes = 0;
 

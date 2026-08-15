@@ -16,18 +16,18 @@
 
 #include <iostream>
 
+#include "base/base64.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "common/config_scan_io_fwd.h"
-#include "exprs/base64.h"
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 
-Status VarBinaryConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status VarBinaryConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
     auto& bytes = binary->get_immutable_bytes();
@@ -45,7 +45,7 @@ Status VarBinaryConverter::write_string(io::FormattedOutputStream* os, const Col
     return os->write(Slice(buf, encoded_len));
 }
 
-Status VarBinaryConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status VarBinaryConverter::write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                                const Options& options) const {
     RETURN_IF_ERROR(os->write('"'));
     RETURN_IF_ERROR(write_string(os, column, row_num, options));

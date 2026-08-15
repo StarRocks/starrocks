@@ -1,7 +1,8 @@
 ---
 displayed_sidebar: docs
+description: "Hadoop 3.4.3 アップグレードによる Wildfly OpenSSL 互換性問題の解決方法を説明します。"
 sidebar_label: "Hadoop Wildfly Native SSL ライブラリ問題"
-sidebar_position: 99
+sidebar_position: 110
 ---
 # FAQ：StarRocks における Hadoop 3.4.3 Wildfly Native SSL ライブラリ問題
 
@@ -29,7 +30,7 @@ A error occurred: errorCode=2001 errorMessage:Channel inactive error!
     @     0x7b9a68544be1 (unknown)
 ```
 
-原因は、Wildfly の JNI 呼び出し `Java_org_wildfly_openssl_SSLImpl_makeSSLContext0` が OpenSSL のネイティブコードを実行する際、同梱された `libwfssl.so` とシステムの OpenSSL との間で ABI／ランタイムの不整合が発生し、クラッシュするためです。
+原因は、Wildfly の JNI 呼び出し `Java_org_wildfly_openssl_SSLImpl_makeSSLContext0` が **OpenSSL 3.x ABI 向けにコンパイルされた `libwfssl.so`** をロードするためです。しかし `starrocks_be` プロセス内では、`libwfssl.so` からの OpenSSL シンボル解決はディスク上のシステム OpenSSL 3.x 共有ライブラリに届く前に、**`starrocks_be` バイナリへ静的リンクされた OpenSSL 1.x のシンボル**（StarRocks thirdparty 由来）で先に解決されてしまいます。3.x の呼び出し側（`SSL_CTX_new_ex` など）が 1.x 実装にディスパッチされるため、SSL コンテキスト初期化時に JVM がクラッシュします。したがって、ホスト側に OpenSSL 3.x や開発ヘッダをインストールしても**本クラッシュは解消しません**。BE プロセス内の OpenSSL 1.x が常にシンボル解決を横取りしてしまうためです。
 
 ---
 
@@ -41,13 +42,13 @@ Hadoop は [Wildfly OpenSSL](https://github.com/wildfly-security/wildfly-openssl
 
 ## Q2：Hadoop 3.4.3 では何が問題ですか？
 
-Hadoop 3.4.3 は OpenSSL 3.0 対応のため、Wildfly OpenSSL を `2.2.5.Final` にアップグレードしました（[HADOOP-19719](https://issues.apache.org/jira/browse/HADOOP-19719)）。しかし、新しいネイティブライブラリ（`libwfssl.so`）は **GLIBC 2.34+** でコンパイルされており、以下のような問題が発生します：
+Hadoop 3.4.3 は OpenSSL 3.0 対応のため、Wildfly OpenSSL を `2.2.5.Final` にアップグレードしました（[HADOOP-19719](https://issues.apache.org/jira/browse/HADOOP-19719)）。新しいネイティブライブラリ（`libwfssl.so`）は **GLIBC 2.34+** 向けにビルドされ、**OpenSSL 3.x ABI** を前提としています。しかし `starrocks_be` バイナリは依然として thirdparty から OpenSSL 1.x を静的リンクしているため、次の 2 種類の障害が発生します：
 
-| プラットフォーム                           | GLIBC バージョン | OpenSSL バージョン | 障害内容                                                           |
-| ---------------------------------- | ----------- | ------------- | -------------------------------------------------------------- |
-| **RHEL 8 / CentOS 8**              | 2.28        | 1.1.1         | `UnsatisfiedLinkError: GLIBC_2.34 not found` によりライブラリがロードできない  |
-| **Ubuntu 22.04**（`libssl-dev` 未導入） | 2.35        | 3.0.2         | ライブラリはロードされるが、「file not found」や「interface not supported」エラーが発生 |
-| **RHEL 9 / Ubuntu 24.04**          | 2.34+       | 3.0+          | 通常は動作するが、OpenSSL 開発ヘッダがないと問題が発生する可能性あり                         |
+| プラットフォーム                    | GLIBC バージョン | システム OpenSSL | 障害内容                                                                                                    |
+| --------------------------- | ----------- | ------------ | ------------------------------------------------------------------------------------------------------- |
+| **RHEL 8 / CentOS 8**       | 2.28        | 1.1.1        | **ロード時失敗**：`UnsatisfiedLinkError: GLIBC_2.34 not found` により `libwfssl.so` がそもそもロードできない。                  |
+| **Ubuntu 22.04**            | 2.35        | 3.0.2        | **実行時 ABI 衝突**：`libwfssl.so` はロードされるが、その OpenSSL シンボル解決は `starrocks_be` 内部に静的リンクされた OpenSSL 1.x に向かうため、システムの OpenSSL 3.x には届かず `SSL_CTX_new_ex` でクラッシュする。**`libssl-dev` のインストールでは解消しません**。 |
+| **RHEL 9 / Ubuntu 24.04**   | 2.34+       | 3.0+         | Ubuntu 22.04 と同じ実行時 ABI 衝突：BE プロセス内部の静的 OpenSSL 1.x がシステムの OpenSSL 3.x を上書きする。**`openssl-devel` のインストールでも解消しません**。 |
 
 影響を受ける環境では、以下の問題が発生する可能性があります：
 
@@ -97,13 +98,19 @@ Hadoop に JVM 内蔵の SSL 実装（JSSE）を使用させ、Wildfly/OpenSSL �
 
 ---
 
-### 解決策 2：OpenSSL 開発ヘッダのインストール
+### 解決策 2：BE パッケージから `wildfly-openssl` JAR を削除
 
-Ubuntu 22.04 以降では、OpenSSL の開発パッケージをインストールすることで問題が解消される場合があります：
+根本原因は、`wildfly-openssl-*.Final.jar` に同梱された `libwfssl.so` が **OpenSSL 3.x ABI** 向けにコンパイルされている一方、`starrocks_be` バイナリが依然として StarRocks thirdparty から **OpenSSL 1.x を静的リンク**している点にあります。BE プロセス内では `libwfssl.so` の OpenSSL シンボル解決が、`starrocks_be` に組み込まれた 1.x シンボルで先に解決され、システムの OpenSSL 3.x 共有ライブラリには届きません。3.x の呼び出しが 1.x 実装にディスパッチされるため、`SSL_CTX_new_ex` でクラッシュします。**Ubuntu での `apt install libssl-dev` や RHEL での `yum install openssl-devel` はこれを変えられません**。これらのパッケージがホストの OpenSSL を 3.x に更新したとしても、BE プロセス内部の静的 OpenSSL 1.x が常にシンボル解決で勝ってしまうためです。過去のドキュメントで `libssl-dev` / `openssl-devel` のインストールを勧めるものがあっても、本クラッシュに対しては無効として扱ってください。
+
+確実な対処は、当該 JAR を削除して Hadoop がネイティブライブラリをロードできないようにし、JSSE に自動フォールバックさせることです：
 
 ```bash
-sudo apt install libssl-dev
+rm -f $STARROCKS_HOME/lib/hadoop/common/wildfly-openssl-2.2.5.Final.jar
 ```
+
+すべての CN/BE ノード（Broker を配置している場合はすべての Broker ノードも）で実行し、サービスを再起動してください。
+
+[issue #71898](https://github.com/StarRocks/starrocks/issues/71898) の修正を含む StarRocks のビルド以降は、`java-extensions/pom.xml` で `hadoop-common`、`hadoop-aws`、`hadoop-azure`、`hadoop-azure-datalake` の 4 つの依存に対し `<exclusion>org.wildfly.openssl:wildfly-openssl</exclusion>` が宣言されているため、`java-extensions/hadoop-lib` から BE へ JAR が配られること自体がなくなります。保険として `build.sh` 側でも `${STARROCKS_OUTPUT}/be/lib/hadoop/common/wildfly-openssl-2.2.5.Final.jar` を `rm -rf` で削除しています。アップグレード後の手動削除は不要です。
 
 ---
 
@@ -180,16 +187,26 @@ FIPS 準拠の SSL ライブラリを使用している Linux 環境では、Wil
 
 ## Q9：StarRocks 側での対策は？
 
-1. **Docker イメージの修正**（[PR #70688](https://github.com/StarRocks/starrocks/pull/70688)）
-   Ubuntu ランタイムイメージに `libssl-dev` を追加
+1. **Java 拡張のビルドレイヤで `wildfly-openssl` を除外**（[issue #71898](https://github.com/StarRocks/starrocks/issues/71898)）
+   最新の StarRocks ビルドでは `java-extensions/pom.xml` 内の `hadoop-common`、`hadoop-aws`、`hadoop-azure`、`hadoop-azure-datalake` すべてに `<exclusion>org.wildfly.openssl:wildfly-openssl</exclusion>` を追加しており、`java-extensions/hadoop-lib` から BE へこの JAR が配布されなくなります。さらに保険として、`build.sh` は `${STARROCKS_OUTPUT}/be/lib/hadoop/common/` から残存する `wildfly-openssl-2.2.5.Final.jar` を `rm -rf` で削除します。この除外は**暫定的**なものであり、StarRocks thirdparty の OpenSSL が 3.x にアップグレードされ、BE プロセス内部の ABI が `libwfssl.so` の想定と一致した時点で復元される予定です。
 2. **ドキュメント整備**
    本 FAQ および `core-site.xml` 設定ガイドを提供
+
+> 補足：以前、Ubuntu ランタイム Docker イメージに `libssl-dev` を追加する対応（[PR #70688](https://github.com/StarRocks/starrocks/pull/70688)）も検討されましたが、クラッシュの真因は `libwfssl.so` の OpenSSL 3.x 呼び出しが **`starrocks_be` に静的リンクされた OpenSSL 1.x** にディスパッチされることであり、ホスト側の OpenSSL パッケージ不足ではありません。したがって `libssl-dev` や `openssl-devel` をインストールしても結果は変わりません。本項目の依存除外方式がこれに代わる正式な対策です。
 
 ---
 
 ## クイックリファレンス：最小対応
 
-すべての CN/BE ノードの `$STARROCKS_HOME/conf/core-site.xml` に設定を追加し、サービスを再起動してください。
+すべての CN/BE ノード（Broker を配置している場合はすべての Broker ノードも）で、**以下のいずれか**を実施し、サービスを再起動してください。**`apt install libssl-dev` や `yum install openssl-devel` に頼らないでください。本クラッシュは解消しません。**
+
+**方法 A：`wildfly-openssl` JAR を削除する**
+
+```bash
+rm -f $STARROCKS_HOME/lib/hadoop/common/wildfly-openssl-2.2.5.Final.jar
+```
+
+**方法 B：`$STARROCKS_HOME/conf/core-site.xml` で JSSE を強制する**
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -222,4 +239,5 @@ FIPS 準拠の SSL ライブラリを使用している Linux 環境では、Wil
 - [Wildfly OpenSSL GitHub Repository](https://github.com/wildfly-security/wildfly-openssl)
 - [StarRocks Issue #70478: SIGSEGV on Azure ADLS2 query (4.0.7)](https://github.com/StarRocks/starrocks/issues/70478)
 - [StarRocks PR #69503: Upgrade Hadoop 3.4.2 to 3.4.3](https://github.com/StarRocks/starrocks/pull/69503)
-- [StarRocks PR #70688: Install libssl-dev for Ubuntu runtime](https://github.com/StarRocks/starrocks/pull/70688)
+- [StarRocks Issue #71898: BE パッケージから `wildfly-openssl` を除外](https://github.com/StarRocks/starrocks/issues/71898)
+- [StarRocks PR #70688: Install libssl-dev for Ubuntu runtime（置き換え済み・本クラッシュは解消しません）](https://github.com/StarRocks/starrocks/pull/70688)

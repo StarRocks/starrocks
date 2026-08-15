@@ -123,6 +123,18 @@ public class MockedWarehouseManager extends WarehouseManager {
         return computeNodeIdSetAssignedToTablet;
     }
 
+    @Override
+    public Map<Long, List<Long>> getAllComputeNodeIdsAssignToTablets(ComputeResource computeResource,
+                                                                     List<Long> tabletIds) {
+        Map<Long, List<Long>> result = new HashMap<>();
+        if (tabletIds != null) {
+            for (Long tabletId : tabletIds) {
+                result.put(tabletId, new ArrayList<>(computeNodeIdSetAssignedToTablet));
+            }
+        }
+        return result;
+    }
+
     public void setComputeNodeIdsAssignToTablet(Set<Long> computeNodeIds) {
         computeNodeIdSetAssignedToTablet.addAll(computeNodeIds);
     }

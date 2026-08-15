@@ -14,6 +14,7 @@
 
 package com.starrocks.hudi.reader;
 
+import com.starrocks.connector.share.credential.CloudConfigurationApplier;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -78,6 +79,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final int fetchSize;
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
+    private final Map<String, String> fsOptionsPropsMap;
     private final String timeZone;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
@@ -101,6 +103,12 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
         this.fsOptionsProps = params.get("fs_options_props");
+        Map<String, String> propsMap = new HashMap<>();
+        ScannerHelper.parseFSOptionsProps(this.fsOptionsProps, kv -> {
+            propsMap.put(kv[0], kv[1]);
+            return null;
+        }, t -> null);
+        this.fsOptionsPropsMap = propsMap;
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
@@ -112,6 +120,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         JobConf jobConf = new JobConf(conf);
         jobConf.setBoolean("hive.io.file.read.all.columns", false);
         properties.stringPropertyNames().forEach(name -> jobConf.set(name, properties.getProperty(name)));
+        CloudConfigurationApplier.applyCloudConfiguration(fsOptionsPropsMap, jobConf);
         return jobConf;
     }
 

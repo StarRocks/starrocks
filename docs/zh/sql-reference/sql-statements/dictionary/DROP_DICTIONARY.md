@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP DICTIONARY deletes a dictionary object or clears its cached data."
 ---
 
 # DROP DICTIONARY

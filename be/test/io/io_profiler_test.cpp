@@ -14,11 +14,28 @@
 
 #include "io/io_profiler.h"
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
+#include "io/fd_input_stream.h"
+#include "io/fd_output_stream.h"
+#include "io/io_profiler_metrics.h"
 
 namespace starrocks {
+
+namespace {
+
+std::string create_temp_file(int* fd) {
+    char path[] = "/tmp/io_profiler_fd_stream_testXXXXXX";
+    *fd = ::mkstemp(path);
+    EXPECT_GE(*fd, 0);
+    return path;
+}
+
+} // namespace
 
 #define ADD_READ_IO_STAT(stat, bytes, time_ns) \
     stat.read_ops += 1;                        \
@@ -144,6 +161,73 @@ TEST(IOProfilerTest, test_profile_and_get_topn_stats) {
     ASSERT_FALSE(IOProfiler::is_empty());
     auto ret = IOProfiler::profile_and_get_topn_stats_str("all", 1, 1);
     ASSERT_TRUE(IOProfiler::is_empty());
+}
+
+TEST(IOProfilerTest, test_fd_streams_record_io_profiler_stats) {
+    int write_fd = -1;
+    std::string path = create_temp_file(&write_fd);
+    ASSERT_GE(write_fd, 0);
+
+    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+    {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 7);
+        std::string_view content = "hooked-io";
+
+        io::FdOutputStream out(write_fd);
+        ASSERT_OK(out.write(content.data(), content.size()));
+        ASSERT_OK(out.close());
+
+        int read_fd = ::open(path.c_str(), O_RDONLY);
+        ASSERT_GE(read_fd, 0);
+        io::FdInputStream in(read_fd);
+        in.set_close_on_delete(true);
+
+        std::string actual(content.size(), '\0');
+        ASSERT_EQ(content.size(), *in.read(actual.data(), actual.size()));
+        ASSERT_EQ(content, actual);
+
+        auto scoped_io = scope.current_scoped_tls_io();
+        ASSERT_EQ(1, scoped_io.read_ops);
+        ASSERT_EQ(content.size(), scoped_io.read_bytes);
+        ASSERT_EQ(1, scoped_io.write_ops);
+        ASSERT_EQ(content.size(), scoped_io.write_bytes);
+        ASSERT_EQ(0, scoped_io.sync_ops);
+
+        auto context_io = scope.current_context_io();
+        ASSERT_EQ(1, context_io.read_ops);
+        ASSERT_EQ(content.size(), context_io.read_bytes);
+        ASSERT_EQ(1, context_io.write_ops);
+        ASSERT_EQ(content.size(), context_io.write_bytes);
+        ASSERT_EQ(0, context_io.sync_ops);
+    }
+    IOProfiler::stop();
+    IOProfiler::reset();
+
+    ASSERT_EQ(0, ::unlink(path.c_str()));
+}
+
+TEST(IOProfilerMetricsTest, test_register_and_update_io_metrics_by_tag) {
+    MetricRegistry registry("test");
+    IOProfilerMetrics metrics;
+    metrics.install(&registry);
+
+    auto labels = MetricLabels().add("tag", IOProfiler::tag_to_string(IOProfiler::TAG_LOAD));
+    auto* read_ops = registry.get_metric("io_read_ops", labels);
+    auto* read_bytes = registry.get_metric("io_read_bytes", labels);
+    auto* write_ops = registry.get_metric("io_write_ops", labels);
+    auto* write_bytes = registry.get_metric("io_write_bytes", labels);
+    ASSERT_NE(nullptr, read_ops);
+    ASSERT_NE(nullptr, read_bytes);
+    ASSERT_NE(nullptr, write_ops);
+    ASSERT_NE(nullptr, write_bytes);
+
+    metrics.record_read(IOProfiler::TAG_LOAD, 17);
+    metrics.record_write(IOProfiler::TAG_LOAD, 29);
+
+    ASSERT_STREQ("1", read_ops->to_string().c_str());
+    ASSERT_STREQ("17", read_bytes->to_string().c_str());
+    ASSERT_STREQ("1", write_ops->to_string().c_str());
+    ASSERT_STREQ("29", write_bytes->to_string().c_str());
 }
 
 } // namespace starrocks

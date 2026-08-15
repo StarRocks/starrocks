@@ -27,8 +27,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionInfo;
@@ -131,7 +131,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadataRequestContext requestContext) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;
@@ -164,7 +164,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<String> partitionNames = listPartitionNames(databaseName, tableName, ConnectorMetadatRequestContext.DEFAULT);
+        List<String> partitionNames = listPartitionNames(databaseName, tableName, ConnectorMetadataRequestContext.DEFAULT);
         List<String> ret = new ArrayList<>();
         for (String p : partitionNames) {
             if (isPartitionNameValueMatched(p, partitionValues)) {
@@ -1581,7 +1581,6 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         new FieldSchema("hour", "int", null)), Maps.newHashMap(), null, null,
                 "EXTERNAL_TABLE");
         List<String> partitionNames = Lists.newArrayList("day=2012-01-01/hour=6", "day=2012-01-01/hour=06");
-        Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());

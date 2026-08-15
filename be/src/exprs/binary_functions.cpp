@@ -17,6 +17,7 @@
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "exprs/encryption_functions.h"
 #include "exprs/function_helper.h"
@@ -26,7 +27,7 @@ namespace starrocks {
 
 // to_binary
 StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
     case BinaryFormatType::UTF8: {
@@ -43,7 +44,10 @@ StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const C
 
 // to_binary_prepare
 Status BinaryFunctions::to_binary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
+    // BinaryFormatState is an immutable format choice derived from a constant arg; it is
+    // read-only at eval time, so build it once in FRAGMENT_LOCAL and share it across threads
+    // instead of keeping a per-thread copy.
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
     auto* state = new BinaryFormatState();
@@ -62,8 +66,9 @@ Status BinaryFunctions::to_binary_prepare(FunctionContext* context, FunctionCont
 }
 
 Status BinaryFunctions::to_binary_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state =
+                reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
     return Status::OK();
@@ -71,7 +76,7 @@ Status BinaryFunctions::to_binary_close(FunctionContext* context, FunctionContex
 
 // to_binary
 StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
     case BinaryFormatType::UTF8: {
@@ -88,7 +93,8 @@ StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const
 
 // to_binary_prepare
 Status BinaryFunctions::from_binary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
+    // See to_binary_prepare: read-only format choice, shared FRAGMENT_LOCAL rather than per-thread.
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
     auto* state = new BinaryFormatState();
@@ -107,37 +113,30 @@ Status BinaryFunctions::from_binary_prepare(FunctionContext* context, FunctionCo
 }
 
 Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state =
+                reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
     return Status::OK();
 }
 
 StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    (void)has_null;
-    const int size = c0->size();
-    int32_t width = c1->get(0).get_int32();
-    uint8_t* raw_null_flags = null_flags->get_data().data();
-    auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
-    ColumnBuilder<TYPE_BINARY> result(size);
-    const auto raw_c0 = col->immutable_data();
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-#define SLICE_SIZE_MIN(x, y) x < y ? x : y
-    for (auto i = 0; i < size; i++) {
-        if (raw_null_flags[i]) {
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_VARBINARY> viewer(columns[0]);
+    int32_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_BINARY> result(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
             result.append_null();
         } else {
-            Slice src_value = raw_c0[i];
-            result.append(Slice(src_value.get_data(), SLICE_SIZE_MIN(width, src_value.get_size())));
+            Slice src_value = viewer.value(i);
+            result.append(Slice(src_value.get_data(), std::min(width, static_cast<int32_t>(src_value.get_size()))));
         }
     }
-#undef SLICE_SIZE_MIN
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

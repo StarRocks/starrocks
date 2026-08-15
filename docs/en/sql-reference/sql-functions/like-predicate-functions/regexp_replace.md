@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Replaces substrings matching a regular expression pattern with a replacement string."
 ---
 
 # regexp_replace

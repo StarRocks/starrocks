@@ -114,12 +114,20 @@ public class StatisticUtils {
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);
         }
+        // Set warehouse FIRST: ConnectContext.setCurrentWarehouse() replaces sessionVariable
+        // with a fresh clone of defaultSessionVariable, which would discard every override
+        // applied below (enable_profile, queryTimeoutS, parallelism, pipeline, CTE reuse, etc.).
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getBackgroundWarehouse();
+        context.setCurrentWarehouse(warehouse.getName());
+
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         // Note: queryTimeoutS and insertTimeoutS will be set dynamically based on remaining job time
         // in StatisticsCollectJob.calculateAndSetRemainingTimeout() to ensure the total job timeout
@@ -138,10 +146,6 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setSingleNodeExecPlan(false);
         context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
-
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
         context.setOnlyReadIcebergCache(true);
@@ -440,6 +444,15 @@ public class StatisticUtils {
         }
     }
 
+    // Deterministic, fixed-length (32 hex chars) substitute for the raw table_uuid used as part of the
+    // PK of external_column_statistics / external_histogram_statistics. Iceberg's table_uuid
+    // (catalog.db.table.<36-byte-uuid>) is effectively always longer than this, so hashing it
+    // unconditionally never makes things worse. catalog_name/db_name/table_name are stored as
+    // separate non-key columns on every row, so no traceability is lost by hashing table_uuid.
+    public static String hashTableUuidForPkStorage(String tableUuid) {
+        return Hashing.murmur3_128().hashUnencodedChars(tableUuid).toString();
+    }
+
     public static Optional<Double> convertStatisticsToDouble(Type type, String statistic) {
         if (!type.canStatistic()) {
             throw new StarRocksPlannerException("Error statistic type : " + type.toSql(), ErrorType.INTERNAL_ERROR);
@@ -510,6 +523,10 @@ public class StatisticUtils {
             }
         }
         return columns;
+    }
+
+    public static boolean isUnsupportedHistogramColumnType(Type type) {
+        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType();
     }
 
     public static double multiplyRowCount(double left, double right) {

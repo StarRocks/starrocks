@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE STORAGE VOLUME creates a storage volume for a remote storage system."
 ---
 
 # CREATE STORAGE VOLUME
@@ -8,12 +9,13 @@ displayed_sidebar: docs
 
 为远程存储系统创建存储卷。该功能自 v3.1 起支持。
 
-存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../../deployment/shared_data/shared_data.mdx)中创建数据库和云原生表时引用存储卷。
+存储卷由远程存储系统的属性和认证信息组成。您可以在 StarRocks 存算分离集群中创建数据库和云原生表时引用存储卷。
 
 > **注意**
 >
 > - 仅拥有 SYSTEM 级 CREATE STORAGE VOLUME 权限的用户可以执行该操作。
 > - 如果您需要基于 HDFS 创建存储卷，建议您不要随意修改 **HADOOP_CONF** 和 **core-site.xml/hdfs-site.xml**。如果以上文件中的参数与创建 Storage Volume 的参数存在差异，可能导致系统发生未知行为。
+> - 在 shared_data 模式下，默认情况下 StarRocks 会在执行 `CREATE STORAGE VOLUME` 时对每个 `LOCATION` 做存储可访问性校验。该行为受配置项 `enable_storage_volume_access_check` 控制；如果关闭该配置项，则不会执行此校验。开启校验时，若凭证、端点或网络访问异常，语句会立即失败。
 
 ## 语法
 
@@ -49,6 +51,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。[Preview] 自 v3.3.0 起，支持 Amazon S3 Express One Zone Storage，如 `https://s3express.us-west-2.amazonaws.com`。<Beta /> |
 | aws.s3.use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
 | aws.s3.use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws.s3.access_key` 和 `aws.s3.secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws.s3.iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要将此项设为 `true`，并额外指定 `aws.s3.iam_role_arn` 和 `aws.s3.external_id`。</li></ul> |
+| aws.s3.use_web_identity_token_file  | 是否使用 Web Identity Token 文件访问 S3。有效值：`true` 和 `false`（默认）。启用后，每个 Worker 上的 AWS SDK 从环境变量 `AWS_WEB_IDENTITY_TOKEN_FILE` 和 `AWS_ROLE_ARN` 中获取 Token 文件和 IAM Role。 |
 | aws.s3.access_key                   | 访问 S3 存储空间的 Access Key。                              |
 | aws.s3.secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
 | aws.s3.iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                     |
@@ -62,7 +65,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.sas_token  | 访问 Azure Data Lake Storage Gen2 的共享访问签名（SAS）。              |
 | azure.adls2.oauth2_use_managed_identity | 是否使用 Managed Identity 用于授权 Azure Data Lake Storage Gen2 请求。默认值：`false`。 |
 | azure.adls2.oauth2_tenant_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Tenant ID。 |
-| azure.adls2.oauth2_client_id        | 用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。 |
+| azure.adls2.oauth2_client_id        | <ul><li>对于托管身份验证：用于授权 Azure Data Lake Storage Gen2 请求的 Managed Identity 的 Client ID。</li><li>对于 Workload Identity：与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。</li></ul> |
+| azure.adls2.oauth2_token_file       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
 | gcp.gcs.service_account_email	      | 创建 Service Account 时生成的 JSON 文件中的 Email。示例：`user@hello.iam.gserviceaccount.com`。 |
 | gcp.gcs.service_account_private_key_id | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
 | gcp.gcs.service_account_private_key | 创建 Service Account 时生成的 JSON 文件中的 Private Key。示例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
@@ -80,6 +84,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.num_partitioned_prefix       | 要为该存储卷创建的前缀数量。默认值：`256`。有效范围：[4, 1024]。|
 
 #### 认证信息
+
+有关 FE 与存储卷支持的凭证组合对比，请参阅[存储卷 AWS 凭证支持情况](AWS_CREDENTIAL_SUPPORT.md)。
 
 ##### AWS S3
 
@@ -113,6 +119,26 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.use_aws_sdk_default_behavior" = "false",
   "aws.s3.use_instance_profile" = "true"
   ```
+
+- 如果您使用 Web Identity Token 文件（例如 EKS IAM Roles for Service Accounts，即 IRSA）进行认证，请设置以下
+  属性，并在每个需要访问该存储卷的 Worker 环境中设置 `AWS_WEB_IDENTITY_TOKEN_FILE` 和 `AWS_ROLE_ARN`。
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "aws.s3.region" = "<region>",
+  "aws.s3.endpoint" = "<endpoint_url>",
+  "aws.s3.use_aws_sdk_default_behavior" = "false",
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.use_web_identity_token_file" = "true"
+  ```
+
+  如果需要在通过 Web Identity 获取凭证后再 Assume 另一个 IAM Role，请额外设置 `aws.s3.iam_role_arn`。对于跨账户
+  访问，还可以设置 `aws.s3.external_id`。
+
+  :::caution
+  为存储卷启用 Web Identity 前，请确保集群中的所有 FE、StarManager、BE 和 CN 均支持此认证方式。滚动升级期间，
+  请等待所有节点升级完成后再使用该存储卷。
+  :::
 
 - 如果您使用 Assumed Role 认证，请设置以下属性：
 
@@ -308,6 +334,16 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
   "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
+- 如果您使用 Workload Identity 认证，请设置以下 PROPERTIES：
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
 :::note
 不支持 Azure Data Lake Storage Gen1。
 :::
@@ -345,7 +381,7 @@ StarRocks 自 v3.4.1 起支持基于 Azure Data Lake Storage Gen2 创建存储�
 - 如果使用基于 S3 协议以及 IAM User 的身份验证方法访问 Google Storage，请设置以下 PROPERTIES：
 
   :::tip 
-  Google Storage 支持使用 [XML API](https://cloud.google.com/storage/docs/interoperability)，设置使用 AWS S3 语法。在这种情况下，必须将 `TYPE` 设置为 `S3`，并将 `LOCATIONS` 设置为与 S3 协议兼容的存储位置。
+  Google Storage 支持使用 [XML API](https://docs.cloud.google.com/storage/docs/interoperability)，设置使用 AWS S3 语法。在这种情况下，必须将 `TYPE` 设置为 `S3`，并将 `LOCATIONS` 设置为与 S3 协议兼容的存储位置。
   :::
 
   ```SQL

@@ -19,7 +19,7 @@
 
 namespace starrocks::csv {
 
-Status ArrayConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status ArrayConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                     const Options& options) const {
     const auto* array = down_cast<const ArrayColumn*>(&column);
     const auto& offsets = array->offsets();
@@ -58,7 +58,7 @@ Status ArrayConverter::write_string(io::FormattedOutputStream* os, const Column&
     return os->write(']');
 }
 
-Status ArrayConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status ArrayConverter::write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                            const Options& options) const {
     return write_string(os, column, row_num, options);
 }

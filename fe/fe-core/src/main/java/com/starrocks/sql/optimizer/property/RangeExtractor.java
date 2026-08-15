@@ -364,7 +364,12 @@ public class RangeExtractor {
 
         @Override
         public Range<ConstantOperator> toRange() {
-            Preconditions.checkState(!values.isEmpty());
+            // An empty value set means the source predicate is contradictory (e.g. col > X AND col < X),
+            // so there is no derivable range. Return Range.all() so callers (e.g. generateBound) derive
+            // no extra bound instead of failing the !values.isEmpty() precondition.
+            if (values.isEmpty()) {
+                return Range.all();
+            }
             ConstantOperator min = values.stream().min(ConstantOperator::compareTo).get();
             ConstantOperator max = values.stream().max(ConstantOperator::compareTo).get();
             return Range.closed(min, max);

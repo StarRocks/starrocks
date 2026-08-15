@@ -57,9 +57,19 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    // Which tablet version rowCount was computed from; 0 = unknown. Not persisted and not
+    // journal-replicated: it describes what THIS FE managed to collect. Only ever written together
+    // with the count it describes and read back the same way, see getRowCountAtVersion.
+    private volatile long rowCountVersion = 0L;
+
+    @SerializedName(value = "vibv")
+    private volatile long vectorIndexBuiltVersion = 0L;
+
     private volatile long minVersion = 0L;
 
-    public long rebuildPindexVersion = 0L;
+    // Written by the ALTER ... DROP PERSISTENT INDEX path and read lock-free by the lake publish
+    // thread (Utils.processTablets); must be volatile so the publish thread observes the update.
+    private volatile long rebuildPindexVersion = 0L;
 
     public LakeTablet() {
         super();
@@ -95,6 +105,17 @@ public class LakeTablet extends Tablet {
         return dataSizeUpdateTime;
     }
 
+    /**
+     * The CN computes get_tablet_stats strictly from the version the FE asked for
+     * (LakeServiceImpl::get_tablet_stats -> get_tablet_metadata(tablet_id, version)), so the
+     * version we requested is exactly the version the returned rowCount describes. The publish-time
+     * shortcut in LakeTableTxnLogApplier likewise knows the version it is applying.
+     */
+    @Override
+    public synchronized long getRowCountAtVersion(long version) {
+        return rowCountVersion > 0 && rowCountVersion == version ? rowCount : -1L;
+    }
+
     public long getMinVersion() {
         return minVersion;
     }
@@ -114,8 +135,23 @@ public class LakeTablet extends Tablet {
         return rowCount;
     }
 
-    public void setRowCount(long rowCount) {
+    /**
+     * For a caller that knows which version the count was computed from. Written as one pair with
+     * the version, so a reader can never pick up a count next to a version that does not describe
+     * it; see getRowCountAtVersion.
+     */
+    public synchronized void setRowCount(long rowCount, long version) {
         this.rowCount = rowCount;
+        this.rowCountVersion = version;
+    }
+
+    /**
+     * For a caller that cannot say which version the count covers. It drops any previous proof
+     * rather than leaving it to vouch for a number it never saw.
+     */
+    public synchronized void setRowCount(long rowCount) {
+        this.rowCount = rowCount;
+        this.rowCountVersion = 0L;
     }
 
     @Override
@@ -197,6 +233,14 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    public long getVectorIndexBuiltVersion() {
+        return vectorIndexBuiltVersion;
+    }
+
+    public void setVectorIndexBuiltVersion(long v) {
+        this.vectorIndexBuiltVersion = Math.max(this.vectorIndexBuiltVersion, v);
     }
 
     public void setRebuildPindexVersion(long rebuildPindexVersion) {

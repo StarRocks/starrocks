@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Removes data from a JSON document at one or more specified JSON paths and returns the modified JSON document."
 ---
 
 # json_remove

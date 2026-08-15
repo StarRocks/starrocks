@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のコントリビューター向け開発環境セットアップガイド。"
 ---
 
 # StarRocks の開発環境をセットアップする
@@ -68,7 +69,7 @@ export JAVA_HOME=xxxxx
 export PYTHON=/usr/bin/python3
 ```
 
-### Ubuntu22 サーバーのセットアップ
+### Ubuntu サーバーのセットアップ
 
 #### StarRocks コードのクローン
 

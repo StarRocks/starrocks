@@ -15,10 +15,11 @@
 #include "exec/table_function_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/table_function_operator.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -59,18 +60,15 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (table_function_name == "unnest" && arg_types.size() > 1) {
         _table_function = get_table_function(table_function_name, {}, {}, table_fn.binary_type);
     } else {
-        _table_function = get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
+        bool is_arrow_input = table_fn.__isset.input_type && table_fn.input_type == "arrow";
+        _table_function =
+                get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type, is_arrow_input);
     }
 
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
 
-    return Status::OK();
-}
-
-Status TableFunctionNode::reset(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::reset(state));
     return Status::OK();
 }
 
@@ -92,7 +90,7 @@ StatusOr<pipeline::OpFactories> TableFunctionNode::decompose_to_pipeline(pipelin
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

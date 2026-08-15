@@ -27,6 +27,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -92,6 +93,7 @@ protected:
 };
 
 TEST_F(LocalPkIndexManagerTest, test_gc) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:1", [](void* arg) { *(bool*)arg = false; });
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
@@ -121,7 +123,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -140,7 +142,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     auto pk_path = data_dir->get_persistent_index_path();
     std::set<std::string> tablet_ids;
     ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
-    LocalPkIndexManager::gc(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+    LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
@@ -161,7 +163,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -173,6 +175,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
 }
 
 TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:1",
                                           [](void* arg) { *(bool*)arg = true; });
@@ -205,7 +208,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -229,7 +232,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
         // lock acquire failed
         SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:3",
                                               [](void* arg) { *(bool*)arg = false; });
-        LocalPkIndexManager::gc(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+        LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
         // no index dir removed
         ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                      std::to_string(_tablet_metadata->id())));
@@ -240,7 +243,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
         // lock acquire succeed
         SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager:index_dir_changed:3",
                                               [](void* arg) { *(bool*)arg = true; });
-        LocalPkIndexManager::gc(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+        LocalPkIndexManager::gc(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
         // index dir removed
         ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                         std::to_string(_tablet_metadata->id())));
@@ -265,7 +268,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -285,6 +288,7 @@ TEST_F(LocalPkIndexManagerTest, test_stop_is_idempotent) {
 }
 
 TEST_F(LocalPkIndexManagerTest, test_evict) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:1", [](void* arg) { *(bool*)arg = true; });
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:2", [](void* arg) { *(bool*)arg = true; });
@@ -316,7 +320,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -335,7 +339,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     auto pk_path = data_dir->get_persistent_index_path();
     std::set<std::string> tablet_ids;
     ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
-    LocalPkIndexManager::evict(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
+    LocalPkIndexManager::evict(StorageEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
@@ -358,7 +362,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -370,6 +374,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
 }
 
 TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1",
                                           [](void* arg) { *(double*)arg = 1.0; });
@@ -400,7 +405,7 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -449,7 +454,7 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -461,6 +466,7 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
 }
 
 TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1",
                                           [](void* arg) { *(double*)arg = 1.0; });
@@ -491,7 +497,7 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());

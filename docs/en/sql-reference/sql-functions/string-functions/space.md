@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a string of the specified number of spaces."
 ---
 
 # space

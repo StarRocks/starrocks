@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "DISTINCT"
+description: "The DISTINCT keyword deduplicates the result set."
 ---
 
 # DISTINCT

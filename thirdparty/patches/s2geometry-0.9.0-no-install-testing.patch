@@ -1,0 +1,21 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5ecd280..d67e1de 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -198,7 +198,7 @@ add_library(s2 STATIC
+             src/s2/util/math/exactfloat/exactfloat.cc
+             src/s2/util/math/mathutil.cc
+             src/s2/util/units/length-units.cc)
+-add_library(s2testing STATIC
++add_library(s2testing EXCLUDE_FROM_ALL STATIC
+             src/s2/s2builderutil_testing.cc
+             src/s2/s2shapeutil_testing.cc
+             src/s2/s2testing.cc)
+@@ -407,7 +407,7 @@ install(FILES src/s2/util/units/length-units.h
+               src/s2/util/units/physical-units.h
+         DESTINATION include/s2/util/units)
+-install(TARGETS s2 s2testing DESTINATION lib)
++install(TARGETS s2 DESTINATION lib)
+
+ message("GTEST_ROOT: ${GTEST_ROOT}")
+ if (GTEST_ROOT)

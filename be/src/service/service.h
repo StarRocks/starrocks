@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "storage/store_path.h"
+#include "platform/store_path.h"
 
 namespace starrocks {
 

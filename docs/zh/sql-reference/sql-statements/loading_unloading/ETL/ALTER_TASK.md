@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "修改通过 SUBMIT TASK 提交的异步 ETL 任务的状态或属性。"
 ---
 
 # ALTER TASK

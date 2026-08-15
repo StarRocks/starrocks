@@ -20,8 +20,10 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.StarRocksAssert;
@@ -106,7 +108,7 @@ public class KillQueryHandleTest {
     @Test
     public void testKillStmtWhenQueryIdNotFound2(@Mocked StreamConnection connection, @Mocked TMasterOpResult result)
             throws Exception {
-        // test killing query is forwarded to fe and query not found
+        // test killing query is forwarded to another fe and the query is not found there either
         new MockUp<TMasterOpResult>() {
             @Mock
             public boolean isSetErrorMsg() {
@@ -128,11 +130,21 @@ public class KillQueryHandleTest {
                 return (T) result;
             }
         };
+        // Treat the sole test frontend as remote (not self), so the kill is actually forwarded to it.
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return null;
+            }
+        };
         ConnectContext ctx1 = prepareConnectContext(connection);
 
-        ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
+        // The query is not present on this FE, so the kill is forwarded; the remote FE reaches but does not
+        // own the query, so the final result is a uniform "Unknown query id".
+        String missingId = UUIDUtil.genUUID().toString();
+        ConnectContext ctx = kill(missingId, true);
         Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assertions.assertEquals("query xxx not found", ctx.getState().getErrorMessage());
+        Assertions.assertEquals("Unknown query id: " + missingId, ctx.getState().getErrorMessage());
 
         ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
@@ -140,9 +152,17 @@ public class KillQueryHandleTest {
     @Test
     public void testKillStmtWhenConnectionFail(@Mocked StreamConnection connection) throws Exception {
         // test killing query is forwarded to fe but fe is down
+        // Treat the sole test frontend as remote (not self), so the kill is actually forwarded to it.
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return null;
+            }
+        };
         ConnectContext ctx1 = prepareConnectContext(connection);
 
-        ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
+        // The query is not present on this FE, so the kill is forwarded; the remote FE is unreachable.
+        ConnectContext ctx = kill(UUIDUtil.genUUID().toString(), true);
         Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
         Assertions.assertTrue(ctx.getState().getErrorMessage().contains("ConnectException"));
 
@@ -161,9 +181,17 @@ public class KillQueryHandleTest {
                 throw new Exception("Unknown error x");
             }
         };
+        // Treat the sole test frontend as remote (not self), so the kill is actually forwarded to it.
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return null;
+            }
+        };
         ConnectContext ctx1 = prepareConnectContext(connection);
 
-        ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
+        // The query is not present on this FE, so the kill is forwarded; the remote FE returns an unexpected error.
+        ConnectContext ctx = kill(UUIDUtil.genUUID().toString(), true);
         Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
         Assertions.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
                 ctx.getState().getErrorMessage());

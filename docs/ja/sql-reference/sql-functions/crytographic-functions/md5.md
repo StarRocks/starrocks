@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MD5 メッセージダイジェストアルゴリズムで文字列のチェックサムを計算します。"
 ---
 
 # md5

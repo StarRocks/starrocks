@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -177,9 +178,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
+            rowset->add_segment_metas()->set_filename(file.path);
         }
 
         writer->close();
@@ -199,7 +199,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // load segment without indexes
     auto sz1 = metacache->memory_usage();
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));

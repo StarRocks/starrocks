@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to collect and analyze query trace profiles in StarRocks to diagnose query execution."
 ---
 
 # Query Trace Profile

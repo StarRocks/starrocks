@@ -1,0 +1,27 @@
+-- name: test_colocate_range_cross_table_join @cloud @sequential
+-- SQL integration: colocate join across two tables in the same range-colocate group.
+-- Verifies the plan uses COLOCATE join (not SHUFFLE / BROADCAST) when both sides
+-- share the same grpId. Tablet ids in EXPLAIN are uuid-dependent so the result
+-- assertion focuses on the join semantics, while plan-shape is covered by FE
+-- optimizer plan tests (see ColocateCheckerTest / RangeColocateJoinTest).
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table tenants (tenant_id int, created_time int, id int)
+    order by(tenant_id, created_time, id)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_join_${uuid0}:tenant_id');
+
+create table events (tenant_id int, created_time int, event_id int)
+    order by(tenant_id, created_time, event_id)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_join_${uuid0}:tenant_id');
+
+insert into tenants values (1, 100, 1), (2, 200, 2), (3, 300, 3);
+insert into events values (1, 100, 11), (2, 200, 22), (3, 300, 33);
+
+select count(*) from tenants t join events e on t.tenant_id = e.tenant_id;
+
+drop table events;
+drop table tenants;
+drop database db_${uuid0};

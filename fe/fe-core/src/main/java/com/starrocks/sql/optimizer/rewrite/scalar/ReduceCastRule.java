@@ -201,6 +201,14 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         LocalDateTime originalDateTime = child2.getDatetime();
         LocalDateTime bottomDateTime = child2.getDatetime().truncatedTo(ChronoUnit.DAYS);
 
+        // A boundary literal (within a day of [0000-01-01, 9999-12-31]) would make plusDays(+/-1)
+        // overflow the supported range and throw from ConstantOperator.createDate/createDatetime,
+        // aborting planning. Skip the reduction and keep the original predicate in that case.
+        if (bottomDateTime.plusDays(1).isAfter(ConstantOperator.MAX_DATETIME)
+                || bottomDateTime.minusDays(1).isBefore(ConstantOperator.MIN_DATETIME)) {
+            return operator;
+        }
+
         LocalDateTime targetDateTime;
         BinaryType binaryType = operator.getBinaryType();
         int offset;
@@ -269,6 +277,11 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         }
 
         LocalDateTime originalDate = child2.getDate().truncatedTo(ChronoUnit.DAYS);
+        // See reduceDateToDatetimeCast: avoid plusDays(+/-1) overflowing the supported date range.
+        if (originalDate.plusDays(1).isAfter(ConstantOperator.MAX_DATETIME)
+                || originalDate.minusDays(1).isBefore(ConstantOperator.MIN_DATETIME)) {
+            return operator;
+        }
         LocalDateTime targetDate;
         BinaryType binaryType = operator.getBinaryType();
         int offset;

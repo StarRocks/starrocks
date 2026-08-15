@@ -11,7 +11,6 @@
 #include "base/debug/trace.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
@@ -43,8 +42,7 @@ struct Table::Rep {
     Block* index_block = nullptr;
 };
 
-Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
-    *table = nullptr;
+Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table) {
     if (size < Footer::kEncodedLength) {
         return Status::Corruption("file is too short to be an sstable");
     }
@@ -81,8 +79,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->cache_id = (options.block_cache ? options.block_cache->new_id() : 0);
         rep->filter_data = nullptr;
         rep->filter = nullptr;
-        *table = new Table(rep);
-        (*table)->ReadMeta(footer);
+        table.reset(new Table(rep));
+        table->ReadMeta(footer);
     }
 
     return s;

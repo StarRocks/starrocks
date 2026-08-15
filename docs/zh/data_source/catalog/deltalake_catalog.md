@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 description: 直接从 Delta Lake 查询数据
 displayed_sidebar: docs
 ---
@@ -30,7 +31,7 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
@@ -152,7 +153,7 @@ Delta Lake catalog 的描述。此参数是可选的。
 | aws.glue.access_key           | 否   | 您的 AWS IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 | aws.glue.secret_key           | 否   | 您的 AWS IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 
-有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
+有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 <DatabricksParams />
 
@@ -202,7 +203,7 @@ Delta Lake catalog 的描述。此参数是可选的。
 | aws.s3.access_key           | 否   | 您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 | aws.s3.secret_key           | 否   | 您的 IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### S3 兼容存储系统
 
@@ -315,6 +316,22 @@ Delta Lake catalog 的描述。此参数是可选的。
   | azure.adls2.oauth2_client_id       | 是          | 服务主体的客户端（应用程序）ID。        |
   | azure.adls2.oauth2_client_secret   | 是          | 新创建的客户端（应用程序）密钥的值。    |
   | azure.adls2.oauth2_client_endpoint | 是          | 服务主体或应用程序的 OAuth 2.0 令牌端点 (v1)。 |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -685,6 +702,21 @@ PROPERTIES
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+- 如果选择 Workload Identity 验证方法，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 

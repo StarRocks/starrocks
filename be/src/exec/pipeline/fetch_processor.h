@@ -23,13 +23,13 @@
 #include "base/phmap/phmap.h"
 #include "bthread/mutex.h"
 #include "column/column.h"
+#include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/fetch_sink_operator.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup_request.h"
-#include "exec/sorting/sort_permute.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {
@@ -62,7 +62,6 @@ namespace starrocks::pipeline {
 //    drains the rebuilt chunks from the queue.
 class FetchProcessor : public std::enable_shared_from_this<FetchProcessor> {
 public:
-    friend class LocalLookUpRequestContext;
     friend class RemoteLookUpRequestContext;
     friend class FetchTask;
 

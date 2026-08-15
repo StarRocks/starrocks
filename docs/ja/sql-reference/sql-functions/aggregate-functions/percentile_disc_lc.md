@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "PERCENTILE_DISC_LC関数は離散分布に基づくパーセンタイル値を計算し、メモリ効率を最適化しています。"
 ---
 
 # percentile_disc_lc

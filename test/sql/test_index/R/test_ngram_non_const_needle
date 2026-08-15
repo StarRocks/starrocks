@@ -1,0 +1,97 @@
+-- name: test_ngram_non_const_needle
+CREATE TABLE t_ngram (
+    haystack VARCHAR(100) NOT NULL,
+    needle   VARCHAR(100) NOT NULL
+) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_ngram values
+    ('abcde',   'abcde'),
+    ('abcde',   'xyzwv'),
+    ('abcdfg',  'abcde'),
+    ('chinese', 'chinese');
+-- result:
+-- !result
+select ngram_search(haystack, needle, 4) as sim from t_ngram order by sim desc, haystack, needle;
+-- result:
+1.0
+1.0
+0.5
+0.0
+-- !result
+select haystack, ngram_search(haystack, 'abcde', 4) = ngram_search(haystack, needle, 4) as parity
+from t_ngram where needle = 'abcde' order by haystack;
+-- result:
+abcde	1
+abcdfg	1
+-- !result
+CREATE TABLE t_ngram_null (
+    haystack VARCHAR(100),
+    needle   VARCHAR(100)
+) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_ngram_null values
+    ('abcde', 'abcde'),
+    ('abcde', null),
+    ('xyzwv', 'abcde');
+-- result:
+-- !result
+select ngram_search(haystack, needle, 4) as sim
+from t_ngram_null where needle is not null order by sim;
+-- result:
+0.0
+1.0
+-- !result
+select ngram_search(haystack, needle, 4) is null as is_null
+from t_ngram_null where needle is null;
+-- result:
+1
+-- !result
+-- name: test_ngram_non_const_needle_case_insensitive
+CREATE TABLE t_ngram_ci (
+    haystack VARCHAR(100) NOT NULL,
+    needle   VARCHAR(100) NOT NULL
+) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_ngram_ci values
+    ('Hello',   'hello'),
+    ('CHINESE', 'chinese'),
+    ('abcde',   'ABCDE');
+-- result:
+-- !result
+select ngram_search_case_insensitive(haystack, needle, 4) as sim
+from t_ngram_ci order by sim desc, haystack;
+-- result:
+1.0
+1.0
+1.0
+-- !result
+select ngram_search(haystack, needle, 4) as sim
+from t_ngram_ci order by sim desc, haystack;
+-- result:
+0.5
+0.0
+0.0
+-- !result
+CREATE TABLE t_ngram_idx (
+    haystack VARCHAR(100) NOT NULL,
+    needle   VARCHAR(100) NOT NULL,
+    INDEX idx_haystack(haystack) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_ngram_idx values
+    ('chinese', 'chinese'),
+    ('chineaaaa', 'chinese'),
+    ('tonightisgreadnight', 'chinese');
+-- result:
+-- !result
+select haystack, ngram_search(haystack, needle, 4) as sim
+from t_ngram_idx order by sim desc, haystack;
+-- result:
+chinese	1.0
+chineaaaa	0.5
+tonightisgreadnight	0.0
+-- !result

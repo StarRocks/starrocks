@@ -1,0 +1,3 @@
+{"before":null,"after":{"id":1,"name":"Alice","age":25},"op":"c"}
+{"before":null,"after":{"id":2,"name":"Bob","age":30},"op":"r"}
+{"before":{"id":3,"name":"Old","age":0},"after":{"id":3,"name":"Charlie","age":35},"op":"u"}

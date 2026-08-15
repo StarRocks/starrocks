@@ -17,7 +17,7 @@
 #include <atomic>
 
 #include "common/status.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
@@ -28,6 +28,8 @@ public:
     ~GrepLogAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 };
 
 } // namespace starrocks

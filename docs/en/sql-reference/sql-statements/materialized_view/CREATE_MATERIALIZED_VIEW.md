@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE MATERIALIZED VIEW creates a materialized view."
 ---
 
 # CREATE MATERIALIZED VIEW
@@ -42,7 +43,7 @@ Parameters in brackets [] are optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (`_`), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 - The name is case-sensitive.
 
@@ -164,7 +165,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -185,7 +186,7 @@ Parameters in brackets [] are optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (`_`), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 - The name is case-sensitive.
 
@@ -199,7 +200,7 @@ Comment on the materialized view. Note that `COMMENT` must be placed after `mv_n
 
 **distribution_desc** (optional)
 
-The bucketing strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). If you do not specify this parameter, StarRocks uses the random bucketing strategy and automatically sets the number of buckets.
+The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` is enabled, omitting this parameter selects range distribution. Otherwise, a materialized view whose `refresh_mode` is not `INCREMENTAL` uses random bucketing, and StarRocks automatically sets the number of buckets. Materialized views whose `refresh_mode` is `INCREMENTAL` follow different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
 
 > **NOTE**
 >
@@ -250,7 +251,7 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 The refresh strategy of the asynchronous materialized view. Valid values:
 
 - `ASYNC`: Automatic refresh mode. Each time the base table data changes, the materialized view is automatically refreshed.
-- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: Regular refresh mode. The materialized view is refreshed regularly at the interval defined. You can specify the interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. The default value is `10 MINUTE`. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`. If the start time is not specified, the current time is used. Example: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`.
+- `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: Regular refresh mode. The materialized view is refreshed regularly at the interval defined. You can specify the interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. The default value is `10 MINUTE`. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`. If the start time is not specified, the current time is used. Example: `SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`. The legacy form `ASYNC [START (...)] EVERY (...)` is still accepted for backward compatibility but `SHOW CREATE MATERIALIZED VIEW` always renders the scheduled form with `SCHEDULE`.
 - `MANUAL`: Manual refresh mode. The materialized view will not be refreshed unless you trigger a refresh task manually.
 
 If this parameter is not specified, the default value `MANUAL` is used.
@@ -328,7 +329,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");  
 ```  
 
-**PROPERTIES** (optional)
+#### PROPERTIES (optional)
 
 Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md).
 
@@ -352,11 +353,10 @@ Properties of the asynchronous materialized view. You can modify the properties 
   :::
 
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions.
-- `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
+- `mv_rewrite_staleness_second`: This materialized view can be used directly for query rewrite, regardless of whether the base table data has changed, as long as the gap between the latest base-table modification time and the materialized view's last confirmed complete refresh does not exceed the time interval specified in this property. Because the comparison is against the latest base-table modification time (not the current wall-clock time), a materialized view whose base tables have not changed since its last complete refresh stays usable for query rewrite no matter how much time passes. Otherwise, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Note that a refresh covering only part of the partitions (for example, a manual `REFRESH ... PARTITION START ... END`, or a refresh limited by `auto_refresh_partitions_limit`) does not renew this freshness baseline. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
 - `excluded_refresh_tables`：The base tables listed in this property will not trigger data refresh to the materialized view when their data changes. This property is usually used together with the `excluded_trigger_tables` property. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any data change in all base tables will trigger the corresponding materialized view refresh.
-
 
   > **CAUTION**
   >
@@ -367,7 +367,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `disable`: Disable automatic query rewrite of the asynchronous materialized view.
   - `checked` (Default value): Enable automatic query rewrite only when the materialized view meets the timeliness requirement, which means:
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
-    - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
+    - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last confirmed complete refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
   - `force_mv`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. The `force_mv` semantic is specifically designed for this scenario. When this semantic is enabled:
     - If the materialized view does not have the `partition_retention_condition` property, it will always force the use of the materialized view for query rewrite, regardless of whether the base table has been updated.
@@ -404,12 +404,10 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
-- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1. Valid values:
+- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1, and only supported for Iceberg append-only tables. Valid values:
 
   - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
-  - `AUTO`: Attempts to use incremental refresh whenever possible. If the materialized view's query definition does not support incremental refresh, it will automatically fall back to `PCT` mode for that operation. After a PCT refresh, future refreshes may switch back to incremental refresh if conditions allow.
   - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
-  - `FULL`: Forces a full refresh of all data every time, regardless of whether the materialized view supports incremental or partition-level refresh.
 
 <MVWarehouse />
 
@@ -464,22 +462,34 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
     - **String**: STRING, UUID, FIXED(L), BINARY
     - **Semi-structured**: LIST
 
-## Incremental Materialized View
+### Incremental Materialized View
 
-StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`). Please note the following usage guidance:
+StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`, valid values: `pct`, `incremental`). Please note the following usage guidance:
 
 - There are restrictions when adjusting `refresh_mode`:
-  - You cannot change legacy materialized views (for example, those of type `PCT`) to use `AUTO` or `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
-  - When modifying a materialized view from `AUTO` or `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
-- Incremental materialized views do not support specifying partition refresh:
-  - For `INCREMENTAL` materialized views, an exception is thrown if you attempt a partition refresh.
-  - For `AUTO` materialized views, StarRocks will automatically switch to `PCT` mode for the refresh operation.
+  - You cannot change legacy materialized views (for example, those of type `PCT`) to use `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
+  - When modifying a materialized view from `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
+- Materialized views with `refresh_mode` set to `INCREMENTAL` do not support specifying partition refresh. An exception is thrown if you attempt a partition refresh.
 
-### Supported Incremental Operators
+#### Distribution
 
-Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed:
-- With `refresh_mode` set to `INCREMENTAL`, the materialized view refresh will fail.
-- With `refresh_mode` set to `AUTO`, the system will automatically fall back to `PCT` mode for the refresh.
+Materialized views whose `refresh_mode` is `INCREMENTAL` follow these distribution rules:
+
+- If you omit `distribution_desc`, StarRocks uses range distribution only in shared-data mode when `enable_range_distribution` is enabled. In all other cases, StarRocks falls back to hash distribution over all target key columns.
+- Range distribution has no user-facing `DISTRIBUTED BY RANGE` syntax and cannot be specified explicitly.
+- If you explicitly specify hash or random distribution, StarRocks normalizes it to hash distribution over all target key columns. An explicitly specified bucket count is preserved.
+
+#### Sort Key
+
+A materialized view whose `refresh_mode` is `INCREMENTAL` is a Primary Key table keyed by an internal row-id column, so `ORDER BY` defines a sort key of its own instead of becoming part of the primary key.
+
+- On a hash- or random-distributed materialized view, the sort key is the `ORDER BY` columns.
+- On a range-distributed materialized view, `ORDER BY` is not supported: the sort key defines the tablet boundaries and must equal the primary key, which is a column you cannot name. Add `DISTRIBUTED BY HASH(...)` if you need a sort key.
+- If you omit `ORDER BY`, the materialized view is sorted by its primary key.
+
+#### Supported Incremental Operators
+
+Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed, the refresh of materialized views whose `refresh_mode` is set to `INCREMENTAL` will fail.
 
 The following operators are currently supported for incremental refresh:
 
@@ -498,55 +508,6 @@ While operators listed above generally support incremental refresh, certain oper
 - Incremental computation is supported for aggregation after Join and aggregation after UNION.
 - However, incremental computation is **not** supported when performing Join after aggregation or UNION ALL after aggregation.
 :::
-
-### Examples
-
-```SQL
-CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
-REFRESH DEFERRED MANUAL 
-properties
-(
-    "refresh_mode" = "INCREMENTAL"
-)
-AS SELECT 
-  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
-  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
-  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
-  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
-  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
-  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
-  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
-FROM 
-  iceberg_catalog.iceberg_test_dbt1 
-  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
-  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
-  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
-  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
- GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
- 
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-```
-
-The `refreshMode` field has been added to the `EXTRA_MESSAGE` column in `information_schema.task_runs` to indicate the refresh mode of the `TaskRun`. For more details, see [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
-
-```SQL
-mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
-     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
-    TASK_NAME: mv-78190
-  CREATE_TIME: 2025-10-17 10:44:41
-  FINISH_TIME: 2025-10-17 10:44:44
-        STATE: SUCCESS
-      CATALOG: NULL
-     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
-   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
-  EXPIRE_TIME: 2025-10-24 10:44:41
-   ERROR_CODE: 0
-ERROR_MESSAGE: NULL
-     PROGRESS: 100%
-EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
-   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
-       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
-```
 
 ## Usage notes
 
@@ -914,7 +875,7 @@ Example 1: Create a non-partitioned materialized view.
 -- create an unpartitioned materialized view sorted by lo_custkey
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC
 AS
 select
@@ -934,7 +895,7 @@ Example 2: Create a partitioned materialized view.
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1123,7 +1084,7 @@ Example 7: Create a partition materialized view with a specific sort key:
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1135,4 +1096,53 @@ select
     count(lo_shipmode) as shipmode_count
 from lineorder 
 group by lo_orderkey, lo_orderdate, lo_custkey;
+```
+
+Example 8: Create an incremental materialized view.
+
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "INCREMENTAL"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
+  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
+  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
+  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
+  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
+  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
+  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
+FROM 
+  iceberg_catalog.iceberg_test_dbt1 
+  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
+  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
+  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
+  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
+ GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
+ 
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+```
+
+The `refreshMode` field has been added to the `EXTRA_MESSAGE` column in `information_schema.task_runs` to indicate the refresh mode of the `TaskRun`. For more details, see [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
+
+```SQL
+mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
+     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
+    TASK_NAME: mv-78190
+  CREATE_TIME: 2025-10-17 10:44:41
+  FINISH_TIME: 2025-10-17 10:44:44
+        STATE: SUCCESS
+      CATALOG: NULL
+     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
+   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
+  EXPIRE_TIME: 2025-10-24 10:44:41
+   ERROR_CODE: 0
+ERROR_MESSAGE: NULL
+     PROGRESS: 100%
+EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
+   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
+       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
 ```

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/random/random.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 
@@ -45,14 +46,14 @@ struct AlwaysOneGenerator {
 
 template <class T, int range>
 struct RandomGenerator {
-    static T next_value() { return rand() % range; }
+    static T next_value() { return ThreadLocalRandomUniform(range); }
 };
 
 template <class T, int range>
 struct RandomConstGenerator {
     static T next_value() {
         if (!_is_initialize) {
-            const_value = rand() % range;
+            const_value = ThreadLocalRandomUniform(range);
             _is_initialize = true;
         }
         return const_value;

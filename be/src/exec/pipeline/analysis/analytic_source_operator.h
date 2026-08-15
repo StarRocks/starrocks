@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/analytor.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {

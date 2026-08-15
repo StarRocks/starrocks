@@ -32,7 +32,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -177,7 +177,7 @@ public class HiveMetadataTest {
     public void testGetPartitionKeys() {
         Assertions.assertEquals(
                 Lists.newArrayList("col1"),
-                hiveMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
+                hiveMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadataRequestContext.DEFAULT));
     }
 
     @Test
@@ -224,11 +224,7 @@ public class HiveMetadataTest {
     @Test
     public void testGetHiveRemoteFiles() throws AnalysisException {
         FeConstants.runningUnitTest = true;
-        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
-        HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
-        List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
-        Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
+        new HiveMetastoreTest.MockedHiveMetaClient();
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
 
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
@@ -292,8 +288,11 @@ public class HiveMetadataTest {
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+        // Stats explicitly disabled: columns must remain UNKNOWN so the optimizer respects the intent
+        ColumnStatistic partStat = statistics.getColumnStatistics().get(partColumnRefOperator);
+        ColumnStatistic dataStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
+        Assertions.assertTrue(partStat.isUnknown());
+        Assertions.assertTrue(dataStat.isUnknown());
     }
 
     @Test
@@ -545,6 +544,11 @@ public class HiveMetadataTest {
         tSinkCommitInfo.setHive_file_info(fileInfo);
 
         new MockUp<RemoteFileOperations>() {
+            @Mock
+            public boolean pathExists(Path path) {
+                return true;
+            }
+
             @Mock
             public void renameDirectory(Path source, Path target, Runnable runWhenPathNotExist) {
             }
@@ -801,6 +805,113 @@ public class HiveMetadataTest {
 
             java.lang.reflect.Method method = HiveCommitter.class.getDeclaredMethod(
                     "prepareOverwriteTable", PartitionUpdate.class, HivePartitionStats.class);
+            method.setAccessible(true);
+            method.invoke(hiveCommitter, partitionUpdate, HivePartitionStats.fromCommonStats(1, 1, 1));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testPrepareOverwritePartitionEnsuresDirWhenTargetMissing(@Mocked HiveMetastoreOperations hmsOps,
+                                                                         @Mocked RemoteFileOperations fileOps,
+                                                                         @Mocked HiveTable hiveTable) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setThreadLocalInfo();
+        try {
+            Path targetPath = new Path("hdfs://127.0.0.1:10000/warehouse/db/table/dt=1");
+            Path writePath = new Path("hdfs://127.0.0.1:10000/staging/q1");
+            PartitionUpdate partitionUpdate = new PartitionUpdate("dt=1", writePath, targetPath,
+                    Lists.newArrayList("file"), 1, 1);
+            HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                    Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://127.0.0.1/staging"));
+
+            Path oldPartitionStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_"
+                    + ctx.getQueryId().toString());
+
+            new Expectations() {
+                {
+                    hiveTable.isUnPartitioned();
+                    result = false;
+                    minTimes = 0;
+
+                    fileOps.pathExists(targetPath);
+                    result = false;
+                    times = 1;
+
+                    fileOps.ensureDirectoryExists(targetPath);
+                    times = 1;
+
+                    fileOps.renameDirectory(targetPath, oldPartitionStagingPath, (Runnable) any);
+                    times = 1;
+
+                    fileOps.renameDirectory(writePath, targetPath, (Runnable) any);
+                    times = 1;
+
+                    hiveTable.getCatalogDBName();
+                    result = "db";
+                    minTimes = 0;
+                    hiveTable.getCatalogTableName();
+                    result = "tbl";
+                    minTimes = 0;
+                }
+            };
+
+            java.lang.reflect.Method method = HiveCommitter.class.getDeclaredMethod(
+                    "prepareOverwritePartition", PartitionUpdate.class, HivePartitionStats.class);
+            method.setAccessible(true);
+            method.invoke(hiveCommitter, partitionUpdate, HivePartitionStats.fromCommonStats(1, 1, 1));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testPrepareOverwritePartitionSkipsEnsureDirWhenTargetExists(@Mocked HiveMetastoreOperations hmsOps,
+                                                                            @Mocked RemoteFileOperations fileOps,
+                                                                            @Mocked HiveTable hiveTable) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setThreadLocalInfo();
+        try {
+            Path targetPath = new Path("hdfs://127.0.0.1:10000/warehouse/db/table/dt=1");
+            Path writePath = new Path("hdfs://127.0.0.1:10000/staging/q1");
+            PartitionUpdate partitionUpdate = new PartitionUpdate("dt=1", writePath, targetPath,
+                    Lists.newArrayList("file"), 1, 1);
+            HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                    Executors.newSingleThreadExecutor(), hiveTable, new Path("hdfs://127.0.0.1/staging"));
+
+            Path oldPartitionStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_"
+                    + ctx.getQueryId().toString());
+
+            new Expectations() {
+                {
+                    hiveTable.isUnPartitioned();
+                    result = false;
+                    minTimes = 0;
+
+                    fileOps.pathExists(targetPath);
+                    result = true;
+                    times = 1;
+
+                    fileOps.renameDirectory(targetPath, oldPartitionStagingPath, (Runnable) any);
+                    times = 1;
+
+                    fileOps.renameDirectory(writePath, targetPath, (Runnable) any);
+                    times = 1;
+
+                    hiveTable.getCatalogDBName();
+                    result = "db";
+                    minTimes = 0;
+                    hiveTable.getCatalogTableName();
+                    result = "tbl";
+                    minTimes = 0;
+                }
+            };
+
+            java.lang.reflect.Method method = HiveCommitter.class.getDeclaredMethod(
+                    "prepareOverwritePartition", PartitionUpdate.class, HivePartitionStats.class);
             method.setAccessible(true);
             method.invoke(hiveCommitter, partitionUpdate, HivePartitionStats.fromCommonStats(1, 1, 1));
         } finally {

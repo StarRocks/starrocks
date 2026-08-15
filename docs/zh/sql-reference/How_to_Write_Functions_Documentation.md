@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CONVERT_TZ 函数将给定的时间转换为另一个时区的时间。"
 unlisted: true
 ---
 

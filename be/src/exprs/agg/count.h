@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/simd/simd.h"
 #include "column/nullable_column.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -99,8 +100,10 @@ public:
                     size_t end) const override {
         DCHECK_GT(end, start);
         auto* column = down_cast<Int64Column*>(dst);
+        int64_t* data = column->get_data().data();
+        const int64_t count_val = this->data(state).count;
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).count;
+            data[i] = count_val;
         }
     }
 
@@ -184,17 +187,11 @@ public:
         if (columns[0]->has_null()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    this->data(states[i] + state_offset).count += !null_data[i];
-                }
-            }
+            agg_selective::for_each_selected(
+                    filter, chunk_size, [&](size_t i) { this->data(states[i] + state_offset).count += !null_data[i]; });
         } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    this->data(states[i] + state_offset).count++;
-                }
-            }
+            agg_selective::for_each_selected(filter, chunk_size,
+                                             [&](size_t i) { this->data(states[i] + state_offset).count++; });
         }
     }
 
@@ -204,9 +201,8 @@ public:
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (size_t i = 0; i < chunk_size; ++i) {
-                    this->data(state).count += !null_data[i];
-                }
+                // SIMD optimization: count_zero counts positions where null_data[i] == 0 (non-null rows)
+                this->data(state).count += SIMD::count_zero(null_data, chunk_size);
             } else {
                 this->data(state).count += nullable_column->size();
             }
@@ -228,9 +224,8 @@ public:
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (size_t i = frame_start; i < frame_end; ++i) {
-                    this->data(state).count += !null_data[i];
-                }
+                // SIMD optimization: count_zero counts positions where null_data[i] == 0 (non-null rows)
+                this->data(state).count += SIMD::count_zero(null_data + frame_start, frame_end - frame_start);
             } else {
                 this->data(state).count += (frame_end - frame_start);
             }
@@ -279,9 +274,8 @@ public:
                         }
                     } else {
                         // Build the frame for the first time
-                        for (size_t i = frame_start; i < frame_end; ++i) {
-                            this->data(state).count += !null_data[i];
-                        }
+                        // SIMD optimization: count_zero counts positions where null_data[i] == 0 (non-null rows)
+                        this->data(state).count += SIMD::count_zero(null_data + frame_start, frame_end - frame_start);
                         this->data(state).is_frame_init = true;
                     }
                     return;
@@ -305,8 +299,10 @@ public:
                     size_t end) const override {
         DCHECK_GT(end, start);
         auto* column = down_cast<Int64Column*>(dst);
+        int64_t* data = column->get_data().data();
+        const int64_t count_val = this->data(state).count;
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).count;
+            data[i] = count_val;
         }
     }
 

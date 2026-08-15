@@ -1,0 +1,533 @@
+-- name: test_http_request_security @sequential
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "false");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://127.0.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://192.168.1.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://10.0.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://172.16.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://169.254.169.254/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'http://127.0.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://192.168.1.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "1");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT CAST(json_query(http_request(
+    url => 'http://127.0.0.1:65535/api',
+    timeout_ms => 1000
+), '$.error') AS STRING) NOT LIKE '%SSRF%' as ssrf_not_blocked;
+-- result:
+1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://postman-echo.com/get'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|postman-echo\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://postman-echo.com/get'
+), '$.status') as status;
+-- result:
+200
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = ".*\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://postman-echo.com/get'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "postman-echo\\.com|.*\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://postman-echo.com/get'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://example.com/api'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "127.0.0.1");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "false");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'http://127.0.0.1:65535/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "true");
+-- result:
+-- !result
+SELECT CAST(json_query(http_request(
+    url => 'http://127.0.0.1:65535/api',
+    timeout_ms => 1000
+), '$.error') AS STRING) NOT LIKE '%SSRF%' as ssrf_not_blocked;
+-- result:
+1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "4");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "127.0.0.1");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "true");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'http://127.0.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com:443/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts?userId=1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'http://[::1]/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://[fe80::1]/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://[fc00::1]/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => ''), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'jsonplaceholder.typicode.com/posts/1'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'ftp://ftp.example.com/file'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'file:///etc/passwd'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'http:///path/to/resource'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'https://'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    headers => '{"Content-Type": "application/json"'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    headers => '["Content-Type", "application/json"]'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://this-domain-definitely-does-not-exist-12345.com/api',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "1");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'http://127.0.0.1:65534/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 1
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "(unclosed");
+-- result:
+E: (1064, "Failed to set config 'http_request_host_allowlist_regexp'. err: 'http_request_host_allowlist_regexp' contains invalid regex pattern '(unclosed': Unclosed group near index 9\n(unclosed")
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "[z-a]");
+-- result:
+E: (1064, "Failed to set config 'http_request_host_allowlist_regexp'. err: 'http_request_host_allowlist_regexp' contains invalid regex pattern '[z-a]': Illegal character range near index 3\n[z-a]\n   ^")
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'http://2130706433/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://0177.0.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://[::ffff:127.0.0.1]/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://localhost/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://user@127.0.0.1/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://%31%32%37%2e%30%2e%30%2e%31/api',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 1
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 0
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => -1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'http://169.254.169.254/latest/meta-data/',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'http://169.254.170.2/v2/credentials',
+    timeout_ms => 1000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+200
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+200
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "2");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'http://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+200
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com:443/posts/1',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+200
+-- !result
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+    ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+    ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+    ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "false");
+} END CLEANUP

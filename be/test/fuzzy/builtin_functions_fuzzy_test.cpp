@@ -30,6 +30,7 @@
 #include "column/runtime_type_traits.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
+#include "runtime/runtime_state.h"
 #include "testutil/init_test_env.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
@@ -57,14 +58,14 @@ protected:
     // Generate random string
     std::string generate_random_string(size_t max_length = 100) {
         std::uniform_int_distribution<size_t> len_dist(0, max_length);
-        std::uniform_int_distribution<char> char_dist('a', 'z');
+        std::uniform_int_distribution<int> char_dist('a', 'z');
 
         size_t length = len_dist(_rng);
         std::string result;
         result.reserve(length);
 
         for (size_t i = 0; i < length; ++i) {
-            result.push_back(char_dist(_rng));
+            result.push_back(static_cast<char>(char_dist(_rng)));
         }
         return result;
     }
@@ -464,8 +465,6 @@ protected:
                         return;
                     }
                     ASSERT_TRUE(st.ok()) << st;
-                    st = (desc.prepare_function(ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL));
-                    ASSERT_TRUE(st.ok()) << st;
                 }
 
                 if (desc.scalar_function) {
@@ -479,8 +478,6 @@ protected:
 
                 if (desc.close_function) {
                     auto st = (desc.close_function(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
-                    ASSERT_TRUE(st.ok()) << st;
-                    st = (desc.close_function(ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL));
                     ASSERT_TRUE(st.ok()) << st;
                 }
             } catch (const std::exception& e) {

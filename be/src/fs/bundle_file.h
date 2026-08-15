@@ -111,6 +111,12 @@ public:
     StatusOr<int64_t> read(void* data, int64_t count) override;
     Status touch_cache(int64_t offset, size_t length) override;
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
+    io::IoStatsSnapshot get_io_stats_snapshot() const override;
+
+    // Override so two slices of the same physical file produce distinct keys at the same
+    // stream-relative offset: we fold the slice base offset into the key, yielding a key
+    // that names the page's absolute position in the physical file.
+    std::string page_cache_key(int64_t stream_offset) const override;
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

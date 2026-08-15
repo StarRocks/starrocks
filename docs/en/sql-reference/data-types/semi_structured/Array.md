@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY, as an extended type of database, is supported in various database systems such as PostgreSQL, ClickHouse, and Snowflake."
 ---
 
 # ARRAY
@@ -200,7 +201,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Use Stream Load or Routine Load to load CSV-formatted arrays
 
-  Arrays in CSV files are separated with comma by default. You can use [Stream Load or Routine Load](../../../loading/Loading_intro.md) to load CSV text files or CSV data in Kafka.
+  Arrays in CSV files are separated with comma by default. You can use [Stream Load or Routine Load](../../../loading/loading_introduction/loading_introduction.mdx) to load CSV text files or CSV data in Kafka.
 
 ## Query ARRAY data
 

@@ -1,10 +1,12 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks が提供する多くのシステム変数の設定と変更について説明。"
 ---
 
 # システム変数
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
@@ -164,7 +166,7 @@ SELECT /*+ SET_VAR
 
 ### ユーザーのプロパティとして変数を設定
 
-[ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
+[ALTER USER](./sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
 
 例：
 
@@ -187,10 +189,17 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### ann_params
+
+* **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。
+* **デフォルト**: `""`
+* **データ型**: String
+* **スコープ**: Session
+
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session
-* **説明**: オプティマイザが array&lt;varchar&gt; カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array&lt;varchar&gt;` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array&lt;varchar&gt;` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
+* **説明**: オプティマイザが `array<varchar>` カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array<varchar>` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array<varchar>` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
 * **デフォルト**: `true`
 * **タイプ**: boolean
 * **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
@@ -198,6 +207,34 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### auto_increment_increment
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
+
+### avro_use_jni_reader
+
+* **スコープ**: Session
+* **説明**: Hive などの外部 Catalog にある Avro データをスキャンする際に、JNI ベースの Avro Reader を使用するかどうかを制御します。有効にすると（`true`）、StarRocks は JNI Reader を使用します。無効にすると（`false`）、StarRocks はネイティブ Avro Reader を使用します。現在この変数は主に互換性確保のためのフォールバックとして利用されます。デフォルト値は `false` のため、既定ではネイティブ Avro Reader が使用されます。
+
+  現在の注意点:
+  - ネイティブ Avro Reader と JNI Reader は、`CHAR(n)` の挙動について現在は整合しています。この整合は [#73579](https://github.com/StarRocks/starrocks/pull/73579) で反映されており、この点では native と JNI の動作は一致しています。
+  - ネイティブ Avro Reader は現在 `null`、`deflate`、`snappy` のみをサポートしており、`bzip2` などその他の codec はサポートしていません。ネイティブ Reader がサポートしていない codec を扱う必要がある場合は、JNI Reader を手動で有効にしてください。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v4.1.1
+
+### binary_encoding_format
+
+* **スコープ**: Session
+* **説明**: StarRocks が MySQL テキスト結果で `BINARY` / `VARBINARY` の値をどのようにエンコードするかを制御します。指定可能な値は `raw`、`hex`、`base64` で、デフォルトは `hex` です。この変数は `binary_encoding_level` と組み合わせて動作します。トップレベルのバイナリ値は MySQL クライアントがそのまま扱える場合がありますが、`ARRAY`、`MAP`、`STRUCT` などのネストした型の中にあるバイナリ値は JSON ライクな文字列として返されるため、表示可能で整った形式を保つには追加のエンコードが必要になることがあります。よりコンパクトな表現が必要な場合は `base64` を、追加エンコードを無効にしたい場合は `raw` を使用します。
+* **デフォルト**: `hex`
+* **データ型**: String
+* **導入バージョン**: v4.1
+
+### binary_encoding_level
+
+* **スコープ**: Session
+* **説明**: MySQL テキスト結果でどのバイナリ値をエンコードするかを制御します。指定可能な値は `nested` と `all` で、デフォルトは `nested` です。`nested` は既存互換性のための設定で、`ARRAY`、`MAP`、`STRUCT` などのネストした型の中にあるバイナリ値のみをエンコードし、トップレベルのバイナリ列の挙動は従来のまま維持します。すべてのバイナリ出力を統一した形式にしたい場合は `all` を使用すると、トップレベルのバイナリ値もエンコードされます。`binary_encoding_format = raw` の場合は、ここで `nested` または `all` を指定していても追加のバイナリエンコードは行われないため、ネスト結果の可読性が下がることがあります。
+* **デフォルト**: `nested`
+* **データ型**: String
+* **導入バージョン**: v4.1
 
 ### big_query_profile_threshold
 
@@ -208,6 +245,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: 秒
 * **データ型**: 文字列
 * **導入バージョン**: v3.1
+
+### blacklist_backup_routing
+
+* **スコープ**: Session
+* **説明**: 共有データ（shared-data）モードでは、スキャンに対してプランが優先する compute node が、現在のクエリで利用可能なワーカーに含まれない場合（例：ノードがダウンしている、またはホストの blocklist に載っているなど）、プランナーはバックアップ用の compute node を選ぶ必要があります。この変数は、（プライマリ以外の）候補ノードのうち、バックアップをどのように選ぶかを設定します。`RANDOM` は候補集合から一様乱択でサンプリングします。`CIRCULAR` はプライマリからソート済みの compute node ID のリング上を走査し、最初に見つかった候補ノードを選びます（決定的）。バックアップとして選べるノードは `skip_black_list` にも依存します。デフォルトではホスト blocklist 上のノードは除外されます。`skip_black_list` が `true` の場合、blocklist に載っていても、（例：生存しておりウェアハウスで利用可能など）他の条件を満たせばバックアップとして選ばれることがあります。
+* **デフォルト**: `CIRCULAR`
+* **データ型**: String
+* **有効な値**: `CIRCULAR`, `RANDOM`
+* **導入バージョン**: -
 
 ### catalog
 
@@ -394,6 +440,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データタイプ**: String
 * **導入バージョン**: v3.4.2, v3.5.0
 
+### default_view_sql_security
+
+* **説明**: `CREATE VIEW` ステートメントで `SECURITY` 句が指定されていない場合に適用される、デフォルトの SQL SECURITY 特性です。`NONE`（明示的な `SECURITY NONE` 句と同等）はビューを参照する際に実行ユーザーがそのビュー自体に対する `SELECT` 権限を持っていればよく、ビューが参照するテーブルは実行ユーザーに対してチェックされないことを意味します。`INVOKER`（`SECURITY INVOKER` と同等）は実行ユーザーがビューの参照するテーブルに対する `SELECT` 権限も持っている必要があることを意味します。ステートメント内で明示的に指定された `SECURITY NONE` または `SECURITY INVOKER` 句は、常にこの変数より優先されます。この変数は `CREATE VIEW` にのみ影響し、`ALTER VIEW` には影響しません。
+* **スコープ**: Session
+* **デフォルト**: `NONE`
+* **データタイプ**: String
+* **有効な値**: `NONE`, `INVOKER`
+* **導入バージョン**: v4.1.1
+
 ### disable_colocate_join
 
 * **説明**: Colocation Join を有効にするかどうかを制御するために使用されます。デフォルト値は `false` で、機能が有効です。この機能が無効になっている場合、クエリプランニングは Colocation Join を実行しようとしません。
@@ -560,7 +615,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 ### enable_insert_strict
 
-* **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/load_concept/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
+* **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
 * **デフォルト**: true
 
 ### max_unknown_string_meta_length (global)
@@ -583,6 +638,27 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **データ型**: Boolean
 * **導入バージョン**: v3.5.16, v4.0.9
+
+### enable_lake_prepared_physical_split_scan
+
+* **説明**: 共有データクラスタ内のクラウドネイティブ（レイク）テーブルに対して Prepared Physical Split Scan を有効にするかどうか。有効にすると、各セグメントは一度だけプルーニングされ、その Prepared Read State が同一タブレットの Split 子タスク間で共有されるため、大きい、またはデータが偏ったタブレットのスキャンを高速化できます。この最適化はスキャンノードごとに判断され、さらにクラウドネイティブテーブルであることと Query Cache が無効であることを必要とします。共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **説明**: Prepared Physical Split scan において、Scan Range 数がすでに Pipeline DOP に達している場合でも、単一の巨大な Lake タブレットを分割できるようにするデータ偏りのしきい値。あるタブレットの行数が、この比率に Driver あたりの理想的な分担（総行数を有効 DOP で割った値）を掛けた値を超えると、そのタブレットは偏ったストラグラーとみなされて分割されます。値が大きいほど分割にはより極端な偏りが必要になり、値が小さいほど積極的に分割します。正の有限な数値である必要があります。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: 1.5
+* **データ型**: Double
+* **導入バージョン**: v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **説明**: 同一クエリ内で 2 つ以上の Scan オペレータによってスキャンされるクラウドネイティブ（レイク）テーブル（セルフジョインや、複数回参照されるテーブルなど）に対して、Prepared Physical Split Scan を許可するかどうか。`false`（デフォルト）の場合、そのような重複スキャンは通常のスキャンにフォールバックします。この最適化が Scan ごとに再利用する Prepared Read State を、同一テーブルの兄弟 Scan 間で共有することは安全ではないためです。`true` に設定すると、それらのスキャンを最適化に再度組み込みます。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -735,6 +811,15 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 * **デフォルト**: false
 
+### enable_explain_in_profile
+
+* **スコープ**: Session
+* **説明**: この変数が `true` で、かつクエリに対してプロファイルが生成される場合、実行された計画の `EXPLAIN COSTS` テキストがプロファイルの `Summary` セクション内に `ExplainPlan` というキーで埋め込まれます。これにより、稼働中のクラスターにアクセスできない状態で保存済みのプロファイル成果物だけを使ってスロークエリを切り分ける際に、ランタイムメトリクスと並べてオプティマイザーの基数推定、列統計、述語、ランタイムフィルター宣言、および全体の計画コストを確認できます。
+
+  プロファイルに埋め込まれる計画は、他の永続化される SQL 成果物と同じ非機密化制御に従います。`FILES(...)` などに含まれる資格情報リテラルは常に編集され、述語や射影のリテラルは、クラスター全体の FE 設定 `enable_sql_desensitize_in_log` またはセッション変数 `enable_desensitize_explain` のいずれかが有効な場合にダイジェスト形式で表示されます。
+* **デフォルト**: false
+* **データ型**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **スコープ**: Session
@@ -800,7 +885,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 ### enable_scan_datacache
 
-* **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
+* **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
 * **デフォルト**: true
 * **導入バージョン**: v2.5
 
@@ -858,6 +943,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v2.3
 
+### enable_tablet_pre_split
+
+* **説明**: サンプリングベースのタブレット事前分割（Sample-Based Tablet Pre-Split）に対するセッション単位のオプトアウト。FE Config ゲート（`enable_tablet_pre_split_for_*`）を主たるオン／オフスイッチとして機能させるため、既定値は `true` です。特定のセッションの取り込みに干渉させたくない場合は `false` に設定してください。事前分割が実行されるには、対応する Config フラグとこのセッション変数の両方が `true` である必要があります。
+* **デフォルト**: true
+* **導入バージョン**: v4.1.0
+
 ### enable_topn_runtime_filter
 
 * **説明**: TopN Runtime Filter を有効にするかどうか。この機能を有効にすると、ORDER BY LIMIT クエリに対して動的に Runtime Filter が構築され、Scan 段階にプッシュダウンされてフィルタリングに利用されます。
@@ -871,6 +962,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **スコープ**: セッション
 * **データタイプ**: boolean
 * **導入バージョン**: v3.2.4
+
+### enable_vector_index_refine
+
+* **説明**: 量子化ベクターインデックスが返した候補について、元のベクトルから正確な距離を再計算し、再順位付けするかどうかを指定します。IVFPQ、および `sq4`、`sq8`、`pq` 量子化器を使用する HNSW インデックスに適用されます。量子化されていない HNSW インデックス（`quantizer = flat`）には影響しません。有効にすると結果の精度が向上する可能性がありますが、I/O と計算コストが増加します。`EXPLAIN` の `Refine: ON/OFF` で有効かどうかを確認できます。
+* **デフォルト**: `false`
+* **データ型**: Boolean
+* **スコープ**: Session
 
 ### enable_view_based_mv_rewrite
 
@@ -992,6 +1090,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1
 * **データ型**: Int
 * **導入バージョン**: -
+
+### k_factor
+
+* **説明**: クエリの `LIMIT` にこの値を掛け、各 Segment が返すベクターインデックス候補数を決定します。`1` より大きい値は、複数 Segment の候補をマージした後の再現率を向上させる可能性がありますが、インデックス検索、メモリ、および後続処理のコストが増加します。最終的な候補数は少なくとも `1` に調整されます。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### lake_bucket_assign_mode
 
@@ -1127,6 +1232,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 3000
 * **単位**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **説明**: Tablet のサイズに基づいて単一 Tablet 最適化を制御します。クエリが単一の Tablet に絞り込まれると、StarRocks は集計を 1 フェーズで実行し、結果を単一ノードに集約して Shuffle を省略できます。小さな Tablet には効率的ですが、Tablet が大きい場合はクエリ全体を単一ノードで直列化します。選択された単一 Tablet の行数がこのしきい値を超える場合、この最適化は無効になり、通常の分散（Shuffle）プランが使用されます。`-1` に設定すると、このゲートが無効になり、Tablet のサイズに関係なく常に単一 Tablet 最適化が適用されます。
+* **デフォルト**: 10000000
+* **データ型**: Long
+* **導入バージョン**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **説明**: マテリアライズドビューの書き換えルールが消費できる最大時間を指定します。しきい値に達すると、このルールはクエリ書き換えに使用されません。
@@ -1212,11 +1324,11 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
 
 ### plan_mode
 
-* **説明**: Iceberg Catalog のメタデータ取得戦略。詳細は [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy) を参照してください。有効な値:
+* **説明**: Iceberg Catalog のメタデータ取得戦略。詳細は [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg.md#appendix-periodic-metadata-refresh-strategy) を参照してください。有効な値:
   * `auto`: システムが自動的に取得プランを選択します。
-  * `local`: ローカルキャッシュプランを使用します。
-  * `distributed`: 分散プランを使用します。
-* **デフォルト**: auto
+  * `local`: FE がローカルで Iceberg manifest ファイルを解析し、解析しながら scan range を段階的に BE に配信します。すべての manifest の解析完了を待つ必要がなく、メモリ使用量と初回レイテンシを削減できます。
+  * `distributed`: manifest の解析を複数の BE に分散して並列処理しますが、FE はすべての BE の結果が揃うまで scan range を配信できません。manifest ファイルが多い大規模テーブルでは、メモリ使用量の増大と待ち時間の長期化を招く可能性があります。FE の CPU がボトルネックになっている場合にのみ推奨します。
+* **デフォルト**: local（v3.5 より `auto` から変更。v3.5 以降、増分 scan range 配信がデフォルトで有効になったため、`local` モードはほとんどのワークロードで `distributed` より低メモリ・低レイテンシで動作します）
 * **導入バージョン**: v3.3.3
 
 ### populate_datacache_mode
@@ -1228,13 +1340,12 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
 * **デフォルト**: auto
 * **導入バージョン**: v3.3.2
 
-### prefer_compute_node
+### pq_refine_factor
 
-* **説明**: FEs がクエリ実行プランを CN ノードに配布するかどうかを指定します。有効な値:
-  * `true`: FEs がクエリ実行プランを CN ノードに配布することを示します。
-  * `false`: FEs がクエリ実行プランを CN ノードに配布しないことを示します。
-* **デフォルト**: false
-* **導入バージョン**: v2.4
+* **説明**: `enable_vector_index_refine` を有効にしたベクター範囲検索で使用する追加の候補倍率です。`k_factor` の後に適用されます。値を大きくすると、正確な距離による再順位付け前の再現率が向上する可能性がありますが、インデックス検索、I/O、および距離計算のコストが増加します。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### query_cache_agg_cardinality_limit
 
@@ -1349,6 +1460,22 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **デフォルト**: 0（制限なし）
 * **導入バージョン**: v3.3.9
 
+### allow_lake_without_partition_filter
+
+* **説明**: レイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してパーティションフィルターなしのクエリを許可するかどうか。`false` に設定すると、有効なパーティションフィルターを含まないクエリは拒否され、意図しないフルテーブルスキャンを防止します。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **エイリアス**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **説明**: 単一のレイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してスキャンできるパーティションの最大数。`0` に設定すると制限なし。上限を超えるとクエリはエラーを返します。なお、増分的にスプリットを列挙するカタログタイプ（Iceberg、Delta Lake）では、制限チェックはスキャンレンジのディスパッチ時に行われ、クエリが即座に拒否されるのではなく、実行途中で失敗する場合があります。
+* **スコープ**: セッション
+* **デフォルト**: `0`（制限なし）
+* **タイプ**: Int
+* **エイリアス**: `scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **説明**: FE がスキャンレンジを構築するときに、各タブレットの内部スキャンレンジに `skip_disk_cache` をマークするよう指示するセッションフラグです。`true` に設定すると、`OlapScanNode.addScanRangeLocations()` は作成された `TInternalScanRange` オブジェクトに対して `internalRange.setSkip_disk_cache(true)` を設定するため、下流の BE スキャンノードはそのスキャンでローカルディスクキャッシュをバイパスするよう指示されます。この設定はセッション単位で適用され、プラン／スキャンレンジ構築時に評価されます。ページキャッシュスキップの制御には `skip_page_cache` と組み合わせて使用し、データキャッシュ関連の変数（`enable_scan_datacache` / `enable_populate_datacache`）と併せて適切に利用してください。
@@ -1408,6 +1535,8 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * `SORT_NULLS_LAST`: ソート後に NULL 値を最後に配置します。
 * `ERROR_IF_OVERFLOW`: 算術オーバーフローが発生した場合に NULL の代わりにエラーを返します。現在、このオプションは DECIMAL データ型にのみ対応しています。
 * `GROUP_CONCAT_LEGACY`: v2.5 およびそれ以前の `group_concat` 構文を使用します。このオプションは v3.0.9 および v3.1.6 からサポートされています。
+* `FORBID_INVALID_IMPLICIT_CAST`: プラン時に Trino 風の厳格な型チェックを有効にします。暗黙的に許可されるのは同一型ファミリ内の拡張（widening）変換のみです（例: `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`、`DATE`→`DATETIME`）。`VARCHAR`/`CHAR` 間の暗黙的キャストは宣言された長さを問わず許可されます。型ファミリをまたぐキャスト（`string`↔`numeric`、`string`↔`date`、`numeric`↔`date`、`boolean` と他の型など）や数値の縮小（narrowing）キャスト（`BIGINT`→`INT`、`DOUBLE`→`FLOAT` など）はセマンティックエラーとして拒否されます。これらの変換が必要な場合は、明示的な `CAST` を使用してください。
+* `STRUCT_CAST_BY_NAME`: STRUCT 型間のキャストにおいて、デフォルトの位置ベースのマッチングではなく、名前ベースのフィールドマッチングを有効にします。このモードが有効になっている場合、ソース構造体のフィールドは、宣言順序に関係なく、フィールド名（大文字小文字を区別しない）に基づいてターゲット構造体のフィールドと照合されます。ソース側には存在するがターゲット側には存在しないフィールドは無視され、ターゲット側には存在するがソース側には存在しないフィールドは NULL で埋められます。このモードは、FE型の解決（UNION ALL における共通のスーパータイプの計算やキャスト可能性のチェック）と、BEキャストの評価（CastStructExpr における実行時のフィールドの順序変更）の両方に影響します。これは、分岐間でフィールドの定義順序が異なるSTRUCT列に対して UNION ALL を実行する場合に特に有用です。
 
 1 つの SQL モードのみを設定できます。例：
 
@@ -1478,16 +1607,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データ型**: long
 * **導入バージョン**: v3.2.0
 
-### use_compute_nodes
-
-* **説明**: 使用できる CN ノードの最大数。この変数は `prefer_compute_node=true` の場合に有効です。有効な値：
-
-  * `-1`: すべての CN ノードが使用されることを示します。
-  * `0`: CN ノードが使用されないことを示します。
-* **デフォルト**: -1
-* **データ型**: Int
-* **導入バージョン**: v2.4
-
 ### version (global)
 
 クライアントに返される MySQL サーバーバージョン。値は FE パラメータ `mysql_server_version` と同じです。
@@ -1502,5 +1621,7 @@ StarRocks のバージョン。変更できません。
 * **デフォルト**: 28800（8 時間）。
 * **単位**: 秒
 * **データ型**: Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

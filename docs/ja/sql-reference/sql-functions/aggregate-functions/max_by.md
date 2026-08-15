@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "y の最大値に関連付けられた x の値を返します。"
 ---
 
 # max_by

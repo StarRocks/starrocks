@@ -1,0 +1,26 @@
+-- name: test_schema_change_string_to_num_null
+-- Bug 15 / numeric Bug 22: ALTER MODIFY COLUMN from VARCHAR to an integer/float type must apply
+-- CAST semantics for unconvertible values (overflow / unparseable -> NULL), matching query-time CAST
+-- and INSERT. Previously the schema-change converter used the lenient TypeInfo::from_string, which
+-- stored a 32-bit-wrapped value ('99999999999'->1215752191) or a 0 sentinel ('abc'->0) as non-NULL.
+drop database if exists test_schema_change_string_to_num_null;
+create database test_schema_change_string_to_num_null;
+use test_schema_change_string_to_num_null;
+
+CREATE TABLE cc1 (k INT, v VARCHAR(32) NOT NULL) DUPLICATE KEY(k)
+  DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("fast_schema_evolution"="true","replication_num"="1");
+INSERT INTO cc1 VALUES (1,'100'),(2,'99999999999'),(3,'abc');
+ALTER TABLE cc1 MODIFY COLUMN v INT;
+function: wait_alter_table_finish()
+-- '100'->100, overflow '99999999999'->NULL, unparseable 'abc'->NULL (matches CAST)
+SELECT k,v FROM cc1 ORDER BY k;
+
+CREATE TABLE cc2 (k INT, v VARCHAR(32)) DUPLICATE KEY(k)
+  DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("fast_schema_evolution"="true","replication_num"="1");
+INSERT INTO cc2 VALUES (1,'7'),(2,'1.5'),(3,'xyz'),(4,NULL);
+ALTER TABLE cc2 MODIFY COLUMN v DOUBLE;
+function: wait_alter_table_finish()
+-- '7'->7.0, '1.5'->1.5, unparseable 'xyz'->NULL, source NULL stays NULL
+SELECT k,v FROM cc2 ORDER BY k;
+
+drop database test_schema_change_string_to_num_null;

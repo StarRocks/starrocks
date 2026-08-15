@@ -23,15 +23,15 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/data_sink.h"
+#include "exec/pipeline/exchange/exchange_compression_strategy.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/data_sink.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "serde/compress_strategy.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace butil {
 class IOBuf;
@@ -102,7 +102,7 @@ public:
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
-        return sz > runtime_state()->chunk_size() * 512;
+        return sz > get_factory()->runtime_state()->chunk_size() * 512;
     }
     void _calc_hash_values_and_bucket_ids();
 
@@ -190,7 +190,7 @@ private:
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
     std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
-    std::shared_ptr<serde::CompressStrategy> _compress_strategy;
+    std::shared_ptr<ExchangeCompressionStrategy> _compress_strategy;
 
     RuntimeProfile::Counter* _serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
@@ -200,6 +200,7 @@ private:
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _raw_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _serialized_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _compressed_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _pass_through_buffer_peak_mem_usage = nullptr;
 

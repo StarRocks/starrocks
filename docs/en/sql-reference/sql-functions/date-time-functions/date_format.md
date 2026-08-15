@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a date into a string according to the specified format."
 ---
 
 # date_format

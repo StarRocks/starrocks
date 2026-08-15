@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns Hive partition information for a specified external table as a JSON string."
 ---
 
 # inspect_hive_part_info

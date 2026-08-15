@@ -38,6 +38,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           token: ${{ secrets.PAT }}
+          # actions/checkout now refuses fork PR checkout under pull_request_target
+          # by default (v7 GA 2026-06-18, backported to all majors 2026-07-16).
+          # This workflow intentionally checks out fork code with a write token
+          # solely to run clang-format and push the fix back, so opt back in.
+          allow-unsafe-pr-checkout: true
 
       - name: Set up base branch reference
         env:
@@ -59,6 +64,11 @@ jobs:
           BASE_REPO: ${{ github.repository }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
+          if git grep -l '^<<<<<<<' -- be/src be/test 2>/dev/null | grep -q .; then
+            echo "Merge conflict markers found; skipping clang-format."
+            exit 0
+          fi
+
           fetched_files=(
             "build-support/format_changed_files.py"
             "build-support/run_clang_format.py"
@@ -169,6 +179,9 @@ jobs:
             git reset HEAD~1
             echo "::error::Auto-push failed. Files that need formatting:"
             git diff --name-only
+            echo "::group::Full clang-format diff (apply locally with 'git apply' to fix)"
+            git --no-pager diff
+            echo "::endgroup::"
             if [ "${HEAD_REPO}" != "${{ github.repository }}" ]; then
               echo "::error::This is a fork PR. Please enable 'Allow edits from maintainers' on your PR."
             else

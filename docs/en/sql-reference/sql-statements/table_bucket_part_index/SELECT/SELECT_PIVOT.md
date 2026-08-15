@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "PIVOT"
+description: "PIVOT transforms rows into columns using aggregate functions, simplifying pivot table queries in StarRocks."
 ---
 
 # PIVOT

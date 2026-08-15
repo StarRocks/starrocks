@@ -48,21 +48,26 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/persistent_index_compaction_manager.h"
-#include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "tablet_meta_manager.h"
 
@@ -89,7 +94,7 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_update_cache_expire_thread, "cache_expire");
 
     _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
-    Thread::set_thread_name(_update_cache_evict_thread, "evict_update_cache");
+    Thread::set_thread_name(_update_cache_evict_thread, "evict_upd_cache");
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
@@ -103,7 +108,7 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
-    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_idx_cmpt_sch");
 
     _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_dump_thread, "pk_dump");
@@ -111,12 +116,8 @@ Status StorageEngine::start_bg_threads() {
 #ifdef USE_STAROS
     _local_pk_index_shared_data_gc_evict_thread =
             std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
-    Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pk_index_shared_data_gc_evict");
+    Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pindex_gc_evict");
 #endif
-
-    // start thread for check finish publish version
-    _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
-    Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -239,7 +240,7 @@ Status StorageEngine::start_bg_threads() {
 
     _clear_expired_replcation_snapshots_thread =
             std::thread([this]() { _clear_expired_replication_snapshots_callback(nullptr); });
-    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expired_replication_snapshots");
+    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clr_exp_repsnap");
 
     start_schedule_apply_thread();
 
@@ -256,6 +257,7 @@ void* StorageEngine::_fd_cache_clean_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::file_descriptor_cache_clean_interval;
         if (interval <= 0) {
@@ -309,6 +311,7 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(1);
         // schedule persistent index compaction
@@ -317,7 +320,7 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
 #ifdef USE_STAROS
-            auto update_manager = ExecEnv::GetInstance()->lake_update_manager();
+            auto update_manager = StorageEnv::GetInstance()->lake_update_manager();
             _local_pk_index_manager->schedule([&]() {
                 return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
             });
@@ -332,6 +335,7 @@ void* StorageEngine::_pk_dump_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(60);
         // disable pk dump generation when pk_dump_interval_seconds less than 0
@@ -351,7 +355,7 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    auto lake_update_manager = ExecEnv::GetInstance()->lake_update_manager();
+    auto lake_update_manager = StorageEnv::GetInstance()->lake_update_manager();
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(config::pindex_shared_data_gc_evict_interval_seconds);
@@ -376,6 +380,7 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         // must be here, because this thread is start on start and
@@ -431,6 +436,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         std::pair<int64_t, vector<uint32_t>> task(-1, vector<uint32>());
@@ -451,9 +457,12 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
                 LOG(ERROR) << "repair compaction failed, tablet not primary key tablet found: " << task.first;
                 continue;
             }
+            auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
+                                                            "Compaction-" + std::to_string(tablet->tablet_id()),
+                                                            RuntimeEnv::GetInstance()->compaction_mem_tracker());
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
-                auto st = tablet->updates()->compaction(GlobalEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                auto st = tablet->updates()->compaction(mem_tracker.get(), {rowsetid});
                 if (!st.ok()) {
                     LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
                                  << st;
@@ -511,6 +520,7 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     GarbageSweepIntervalCalculator interval_calculator;
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         interval_calculator.maybe_interval_updated();
@@ -599,6 +609,7 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         _start_disk_stat_monitor();
 
@@ -608,29 +619,6 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
             interval = 1;
         }
         SLEEP_IN_BG_WORKER(interval);
-    }
-
-    return nullptr;
-}
-
-void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
-    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        int32_t interval = config::finish_publish_version_internal;
-        {
-            // wait cv for at most one second and then wake up to check if has pending tasks or stopping in progress
-            auto wait_timeout = std::chrono::seconds(1);
-            std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
-            while (!_publish_version_manager->has_pending_task() &&
-                   !_bg_worker_stopped.load(std::memory_order_consume)) {
-                _finish_publish_version_cv.wait_for(wl, wait_timeout);
-            }
-            _publish_version_manager->finish_publish_version_task();
-            if (interval <= 0) {
-                LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval << ", force set to 1";
-                interval = 1000;
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
     }
 
     return nullptr;
@@ -670,10 +658,22 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
     return nullptr;
 }
 
+void StorageEngine::_expire_caches(int64_t vector_cache_now) {
+    _update_manager->expire_cache();
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
+#endif
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache != nullptr) {
+        vector_index_cache->clear_expired(vector_cache_now);
+    }
+}
+
 void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t expire_sec = config::update_cache_expire_sec;
         if (expire_sec <= 0) {
@@ -682,14 +682,14 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
         }
         _update_manager->set_cache_expire_ms(expire_sec * 1000);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-        ExecEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
+        StorageEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
 #endif
-        int32_t sleep_sec = std::max(1, expire_sec / 2);
+        int64_t sleep_sec = std::max(1, expire_sec / 2);
+        if (StorageEnv::GetInstance()->vector_index_cache() != nullptr && config::vector_index_cache_expire_sec > 0) {
+            sleep_sec = std::min<int64_t>(sleep_sec, std::max<int64_t>(1, config::vector_index_cache_expire_sec / 2));
+        }
         SLEEP_IN_BG_WORKER(sleep_sec);
-        _update_manager->expire_cache();
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        ExecEnv::GetInstance()->lake_update_manager()->expire_cache();
-#endif
+        _expire_caches(MonotonicMillis());
     }
 
     return nullptr;
@@ -716,7 +716,7 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
         }
         _update_manager->evict_cache(memory_urgent_level, memory_high_level);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-        ExecEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
+        StorageEnv::GetInstance()->lake_update_manager()->evict_cache(memory_urgent_level, memory_high_level);
 #endif
     }
     return nullptr;
@@ -726,6 +726,7 @@ void* StorageEngine::_unused_rowset_monitor_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         double deleted_pct = delete_unused_rowset();
         // delete 20% means we nead speedup 5x which make interval 1/5 before
@@ -743,7 +744,7 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path gc by tablet!";
         ((DataDir*)arg)->perform_path_gc_by_tablet();
@@ -774,7 +775,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(600);
         break;
@@ -801,7 +802,7 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to clear expired replication snapshots!";
         replication_txn_manager()->clear_expired_snapshots();
@@ -822,6 +823,7 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::STORAGE);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "begin to do tablet meta checkpoint:" << ((DataDir*)arg)->path();
         int64_t start_time = UnixMillis();
@@ -842,6 +844,7 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         {
             auto wait_timeout = std::chrono::seconds(1);

@@ -16,15 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/testutil/parallel_test.h"
-#include "runtime/mem_pool.h"
+#include "column/chunk_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/types.h"
 #include "types/decimalv3.h"
-#include "types/json_value.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {
@@ -138,7 +138,7 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalToDecimalV2Column) {
             trim_trailing_zeros(values[4].to_string()),
     };
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DECIMAL, false);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DECIMAL, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
         c0->append_datum({values[2]});
@@ -153,7 +153,7 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalToDecimalV2Column) {
         EXPECT_EQ(values_string[4], c1->get(4).get_decimal().to_string());
     }
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DECIMAL, true);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DECIMAL, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});
@@ -184,7 +184,7 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalV2ToDecimalColumn) {
     ASSERT_TRUE(type_info->from_string(&values[4], "9999999.999999").ok());
 
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DECIMALV2, false);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DECIMALV2, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
         c0->append_datum({values[2]});
@@ -199,7 +199,7 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalV2ToDecimalColumn) {
         EXPECT_EQ(values[4].to_string(), trim_trailing_zeros(c1->get(4).get_decimal12().to_string()));
     }
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DECIMALV2, true);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DECIMALV2, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});
@@ -227,7 +227,7 @@ PARALLEL_TEST(ConvertHelperTest, testDateToDateV2Column) {
     ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31").ok());
 
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATE_V1, false);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATE_V1, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
 
@@ -236,7 +236,7 @@ PARALLEL_TEST(ConvertHelperTest, testDateToDateV2Column) {
         EXPECT_EQ(values[1], c1->get(1).get_date().to_mysql_date());
     }
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATE_V1, true);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATE_V1, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});
@@ -258,7 +258,7 @@ PARALLEL_TEST(ConvertHelperTest, testDateV2ToDateColumn) {
     ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31").ok());
 
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATE, false);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATE, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
 
@@ -267,7 +267,7 @@ PARALLEL_TEST(ConvertHelperTest, testDateV2ToDateColumn) {
         EXPECT_EQ(values[1].to_mysql_date(), c1->get(1).get_uint24());
     }
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATE, true);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATE, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});
@@ -289,7 +289,7 @@ PARALLEL_TEST(ConvertHelperTest, testDatetimeToTimestampColumn) {
     ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31 08:09:10").ok());
 
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATETIME_V1, false);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATETIME_V1, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
 
@@ -298,7 +298,7 @@ PARALLEL_TEST(ConvertHelperTest, testDatetimeToTimestampColumn) {
         EXPECT_EQ(values[1], c1->get(1).get_timestamp().to_timestamp_literal());
     }
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATETIME_V1, true);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATETIME_V1, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});
@@ -320,7 +320,7 @@ PARALLEL_TEST(ConvertHelperTest, testTimestampToDatetimeColumn) {
     ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31 05:06:07").ok());
 
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATETIME, false);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATETIME, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
 
@@ -329,7 +329,7 @@ PARALLEL_TEST(ConvertHelperTest, testTimestampToDatetimeColumn) {
         EXPECT_EQ(values[1].to_timestamp_literal(), c1->get(1).get_int64());
     }
     {
-        auto c0 = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
+        auto c0 = ChunkFactory::column_from_field_type(TYPE_DATETIME, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});
@@ -350,7 +350,7 @@ static void test_convert_same_numeric_types() {
     auto conv = get_field_converter(field_type, field_type);
     CppType values[5] = {std::numeric_limits<CppType>::lowest(), -123, 0, 123, std::numeric_limits<CppType>::max()};
 
-    auto c0 = ChunkHelper::column_from_field_type(field_type, false);
+    auto c0 = ChunkFactory::column_from_field_type(field_type, false);
     c0->append_datum({values[0]});
     c0->append_datum({values[1]});
     c0->append_datum({values[2]});
@@ -396,7 +396,7 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_VARCHAR) {
     auto conv = get_field_converter(TYPE_VARCHAR, TYPE_VARCHAR);
     const Slice values[5] = {"", "xxxx", "yyyyyyy", "aaaaaa", "b"};
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
     c0->append_datum({values[0]});
     c0->append_datum({values[1]});
     c0->append_datum({values[2]});
@@ -425,7 +425,7 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_DOUBLE) {
     auto conv = get_field_converter(TYPE_DOUBLE, TYPE_DOUBLE);
     double values[4] = {INFINITY, -12345.11, 0.11, 12345.111};
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_DOUBLE, false);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_DOUBLE, false);
     c0->append_datum({values[0]});
     c0->append_datum({values[1]});
     c0->append_datum({values[2]});
@@ -451,7 +451,7 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_DATE_V2) {
     ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01").ok());
     ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31").ok());
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_DATE, false);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_DATE, false);
     c0->append_datum({values[0]});
     c0->append_datum({values[1]});
 
@@ -471,7 +471,7 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_TIMESTAMP) {
     ASSERT_TRUE(type_info->from_string(&values[0], "1990-01-01 02:03:04").ok());
     ASSERT_TRUE(type_info->from_string(&values[1], "1983-12-31 10:11:12").ok());
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_DATETIME, false);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_DATETIME, false);
     c0->append_datum({values[0]});
     c0->append_datum({values[1]});
 
@@ -545,54 +545,4 @@ PARALLEL_TEST(ConvertHelperTest, testValidSchema) {
     }
 }
 
-PARALLEL_TEST(ConvertHelperTest, testNullableIntConvertString) {
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    auto conv = get_type_converter(TYPE_INT, TYPE_VARCHAR);
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
-    auto c1 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
-    auto t0 = get_scalar_type_info(TYPE_INT);
-    auto t1 = get_scalar_type_info(TYPE_VARCHAR);
-
-    c0->append_datum({1});
-    c0->append_nulls(1);
-    auto status =
-            conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), mem_pool.get());
-
-    EXPECT_EQ("1", c1->get(0).get_slice());
-    ASSERT_TRUE(c1->get(1).is_null());
-}
-
-PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertInt) {
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    auto conv = get_type_converter(TYPE_VARCHAR, TYPE_INT);
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
-    auto c1 = ChunkHelper::column_from_field_type(TYPE_INT, true);
-    auto t0 = get_scalar_type_info(TYPE_VARCHAR);
-    auto t1 = get_scalar_type_info(TYPE_INT);
-
-    c0->append_datum({"1"});
-    c0->append_nulls(1);
-    auto status =
-            conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), mem_pool.get());
-
-    EXPECT_EQ(1, c1->get(0).get_int32());
-    ASSERT_TRUE(c1->get(1).is_null());
-}
-
-PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertJson) {
-    std::unique_ptr<MemPool> mem_pool(new MemPool());
-    auto conv = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
-    auto c1 = ChunkHelper::column_from_field_type(TYPE_JSON, true);
-    auto t0 = get_scalar_type_info(TYPE_VARCHAR);
-    auto t1 = get_scalar_type_info(TYPE_JSON);
-
-    c0->append_datum({"{}"});
-    c0->append_nulls(1);
-    auto status =
-            conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), mem_pool.get());
-
-    EXPECT_EQ("{}", c1->get(0).get_json()->to_string_uncheck());
-    ASSERT_TRUE(c1->get(1).is_null());
-}
 } // namespace starrocks

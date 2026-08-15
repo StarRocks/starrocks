@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "covar_samp 返回两个表达式的样本协方差，支持作为窗口函数使用。"
 ---
 
 # covar_samp

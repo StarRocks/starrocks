@@ -27,6 +27,7 @@
 #include "butil/time.h"
 #include "column/column.h"
 #include "column/const_column.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
@@ -38,9 +39,9 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
+#include "runtime/runtime_state.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -54,29 +55,6 @@ public:
         expr_node.__isset.opcode = true;
         expr_node.__isset.child_type = true;
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    }
-
-    Status test_extract_from_object(std::string input, const std::string& jsonpath, std::string* output) {
-        // reverse for padding.
-        input.reserve(input.size() + simdjson::SIMDJSON_PADDING);
-
-        simdjson::ondemand::parser parser;
-        simdjson::ondemand::document doc;
-        EXPECT_EQ(simdjson::error_code::SUCCESS, parser.iterate(input).get(doc));
-
-        simdjson::ondemand::object obj;
-
-        EXPECT_EQ(simdjson::error_code::SUCCESS, doc.get_object().get(obj));
-
-        std::vector<SimpleJsonPath> path;
-        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(jsonpath, &path));
-
-        simdjson::ondemand::value val;
-        RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, &val));
-        std::string_view sv = simdjson::to_json_string(val);
-
-        output->assign(sv.data(), sv.size());
-        return Status::OK();
     }
 
 public:
@@ -237,6 +215,36 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
+}
+
+TEST_F(JsonFunctionsTest, get_json_string_invalid_json_respects_allow_throw_exception) {
+    Columns columns;
+    auto strings = BinaryColumn::create();
+    auto paths = BinaryColumn::create();
+    strings->append(std::string(kJSONLengthLimit + 1, '{'));
+    paths->append("$.a");
+    columns.emplace_back(strings);
+    columns.emplace_back(paths);
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto result = JsonFunctions::get_json_string(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_EQ(1, ColumnHelper::count_nulls(result.value()));
+    }
+
+    {
+        TQueryOptions query_options;
+        query_options.__set_allow_throw_exception(true);
+        TQueryGlobals query_globals;
+        RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ctx->set_runtime_state(&state);
+
+        auto result = JsonFunctions::get_json_string(ctx.get(), columns);
+        ASSERT_FALSE(result.ok());
+        ASSERT_EQ("JSON string exceed maximum length 16MB", result.status().message());
+    }
 }
 
 TEST_F(JsonFunctionsTest, get_json_emptyTest) {
@@ -1292,44 +1300,6 @@ INSTANTIATE_TEST_SUITE_P(JsonObjectTest, JsonObjectTestFixture,
 
                                  // clang-format on
                                  ));
-
-TEST_F(JsonFunctionsTest, extract_from_object_test) {
-    std::string output;
-
-    EXPECT_OK(test_extract_from_object(R"({"data" : 1})", "$.data", &output));
-    EXPECT_STREQ(output.data(), "1");
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data" : 1})", "$.dataa", &output));
-
-    EXPECT_OK(test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output));
-    EXPECT_STREQ(output.data(), "2");
-
-    EXPECT_STATUS(Status::NotFound(""),
-                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output));
-
-    EXPECT_STATUS(Status::NotFound(""),
-                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[3].key", &output));
-
-    EXPECT_STATUS(Status::DataQualityError(""),
-                  test_extract_from_object(R"({"data1 " : 1, "data2":})", "$.data", &output));
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": null})", "$.data", &output));
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": null})", "$.data.key", &output));
-
-    EXPECT_OK(test_extract_from_object(R"({"data": {}})", "$.data", &output));
-    EXPECT_STREQ(output.data(), "{}");
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": {}})", "$.data.key", &output));
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": 1})", "$.data.key", &output));
-
-    EXPECT_OK(test_extract_from_object(R"({"key1": [1,2]})", "$.key1[1]", &output));
-    EXPECT_STREQ(output.data(), "2");
-
-    EXPECT_OK(test_extract_from_object(R"({"key1": [{"key2":3},{"key4": 5}]})", "$.key1[1].key4", &output));
-    EXPECT_STREQ(output.data(), "5");
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"key1": null})", "$.key1[1].key4", &output));
-}
 
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
 

@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -44,6 +45,8 @@ public abstract class StreamLoadParamsTestBase {
                 buildFileFormatType(TFileFormatType.FORMAT_CSV_DEFLATE).getFileFormatType().orElse(null));
         assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
                 buildFileFormatType(TFileFormatType.FORMAT_CSV_ZSTD).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_ARROW,
+                buildFileFormatType(TFileFormatType.FORMAT_ARROW).getFileFormatType().orElse(null));
     }
 
     protected abstract StreamLoadParams buildFileFormatType(TFileFormatType expected);
@@ -312,4 +315,19 @@ public abstract class StreamLoadParamsTestBase {
     }
 
     protected abstract StreamLoadParams buildStripOuterArray(Boolean expected);
+
+    @Test
+    public void testEnvelope() throws Exception {
+        assertFalse(buildEnvelope(null).getEnvelope().isPresent());
+        assertEquals(TEnvelopeType.DEBEZIUM,
+                buildEnvelope("debezium").getEnvelope().orElse(null));
+        assertEquals(TEnvelopeType.DEBEZIUM,
+                buildEnvelope("DEBEZIUM").getEnvelope().orElse(null));
+        assertEquals(TEnvelopeType.NONE,
+                buildEnvelope("none").getEnvelope().orElse(null));
+        assertEquals(TEnvelopeType.NONE,
+                buildEnvelope("NONE").getEnvelope().orElse(null));
+    }
+
+    protected abstract StreamLoadParams buildEnvelope(String value);
 }

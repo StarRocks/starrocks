@@ -49,6 +49,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlProxyQueryManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -60,6 +61,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -137,8 +139,19 @@ public class LeaderOpExecutor {
         try {
             forward();
             if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+                long deadline = System.currentTimeMillis() + waitTimeoutMs;
                 LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
                 ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+                if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
+                    // NOTE: It is a known pitfall that when FE journal catch-up consumes the whole waitTimeoutMs,
+                    // remaining becomes 0, and the subsequent StarMgr wait returns immediately because
+                    // JournalObserver.waitForReplay() treats timeoutMs <= 0 as success even if replay is still behind.
+                    int remaining = (int) Math.max(0, deadline - System.currentTimeMillis());
+                    LOG.info("waiting for star mgr journal replay to {}", result.maxStarMgrJournalId);
+                    StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
+                            result.maxStarMgrJournalId, remaining,
+                            () -> StarMgrServer.getCurrentState().getReplayId());
+                }
             }
 
             if (result.state != null) {

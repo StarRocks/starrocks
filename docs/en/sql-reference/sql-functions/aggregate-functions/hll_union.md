@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the concatenation of a set of HLL values."
 ---
 
 

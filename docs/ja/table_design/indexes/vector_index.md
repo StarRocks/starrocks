@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.4 以降は IVFPQ、HNSW ベクターインデックスで高次元ベクターデータの近似最近傍探索をサポートします。"
 sidebar_position: 60
 ---
 
@@ -46,18 +47,6 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 各テーブルは 1 つのベクターインデックスのみをサポートします。
 
-### 前提条件
-
-ベクターインデックスを作成する前に、FE 設定項目 `enable_experimental_vector` を `true` に設定して有効にする必要があります。
-
-次のステートメントを実行して動的に有効にします。
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
-```
-
-永続的に有効にするには、FE 設定ファイル `fe.conf` に `enable_experimental_vector = true` を追加し、FE を再起動する必要があります。
-
 ### ベクターインデックスの作成
 
 このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[Append vector index](#append-vector-index) を参照してください。
@@ -91,8 +80,9 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
             "dim"="5", 
             "metric_type" = "l2_distance", 
             "is_vector_normed" = "false", 
-            "nbits" = "16", 
-            "nlist" = "40"
+            "nbits" = "8",
+            "nlist" = "40",
+            "M_IVFPQ" = "1"
         )
     ) ENGINE=OLAP
     DUPLICATE KEY(id)
@@ -133,6 +123,20 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 - **必須**: いいえ
 - **説明**: ベクトルが正規化されているかどうか。 有効な値は `true` と `false` です。`metric_type` が `cosine_similarity` の場合にのみ有効です。ベクトルが正規化されている場合、計算された距離の値は [-1, 1] の範囲内になります。ベクトルは平方和が `1` である必要があります。そうでない場合、エラーが返されます。
 
+##### index_build_threshold
+
+- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
+- **必須**: いいえ
+- **説明**: ベクトルインデックスの構築をトリガーする行数のしきい値。書き込まれた行数がこのしきい値未満の場合、インデックスは構築されず、検索はブルートフォーススキャンにフォールバックします。`1` 以上の整数である必要があります。IVFPQ インデックスの場合、IVFPQ の k-means 学習には少なくとも `nlist` 件のベクトルが必要なため、この値は `nlist` 以上である必要もあります。この制約に違反する DDL 文は拒否されます。
+
+##### index_build_mode
+
+- **デフォルト**: `sync`
+- **必須**: いいえ
+- **説明**: 共有データクラスタでのインデックス構築方式です。有効な値：
+  - `sync`：データ書き込み時に同期してインデックスを構築します。クエリはすぐにインデックスを使用できますが、ロード遅延が増加します。
+  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
+
 ##### M
 
 - **デフォルト**: 16
@@ -145,11 +149,33 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 - **必須**: いいえ
 - **説明**: HNSW 固有のパラメータ。最も近い隣接点を含む候補リストのサイズ。`1` 以上の整数である必要があります。グラフ構築プロセス中の検索深度を制御するために使用されます。具体的には、`efconstruction` はグラフ構築プロセス中の各頂点の検索リスト（候補リストとも呼ばれる）のサイズを定義します。この候補リストは、現在の頂点の隣接候補を格納するために使用され、リストのサイズは `efconstruction` です。`efconstruction` の値が大きいほど、グラフ構築プロセス中に頂点の隣接候補として考慮される候補が増え、その結果、グラフの品質（接続性の向上など）が向上しますが、グラフ構築の時間消費と計算の複雑さも増加します。
 
+##### quantizer
+
+- **デフォルト**: `flat`（量子化なし）
+- **必須**: いいえ
+- **説明**: HNSW 固有のパラメータです。内部の HNSW ストレージの前段にスカラー量子化または積量子化を適用し、再現率（recall）を一部犠牲にする代わりに、ディスクおよびメモリ使用量を削減します。指定可能な値は以下のとおりです。
+
+  - `flat` — 量子化なし（デフォルト）。このプロパティを省略した場合と同等であり、quantizer 導入以前に作成されたインデックスとの後方互換性を維持します。
+  - `sq4` — 4 ビットのスカラー量子化。最小のフットプリントを実現しますが、`sq8` よりも再現率の低下が大きくなります。
+  - `sq8` — 8 ビットのスカラー量子化。サイズ削減の初期設定として推奨され、`ef_search` が高い場合は再現率の低下は一般的に小さくなります。
+  - `pq` — 積量子化（Product Quantization）。`m_pq` の指定が必要であり、ストレージサイズはベクトルあたり `m_pq * nbits_pq` ビットに比例します。
+
+##### m_pq
+
+- **必須**: `quantizer = pq` の場合に必須。それ以外では指定不可。
+- **説明**: HNSW 固有のパラメータ（PQ 量子化専用）。積量子化におけるサブ量子化器の数を指定します。元のベクトルは `m_pq` 個の等長サブベクトルに分割されるため、`m_pq` は `dim` を割り切る必要があります。`m_pq` を大きくすると再現率は向上しますが、ベクトルあたりの使用バイト数も増加します。一般的な値は `dim` に応じて 4～32 の範囲です。
+
+##### nbits_pq
+
+- **デフォルト**: 8
+- **必須**: いいえ（`quantizer = pq` の場合のみ指定可能。それ以外では指定不可）
+- **説明**: HNSW 固有のパラメータ（PQ 量子化専用）。各 PQ サブ量子化器に割り当てるビット数を指定します。指定可能な範囲は 4～16 ビットです。
+
 ##### nbits
 
-- **デフォルト**: 16
+- **デフォルト**: 8
 - **必須**: いいえ
-- **説明**: IVFPQ 固有のパラメータ。プロダクト量子化 (PQ) の精度。`8` の倍数である必要があります。IVFPQ では、各ベクトルが複数のサブベクトルに分割され、各サブベクトルが量子化されます。`Nbits` は量子化の精度を定義し、各サブベクトルが何ビットに量子化されるかを示します。`nbits` の値が大きいほど、量子化の精度が高くなりますが、ストレージと計算コストも増加します。
+- **説明**: IVFPQ 固有のパラメータ。プロダクト量子化 (PQ) で使用するビット数です。現在は `8` のみサポートされています。
 
 ##### nlist
 
@@ -159,8 +185,9 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 
 ##### M_IVFPQ
 
+- **デフォルト**: N/A
 - **必須**: はい
-- **説明**: IVFPQ 固有のパラメータ。元のベクトルが分割されるサブベクトルの数。IVFPQ インデックスは、`dim` 次元のベクトルを `M_IVFPQ` 等長のサブベクトルに分割します。したがって、`dim` の値の因数である必要があります。
+- **説明**: IVFPQ 固有のパラメータ。元のベクトルが分割されるサブベクトルの数。IVFPQ インデックスは、`dim` 次元のベクトルを `M_IVFPQ` 個の等長サブベクトルに分割するため、`M_IVFPQ` は `dim` を割り切る必要があります。SQL プロパティ名は `M_IVFPQ` です。`M` は HNSW 専用の別のプロパティです。
 
 #### ベクターインデックスの追加
 
@@ -176,8 +203,9 @@ USING VECTOR (
     "metric_type" = "l2_distance", 
     "is_vector_normed" = "false",  
     "dim"="5", 
-    "nlist" = "256", 
-    "nbits"="10"
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
 );
 
 ALTER TABLE ivfpq 
@@ -187,8 +215,9 @@ USING VECTOR (
     "metric_type" = "l2_distance", 
     "is_vector_normed" = "false", 
     "dim"="5", 
-    "nlist" = "256", 
-    "nbits"="10"
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
 );
 ```
 
@@ -230,8 +259,6 @@ ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
 ```
 
 ### ベクターインデックスを使用した ANNS の実行
-
-ベクター検索を実行する前に、FE 設定項目 `enable_experimental_vector` が `true` に設定されていることを確認してください。
 
 #### ベクターインデックスベースのクエリの要件
 
@@ -281,8 +308,9 @@ CREATE TABLE test_hnsw (
         "index_type" = "hnsw",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
-        "M" = "512", 
-        "dim"="5")
+        "M" = "512",
+        "dim" = "5",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -298,10 +326,11 @@ CREATE TABLE test_ivfpq (
         "index_type" = "ivfpq",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
-        "nlist" = "256", 
-        "nbits"="8",
-        "dim"="5",
-        "M_IVFPQ"="1")
+        "nlist" = "1",
+        "nbits" = "8",
+        "dim" = "5",
+        "M_IVFPQ" = "1",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -373,7 +402,7 @@ LIMIT 1;
 
 パラメータの調整はベクター検索において重要であり、パフォーマンスと精度の両方に影響を与えます。小さなデータセットで検索パラメータを調整し、期待されるリコールと遅延が達成された場合にのみ大規模なデータセットに移行することをお勧めします。
 
-検索パラメータは SQL ステートメント内のヒントを通じて渡されます。
+検索パラメータは [`ann_params`](../../sql-reference/System_variable.md#ann_params) セッション変数、または SQL ステートメント内のヒントを通じて渡されます。
 
 ##### HNSW インデックスの場合
 
@@ -381,7 +410,7 @@ LIMIT 1;
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{efsearch=256}') */ 
+    /*+ SET_VAR (ann_params='{"efsearch":"256"}') */
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_hnsw 
 WHERE id = 1 
@@ -393,7 +422,7 @@ LIMIT 1;
 
 ###### efsearch
 
-- **デフォルト**: 16
+- **デフォルト**: 40
 - **必須**: いいえ
 - **説明**: 精度と速度のトレードオフを制御するパラメータ。階層的なグラフ構造の検索中に、このパラメータは検索中の候補リストのサイズを制御します。`efsearch` の値が大きいほど、精度が高くなりますが、速度が低下します。
 
@@ -403,7 +432,7 @@ LIMIT 1;
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{nprobe=256,max_codes=0,scan_table_threshold=0,polysemous_ht=0,range_search_confidence=0.1}') */ 
+    /*+ SET_VAR (ann_params='{"nprobe":"256","max_codes":"0","scan_table_threshold":"0","polysemous_ht":"0","range_search_confidence":"0.1"}') */
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_ivfpq 
 ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
@@ -441,6 +470,24 @@ LIMIT 1;
 - **デフォルト**: 0.1
 - **必須**: いいえ
 - **説明**: 近似範囲検索の信頼度。値の範囲: [0, 1]。`1` に設定すると、最も正確な結果が得られます。
+
+#### 候補数と結果のリファインを調整する
+
+次のセッション変数は、インデックスが返す候補数と、StarRocks が候補の正確な距離を再計算するかどうかを制御します。
+
+- [`k_factor`](../../sql-reference/System_variable.md#k_factor)、デフォルト `1`：`LIMIT` にこの値を掛け、各 Segment に要求する候補数を決定します。値を大きくすると、複数 Segment の結果をマージした後の再現率が向上する可能性がありますが、CPU、メモリ、および後続処理のコストが増加します。
+- [`enable_vector_index_refine`](../../sql-reference/System_variable.md#enable_vector_index_refine)、デフォルト `false`：IVFPQ、および `sq4`、`sq8`、`pq` 量子化器を使用する HNSW インデックスについて、元のベクトルから正確な距離を再計算し、候補を再順位付けします。量子化されていない HNSW インデックス（`quantizer = flat`）には影響しません。
+- [`pq_refine_factor`](../../sql-reference/System_variable.md#pq_refine_factor)、デフォルト `1`：正確な距離によるリファインを有効にした範囲検索で、`k_factor` の適用後に候補数をさらに増やします。
+
+例：
+
+```SQL
+SET enable_vector_index_refine = true;
+SET k_factor = 2;
+SET pq_refine_factor = 2;
+```
+
+候補倍率を大きくすると一般に再現率は向上しますが、インデックス検索、I/O、および距離計算のコストも増加します。`EXPLAIN` の `Refine: ON/OFF` で、正確な距離によるリファインが有効かどうかを確認できます。
 
 #### 近似リコールの計算
 

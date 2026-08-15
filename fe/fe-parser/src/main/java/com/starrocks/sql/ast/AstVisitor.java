@@ -504,6 +504,10 @@ public interface AstVisitor<R, C> {
         return visitFrontendClause(clause, context);
     }
 
+    default R visitTransferLeaderClause(TransferLeaderClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
     default R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -608,6 +612,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -692,6 +700,10 @@ public interface AstVisitor<R, C> {
 
     default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowCreateFunctionStatement(ShowCreateFunctionStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {

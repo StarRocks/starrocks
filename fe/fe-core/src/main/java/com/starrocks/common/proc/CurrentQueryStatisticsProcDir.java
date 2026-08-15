@@ -70,6 +70,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("Warehouse")
             .add("CustomQueryId")
             .add("ResourceGroup")
+            .add("QueryType")
             .build();
 
     @Override

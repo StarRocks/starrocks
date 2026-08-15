@@ -17,8 +17,8 @@
 #include <memory>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "column/column.h"
+#include "common/system/master_info.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "runtime/descriptors.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -140,7 +140,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
     }
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*schema, schema->columns());
     for (const auto& slot : slots) {
-        const std::string& col_name = slot->col_name();
+        const auto col_name = slot->col_name();
         if (slot->is_virtual()) {
             bool found = false;
             for (const auto& vc : VIRTUAL_COLUMNS) {

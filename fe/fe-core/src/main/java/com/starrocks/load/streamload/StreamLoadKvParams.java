@@ -14,7 +14,10 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Util;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -35,6 +38,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COMPRESSIO
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REPLICATED_STORAGE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_HEADER_LIST;
@@ -105,6 +109,8 @@ public class StreamLoadKvParams implements StreamLoadParams {
             return TFileFormatType.FORMAT_CSV_DEFLATE;
         } else if (formatKey.equalsIgnoreCase("zstd")) {
             return TFileFormatType.FORMAT_CSV_ZSTD;
+        } else if (formatKey.equalsIgnoreCase("arrow")) {
+            return TFileFormatType.FORMAT_ARROW;
         }
         return TFileFormatType.FORMAT_UNKNOWN;
     }
@@ -295,6 +301,21 @@ public class StreamLoadKvParams implements StreamLoadParams {
     @Override
     public Optional<Boolean> getStripOuterArray() {
         return getBoolParam(HTTP_STRIP_OUTER_ARRAY);
+    }
+
+    @Override
+    public Optional<TEnvelopeType> getEnvelope() throws StarRocksException {
+        String value = params.get(HTTP_ENVELOPE);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (value.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)) {
+            return Optional.of(TEnvelopeType.DEBEZIUM);
+        }
+        if (value.equalsIgnoreCase("none")) {
+            return Optional.of(TEnvelopeType.NONE);
+        }
+        throw new StarRocksException("Unknown envelope type: " + value);
     }
 
     public Optional<Boolean> getEnableBatchWrite() {

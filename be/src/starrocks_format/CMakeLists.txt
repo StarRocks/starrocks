@@ -24,31 +24,27 @@ set(STARROCKS_LIBS
     ${WL_START_GROUP}
     Base
     Common
-    Column
+    ChunkCore
     ColumnCore
     Connector
+    ConnectorLake
     Exec
-    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
-    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
+    ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
+    ${WL_WHOLE_ARCHIVE_PREFIX} Expr ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
-    FSCore
     Formats
     Gutil
     IO
-    Serde
+    Platform
     Storage
-    Rowset
     Runtime
-    RuntimeCore
-    TypesCore
     Types
-    Util
     Script
     StarRocksGen
-    Webserver
-    TestUtil
+    HttpService
     Cache
     ${WL_END_GROUP}
+    FormatOrc
 )
 
 add_library(hdfs_so SHARED IMPORTED GLOBAL)
@@ -58,7 +54,7 @@ SET(STARROCKS_FORMAT_LIBS
     ${STARROCKS_LIBS}
     ${STARROCKS_DEPENDENCIES}
     -static-libstdc++ -static-libgcc
-    -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    -lresolv -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
     hdfs_so
 )
 message(STATUS "STARROCKS_FORMAT_LIBS is ${STARROCKS_FORMAT_LIBS}")

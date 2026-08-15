@@ -15,7 +15,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.LakeMaterializedView;
@@ -38,7 +40,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AnalyzerUtilsTest {
 
@@ -64,6 +69,23 @@ public class AnalyzerUtilsTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ");")
+                .withTable("CREATE TABLE `relation_src` (\n" +
+                        "  `k1` int NOT NULL\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
+                .withTable("CREATE TABLE `relation_target` (\n" +
+                        "  `k1` int NOT NULL\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
+                .withView("CREATE VIEW relation_view AS SELECT k1 FROM relation_src;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS " +
                         "SELECT * FROM bill_detail;");
     }
@@ -97,6 +119,46 @@ public class AnalyzerUtilsTest {
     }
 
     @Test
+    public void testTransformVarcharPreferStringFalseKeepsDeclaredLength() {
+        ScalarType narrow = TypeFactory.createVarcharType(64);
+        ScalarType result = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true, false);
+        Assertions.assertEquals(64, result.getLength());
+    }
+
+    @Test
+    public void testTransformVarcharPreferStringTrueWidensToMax() {
+        ScalarType narrow = TypeFactory.createVarcharType(64);
+        ScalarType result = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true, true);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), result.getLength());
+    }
+
+    @Test
+    public void testTransformUnboundedVarcharWidensRegardlessOfPreferString() {
+        ScalarType unbounded = TypeFactory.createVarcharType(-1);
+        ScalarType keepLen = (ScalarType) AnalyzerUtils.transformTableColumnType(unbounded, true, false);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), keepLen.getLength());
+        ScalarType preferStr = (ScalarType) AnalyzerUtils.transformTableColumnType(unbounded, true, true);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), preferStr.getLength());
+    }
+
+    @Test
+    public void testTransformTwoArgOverloadFollowsConfigFlag() {
+        ScalarType narrow = TypeFactory.createVarcharType(64);
+        boolean saved = Config.transform_type_prefer_string_for_varchar;
+        try {
+            Config.transform_type_prefer_string_for_varchar = true;
+            ScalarType widened = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
+            Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), widened.getLength());
+
+            Config.transform_type_prefer_string_for_varchar = false;
+            ScalarType preserved = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
+            Assertions.assertEquals(64, preserved.getLength());
+        } finally {
+            Config.transform_type_prefer_string_for_varchar = saved;
+        }
+    }
+
+    @Test
     public void testCopyOlapTable() throws Exception {
         {
             String sql = "select count(*) from bill_detail;";
@@ -119,5 +181,44 @@ public class AnalyzerUtilsTest {
             Assertions.assertSame(starRocksAssert.getTable("test", "mv1"), tables.iterator().next());
             Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
         }
+    }
+
+    @Test
+    public void testCollectAllTableAndViewRelationNames() throws Exception {
+        StatementBase insertStmt = UtFrameUtils.parseStmtWithNewParser(
+                "insert into relation_target " + "select src.k1 from relation_view rv " +
+                        "join relation_src src on rv.k1 = src.k1 " + "join relation_view rv2 on rv2.k1 = src.k1",
+                starRocksAssert.getCtx());
+        List<String> relationNames = AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(insertStmt);
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_view"),
+                qualifiedRelationName("test", "relation_src")), relationNames);
+
+        StatementBase cteStmt = UtFrameUtils.parseStmtWithNewParser("with cte as (select k1 from relation_src) " +
+                "select cte.k1 from cte join relation_view rv on cte.k1 = rv.k1", starRocksAssert.getCtx());
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_src"),
+                        qualifiedRelationName("test", "relation_view")),
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(cteStmt));
+    }
+
+    @Test
+    public void testCollectAllConnectorTableAndViewWithViewDefinitions() throws Exception {
+        starRocksAssert.withView("CREATE VIEW relation_nested_view AS SELECT k1 FROM relation_view;");
+        try {
+            QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    "SELECT k1 FROM relation_nested_view", starRocksAssert.getCtx());
+            Set<String> tableNames = AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement)
+                    .values().stream()
+                    .map(Table::getName)
+                    .collect(Collectors.toSet());
+
+            Assertions.assertEquals(Sets.newHashSet("relation_src", "relation_view", "relation_nested_view"),
+                    tableNames);
+        } finally {
+            starRocksAssert.dropView("relation_nested_view");
+        }
+    }
+
+    private String qualifiedRelationName(String dbName, String tableName) {
+        return String.format("%s.%s.%s", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tableName);
     }
 }

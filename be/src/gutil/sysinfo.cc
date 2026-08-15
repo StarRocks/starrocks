@@ -69,9 +69,8 @@
 
 using std::numeric_limits;
 
-// This isn't in the 'base' namespace in tcmallc. But, tcmalloc
-// exports these functions, so we need to namespace them to avoid
-// the conflict.
+// These functions are exported by some allocator libraries outside the 'base'
+// namespace, so keep StarRocks' copies namespaced to avoid conflicts.
 namespace base {
 
 // ----------------------------------------------------------------------

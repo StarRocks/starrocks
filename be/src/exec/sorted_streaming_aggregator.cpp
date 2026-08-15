@@ -28,7 +28,9 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
+#include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

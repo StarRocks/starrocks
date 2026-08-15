@@ -55,7 +55,8 @@ public:
     explicit HiveTextArrayReader(const Converter::Options& options)
             : ArrayReader(get_collection_delimiter(options.array_hive_collection_delimiter,
                                                    options.array_hive_mapkey_delimiter,
-                                                   options.array_hive_nested_level)) {}
+                                                   options.array_hive_nested_level)),
+              _escape(options.escape) {}
     [[nodiscard]] bool validate(const Slice& s) const override;
     [[nodiscard]] bool split_array_elements(const Slice& s, std::vector<Slice>& elements) const override;
     [[nodiscard]] bool read_quoted_string(const std::unique_ptr<Converter>& elem_converter, Column* column,
@@ -74,6 +75,14 @@ public:
     // In the third level, Hive will use ^D (user can't specify it) as a separator, then we can get
     // each element in this array.
     static char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level);
+
+private:
+    // 0 when this scan has no LazySimpleSerDe ESCAPED BY (the common case): element
+    // boundaries are then found by plain byte comparison, same as before. Non-zero
+    // only for ESCAPED BY tables, where an escaped element separator (e.g. "a\|b|c")
+    // must not split -- elements are still returned RAW; NullableConverter, one level
+    // down, unescapes each element once it knows it is a scalar leaf.
+    const char _escape;
 };
 
 } // namespace starrocks::csv

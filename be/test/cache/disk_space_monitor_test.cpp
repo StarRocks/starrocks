@@ -20,6 +20,7 @@
 #include <cstring>
 #include <filesystem>
 
+#include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "cache/disk_cache/block_cache.h"
@@ -96,20 +97,25 @@ public:
         config::disk_safe_level = 70;
         _disk_low_level = config::disk_low_level;
         config::disk_low_level = 60;
+        _datacache_disk_size = config::datacache_disk_size.value();
+        config::datacache_disk_size = "100%";
     }
     void TearDown() override {
         config::disk_high_level = _disk_high_level;
         config::disk_safe_level = _disk_safe_level;
         config::disk_low_level = _disk_low_level;
+        config::datacache_disk_size = _datacache_disk_size;
     }
 
     static void insert_to_cache(BlockCache* cache, size_t count);
+    static StatusOr<bool> adjust_quota_once(DiskSpaceMonitor* monitor);
 
 protected:
     std::shared_ptr<MockFileSystem> _mock_fs;
     int64_t _disk_high_level = 0;
     int64_t _disk_safe_level = 0;
     int64_t _disk_low_level = 0;
+    std::string _datacache_disk_size;
 };
 
 const size_t DiskSpaceMonitorTest::kBlockSize = 256 * KB;
@@ -123,6 +129,14 @@ void DiskSpaceMonitorTest::insert_to_cache(BlockCache* cache, size_t count) {
         Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
         ASSERT_TRUE(st.ok()) << st.message();
     }
+}
+
+StatusOr<bool> DiskSpaceMonitorTest::adjust_quota_once(DiskSpaceMonitor* monitor) {
+    bool changed = monitor->_adjust_spaces_by_disk_usage();
+    if (changed) {
+        RETURN_IF_ERROR(monitor->_update_cache_quota(monitor->all_dir_spaces()));
+    }
+    return changed;
 }
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
@@ -189,7 +203,6 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
     ASSERT_OK(space_monitor->init(&options.dir_spaces));
-    space_monitor->start();
 
     // Fill cache data
     {
@@ -206,14 +219,16 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
 
     {
         config::enable_datacache_disk_auto_adjust = true;
-        sleep(3);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
         auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
         config::datacache_disk_idle_seconds_for_expansion = 1;
-        sleep(3);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
         auto metrics = local_cache->cache_metrics();
         // other: 500M - 300M - 19M = 181M
         // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
@@ -239,7 +254,6 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
     ASSERT_OK(space_monitor->init(&options.dir_spaces));
-    space_monitor->start();
 
     // Fill cache data
     {
@@ -256,14 +270,16 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
 
     {
         config::enable_datacache_disk_auto_adjust = true;
-        sleep(3);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
         auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
         config::datacache_disk_idle_seconds_for_expansion = 1;
-        sleep(3);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
         auto metrics = local_cache->cache_metrics();
         // other: 500M - 300M - 19M = 181M
         // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
@@ -289,7 +305,6 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
     ASSERT_OK(space_monitor->init(&options.dir_spaces));
-    space_monitor->start();
 
     // Fill cache data
     {
@@ -306,19 +321,12 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
 
     {
         config::enable_datacache_disk_auto_adjust = true;
-        size_t new_quota = 0;
-        for (int i = 0; i < 6; ++i) {
-            auto metrics = local_cache->cache_metrics();
-            if (metrics.disk_quota_bytes > 0 && metrics.disk_quota_bytes != 50 * MB) {
-                config::enable_datacache_disk_auto_adjust = false;
-                new_quota = metrics.disk_quota_bytes;
-                break;
-            }
-            sleep(1);
-        }
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
         // other: 100M - 10M - 50M = 40M
         // new quota: 100 * 0.7 - other = 30M
-        ASSERT_EQ(new_quota, 30 * MB);
+        ASSERT_EQ(metrics.disk_quota_bytes, 30 * MB);
     }
 }
 
@@ -338,7 +346,6 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
 
     auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
     ASSERT_OK(space_monitor->init(&options.dir_spaces));
-    space_monitor->start();
 
     // Fill cache data
     {
@@ -355,22 +362,17 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
 
     {
         config::enable_datacache_disk_auto_adjust = true;
-        size_t new_quota = 0;
-        for (int i = 0; i < 6; ++i) {
-            auto metrics = local_cache->cache_metrics();
-            if (metrics.disk_quota_bytes > 0 && metrics.disk_quota_bytes != 50 * MB) {
-                config::enable_datacache_disk_auto_adjust = false;
-                new_quota = metrics.disk_quota_bytes;
-                break;
-            }
-            sleep(1);
-        }
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
         // other: 100M - 10M - 50M = 40M
         // new quota: 100 * 0.7 - other = 30M < 40M = 0
-        ASSERT_EQ(new_quota, 0);
-        sleep(3);
-        // Adjust to zero again
-        ASSERT_EQ(new_quota, 0);
+        ASSERT_EQ(metrics.disk_quota_bytes, 0);
+
+        ASSIGN_OR_ASSERT_FAIL(changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
+        metrics = local_cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 0);
     }
 }
 

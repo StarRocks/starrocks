@@ -1,0 +1,546 @@
+-- name: test_range_partition_prune_date_basic
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_range_date (
+    dt DATE NOT NULL,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES [('2024-01-01'), ('2024-01-10')),
+    PARTITION p2 VALUES [('2024-01-10'), ('2024-01-20')),
+    PARTITION p3 VALUES [('2024-01-20'), ('2024-02-01'))
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_date VALUES
+    ('2024-01-01', 1), ('2024-01-05', 2), ('2024-01-09', 3),
+    ('2024-01-10', 4), ('2024-01-15', 5), ('2024-01-19', 6),
+    ('2024-01-20', 7), ('2024-01-25', 8), ('2024-01-31', 9);
+
+-- basic equality: should return 1 row from p1
+SELECT v FROM t_range_date WHERE dt = '2024-01-05' ORDER BY v;
+
+-- range predicate: should return rows from p2 and p3
+SELECT v FROM t_range_date WHERE dt >= '2024-01-10' ORDER BY v;
+
+-- predicate that matches no partition values but rows exist: partition should not be wrongly pruned
+SELECT v FROM t_range_date WHERE dt BETWEEN '2024-01-03' AND '2024-01-07' ORDER BY v;
+
+-- count with equality
+SELECT COUNT(*) FROM t_range_date WHERE dt = '2024-01-20';
+
+-- predicate that matches nothing
+SELECT COUNT(*) FROM t_range_date WHERE dt = '2024-03-01';
+
+drop table t_range_date force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_int_basic
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_range_int (
+    k INT NOT NULL,
+    v STRING
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY RANGE(k) (
+    PARTITION p1 VALUES [('0'), ('100')),
+    PARTITION p2 VALUES [('100'), ('200')),
+    PARTITION p3 VALUES [('200'), ('300'))
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_int VALUES
+    (10, 'a'), (50, 'b'), (99, 'c'),
+    (100, 'd'), (150, 'e'), (199, 'f'),
+    (200, 'g'), (250, 'h'), (299, 'i');
+
+-- equality
+SELECT v FROM t_range_int WHERE k = 150;
+
+-- range
+SELECT COUNT(*) FROM t_range_int WHERE k >= 100 AND k < 200;
+
+-- cross-partition range
+SELECT COUNT(*) FROM t_range_int WHERE k >= 50 AND k <= 250;
+
+drop table t_range_int force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_null_date @native
+-- This test verifies that NULL values in RANGE partitions with MINVALUE lower bound
+-- are NOT incorrectly pruned by BE-side dynamic partition pruning.
+-- NULL values go to the partition whose lower bound is MINVALUE.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_range_null_date (
+    dt DATE,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2024-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2024-02-01"),
+    PARTITION p3 VALUES LESS THAN ("2024-03-01")
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_null_date VALUES
+    (NULL, 1), (NULL, 2),
+    ('2024-01-15', 3),
+    ('2024-02-15', 4);
+
+-- IS NULL must return the 2 NULL rows from p0 (NOT be pruned away)
+SELECT v FROM t_range_null_date WHERE dt IS NULL ORDER BY v;
+
+-- IS NOT NULL should return the non-null rows
+SELECT v FROM t_range_null_date WHERE dt IS NOT NULL ORDER BY v;
+
+-- equality on a date in p1
+SELECT v FROM t_range_null_date WHERE dt = '2024-01-15';
+
+-- NULL-safe comparison
+SELECT v FROM t_range_null_date WHERE dt <=> NULL ORDER BY v;
+
+-- combined: NULL or a specific date
+SELECT COUNT(*) FROM t_range_null_date WHERE dt IS NULL OR dt = '2024-02-15';
+
+-- verify total row count
+SELECT COUNT(*) FROM t_range_null_date;
+
+drop table t_range_null_date force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_null_tinyint @native
+-- TINYINT with MINVALUE has a small range (228 values), fits under default limit 4096.
+-- This is the most likely scenario to trigger the NULL pruning bug.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_range_null_tinyint (
+    k TINYINT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY RANGE(k) (
+    PARTITION p1 VALUES [("-128"), ("0")),
+    PARTITION p2 VALUES [("0"), ("5")),
+    PARTITION p3 VALUES [("5"), ("127"))
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_null_tinyint VALUES
+    (NULL, 1), (NULL, 2),
+    (-10, 3), (-1, 4),
+    (0, 5), (25, 6),
+    (50, 7), (100, 8);
+
+-- IS NULL must not prune p0
+SELECT v FROM t_range_null_tinyint WHERE k IS NULL ORDER BY v;
+
+-- negative values in p0
+SELECT v FROM t_range_null_tinyint WHERE k = -10;
+
+-- IS NOT NULL
+SELECT COUNT(*) FROM t_range_null_tinyint WHERE k IS NOT NULL;
+
+-- verify total
+SELECT COUNT(*) FROM t_range_null_tinyint;
+
+-- equality on p1
+SELECT v FROM t_range_null_tinyint WHERE k = 25;
+
+drop table t_range_null_tinyint force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_null_smallint @native
+-- SMALLINT with MINVALUE, range can exceed limit but smaller sub-ranges may not.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_range_null_smallint (
+    k SMALLINT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY RANGE(k) (
+     PARTITION p1 VALUES LESS THAN ('-3200'),
+     PARTITION p2 VALUES LESS THAN ('0'),
+     PARTITION p3 VALUES LESS THAN ('32000')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_null_smallint VALUES
+    (NULL, 1),
+    (-32100, 2),
+    (-100, 3),
+    (100, 4);
+
+-- IS NULL must return 1 row from p0
+SELECT v FROM t_range_null_smallint WHERE k IS NULL;
+
+-- verify negative value in p0
+SELECT v FROM t_range_null_smallint WHERE k = -32100;
+
+-- verify total
+SELECT COUNT(*) FROM t_range_null_smallint;
+
+drop table t_range_null_smallint force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_list_partition_prune_basic
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_list_int (
+    k INT NOT NULL,
+    v STRING
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+    PARTITION p1 VALUES IN ('1', '2', '3'),
+    PARTITION p2 VALUES IN ('4', '5', '6'),
+    PARTITION p3 VALUES IN ('7', '8', '9')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_list_int VALUES
+    (1, 'a'), (2, 'b'), (3, 'c'),
+    (4, 'd'), (5, 'e'), (6, 'f'),
+    (7, 'g'), (8, 'h'), (9, 'i');
+
+-- equality should hit only p1
+SELECT v FROM t_list_int WHERE k = 2;
+
+-- IN should hit p1 and p3
+SELECT COUNT(*) FROM t_list_int WHERE k IN (1, 7);
+
+-- range that crosses partitions
+SELECT COUNT(*) FROM t_list_int WHERE k >= 3 AND k <= 7;
+
+-- no match
+SELECT COUNT(*) FROM t_list_int WHERE k = 100;
+
+drop table t_list_int force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_list_partition_prune_null @native
+-- Verify NULL handling in LIST partitions with explicit NULL in VALUES.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_list_null (
+    k INT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+    PARTITION p1 VALUES IN ('1', '2', '3'),
+    PARTITION p2 VALUES IN ('4', '5', '6', NULL)
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_list_null VALUES
+    (NULL, 1), (NULL, 2),
+    (1, 3), (2, 4),
+    (4, 5), (5, 6);
+
+-- IS NULL must return the 2 NULL rows from p0
+SELECT v FROM t_list_null WHERE k IS NULL ORDER BY v;
+
+-- IS NOT NULL
+SELECT COUNT(*) FROM t_list_null WHERE k IS NOT NULL;
+
+-- equality
+SELECT v FROM t_list_null WHERE k = 1;
+
+-- NULL-safe comparison
+SELECT v FROM t_list_null WHERE k <=> NULL ORDER BY v;
+
+-- total
+SELECT COUNT(*) FROM t_list_null;
+
+drop table t_list_null force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_list_partition_prune_null_mixed @native
+-- NULL mixed with non-NULL values in the same partition.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_list_null_mixed (
+    k INT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+    PARTITION p0 VALUES IN (NULL, '0', '1'),
+    PARTITION p1 VALUES IN ('2', '3'),
+    PARTITION p2 VALUES IN ('4', '5')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_list_null_mixed VALUES
+    (NULL, 1), (0, 2), (1, 3),
+    (2, 4), (3, 5),
+    (4, 6), (5, 7);
+
+-- IS NULL returns null rows from p0
+SELECT v FROM t_list_null_mixed WHERE k IS NULL;
+
+-- equality on non-null value in the same partition as NULL
+SELECT v FROM t_list_null_mixed WHERE k = 0;
+
+-- combined: IS NULL or a non-null value
+SELECT COUNT(*) FROM t_list_null_mixed WHERE k IS NULL OR k = 4;
+
+-- verify all rows
+SELECT COUNT(*) FROM t_list_null_mixed;
+
+drop table t_list_null_mixed force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_list_partition_prune_multi_column_null @native
+-- Multi-column list partition with NULL values.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_list_multi_null (
+    c1 INT,
+    c2 INT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(c1)
+PARTITION BY LIST(c1, c2) (
+    PARTITION p0 VALUES IN ((NULL, NULL)),
+    PARTITION p1 VALUES IN (('1', '10'), ('2', '20')),
+    PARTITION p2 VALUES IN (('3', '30'), ('4', '40'))
+)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_list_multi_null VALUES
+    (NULL, NULL, 1),
+    (1, 10, 2), (2, 20, 3),
+    (3, 30, 4), (4, 40, 5);
+
+-- IS NULL on both columns
+SELECT v FROM t_list_multi_null WHERE c1 IS NULL AND c2 IS NULL;
+
+-- IS NULL on first column only
+SELECT v FROM t_list_multi_null WHERE c1 IS NULL;
+
+-- equality
+SELECT v FROM t_list_multi_null WHERE c1 = 1 AND c2 = 10;
+
+-- total
+SELECT COUNT(*) FROM t_list_multi_null;
+
+drop table t_list_multi_null force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_dynamic_partition_prune_limit_session_var
+-- Verify the dynamic_partition_prune_limit session variable.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_limit_test (
+    k INT NOT NULL,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY RANGE(k) (
+    PARTITION p1 VALUES [('0'), ('100')),
+    PARTITION p2 VALUES [('100'), ('200')),
+    PARTITION p3 VALUES [('200'), ('300'))
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_limit_test VALUES (50, 1), (150, 2), (250, 3);
+
+-- default limit (4096): pruning should work, 100 values per partition < 4096
+SELECT v FROM t_limit_test WHERE k = 50;
+SELECT v FROM t_limit_test WHERE k = 150;
+
+-- set limit very small: pruning disabled because range > limit
+set dynamic_partition_prune_limit = 10;
+SELECT v FROM t_limit_test WHERE k = 50;
+SELECT v FROM t_limit_test WHERE k = 150;
+
+-- set limit very large
+set dynamic_partition_prune_limit = 100000;
+SELECT v FROM t_limit_test WHERE k = 50;
+SELECT v FROM t_limit_test WHERE k = 150;
+
+-- reset
+set dynamic_partition_prune_limit = 4096;
+
+drop table t_limit_test force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_date_with_cast
+-- Verify pruning works with expressions involving casts on partition column.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_range_cast (
+    dt DATE NOT NULL,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES [('2024-01-01'), ('2024-02-01')),
+    PARTITION p2 VALUES [('2024-02-01'), ('2024-03-01')),
+    PARTITION p3 VALUES [('2024-03-01'), ('2024-04-01'))
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_cast VALUES
+    ('2024-01-15', 1),
+    ('2024-02-15', 2),
+    ('2024-03-15', 3);
+
+-- cast string to date
+SELECT v FROM t_range_cast WHERE dt = CAST('2024-02-15' AS DATE);
+
+-- implicit cast
+SELECT v FROM t_range_cast WHERE dt = '2024-03-15';
+
+-- function on constant side
+SELECT v FROM t_range_cast WHERE dt = DATE_ADD('2024-01-14', INTERVAL 1 DAY);
+
+-- verify all data
+SELECT COUNT(*) FROM t_range_cast;
+
+drop table t_range_cast force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_multi_predicates
+-- Multiple predicates on the same partition column.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_multi_pred (
+    dt DATE NOT NULL,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES [('2024-01-01'), ('2024-01-10')),
+    PARTITION p2 VALUES [('2024-01-10'), ('2024-01-20')),
+    PARTITION p3 VALUES [('2024-01-20'), ('2024-02-01'))
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_multi_pred VALUES
+    ('2024-01-05', 1), ('2024-01-08', 2),
+    ('2024-01-12', 3), ('2024-01-18', 4),
+    ('2024-01-22', 5), ('2024-01-30', 6);
+
+-- two conjuncts on same column should AND together
+SELECT v FROM t_multi_pred WHERE dt >= '2024-01-05' AND dt < '2024-01-10' ORDER BY v;
+
+-- three conjuncts
+SELECT v FROM t_multi_pred WHERE dt >= '2024-01-10' AND dt < '2024-01-20' AND dt != '2024-01-12' ORDER BY v;
+
+-- equality plus other predicates
+SELECT COUNT(*) FROM t_multi_pred WHERE dt = '2024-01-22' AND v > 0;
+
+drop table t_multi_pred force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_open_bound @native
+-- Partitions with MAXVALUE upper bound should not crash or produce wrong results.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_open_bound (
+    k INT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY RANGE(k) (
+    PARTITION p1 VALUES [('0'), ('100')),
+    PARTITION p2 VALUES [('100'), ('2100000000'))
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_open_bound VALUES
+    (50, 1), (99, 2),
+    (100, 3), (999, 4);
+
+SELECT v FROM t_open_bound WHERE k = 50;
+SELECT v FROM t_open_bound WHERE k = 999;
+SELECT COUNT(*) FROM t_open_bound WHERE k >= 100;
+SELECT COUNT(*) FROM t_open_bound;
+
+drop table t_open_bound force;
+drop database test_dyn_prune_${uuid0} force;
+
+
+-- name: test_range_partition_prune_null_with_other_preds @native
+-- NULL combined with non-null predicates in conjuncts.
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+
+CREATE TABLE t_null_combined (
+    dt DATE,
+    category INT,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ("2024-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2024-02-01"),
+    PARTITION p3 VALUES LESS THAN ("2024-03-01")
+)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_null_combined VALUES
+    (NULL, 1, 10), (NULL, 2, 20),
+    ('2024-01-15', 1, 30),
+    ('2024-02-15', 2, 40);
+
+-- IS NULL with additional non-partition predicate
+SELECT v FROM t_null_combined WHERE dt IS NULL AND category = 1;
+
+-- IS NULL alone
+SELECT COUNT(*) FROM t_null_combined WHERE dt IS NULL;
+
+-- non-null filter should still work
+SELECT v FROM t_null_combined WHERE dt = '2024-01-15';
+
+-- mixed: some partitions have data, some don't
+SELECT COUNT(*) FROM t_null_combined WHERE dt IS NOT NULL AND category = 1;
+
+drop table t_null_combined force;
+drop database test_dyn_prune_${uuid0} force;

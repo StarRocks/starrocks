@@ -20,7 +20,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
@@ -37,7 +37,6 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.Type;
-import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -132,8 +131,7 @@ public class DeltaLakeScanNode extends ScanNode {
         this.enableIncrementalScanRanges = enableIncrementalScanRanges;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
-        Engine engine = deltaLakeTable.getDeltaEngine();
-        long snapshotId = snapshot.getVersion(engine);
+        long snapshotId = snapshot.getVersion();
 
         GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
@@ -174,7 +172,7 @@ public class DeltaLakeScanNode extends ScanNode {
                     explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
         output.append(prefix).append(String.format("TABLE VERSION: %s",
-                deltaLakeTable.getDeltaSnapshot().getVersion(deltaLakeTable.getDeltaEngine())));
+                deltaLakeTable.getDeltaSnapshot().getVersion()));
         output.append("\n");
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
@@ -196,7 +194,7 @@ public class DeltaLakeScanNode extends ScanNode {
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     deltaLakeTable.getCatalogName(), deltaLakeTable.getCatalogDBName(), deltaLakeTable.getCatalogTableName(),
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
 
             if (selectedPartitionCount == -1) {
                 if (scanRangeSource != null) {

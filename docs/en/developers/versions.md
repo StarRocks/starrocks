@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 1
+description: "Version naming is detailed in the versioning documentation."
 ---
 
 # Version Release Guide
@@ -8,7 +9,7 @@ sidebar_position: 1
 Version naming is detailed in the [versioning](../introduction/versioning.md) documentation. Read that page first to understand **major**, **minor**, and **patch** versioning.
 
 ## Release Plan
-- Release a minor version every four months, in Jan/Feb, May/June, Sep/Oct.
+- Release a minor version approximately every four months.
 - Maintain the three latest minor versions (**minor** is the second number in the dot separated version, for example, in 3.4.2 **4** is the minor version). 
 
   With a minor version released every four months, a minor version should be expected to be supported for at most one year.

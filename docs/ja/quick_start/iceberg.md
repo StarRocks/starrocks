@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 description: "Apache Iceberg を使用したデータレイクハウス"
 displayed_sidebar: docs
 ---
@@ -73,6 +74,7 @@ services:
       iceberg_net:
     environment:
       - HOST_TYPE=FQDN
+      - AWS_EC2_METADATA_DISABLED=true
 
   rest:
     image: apache/iceberg-rest-fixture
@@ -239,4 +241,4 @@ MinIO のユーザー名とパスワードは docker-compose.yml ファイルに
 
 #### 詳しく学ぶ
 
-Iceberg と StarRocks を使い始めた今、[StarRocks-Iceberg ドキュメント](../data_source/catalog/iceberg/iceberg_catalog.md)をチェックして、さらに学びましょう！
+Iceberg と StarRocks を使い始めた今、[StarRocks-Iceberg ドキュメント](../data_source/catalog/iceberg/iceberg.md)をチェックして、さらに学びましょう！

@@ -66,6 +66,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.concurrent.ExecutorService;
 
 public class HeartbeatMgrTest {
 
@@ -247,4 +248,43 @@ public class HeartbeatMgrTest {
             }
         };
     }
+
+    @Test
+    public void testOnStoppedShutsDownAndAwaitsExecutorTermination() {
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        // start() lazy-inits the executor.
+        mgr.start();
+        ExecutorService before = mgr.executor;
+        Assertions.assertNotNull(before, "executor must be initialized after start()");
+
+        // protected onStopped() is visible from the same package.
+        mgr.onStopped();
+
+        Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
+        Assertions.assertTrue(before.isTerminated(),
+                "previous executor must be terminated after onStopped() awaits drain");
+        // Nulled after the drain for consistency with the other pool-owning daemons
+        // (PublishVersionDaemon, AutovacuumDaemon); start() lazily rebuilds either way.
+        Assertions.assertNull(mgr.executor, "executor reference is dropped after successful drain");
+    }
+
+    @Test
+    public void testStartRebuildsExecutorAfterOnStopped() {
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        mgr.start();
+        ExecutorService originalExecutor = mgr.executor;
+        mgr.onStopped();
+        Assertions.assertTrue(originalExecutor.isTerminated());
+
+        mgr.start();
+        try {
+            Assertions.assertNotSame(originalExecutor, mgr.executor,
+                    "executor must be rebuilt on re-election");
+            Assertions.assertFalse(mgr.executor.isShutdown(),
+                    "rebuilt executor must accept new heartbeats");
+        } finally {
+            mgr.setStop();
+        }
+    }
+
 }

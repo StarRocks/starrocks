@@ -111,6 +111,19 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testCastVariantQueryRewriteToDecimal() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select cast(variant_query(v, '$.profile.rank') as decimal(10, 2)) from " + VARIANT_TABLE;
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "v.profile.rank");
+
+        String verbose = getVerboseExplain(sql);
+        assertContains(verbose, "ExtendedColumnAccessPath");
+        assertContains(verbose,
+                "/v(decimal(10, 2))/profile(decimal(10, 2))/rank(decimal(10, 2))");
+    }
+
+    @Test
     public void testAggregateRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
         String sql = "select sum(get_variant_int(v, '$.metrics.views')) from " + VARIANT_TABLE;
@@ -209,6 +222,55 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
         assertContains(verbose, "ExtendedColumnAccessPath: [/v(bigint(20))/a(bigint(20))/b(bigint(20))]");
         assertNotContains(verbose,
                 "ExtendedColumnAccessPath: [/v(bigint(20))/a(bigint(20))/b(bigint(20))/c(bigint(20))]");
+    }
+
+    @Test
+    public void testVariantSubfieldPruning() throws Exception {
+        // Generic subfield pruning (variant path rewrite disabled): the prune-subfield rule populates
+        // ColumnAccessPath on the scan node. It is scan-agnostic and is exposed for Iceberg variant
+        // columns the same way it was for the (now DDL-rejected) OLAP variant column.
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(false);
+        int prevDepth = connectContext.getSessionVariable().getCboPruneJsonSubfieldDepth();
+        try {
+            String sql = "select get_variant_int(v, '$.a.b'), get_variant_string(v, '$.c') from " + VARIANT_TABLE;
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/c(varchar)]");
+
+            sql = "select get_variant_int(v, '$.a'), get_variant_string(v, '$.a') from " + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+            sql = "select variant_query(v, '$.profile.rank') from " + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/profile/rank(variant)]");
+
+            connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
+
+            sql = "select get_variant_int(v, '$.a.b') from " + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+            sql = "select get_variant_int(v, '$.a[0]') from " + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+            connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+
+            sql = "select get_variant_int(v, 'a.b'), get_variant_string(v, '$.\"profile.name\".first') from "
+                    + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/\"profile.name\"/first(varchar), /v/a/b(bigint(20))]");
+
+            sql = "select variant_query(v, '$.a.b'), get_variant_string(v, '$.a.b') from " + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/a/b(variant)]");
+
+            sql = "select get_variant_int(v, '$.a.b'), get_variant_double(v, '$.a.b') from " + VARIANT_TABLE;
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/v/a/b(variant)]");
+        } finally {
+            connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(prevDepth);
+        }
     }
 
     @Test

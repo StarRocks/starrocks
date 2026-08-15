@@ -31,6 +31,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"

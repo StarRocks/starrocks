@@ -150,6 +150,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, ColocatePersistInfo.class)
             .put(OperationType.OP_COLOCATE_MARK_STABLE_V2, ColocatePersistInfo.class)
             .put(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, TablePropertyInfo.class)
+            .put(OperationType.OP_COLOCATE_RANGE_UPDATE, ColocateRangePersistInfo.class)
             .put(OperationType.OP_HEARTBEAT_V2, HbPackage.class)
             .put(OperationType.OP_ADD_FUNCTION_V2, Function.class)
             .put(OperationType.OP_DROP_FUNCTION_V2, FunctionSearchDesc.class)
@@ -284,6 +285,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
             .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)
+            .put(OperationType.OP_ERASE_MATERIALIZED_INDEX, EraseMaterializedIndexLog.class)
             .put(OperationType.OP_DROP_ALL_BROKER_V2, DropBrokerLog.class)
             .put(OperationType.OP_DROP_REPOSITORY_V2, DropRepositoryLog.class)
             .build();

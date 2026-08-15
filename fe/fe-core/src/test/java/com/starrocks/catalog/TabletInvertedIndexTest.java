@@ -262,4 +262,51 @@ public class TabletInvertedIndexTest {
         }
         Assertions.assertEquals(result1, result2);
     }
+
+    @Test
+    public void testAddReplicaDeduplicatesSameBackendId() {
+        long tabletId = 2000L;
+        long backendId = 5000L;
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+
+        Replica first = new Replica(200L, backendId, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica second = new Replica(201L, backendId, 2L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 2L);
+
+        tabletInvertedIndex.addReplica(tabletId, first);
+        Assertions.assertSame(first, tabletInvertedIndex.getReplica(tabletId, backendId));
+        Assertions.assertEquals(1, tabletInvertedIndex.getReplicasByTabletId(tabletId).size());
+
+        // Re-adding for the same (tabletId, backendId) must replace, not append.
+        tabletInvertedIndex.addReplica(tabletId, second);
+        Assertions.assertSame(second, tabletInvertedIndex.getReplica(tabletId, backendId));
+        List<Replica> replicas = tabletInvertedIndex.getReplicasByTabletId(tabletId);
+        Assertions.assertEquals(1, replicas.size(),
+                "expected unique entry per (tabletId, backendId), got: " + replicas);
+        Assertions.assertSame(second, replicas.get(0));
+    }
+
+    @Test
+    public void testAddReplicaPreservesDistinctBackends() {
+        long tabletId = 2001L;
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+
+        Replica r1 = new Replica(210L, 6000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r2 = new Replica(211L, 6001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r3 = new Replica(212L, 6002L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+
+        tabletInvertedIndex.addReplica(tabletId, r1);
+        tabletInvertedIndex.addReplica(tabletId, r2);
+        tabletInvertedIndex.addReplica(tabletId, r3);
+
+        Assertions.assertEquals(3, tabletInvertedIndex.getReplicasByTabletId(tabletId).size());
+        Assertions.assertSame(r1, tabletInvertedIndex.getReplica(tabletId, 6000L));
+        Assertions.assertSame(r2, tabletInvertedIndex.getReplica(tabletId, 6001L));
+        Assertions.assertSame(r3, tabletInvertedIndex.getReplica(tabletId, 6002L));
+    }
+
 }

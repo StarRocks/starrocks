@@ -181,7 +181,6 @@ public class StreamLoadMgr implements MemoryTrackable {
                                           TransactionResult resp, ComputeResource computeResource) throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
-        long dbId = db.getId();
         // if task is already created, return directly
         readLock();
         try {
@@ -223,7 +222,6 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
-        long dbId = db.getId();
         Table table = checkMeta(db, tableName);
 
         writeLock();
@@ -581,6 +579,19 @@ public class StreamLoadMgr implements MemoryTrackable {
                 dbToLabelToStreamLoadTask.remove(dbId);
             }
         }
+
+        // Unregister the txn-state callback that was registered in addLoadTask(), otherwise the task
+        // leaks in TxnStateCallbackFactory forever.
+        // - For an ordinary StreamLoadTask the callback is already removed in afterVisible/afterAborted,
+        //   so this is an idempotent no-op.
+        // - For a StreamLoadMultiStmtTask the explicit transaction carries no callback id, so the parent
+        //   task's afterCommitted/afterVisible/afterAborted are never dispatched and its callback is never
+        //   removed. Without this call every multi-statement stream load would leave one dangling entry
+        //   (and the StreamLoadTask sub-task shells it references) in the callback map permanently.
+        // This is only reached after the task has reached a final state (see checkNeedRemove /
+        // isFinalState in the callers), so the callback is guaranteed to be unneeded here.
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory()
+                .removeCallback(streamLoadTask.getId());
 
         if (streamLoadTask instanceof StreamLoadTask) {
             warehouseLoadStatusInfoBuilder.withRemovedJob((StreamLoadTask) streamLoadTask);

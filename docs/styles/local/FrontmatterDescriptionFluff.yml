@@ -1,0 +1,5 @@
+extends: script
+message: "Description opens with document meta-commentary. State what the content covers directly — e.g. 'How to configure X' not 'This page describes how to configure X'."
+level: error
+scope: raw
+script: FrontmatterDescriptionFluff.tengo

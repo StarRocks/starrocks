@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "16進数でエンコードされた文字列をバイナリにデコードします。"
 ---
 
 # hex_decode_binary

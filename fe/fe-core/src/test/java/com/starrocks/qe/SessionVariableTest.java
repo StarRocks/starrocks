@@ -13,6 +13,10 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
+import com.starrocks.thrift.TQueryOptions;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -100,17 +104,17 @@ public class SessionVariableTest {
 
         // Default mode is AUTO
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.AUTO,
-                sessionVariable.getConnectorSinkShuffleMode());
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
 
         // Backward compatibility: enableIcebergSinkGlobalShuffle implies FORCE when mode stays at default AUTO.
         com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "enableIcebergSinkGlobalShuffle", true);
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.FORCE,
-                sessionVariable.getConnectorSinkShuffleMode());
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
 
         // Explicitly set mode to NEVER should not be affected by legacy boolean.
         com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "connectorSinkShuffleMode", "never");
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
-                sessionVariable.getConnectorSinkShuffleMode());
+                sessionVariable.getIcebergConnectorSinkShuffleMode());
     }
 
     @Test
@@ -120,11 +124,100 @@ public class SessionVariableTest {
         // Test default value
         Assertions.assertFalse(sessionVariable.isMVPlanner());
 
-        // Test setter and getter
+        // Deprecated compatibility flag should remain inert.
         sessionVariable.setMVPlanner(true);
-        Assertions.assertTrue(sessionVariable.isMVPlanner());
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
 
         sessionVariable.setMVPlanner(false);
         Assertions.assertFalse(sessionVariable.isMVPlanner());
+    }
+
+    @Test
+    public void testEnableIncrementalRefreshMvIsNoOp() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(true);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(false);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+    }
+
+    @Test
+    public void testBinaryEncodingDefaultsAndToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.HEX, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.NESTED, queryOptions.getBinary_encoding_level());
+    }
+
+    @Test
+    public void testBinaryEncodingSettersNormalizeAndValidate() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        sessionVariable.setBinaryEncodingFormat("BASE64");
+        sessionVariable.setBinaryEncodingLevel("ALL");
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+        Assertions.assertEquals("base64", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("all", sessionVariable.getBinaryEncodingLevel());
+        Assertions.assertEquals(TBinaryEncodingFormat.BASE64, queryOptions.getBinary_encoding_format());
+        Assertions.assertEquals(TBinaryEncodingLevel.ALL, queryOptions.getBinary_encoding_level());
+
+        sessionVariable.setBinaryEncodingFormat(null);
+        sessionVariable.setBinaryEncodingLevel(null);
+        Assertions.assertEquals("hex", sessionVariable.getBinaryEncodingFormat());
+        Assertions.assertEquals("nested", sessionVariable.getBinaryEncodingLevel());
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingFormat("invalid"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setBinaryEncodingLevel("invalid"));
+    }
+
+    @Test
+    public void testLakeTabletInternalParallelSkewSplitRatioValidation() {
+        SessionVariable sessionVariable = new SessionVariable();
+        // A positive finite ratio is accepted.
+        sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(2.0);
+        Assertions.assertEquals(2.0, sessionVariable.getLakeTabletInternalParallelSkewSplitRatio(), 0.0);
+        // Non-positive or non-finite ratios are rejected: a non-positive value would make every sufficiently
+        // large tablet look skewed (over-splitting), and NaN/Infinity would silently disable the skew override.
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(-1.0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.NaN));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    public void testReplayFromJsonWithAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // alias key in JSON should be resolved
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 1024}");
+        Assertions.assertEquals(1024, sessionVariable.getScanLakePartitionNumLimit());
+
+        // canonical name key should also work
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 2048}");
+        Assertions.assertEquals(2048, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testReplayFromJsonNameTakesPriorityOverAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // when both name and alias are present, canonical name takes priority
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
+        Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
 }

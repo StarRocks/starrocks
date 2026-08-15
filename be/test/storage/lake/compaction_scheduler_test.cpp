@@ -19,8 +19,10 @@
 #include "base/testutil/assert.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/lake/compaction_task_context.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/test_util.h"
 
 namespace starrocks::lake {
@@ -113,8 +115,21 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     EXPECT_EQ(1, tasks[0].runs);
     EXPECT_EQ(100, tasks[0].progress);
     EXPECT_FALSE(tasks[0].skipped);
+    EXPECT_EQ(-1, tasks[0].subtask_id);
 
     bthread_join(tid, nullptr);
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_list_tasks_hides_parallel_merged_context) {
+    auto context = std::make_unique<CompactionTaskContext>(100, 101, 1, false, false, nullptr);
+    context->is_parallel_merged = true;
+    _compaction_scheduler._contexts.Append(context.get());
+
+    std::vector<CompactionTaskInfo> tasks;
+    _compaction_scheduler.list_tasks(&tasks);
+    EXPECT_TRUE(tasks.empty());
+
+    context->RemoveFromList();
 }
 
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
@@ -310,6 +325,47 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     TEST_DISABLE_ERROR_POINT("HorizontalCompactionTask::execute::1");
     TEST_DISABLE_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1");
     SyncPoint::GetInstance()->DisableProcessing();
+
+    // A task that failed before producing a txn log must not leave anything behind in the metacache.
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id)));
+}
+
+// skip_write_txnlog is the aggregate/file-bundling path: the compaction worker returns the txn log
+// inline instead of persisting it, and the aggregator folds every tablet's log into one combined
+// `<txn_id>.logs` object. The worker must still populate the metacache under the per-tablet txn log
+// key, because that is what the publish path (`load_txn_log()` in transactions.cpp) probes before
+// falling back to a remote read of the combined log.
+TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    auto request = CompactRequest{};
+    auto response = CompactResponse{};
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(/*1 minute=*/60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    request.set_skip_write_txnlog(true);
+
+    auto log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(log_path));
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+
+    ASSERT_EQ(0, response.failed_tablets_size());
+    ASSERT_EQ(1, response.txn_logs_size());
+
+    // The log was not written to object storage ...
+    EXPECT_FALSE(fs::path_exist(log_path));
+    // ... but the publish path can still find it without a remote read.
+    auto cached = _tablet_mgr->metacache()->lookup_txn_log(log_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(_tablet_metadata->id(), cached->tablet_id());
+    EXPECT_EQ(txn_id, cached->txn_id());
+    EXPECT_TRUE(cached->has_op_compaction());
+    EXPECT_EQ(response.txn_logs(0).op_compaction().compact_version(), cached->op_compaction().compact_version());
 }
 
 // Test for process_parallel_compaction (lines 299-369 in compaction_scheduler.cpp)
@@ -326,8 +382,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
         rowset->set_overlapped(true);
         rowset->set_num_rows(100);
         rowset->set_data_size(1024 * 1024); // 1MB each
-        rowset->add_segments(fmt::format("segment_{}.dat", i));
-        rowset->add_segment_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -370,8 +427,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_fallback) {
         rowset->set_overlapped(true);
         rowset->set_num_rows(100);
         rowset->set_data_size(1024 * 1024);
-        rowset->add_segments(fmt::format("segment_{}.dat", i));
-        rowset->add_segment_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -414,8 +472,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(100);
             rowset->set_data_size(1024 * 1024);
-            rowset->add_segments(fmt::format("segment_{}.dat", i));
-            rowset->add_segment_size(1024 * 1024);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+            segment_meta->set_size(1024 * 1024);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));

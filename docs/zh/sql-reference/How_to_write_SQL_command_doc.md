@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SQL 命令文档编写模板和规范，包括语法、示例和参数说明的统一要求。"
 unlisted: true
 ---
 

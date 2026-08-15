@@ -17,6 +17,13 @@
 namespace starrocks {
 
 class ExecEnv;
-class GlobalEnv;
+class RuntimeEnv;
+struct ExecutionEnv;
+struct RpcServices;
+struct LakeServices;
+struct RuntimeServices;
+struct AgentServices;
+struct QueryExecutionServices;
+struct AdminServices;
 
 } // namespace starrocks

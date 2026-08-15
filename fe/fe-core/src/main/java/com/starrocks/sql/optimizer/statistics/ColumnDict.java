@@ -17,14 +17,44 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
+import java.util.Map;
 
 public final class ColumnDict extends StatsVersion {
+    /**
+     * Unsigned-byte lexicographic comparator. BE sorts dictionary strings via memcmp, which the C
+     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo on JDK 8 instead
+     * compares bytes as signed (Java 9 fixed this to unsigned), so any UTF-8 string with a high-bit
+     * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
+     * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
+     */
+    public static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
+        int aPos = a.position();
+        int bPos = b.position();
+        int aLen = a.limit() - aPos;
+        int bLen = b.limit() - bPos;
+        int n = Math.min(aLen, bLen);
+        for (int i = 0; i < n; i++) {
+            int diff = (a.get(aPos + i) & 0xff) - (b.get(bPos + i) & 0xff);
+            if (diff != 0) {
+                return diff;
+            }
+        }
+        return aLen - bLen;
+    };
+
     private final ImmutableMap<ByteBuffer, Integer> dict;
+    // Serialized dict bytes, precomputed so the cache weigher is O(1).
+    private final int byteSize;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
@@ -35,11 +65,21 @@ public final class ColumnDict extends StatsVersion {
         Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
+        this.byteSize = computeByteSize(dict);
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
         super(collectedVersion, version);
         this.dict = dict;
+        this.byteSize = computeByteSize(dict);
+    }
+
+    private static int computeByteSize(ImmutableMap<ByteBuffer, Integer> dict) {
+        int size = 0;
+        for (ByteBuffer buf : dict.keySet()) {
+            size += buf.limit() - buf.position() + Integer.BYTES; // string bytes + offset id
+        }
+        return size;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
@@ -48,6 +88,10 @@ public final class ColumnDict extends StatsVersion {
 
     public int getDictSize() {
         return dict.size();
+    }
+
+    public int getByteSize() {
+        return byteSize;
     }
 
     public String toJson() {
@@ -72,6 +116,22 @@ public final class ColumnDict extends StatsVersion {
         return gson.toJson(jsonMap);
     }
 
+    // Inverse of toJson, used by query-dump replay to rebuild a captured global dict. Keys round-trip through
+    // UTF-8 (matching toJson); this is lossy only for non-UTF-8 dict bytes, which never surface in a plan (the
+    // plan shows dict ids, not the strings), so it is safe for replay. Uses the 3-arg constructor so a dump
+    // captured under a different low_cardinality_threshold does not trip the 2-arg size precondition.
+    public static ColumnDict fromJson(String json) {
+        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+        JsonObject dictObj = obj.getAsJsonObject("dict");
+        ImmutableMap.Builder<ByteBuffer, Integer> builder = ImmutableMap.builder();
+        for (Map.Entry<String, JsonElement> entry : dictObj.entrySet()) {
+            builder.put(ByteBuffer.wrap(entry.getKey().getBytes(StandardCharsets.UTF_8)), entry.getValue().getAsInt());
+        }
+        long collectedVersion = obj.get("collectedVersion").getAsLong();
+        long version = obj.get("version").getAsLong();
+        return new ColumnDict(builder.build(), collectedVersion, version);
+    }
+
     /**
      * Merge two dictionaries and return two new dictionaries.
      * The id of each dictionary is a continuous integer from 1 to n, where n is the number of words in the dictionary.
@@ -94,7 +154,10 @@ public final class ColumnDict extends StatsVersion {
         while (idx1 < n1 && idx2 < n2) {
             ByteBuffer key1 = sortedKeys1[idx1];
             ByteBuffer key2 = sortedKeys2[idx2];
-            int cmp = key1.compareTo(key2);
+            // Must use UNSIGNED_LEX here, not ByteBuffer.compareTo: BE sorted these dicts by
+            // unsigned memcmp, and on JDK 8 ByteBuffer.compareTo is signed, which would walk the
+            // arrays in the wrong order and emit duplicate keys.
+            int cmp = UNSIGNED_LEX.compare(key1, key2);
             if (cmp == 0) {
                 builder.put(key1, newIdx);
                 idx1++;

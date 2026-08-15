@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Base64 エンコードされた文字列をデコードします。"
 ---
 
 # base64_decode_string

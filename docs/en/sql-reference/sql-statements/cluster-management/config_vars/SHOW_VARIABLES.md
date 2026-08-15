@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW VARIABLES shows the system variables of StarRocks."
 ---
 
 # SHOW VARIABLES

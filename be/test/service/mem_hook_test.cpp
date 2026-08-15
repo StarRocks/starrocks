@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FIXME: The case doesn't work on ASAN case since the malloc will be hooked
-// when doing the ASAN init. Can't make it work so just disable it for now.
-#ifndef ADDRESS_SANITIZER
-
 #include "service/mem_hook.h"
+
+// Mem hook behavior is only testable when the production hook is enabled.
+#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 
 #include <gtest/gtest.h>
 
@@ -75,4 +74,4 @@ TEST(MemhookTest, test_calloc_mem_hook_block_without_try_catch) {
     set_large_memory_alloc_failure_threshold(0);
 }
 } // namespace starrocks
-#endif
+#endif // STARROCKS_ENABLE_JEMALLOC_MEM_HOOK

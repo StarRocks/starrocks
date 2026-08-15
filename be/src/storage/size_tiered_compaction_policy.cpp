@@ -22,7 +22,6 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_task_factory.h"
 
 namespace starrocks {

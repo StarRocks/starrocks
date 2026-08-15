@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.9
+description: "From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language."
 ---
 
 # Java UDF
@@ -19,7 +20,7 @@ Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDA
 
 - You have installed JDK 17 on your servers.
 
-- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/management/FE_configuration.md).
+- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/configuration/FE_parameters/FE_parameters.md).
 
 ## Develop and use UDFs
 
@@ -293,7 +294,7 @@ The user-defined class must implement the method required by UDAFs (because a UD
 
 | Method                                                   | Description                                                  |
 | -------------------------------------------------------- | ------------------------------------------------------------ |
-| void windowUpdate(State state, int, int, int , int, ...) | Updates the data of the window. For more information about UDWFs, see [Window functions](../sql-functions/Window_function.md). Every time when you enter a row as input, this method obtains the window information and updates intermediate results accordingly.<ul><li>`peer_group_start`: the start position of the current partition. `PARTITION BY` is used in the OVER clause to specify a partition column. Rows with the same values in the partition column are considered to be in the same partition.</li><li>`peer_group_end`: the end position of the current partition.</li><li>`frame_start`: the start position of the current window frame. The window frame clause specifies a calculation range, which covers the current row and the rows that are within a specified distance to the current row. For example, `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` specifies a calculation range that covers the current row, the previous row before the current row, and the following row after the current row.</li><li>`frame_end`: the end position of the current window frame.</li><li>`inputs`: the data that is entered as the input to a window. The data is an array package that supports only specific data types. In this example, INT values are entered as input, and the array package is Integer[].</li></ul> |
+| void windowUpdate(State state, int, int, int , int, ...) | Updates the data of the window. For more information about UDWFs, see [Window functions](./Window_function.md). Every time when you enter a row as input, this method obtains the window information and updates intermediate results accordingly.<ul><li>`peer_group_start`: the start position of the current partition. `PARTITION BY` is used in the OVER clause to specify a partition column. Rows with the same values in the partition column are considered to be in the same partition.</li><li>`peer_group_end`: the end position of the current partition.</li><li>`frame_start`: the start position of the current window frame. The window frame clause specifies a calculation range, which covers the current row and the rows that are within a specified distance to the current row. For example, `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` specifies a calculation range that covers the current row, the previous row before the current row, and the following row after the current row.</li><li>`frame_end`: the end position of the current window frame.</li><li>`inputs`: the data that is entered as the input to a window. The data is an array package that supports only specific data types. In this example, INT values are entered as input, and the array package is Integer[].</li></ul> |
 
 #### Compile a UDTF
 
@@ -404,6 +405,114 @@ PROPERTIES (
 | type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
 | file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
 | isolation | (Optional) To share function instances across UDF executions and support static variables, set this to "shared". |
+| input     | (Optional) Input format. Valid values: `scalar` (default, one boxed Java object per row) and `arrow` (vectorized — one Apache Arrow `FieldVector` per argument for the whole batch). See [Vectorized (Arrow) input](#vectorized-arrow-input). |
+
+#### Vectorized (Arrow) input
+
+Setting `"input" = "arrow"` switches a Java UDF from the per-row boxed calling convention to a
+**vectorized** one: your method receives one Apache Arrow
+`FieldVector` per argument covering the whole batch, and
+(for scalar/UDTF) returns a `FieldVector`. Columns are exchanged with the backend zero-copy over the
+[Arrow C Data Interface](https://arrow.apache.org/docs/format/CDataInterface.html), avoiding the
+per-row boxing/unboxing of the default path.
+
+Add the Arrow dependency to your Maven project (the version must match the one bundled with your
+StarRocks release), scoped `provided` since the BE already ships it:
+
+```xml
+<dependency>
+    <groupId>org.apache.arrow</groupId>
+    <artifactId>arrow-vector</artifactId>
+    <version>17.0.0</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+Allocate result vectors from the framework-managed allocator via `arg.getAllocator()` so the engine
+owns their lifecycle.
+
+:::note
+The BE runs the UDF in an embedded JVM that must expose `java.nio` to Arrow's off-heap memory
+layer. The shipped `conf/be.conf` already sets this via
+`JAVA_OPTS="... --add-opens=java.base/java.nio=ALL-UNNAMED ..."`; if you customize `JAVA_OPTS`,
+keep that flag or arrow-input UDFs fail to initialize.
+:::
+
+**Scalar** — `evaluate(FieldVector...)` returns a `FieldVector`:
+
+```java
+public class ArrowAdd {
+    public IntVector evaluate(IntVector a, IntVector b) {
+        IntVector out = new IntVector("result", a.getAllocator());
+        int n = a.getValueCount();
+        out.allocateNew(n);
+        for (int i = 0; i < n; i++) {
+            if (a.isNull(i) || b.isNull(i)) {
+                out.setNull(i);
+            } else {
+                out.set(i, a.get(i) + b.get(i));
+            }
+        }
+        out.setValueCount(n);
+        return out;
+    }
+}
+```
+
+```SQL
+CREATE FUNCTION arrow_add(INT, INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.udf.sample.ArrowAdd",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
+);
+```
+
+**UDTF** — `process(FieldVector...)` returns `T[][]` (one `T[]` of output rows per input row; only the
+input is vectorized):
+
+```java
+public class ArrowRepeat {
+    public Integer[][] process(IntVector v) {
+        Integer[][] out = new Integer[v.getValueCount()][];
+        for (int i = 0; i < v.getValueCount(); i++) {
+            out[i] = v.isNull(i) ? new Integer[0] : new Integer[] {v.get(i), v.get(i)};
+        }
+        return out;
+    }
+}
+```
+
+**UDAF** — `update(State, FieldVector...)` receives the whole batch destined for one state;
+`create`/`merge`/`serialize`/`finalize` keep their normal (boxed) signatures.
+
+> **LIMITATIONS**
+>
+> - Arrow-input UDAFs are supported only for **global aggregation** and **sorted-streaming
+>   aggregation** (a whole batch belongs to one state). A query that routes an arrow UDAF through a
+>   hash `GROUP BY` fails with a clear error — use the default (boxed) input for `GROUP BY` UDAFs.
+> - Arrow input is **not** supported for window functions (`analytic = "true"`) yet.
+
+Mapping between SQL types and the Arrow `FieldVector` your method receives:
+
+| SQL type   | Arrow FieldVector          |
+| ---------- | -------------------------- |
+| BOOLEAN    | `BitVector`                |
+| TINYINT    | `TinyIntVector`            |
+| SMALLINT   | `SmallIntVector`           |
+| INT        | `IntVector`                |
+| BIGINT     | `BigIntVector`             |
+| FLOAT      | `Float4Vector`             |
+| DOUBLE     | `Float8Vector`             |
+| VARCHAR    | `VarCharVector`            |
+| DECIMAL    | `DecimalVector`            |
+| DATE       | `DateDayVector`            |
+| DATETIME   | `TimeStampMicroVector`     |
+| ARRAY      | `ListVector`               |
+| MAP        | `MapVector`                |
+| STRUCT     | `StructVector`             |
 
 #### Create a UDAF
 
@@ -538,20 +647,145 @@ For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTI
 
 > **NOTE**
 >
-> Currently, only non-nested ARRAY and MAP parameter/return types are supported for Scalar UDFs.
+> Scalar UDFs, UDAFs, and UDTFs all support nested `ARRAY`, `MAP`, and
+> `STRUCT` parameter/return types — including arbitrary nesting such as
+> `ARRAY<ARRAY<INT>>`, `ARRAY<MAP<INT, STRING>>`,
+> `MAP<INT, ARRAY<STRING>>`, `STRUCT<a INT, b ARRAY<STRING>>`, and
+> `ARRAY<STRUCT<a INT, b STRING>>`. The leaf element type must still be one of
+> the scalar types listed below. Because of Java type erasure, the Java
+> method signature only needs the raw `java.util.List` / `java.util.Map` for
+> ARRAY / MAP slots whose subtree contains no STRUCT; StarRocks drives the
+> per-row conversion from the SQL signature. STRUCT slots, on the other
+> hand, must be bound to a concrete Java `record` class so the analyzer
+> can preserve the formal record type through the JNI boundary (see
+> [STRUCT type binding](#struct-type-binding) below).
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
-| ARRAY          | java.util.List    |
-| Map            | java.util.Map     |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| DATE                                           | java.time.LocalDate   |
+| DATETIME                                       | java.time.LocalDateTime |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+| STRUCT                                         | a Java `record` class declared by the UDF author |
+
+> **NOTE**
+>
+> For `DECIMAL` parameters, BigDecimal values produced by the UDF are rescaled
+> to the column's declared `(precision, scale)` using `RoundingMode.HALF_UP`
+> before they are written back. If the rescaled value does not fit in the
+> declared `(precision, scale)`, the behavior follows the session
+> `overflow_mode`:
+>
+> - `OUTPUT_NULL` (default): the offending row is written as `NULL`.
+> - `REPORT_ERROR`: the query aborts with an `ArithmeticException`.
+
+### STRUCT type binding
+
+`STRUCT` parameters and return types must be bound to a Java `record`
+class (JDK 14+) declared by the UDF author. The mapping is positional:
+
+- The record's component count must match the SQL `STRUCT` field count.
+- Each component's type must match the corresponding SQL field type by
+  position; component names are not enforced (Java identifiers cannot
+  represent every legal SQL field name, and CREATE FUNCTION binds by
+  position regardless of the session's `STRUCT_CAST_BY_NAME` setting).
+- Nested `STRUCT` is supported in any position: as a record component,
+  as an `ARRAY` element (`List<MyRecord>`), or as a `MAP` key/value
+  (`Map<String, MyRecord>`).
+
+The same record-class binding applies to scalar UDF, UDAF, and UDTF.
+For UDAF, the record class is supplied for the `update(State, ...)`
+arguments and the `finalize(State)` return type. For UDTF, the record
+class is supplied for the `process(...)` arguments and the
+`TYPE[] process(...)` element return type.
+
+#### Scalar UDF example
+
+```java
+public record Address(String street, Integer zip) {}
+
+public record AddressOut(String full, Integer region) {}
+
+public class AddrUdf {
+    public AddressOut evaluate(Address addr) {
+        return new AddressOut(addr.street() + " #" + addr.zip(), addr.zip() / 1000);
+    }
+}
+```
+
+```sql
+CREATE FUNCTION addr_udf(struct<street string, zip int>)
+RETURNS struct<`full` string, region int>
+PROPERTIES (
+    "symbol" = "com.example.AddrUdf",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/addr_udf.jar"
+);
+```
+
+#### UDAF example
+
+```java
+public record Item(String name, Integer qty) {}
+
+public record TopItem(String name, Long total) {}
+
+public class TopItemAgg {
+    public static class State {
+        // serialization elided for brevity
+        public int serializeLength() { return 0; }
+    }
+    public State create() { return new State(); }
+    public void destroy(State state) {}
+    public void update(State state, Item item) { /* ... */ }
+    public void serialize(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public void merge(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public TopItem finalize(State state) { return new TopItem("a", 0L); }
+}
+```
+
+```sql
+CREATE AGGREGATE FUNCTION top_item_agg(struct<name string, qty int>)
+RETURNS struct<name string, total bigint>
+PROPERTIES (
+    "symbol" = "com.example.TopItemAgg",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/top_item_agg.jar"
+);
+```
+
+#### UDTF example
+
+```java
+public record Pair(String key, Integer value) {}
+
+public class ExplodePairs {
+    public Pair[] process(java.util.Map<String, Integer> m) {
+        return m.entrySet().stream()
+                .map(e -> new Pair(e.getKey(), e.getValue()))
+                .toArray(Pair[]::new);
+    }
+}
+```
+
+```sql
+CREATE TABLE FUNCTION explode_pairs(map<string, int>)
+RETURNS struct<`key` string, `value` int>
+PROPERTIES (
+    "symbol" = "com.example.ExplodePairs",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/explode_pairs.jar"
+);
+```
 
 ## Parameter settings
 

@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -35,6 +37,105 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CheckBeModuleBoundariesTest(unittest.TestCase):
+    def test_schema_scanner_is_an_internal_include_prefix(self) -> None:
+        self.assertTrue(MODULE._is_internal_include("schema_scanner/schema_tables_scanner.h"))
+
+    def test_load_path_allowlist_ignores_comments_and_blank_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            allowlist_path = Path(tmpdir) / "allowlist.txt"
+            allowlist_path.write_text(
+                textwrap.dedent(
+                    """\
+                    # comment
+
+                    src/exec/exec_env.cpp
+                    src/storage/lake/update_manager.cpp
+                    """
+                )
+            )
+
+            self.assertEqual(
+                {
+                    "src/exec/exec_env.cpp",
+                    "src/storage/lake/update_manager.cpp",
+                },
+                MODULE.load_path_allowlist(allowlist_path),
+            )
+
+    def test_collect_exec_env_include_paths_scans_header_files_in_src_and_test(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "test" / "runtime" / "exec_env_helper.h").write_text('#include "exec/exec_env.h"\n')
+            (repo / "be" / "test" / "runtime" / "exec_env_helper.cpp").write_text('#include "exec/exec_env.h"\n')
+
+            self.assertEqual(
+                {
+                    "src/column/hash_set.h",
+                    "test/runtime/exec_env_helper.h",
+                },
+                MODULE.collect_exec_env_include_paths(repo),
+            )
+
+    def test_collect_exec_env_singleton_paths_scans_be_src_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "src" / "runtime" / "runtime.cpp").write_text("void f() { (void)ExecEnv::GetInstance(); }\n")
+            (repo / "be" / "test" / "runtime" / "runtime_test.cpp").write_text("void f() { (void)ExecEnv::GetInstance(); }\n")
+
+            self.assertEqual(
+                {"src/runtime/runtime.cpp"},
+                MODULE.collect_exec_env_singleton_paths(repo),
+            )
+
+    def test_diff_allowlist_reports_new_and_stale_paths(self) -> None:
+        extra_paths, stale_paths = MODULE.diff_path_allowlist(
+            current={"src/runtime/runtime.cpp", "src/column/hash_set.h"},
+            allowlist={"src/runtime/runtime.cpp", "src/exec/old.cpp"},
+        )
+
+        self.assertEqual({"src/column/hash_set.h"}, extra_paths)
+        self.assertEqual({"src/exec/old.cpp"}, stale_paths)
+
+    def test_print_path_allowlist_diff_highlights_allowlist_and_action_for_new_paths(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            MODULE._print_path_allowlist_diff(
+                "exec-env-include",
+                {"test/testutil/runtime_state_test_util.h"},
+                set(),
+                "build-support/exec_env_header_include_allowlist.txt",
+            )
+
+        output = stdout.getvalue()
+        self.assertIn("ERROR: new exec-env-include paths require allowlist review", output)
+        self.assertIn("allowlist: build-support/exec_env_header_include_allowlist.txt", output)
+        self.assertIn(
+            "action: remove the new dependency or add the path to build-support/exec_env_header_include_allowlist.txt if it is intentional.",
+            output,
+        )
+        self.assertIn("[exec-env-include] new path=test/testutil/runtime_state_test_util.h", output)
+
+    def test_print_path_allowlist_diff_highlights_allowlist_and_action_for_stale_paths(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            MODULE._print_path_allowlist_diff(
+                "exec-env-singleton",
+                set(),
+                {"src/exec/old.cpp"},
+                "build-support/exec_env_singleton_allowlist.txt",
+            )
+
+        output = stdout.getvalue()
+        self.assertIn("ERROR: stale exec-env-singleton allowlist entries should be removed", output)
+        self.assertIn("allowlist: build-support/exec_env_singleton_allowlist.txt", output)
+        self.assertIn(
+            "action: delete the stale entries from build-support/exec_env_singleton_allowlist.txt.",
+            output,
+        )
+        self.assertIn("[exec-env-singleton] stale path=src/exec/old.cpp", output)
+
     def test_ci_architecture_filter_covers_checker_code_extensions(self) -> None:
         workflow_path = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml"
         workflow_lines = workflow_path.read_text().splitlines()
@@ -78,11 +179,21 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
             workflow_text,
         )
 
+    def test_ci_architecture_filter_includes_exec_env_guardrail_files(self) -> None:
+        workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+
+        self.assertIn("- 'build-support/exec_env_header_include_allowlist.txt'", workflow_text)
+        self.assertIn("- 'build-support/exec_env_singleton_allowlist.txt'", workflow_text)
+
+    def test_changed_full_check_paths_include_exec_env_guardrail_files(self) -> None:
+        self.assertIn("build-support/exec_env_header_include_allowlist.txt", MODULE.DEFAULT_CHANGED_FULL_CHECK_PATHS)
+        self.assertIn("build-support/exec_env_singleton_allowlist.txt", MODULE.DEFAULT_CHANGED_FULL_CHECK_PATHS)
+
     def test_ci_compute_merge_base_uses_fetched_base_head(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
 
         self.assertIn('name: Compute Merge Base', workflow_text)
-        self.assertIn('git fetch origin ${{ github.base_ref }} --depth=1', workflow_text)
+        self.assertIn('git fetch origin ${{ github.base_ref }}', workflow_text)
         self.assertIn('base="$(git merge-base FETCH_HEAD HEAD)"', workflow_text)
         self.assertIn('[[ -n "${base}" ]]', workflow_text)
         self.assertIn('echo "base=${base}" >> "$GITHUB_OUTPUT"', workflow_text)
@@ -164,7 +275,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
             violation = violations.include_violations[0]
             self.assertEqual("columncore", violation.module)
             self.assertEqual("be/src/column/hash_set.h", violation.path)
-            self.assertEqual("runtime/exec_env.h", violation.edge)
+            self.assertEqual("exec/exec_env.h", violation.edge)
 
             baseline_path.write_text(
                 json.dumps(
@@ -173,7 +284,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             {
                                 "module": "columncore",
                                 "path": "be/src/column/hash_set.h",
-                                "edge": "runtime/exec_env.h",
+                                "edge": "exec/exec_env.h",
                             }
                         ]
                     },
@@ -200,8 +311,12 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 set(cmake_state.target_sources["ColumnCore"]),
             )
             self.assertEqual(
-                ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+                ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
                 cmake_state.test_target_links["column_test"],
+            )
+            self.assertEqual(
+                ["Types", "ColumnCoreInternal", "Common"],
+                cmake_state.target_links["ColumnCore"],
             )
 
     def test_changed_paths_limit_checked_modules(self) -> None:
@@ -234,7 +349,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 repo_root=repo,
             )
 
-            self.assertEqual({"columncore", "iocore"}, selected)
+            self.assertEqual({"columncore", "io"}, selected)
 
     def test_changed_paths_include_test_target_definition_cmakelists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -250,7 +365,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 repo_root=repo,
             )
 
-            self.assertEqual({"columncore", "iocore"}, selected)
+            self.assertEqual({"columncore", "io"}, selected)
 
     def test_changed_paths_include_cross_module_test_target_definition_cmakelists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -266,13 +381,13 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 repo_root=repo,
             )
 
-            self.assertEqual({"columncore", "runtimecore"}, selected)
+            self.assertEqual({"columncore", "runtime"}, selected)
 
     def test_collect_owned_files_expands_recursive_manifest_globs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
             self._write_sample_repo(repo)
-            (repo / "be" / "src" / "column" / "header_only_column.h").write_text('#include "runtime/exec_env.h"\n')
+            (repo / "be" / "src" / "column" / "header_only_column.h").write_text('#include "exec/exec_env.h"\n')
 
             manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
             cmake_state = MODULE.parse_cmake_state(repo)
@@ -299,7 +414,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                         {
                             "id": "columncore",
                             "doc_label": "ColumnCore",
-                            "owned_targets": ["ColumnCore"],
+                            "owned_targets": ["ColumnCore", "ColumnCoreInternal"],
                             "owned_globs": ["be/src/column/**"],
                             "allowed_include_prefixes": [
                                 "column/",
@@ -309,11 +424,11 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                                 "gutil/",
                                 "gen_cpp/",
                             ],
-                            "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+                            "allowed_target_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],
                             "allowed_test_targets": ["column_test"],
                             "allowed_test_link_deps": [
                                 "ColumnCore",
-                                "TypesCore",
+                                "Types",
                                 "Common",
                                 "Base",
                                 "Gutil",
@@ -322,9 +437,9 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             "remediation": "Move code down or add an interface instead of pulling runtime into ColumnCore.",
                         },
                         {
-                            "id": "iocore",
-                            "doc_label": "IOCore",
-                            "owned_targets": ["IOCore"],
+                            "id": "io",
+                            "doc_label": "IO",
+                            "owned_targets": ["IO"],
                             "allowed_include_prefixes": [
                                 "io/",
                                 "common/",
@@ -334,12 +449,12 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             "allowed_target_deps": ["Common", "Base", "Gutil"],
                             "allowed_test_targets": [],
                             "allowed_test_link_deps": [],
-                            "remediation": "Move code into IOCore or add an interface instead of pulling unrelated dependencies into IO.",
+                            "remediation": "Move code into IO or add an interface instead of pulling unrelated dependencies into IO.",
                         },
                         {
-                            "id": "runtimecore",
-                            "doc_label": "RuntimeCore",
-                            "owned_targets": ["RuntimeCore"],
+                            "id": "runtime",
+                            "doc_label": "Runtime",
+                            "owned_targets": ["Runtime"],
                             "allowed_include_prefixes": [
                                 "runtime/",
                                 "column/",
@@ -348,9 +463,9 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                                 "gutil/",
                             ],
                             "allowed_target_deps": ["ColumnCore", "Common", "Base", "Gutil"],
-                            "allowed_test_targets": ["runtime_core_test"],
-                            "allowed_test_link_deps": ["RuntimeCore", "ColumnCore", "Common", "Base", "Gutil"],
-                            "remediation": "Move code down or add an interface instead of pulling unrelated dependencies into RuntimeCore.",
+                            "allowed_test_targets": ["runtime_test"],
+                            "allowed_test_link_deps": ["Runtime", "ColumnCore", "Common", "Base", "Gutil"],
+                            "remediation": "Move code down or add an interface instead of pulling unrelated dependencies into Runtime.",
                         }
                     ]
                 },
@@ -362,17 +477,24 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "be" / "src" / "column" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
+                ADD_BE_LIB(ColumnCoreInternal
+                    internal.cpp
+                )
+
                 ADD_BE_LIB(ColumnCore
                     column.cpp
                     hash_set.cpp
                 )
+
+                target_link_libraries(ColumnCore PUBLIC Types)
+                target_link_libraries(ColumnCore PRIVATE ColumnCoreInternal Common)
                 """
             )
         )
         (repo / "be" / "src" / "io" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
-                ADD_BE_LIB(IOCore
+                ADD_BE_LIB(IO
                     io.cpp
                 )
                 """
@@ -381,7 +503,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "be" / "src" / "runtime" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
-                ADD_BE_LIB(RuntimeCore
+                ADD_BE_LIB(Runtime
                     runtime.cpp
                 )
                 """
@@ -392,7 +514,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 """\
                 set(COLUMN_TEST_LINK_LIBS
                     ColumnCore
-                    TypesCore
+                    Types
                     Common
                     Base
                     Gutil
@@ -406,20 +528,21 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "be" / "test" / "runtime" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
-                set(RUNTIME_CORE_TEST_LINK_LIBS
-                    RuntimeCore
+                set(RUNTIME_TEST_LINK_LIBS
+                    Runtime
                     ColumnCore
                     Common
                     Base
                     Gutil
                 )
 
-                target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
+                target_link_libraries(runtime_test ${RUNTIME_TEST_LINK_LIBS} gtest_main)
                 """
             )
         )
         (repo / "be" / "src" / "column" / "column.cpp").write_text('#include "column/column.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.cpp").write_text('#include "column/hash_set.h"\n')
+        (repo / "be" / "src" / "column" / "internal.cpp").write_text('#include "column/internal.h"\n')
         (repo / "be" / "src" / "io" / "io.cpp").write_text('#include "io/io.h"\n')
         (repo / "be" / "src" / "runtime" / "runtime.cpp").write_text('#include "runtime/runtime_state.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.h").write_text(
@@ -427,7 +550,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 """\
                 #pragma once
 
-                #include "runtime/exec_env.h"
+                #include "exec/exec_env.h"
                 """
             )
         )

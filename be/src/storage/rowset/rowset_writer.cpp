@@ -43,33 +43,37 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/logging.h"
+#include "common/storage_define.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "fs/key_cache.h"
-#include "io/core/io_error.h"
+#include "io/io_error.h"
+#include "platform/key_cache.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
-#include "serde/column_array_serde.h"
-#include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/merge_iterator.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/metadata_util.h"
-#include "storage/olap_define.h"
-#include "storage/row_source_mask.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "storage/type_utils.h"
+#include "storage_primitive/aggregate_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/row_source_mask_buffer.h"
+#include "storage_primitive/type_utils.h"
 
 namespace starrocks {
 
@@ -310,7 +314,10 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
+        // segment_pb.data_size() is full segment file bytes (column data + embedded index pages).
+        // Subtract embedded index so _total_data_size holds only column data bytes;
+        // invariant: data_disk_size + index_disk_size == total_disk_size == segment file size.
+        _total_data_size += segment_pb.data_size() - segment_pb.index_size();
         _total_index_size += segment_pb.index_size();
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
@@ -548,6 +555,9 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 for (int i = 0; i < _num_segment; i++) {
                     for (const auto& index : indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
@@ -689,6 +699,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             wopts.encryption_info = pair.info;
             encryption_meta = std::move(pair.encryption_meta);
         }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
         auto file_path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
@@ -911,7 +922,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -942,7 +953,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             return Status::InternalError(ss.str());
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -1008,10 +1019,10 @@ Status HorizontalRowsetWriter::_final_merge() {
             }
             RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-            auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
 
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();
@@ -1082,7 +1093,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -1105,7 +1116,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         // method to create segment data files, rather than temporary segment files.
         _context.segments_overlap = NONOVERLAPPING;
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -1173,7 +1184,9 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     }
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += static_cast<int64_t>(segment_size);
+        // segment_size is full segment file bytes; subtract index_size so
+        // _total_data_size holds only column data bytes.
+        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(index_size);
         _total_index_size += static_cast<int64_t>(index_size);
     }
 
@@ -1240,6 +1253,9 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
                 if (!indexes->empty()) {
                     for (const auto& index : *indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
@@ -1348,6 +1364,7 @@ Status VerticalRowsetWriter::flush_columns() {
 }
 
 Status VerticalRowsetWriter::final_flush() {
+    int64_t total_segment_file_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1360,15 +1377,18 @@ Status VerticalRowsetWriter::final_flush() {
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += static_cast<int64_t>(segment_size);
-        }
+        total_segment_file_bytes += static_cast<int64_t>(segment_size);
 
         // check global_dict efficacy
         _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
+    }
+    {
+        // _total_index_size was accumulated in _flush_columns() via finalize_columns().
+        // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += total_segment_file_bytes - _total_index_size;
     }
     return Status::OK();
 }

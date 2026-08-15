@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "マップから重複するキーを削除します。"
 ---
 
 # distinct_map_keys

@@ -93,7 +93,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -102,7 +101,6 @@ import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -113,6 +111,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -158,6 +157,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION = "light_weight_tablet_creation";
+
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
@@ -176,6 +177,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FLAT_JSON_SPARSITY_FACTOR = "flat_json.sparsity.factor";
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
+
+    public static final String PROPERTIES_FLAT_JSON_VERSION = "flat_json.version";
 
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
@@ -211,6 +214,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
+    public static final String PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER = "load_initial_open_partition_number";
 
     // default: same as cluster query_timeout
     public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
@@ -235,6 +239,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
+
+    // Only used in `INSERT INTO target_table SELECT ... FROM files()`.
+    // When set to true, pushes down the target table schema to files() for schema inference.
+    public static final String PROPERTIES_ENABLE_PUSH_DOWN_SCHEMA = "enable_push_down_schema";
 
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
@@ -474,6 +482,25 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static int analyzeLoadInitialOpenPartitionNumber(Map<String, String> properties, boolean removeProperties) {
+        int value = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            try {
+                value = Integer.parseInt(properties.get(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new SemanticException(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + e.getMessage());
+            }
+            if (value < 0) {
+                throw new SemanticException("Illegal " + PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + value
+                        + ". Use 0 to open all partitions, or a positive integer to open the latest N partitions.");
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+            }
+        }
+        return value;
     }
 
     public static String analyzePartitionRetentionCondition(Database db,
@@ -720,14 +747,18 @@ public class PropertyAnalyzer {
         String refreshMode = null;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
+            MaterializedView.RefreshMode parsed;
             try {
-                MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode + ". Only " +
-                        EnumUtils.getEnumList(MaterializedView.RefreshMode.class).stream()
-                                .map(MaterializedView.RefreshMode::name)
-                                .collect(Collectors.joining(", ")) +
-                        " are supported.");
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            // AUTO is intentionally not exposed to users; the implementation is preserved
+            // internally for future revival.
+            if (parsed == MaterializedView.RefreshMode.AUTO) {
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
             }
             properties.remove(PROPERTIES_MV_REFRESH_MODE);
         }
@@ -1119,6 +1150,23 @@ public class PropertyAnalyzer {
             return Boolean.parseBoolean(val);
         }
         return defaultVal;
+    }
+
+    /**
+     * Looks up {@code property} in {@code properties}, parses its value as a strict boolean
+     * (throws {@link SemanticException} for any value other than "true"/"false"), removes the
+     * key from the map, and returns the result. Returns {@code defaultValue} if the key is absent.
+     */
+    public static boolean analyzeBooleanPropStrictly(Map<String, String> properties,
+            String property, boolean defaultValue) throws SemanticException {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.remove(property);
+        if (value == null) {
+            return defaultValue;
+        }
+        return parseBooleanStrictly(property, value);
     }
 
     public static boolean analyzeEnablePersistentIndex(Map<String, String> properties) {
@@ -1637,22 +1685,6 @@ public class PropertyAnalyzer {
         return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
     }
 
-    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
-        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
-            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            if (type.equalsIgnoreCase(TableProperty.LOCAL_INDEX_TYPE)) {
-                return TPersistentIndexType.LOCAL;
-            } else if (type.equalsIgnoreCase(TableProperty.CLOUD_NATIVE_INDEX_TYPE)) {
-                return TPersistentIndexType.CLOUD_NATIVE;
-            } else {
-                throw new AnalysisException("Invalid persistent index type: " + type);
-            }
-        }
-        return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
-                : TPersistentIndexType.LOCAL;
-    }
-
     public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {
         if (properties != null && properties.containsKey(PROPERTIES_COMPACTION_STRATEGY)) {
             String strategy = properties.get(PROPERTIES_COMPACTION_STRATEGY);
@@ -1938,7 +1970,7 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(": random distribution does not support 'colocate_with'");
                 }
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
-                        db, materializedView, colocateGroup, false /* expectLakeTable */);
+                        db, materializedView, colocateGroup, false /* afterTabletCreation */);
             }
 
             // enable_query_rewrite
@@ -2144,4 +2176,5 @@ public class PropertyAnalyzer {
         }
         return ret;
     }
+
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v2.2.0 以降、Java プログラミング言語を使用してカスタム UDF を開発できます。"
 sidebar_position: 0.9
 ---
 
@@ -19,7 +20,7 @@ sidebar_position: 0.9
 
 - サーバーに JDK 17 をインストールしています。
 
-- Java UDF 機能が有効になっています。この機能を有効にするには、FE 設定ファイル **fe/conf/fe.conf** の FE 設定項目 `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[パラメーター設定](../../administration/management/FE_configuration.md)を参照してください。
+- Java UDF 機能が有効になっています。この機能を有効にするには、FE 設定ファイル **fe/conf/fe.conf** の FE 設定項目 `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[パラメーター設定](../../administration/configuration/FE_parameters/FE_parameters.md)を参照してください。
 
 ## UDF の開発と使用
 
@@ -293,7 +294,7 @@ public class WindowSumInt {
 
 | メソッド                                                   | 説明                                                  |
 | -------------------------------------------------------- | ------------------------------------------------------------ |
-| void windowUpdate(State state, int, int, int , int, ...) | ウィンドウのデータを更新します。UDWF の詳細については、[ウィンドウ関数](../sql-functions/Window_function.md)を参照してください。入力として行を入力するたびに、このメソッドはウィンドウ情報を取得し、中間結果を適宜更新します。<ul><li>`peer_group_start`: 現在のパーティションの開始位置。`PARTITION BY` は、OVER 句でパーティション列を指定するために使用されます。パーティション列の値が同じ行は、同じパーティションに属すると見なされます。</li><li>`peer_group_end`: 現在のパーティションの終了位置。</li><li>`frame_start`: 現在のウィンドウフレームの開始位置。ウィンドウフレーム句は、計算範囲を指定し、現在の行と現在の行に対して指定された距離内の行をカバーします。例えば、`ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` は、現在の行、現在の行の前の行、および現在の行の後の行をカバーする計算範囲を指定します。</li><li>`frame_end`: 現在のウィンドウフレームの終了位置。</li><li>`inputs`: ウィンドウへの入力として入力されるデータ。データは特定のデータ型のみをサポートする配列パッケージです。この例では、INT 値が入力として入力され、配列パッケージは Integer[] です。</li></ul> |
+| void windowUpdate(State state, int, int, int , int, ...) | ウィンドウのデータを更新します。UDWF の詳細については、[ウィンドウ関数](./Window_function.md)を参照してください。入力として行を入力するたびに、このメソッドはウィンドウ情報を取得し、中間結果を適宜更新します。<ul><li>`peer_group_start`: 現在のパーティションの開始位置。`PARTITION BY` は、OVER 句でパーティション列を指定するために使用されます。パーティション列の値が同じ行は、同じパーティションに属すると見なされます。</li><li>`peer_group_end`: 現在のパーティションの終了位置。</li><li>`frame_start`: 現在のウィンドウフレームの開始位置。ウィンドウフレーム句は、計算範囲を指定し、現在の行と現在の行に対して指定された距離内の行をカバーします。例えば、`ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` は、現在の行、現在の行の前の行、および現在の行の後の行をカバーする計算範囲を指定します。</li><li>`frame_end`: 現在のウィンドウフレームの終了位置。</li><li>`inputs`: ウィンドウへの入力として入力されるデータ。データは特定のデータ型のみをサポートする配列パッケージです。この例では、INT 値が入力として入力され、配列パッケージは Integer[] です。</li></ul> |
 
 #### UDTF をコンパイル
 
@@ -538,18 +539,148 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 > **NOTE**
 >
-> 現在、スカラー UDF でサポートされているのは、ネストされていない ARRAY と MAP パラメータ/リターンタイプのみです。
+> スカラー UDF、UDAF、UDTF はすべて、ネストされた `ARRAY`、`MAP`、
+> `STRUCT` のパラメータ/リターンタイプをサポートします。任意のネストも
+> 可能で、例えば `ARRAY<ARRAY<INT>>`、`ARRAY<MAP<INT, STRING>>`、
+> `MAP<INT, ARRAY<STRING>>`、`STRUCT<a INT, b ARRAY<STRING>>`、
+> `ARRAY<STRUCT<a INT, b STRING>>` などです。葉ノードの要素型は
+> 引き続き下表のスカラー型である必要があります。Java の型消去のため、
+> サブツリーに STRUCT を含まない ARRAY / MAP スロットでは、Java メソッド
+> シグネチャに raw 型の `java.util.List` / `java.util.Map` を指定するだけで
+> 十分で、行ごとの変換は SQL シグネチャに基づいて StarRocks 側で行われます。
+> 一方、STRUCT スロットは具体的な Java `record` クラスへバインドする必要が
+> あり、これによりアナライザは JNI 境界を越えて正式な record 型を保持
+> できます (詳細は下記の [STRUCT 型バインディング](#struct-型バインディング)
+> を参照)。
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| DATE                                           | java.time.LocalDate   |
+| DATETIME                                       | java.time.LocalDateTime |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+| STRUCT                                         | UDF 作成者が宣言した Java `record` クラス |
+
+> **NOTE**
+>
+> `DECIMAL` パラメータについて、UDF が返す BigDecimal は列の宣言された
+> `(precision, scale)` に従って `RoundingMode.HALF_UP` でスケール調整されてから
+> 列に書き戻されます。スケール調整後の値が宣言された `(precision, scale)` に
+> 収まらない場合、動作はセッション変数 `overflow_mode` に従います:
+>
+> - `OUTPUT_NULL`（既定）: 該当行は `NULL` として書き込まれます。
+> - `REPORT_ERROR`: クエリは `ArithmeticException` エラーで中断されます。
+
+### STRUCT 型バインディング
+
+`STRUCT` のパラメータ/リターンタイプは、UDF 作成者が宣言した
+Java `record` クラス (JDK 14+) にバインドする必要があります。
+バインディングは位置ベースで行われます:
+
+- record の構成要素数は SQL `STRUCT` のフィールド数と一致しなければ
+  なりません。
+- 各構成要素の型は、対応する位置の SQL フィールド型と一致しなければ
+  なりません。構成要素名は強制されません (Java 識別子では合法な
+  SQL フィールド名をすべて表現できないため。CREATE FUNCTION は
+  位置でバインドし、セッション変数 `STRUCT_CAST_BY_NAME` の影響は
+  受けません)。
+- ネストした `STRUCT` は任意の位置でサポートされます: 別の record
+  の構成要素として、`ARRAY` の要素 (`List<MyRecord>`) として、
+  あるいは `MAP` のキー/値 (`Map<String, MyRecord>`) として。
+
+同じ record クラスバインディング規則は、スカラー UDF、UDAF、UDTF の
+すべてに適用されます。UDAF では `update(State, ...)` の引数と
+`finalize(State)` の戻り値の record クラスが指定されます。UDTF では
+`process(...)` の引数と `TYPE[] process(...)` の要素戻り値の record
+クラスが指定されます。
+
+#### スカラー UDF の例
+
+```java
+public record Address(String street, Integer zip) {}
+
+public record AddressOut(String full, Integer region) {}
+
+public class AddrUdf {
+    public AddressOut evaluate(Address addr) {
+        return new AddressOut(addr.street() + " #" + addr.zip(), addr.zip() / 1000);
+    }
+}
+```
+
+```sql
+CREATE FUNCTION addr_udf(struct<street string, zip int>)
+RETURNS struct<`full` string, region int>
+PROPERTIES (
+    "symbol" = "com.example.AddrUdf",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/addr_udf.jar"
+);
+```
+
+#### UDAF の例
+
+```java
+public record Item(String name, Integer qty) {}
+
+public record TopItem(String name, Long total) {}
+
+public class TopItemAgg {
+    public static class State {
+        // シリアライズ部分は省略
+        public int serializeLength() { return 0; }
+    }
+    public State create() { return new State(); }
+    public void destroy(State state) {}
+    public void update(State state, Item item) { /* ... */ }
+    public void serialize(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public void merge(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public TopItem finalize(State state) { return new TopItem("a", 0L); }
+}
+```
+
+```sql
+CREATE AGGREGATE FUNCTION top_item_agg(struct<name string, qty int>)
+RETURNS struct<name string, total bigint>
+PROPERTIES (
+    "symbol" = "com.example.TopItemAgg",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/top_item_agg.jar"
+);
+```
+
+#### UDTF の例
+
+```java
+public record Pair(String key, Integer value) {}
+
+public class ExplodePairs {
+    public Pair[] process(java.util.Map<String, Integer> m) {
+        return m.entrySet().stream()
+                .map(e -> new Pair(e.getKey(), e.getValue()))
+                .toArray(Pair[]::new);
+    }
+}
+```
+
+```sql
+CREATE TABLE FUNCTION explode_pairs(map<string, int>)
+RETURNS struct<`key` string, `value` int>
+PROPERTIES (
+    "symbol" = "com.example.ExplodePairs",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/explode_pairs.jar"
+);
+```
 
 ## パラメーター設定
 

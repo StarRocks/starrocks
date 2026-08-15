@@ -49,11 +49,23 @@ public class JDBCTable extends Table {
     private String jdbcTable;
     @SerializedName(value = "rn")
     private String resourceName;
+    @SerializedName(value = "qt")
+    private boolean queryTable;
 
     private Map<String, String> connectInfo;
     private String catalogName;
     private String dbName;
     private List<Column> partitionColumns;
+
+    // Transient: original JDBC column types (java.sql.Types) from the external database.
+    // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
+    private transient Map<String, Integer> originalJdbcColumnTypes;
+
+    // Transient: marker for {@link com.starrocks.connector.jdbc.JDBCMetadata#getTableComment}
+    // dedup. Once REMARKS has been fetched for this cached instance, further calls return the
+    // already-stored comment without another remote round-trip. Reset when the cache entry is
+    // evicted or refreshTable creates a new JDBCTable.
+    private transient boolean commentFetched;
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -134,6 +146,96 @@ public class JDBCTable extends Table {
     public boolean isMySQLCompatible() {
         String uri = getJdbcUri();
         return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
+    }
+
+    public Map<String, Integer> getOriginalJdbcColumnTypes() {
+        if (originalJdbcColumnTypes == null) {
+            originalJdbcColumnTypes = new HashMap<>();
+        }
+        return originalJdbcColumnTypes;
+    }
+
+    public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
+        if (originalJdbcColumnTypes == null) {
+            this.originalJdbcColumnTypes = new HashMap<>();
+        } else {
+            this.originalJdbcColumnTypes = new HashMap<>(originalJdbcColumnTypes);
+        }
+    }
+
+    public boolean isCommentFetched() {
+        return commentFetched;
+    }
+
+    public void setCommentFetched(boolean commentFetched) {
+        this.commentFetched = commentFetched;
+    }
+
+    public boolean isQueryTable() {
+        return queryTable;
+    }
+
+    public void setPassThroughQuery(String query) {
+        jdbcTable = "(" + normalizePassThroughQuery(query) + ") starrocks_query";
+        queryTable = true;
+    }
+
+    public static String normalizePassThroughQuery(String query) {
+        String normalizedQuery = StringUtils.trimToEmpty(query);
+        while (normalizedQuery.endsWith(";")) {
+            normalizedQuery = StringUtils.stripEnd(normalizedQuery.substring(0, normalizedQuery.length() - 1), null);
+        }
+        if (normalizedQuery.isEmpty()) {
+            throw new IllegalArgumentException("pass-through query cannot be empty");
+        }
+        validatePassThroughQuery(normalizedQuery);
+        return normalizedQuery;
+    }
+
+    private static void validatePassThroughQuery(String query) {
+        String leadingSql = stripLeadingComments(query);
+        if (!startsWithSqlKeyword(leadingSql, "select")) {
+            throw new IllegalArgumentException("JDBC query table function only supports SELECT queries");
+        }
+    }
+
+    private static String stripLeadingComments(String query) {
+        int offset = 0;
+        while (offset < query.length()) {
+            char ch = query.charAt(offset);
+            if (Character.isWhitespace(ch)) {
+                offset++;
+                continue;
+            }
+            if (ch == '-' && offset + 1 < query.length() && query.charAt(offset + 1) == '-') {
+                offset += 2;
+                while (offset < query.length() && query.charAt(offset) != '\n' && query.charAt(offset) != '\r') {
+                    offset++;
+                }
+                continue;
+            }
+            if (ch == '/' && offset + 1 < query.length() && query.charAt(offset + 1) == '*') {
+                int commentEnd = query.indexOf("*/", offset + 2);
+                if (commentEnd < 0) {
+                    throw new IllegalArgumentException("JDBC query table function only supports SELECT queries");
+                }
+                offset = commentEnd + 2;
+                continue;
+            }
+            break;
+        }
+        return query.substring(offset);
+    }
+
+    private static boolean startsWithSqlKeyword(String query, String keyword) {
+        if (!query.regionMatches(true, 0, keyword, 0, keyword.length())) {
+            return false;
+        }
+        if (query.length() == keyword.length()) {
+            return true;
+        }
+        char next = query.charAt(keyword.length());
+        return !Character.isLetterOrDigit(next) && next != '_';
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -239,16 +341,24 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_checksum(connectInfo.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(connectInfo.get(JDBCResource.DRIVER_CLASS));
 
-            if (connectInfo.get(JDBC_TABLENAME) != null) {
+            if (connectInfo.get(JDBC_TABLENAME) != null || queryTable || Strings.isNullOrEmpty(dbName)) {
                 tJDBCTable.setJdbc_url(uri);
             } else {
                 int delimiterIndex = uri.indexOf("?");
                 if (delimiterIndex > 0) {
                     String urlPrefix = uri.substring(0, delimiterIndex);
                     String urlSuffix = uri.substring(delimiterIndex + 1);
-                    tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    if (urlPrefix.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(urlPrefix + dbName + "?" + urlSuffix);
+                    } else {
+                        tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    }
                 } else {
-                    tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    if (uri.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(uri + dbName);
+                    } else {
+                        tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    }
                 }
             }
             tJDBCTable.setJdbc_table(jdbcTable);

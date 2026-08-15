@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to set up the StarRocks FE development environment in IntelliJ IDEA on macOS Apple Silicon."
 ---
 
 # Setup StarRocks FE development environment on IDEA

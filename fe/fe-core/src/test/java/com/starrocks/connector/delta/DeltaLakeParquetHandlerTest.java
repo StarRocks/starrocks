@@ -23,6 +23,7 @@ import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.engine.FileReadResult;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.replay.LogReplay;
 import io.delta.kernel.internal.util.Utils;
@@ -41,6 +42,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
@@ -69,7 +71,8 @@ public class DeltaLakeParquetHandlerTest {
                 @NotNull
                 @Override
                 public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
-                    return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
+                    return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.first.getSize(),
+                            pair.first.getModificationTime(), pair.second, hdfsConfiguration);
                 }
             });
 
@@ -78,14 +81,15 @@ public class DeltaLakeParquetHandlerTest {
         String path = deltaLakePath + "/00000000000000000030.checkpoint.parquet";
         DeltaLakeParquetHandler deltaLakeParquetHandler = new DeltaLakeParquetHandler(hdfsConfiguration, checkpointCache);
         StructType readSchema = LogReplay.getAddRemoveReadSchema(true);
-        FileStatus fileStatus = FileStatus.of(path, 111, 111111);
+        File file = new File(path);
+        FileStatus fileStatus = FileStatus.of(path, file.length(), file.lastModified());
         DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileStatus);
 
         List<Row> addRows = Lists.newArrayList();
-        try (CloseableIterator<ColumnarBatch> parquetIter = deltaLakeParquetHandler.readParquetFiles(
+        try (CloseableIterator<FileReadResult> parquetIter = deltaLakeParquetHandler.readParquetFiles(
                 Utils.singletonCloseableIterator(fileStatus), readSchema, Optional.empty())) {
             while (parquetIter.hasNext()) {
-                ColumnarBatch columnarBatch = parquetIter.next();
+                ColumnarBatch columnarBatch = parquetIter.next().getData();
                 ColumnVector addsVector = columnarBatch.getColumnVector(ADD_FILE_ORDINAL);
 
                 for (int rowId = 0; rowId < addsVector.getSize(); rowId++) {
@@ -136,14 +140,14 @@ public class DeltaLakeParquetHandlerTest {
                     @NotNull
                     @Override
                     public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first, 0, 0, pair.second, hdfsConfiguration);
                     }
                 });
         List<ColumnarBatch> columnarBatches = Lists.newArrayList();
         new MockUp<DeltaLakeParquetHandler>() {
             @Mock
-            public List<ColumnarBatch> readParquetFile(@NotNull String path, @NotNull StructType schema,
-                                                       @NotNull Configuration hdfsConfiguration) {
+            public List<ColumnarBatch> readParquetFile(@NotNull String path, long fileSize, long modificationTime,
+                                                       @NotNull StructType schema, @NotNull Configuration hdfsConfiguration) {
                 return columnarBatches;
             }
         };

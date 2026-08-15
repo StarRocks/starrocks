@@ -18,11 +18,10 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "common/config_rpc_client_fwd.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
-#include "runtime/exec_env.h"
-#include "util/thrift_rpc_helper.h"
+#include "platform/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -39,7 +38,7 @@ AuditStatisticsReporter::AuditStatisticsReporter() {
 }
 
 // including the final status when execution finishes.
-Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
+Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatisticsParams& params,
                                                         const TNetworkAddress& fe_addr) {
     TReportAuditStatisticsResult res;
     Status rpc_status;

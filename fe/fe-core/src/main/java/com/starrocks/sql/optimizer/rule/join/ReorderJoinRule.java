@@ -71,9 +71,19 @@ public class ReorderJoinRule extends Rule {
                 return;
             }
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            // For A inner join (B inner join C), we only think A is root tree
             if (joinOperator.isInnerOrCrossJoin()) {
-                // For A inner join (B inner join C), we only think A is root tree
-                if (!findNewRoot) {
+                boolean hasProjectRelyOnTwoChildren = MultiJoinNode.hasProjectRelyOnTwoChildren(root);
+                // if findNewRoot == true && hasProjectRelyOnTwoChildren
+                // like below:
+                //      B
+                //    /   \
+                //   A     C
+                //        /  \
+                //       D    E
+                // if C has project rely on two child, then C is an atom for join tree with B as root,
+                // but we still can reorder join tree whose root is C
+                if (!findNewRoot || hasProjectRelyOnTwoChildren) {
                     findNewRoot = true;
                     results.add(Pair.create(root, Pair.create(parent, childIdx)));
                 }
@@ -284,6 +294,13 @@ public class ReorderJoinRule extends Rule {
 
         public OptExpression rewrite(OptExpression optExpression, ColumnRefSet requiredColumns) {
             Operator operator = optExpression.getOp();
+            // The operator consumes the columns referenced by its own predicate (the filter is applied
+            // before the projection). Treat them as required so projection pruning below cannot drop a
+            // pass-through column that the predicate still references -- otherwise the rebuilt statistics
+            // would lack that column and statistics estimation throws "missing statistic of col".
+            if (operator.getPredicate() != null) {
+                requiredColumns.union(operator.getPredicate().getUsedColumns());
+            }
             if (operator.getProjection() != null) {
                 Projection projection = operator.getProjection();
 

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 description: Kafka ルーチン ロード with 共有データ storage
 displayed_sidebar: docs
 ---
@@ -47,7 +48,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ### curl
 
-`curl` は Compose ファイルとデータを生成するスクリプトをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/dlwiz/?type=bin).
+`curl` は Compose ファイルとデータを生成するスクリプトをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/).
 
 ### Python
 
@@ -739,6 +740,6 @@ Kafka のブローカー接続情報。形式は `<kafka_broker_name_or_ip>:<bro
 
 [StarRocks Architecture](../introduction/Architecture.md)
 
-このラボで使用されたサンプルは非常にシンプルです。Routine Load には多くのオプションと機能があります。[詳細はこちら](../loading/RoutineLoad.md).
+このラボで使用されたサンプルは非常にシンプルです。Routine Load には多くのオプションと機能があります。[詳細はこちら](../loading/kafka/RoutineLoad.md).
 
 [JSONPath](https://goessner.net/articles/JsonPath/)

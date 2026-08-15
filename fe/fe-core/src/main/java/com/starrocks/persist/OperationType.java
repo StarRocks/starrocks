@@ -421,6 +421,14 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
 
+    // Colocate range mgr update (range distribution colocate). Marked @IgnorableOnReplayFailed
+    // to match the sibling colocate ops; if a follower skips this record under
+    // metadata_journal_ignore_replay_failure, the next DDL on the same group is fail-loud via
+    // ColocateTableIndex.addTableToGroup's range-metadata-missing guard rather than silently
+    // corrupting dispatch.
+    @IgnorableOnReplayFailed
+    public static final short OP_COLOCATE_RANGE_UPDATE = 12135;
+
     //Export json format log
 
     @IgnorableOnReplayFailed
@@ -677,6 +685,15 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_RESOURCE = 13557;
+
+    // Physically erase a materialized index parked in the CatalogRecycleBin (e.g. a superseded index
+    // retired by a tablet reshard). The recycle itself is not journaled -- it is rebuilt from the
+    // reshard job's replay and persisted in the recycle-bin image; only the leader-driven erase is.
+    // Ignorable like its erase/drop siblings above: replayEraseMaterializedIndex is idempotent and
+    // null-safe, and a failed erase merely leaves the index installed to retry next cycle, so a replay
+    // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
 
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

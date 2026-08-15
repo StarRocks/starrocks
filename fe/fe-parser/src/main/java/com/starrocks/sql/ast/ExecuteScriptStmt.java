@@ -16,14 +16,30 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-// EXECUTE ON <BE_ID> <SCRIPT>
+import java.util.Collections;
+import java.util.List;
+
+// ADMIN EXECUTE ON <target> <SCRIPT>
+//   <target> := FRONTEND
+//             | <node_id> (, <node_id>)*
+//             | ALL BACKENDS
+//             | ALL COMPUTE NODES
 public class ExecuteScriptStmt extends StatementBase {
     static long TIMEOUT_SEC_DEFAULT = 600;
 
-    long beId;
-    String script;
+    public enum TargetType {
+        FRONTEND,
+        NODES,
+        ALL_BACKENDS,
+        ALL_COMPUTE_NODES,
+    }
 
-    long timeoutSec = TIMEOUT_SEC_DEFAULT;
+    private final TargetType targetType;
+    // Explicit node ids when targetType == NODES; empty otherwise (resolved at execution time).
+    private final List<Long> nodeIds;
+    private final String script;
+
+    private long timeoutSec = TIMEOUT_SEC_DEFAULT;
 
     public ExecuteScriptStmt(long beId, String script) {
         this(beId, script, NodePosition.ZERO);
@@ -31,12 +47,38 @@ public class ExecuteScriptStmt extends StatementBase {
 
     public ExecuteScriptStmt(long beId, String script, NodePosition pos) {
         super(pos);
-        this.beId = beId;
+        if (beId == -1) {
+            this.targetType = TargetType.FRONTEND;
+            this.nodeIds = Collections.emptyList();
+        } else {
+            this.targetType = TargetType.NODES;
+            this.nodeIds = Collections.singletonList(beId);
+        }
         this.script = script;
     }
 
+    public ExecuteScriptStmt(TargetType targetType, List<Long> nodeIds, String script, NodePosition pos) {
+        super(pos);
+        this.targetType = targetType;
+        this.nodeIds = (nodeIds == null) ? Collections.emptyList() : List.copyOf(nodeIds);
+        this.script = script;
+    }
+
+    public TargetType getTargetType() {
+        return targetType;
+    }
+
+    public List<Long> getNodeIds() {
+        return nodeIds;
+    }
+
+    // Legacy accessor: returns -1 for frontend / unresolved fan-out targets,
+    // otherwise the first node id. Prefer getNodeIds() for new code.
     public long getBeId() {
-        return beId;
+        if (nodeIds.isEmpty()) {
+            return -1;
+        }
+        return nodeIds.get(0);
     }
 
     public String getScript() {
@@ -44,7 +86,7 @@ public class ExecuteScriptStmt extends StatementBase {
     }
 
     public boolean isFrontendScript() {
-        return beId == -1;
+        return targetType == TargetType.FRONTEND;
     }
 
     public void setTimeoutSec(long timeoutSec) {
@@ -57,8 +99,30 @@ public class ExecuteScriptStmt extends StatementBase {
 
     @Override
     public String toString() {
-        String s = String.format("EXECUTE ON %d %s", beId, script);
-        return s;
+        String targetDesc;
+        switch (targetType) {
+            case FRONTEND:
+                targetDesc = "FRONTEND";
+                break;
+            case ALL_BACKENDS:
+                targetDesc = "ALL BACKENDS";
+                break;
+            case ALL_COMPUTE_NODES:
+                targetDesc = "ALL COMPUTE NODES";
+                break;
+            case NODES:
+            default:
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < nodeIds.size(); i++) {
+                    if (i > 0) {
+                        sb.append(",");
+                    }
+                    sb.append(nodeIds.get(i));
+                }
+                targetDesc = sb.toString();
+                break;
+        }
+        return String.format("EXECUTE ON %s %s", targetDesc, script);
     }
 
     @Override

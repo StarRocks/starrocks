@@ -264,7 +264,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
     @Test
     public void testModifyDynamicPartitionNormal() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
         properties.put(DynamicPartitionProperty.ENABLE, "true");
@@ -358,7 +357,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
             throws StarRocksException {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
         properties.put(propertyKey, propertyValue);
@@ -530,22 +528,22 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         job1.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertSame(job1, schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
         Assertions.assertFalse(job1.getHistorySchema().orElse(null).isExpired());
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn1, "fail1");
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
 
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn2, "fail2");
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
         Assertions.assertTrue(job2.getHistorySchema().orElse(null).isExpired());
         Assertions.assertNull(job2.getHistorySchema().orElse(null).getSchemaByIndexMetaId(baseIndexMetaId).orElse(null));
         Assertions.assertNull(job2.getHistorySchema().orElse(null)
                 .getSchemaBySchemaId(preAlterIndexMeta2.getSchemaId()).orElse(null));
         job2.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeHandler.runAfterLeaseValid();
         Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
     }
 

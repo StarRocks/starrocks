@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Enable Group Provider in StarRocks to authenticate and authorize user groups from external authentication systems for collective user management."
 sidebar_position: 30
 ---
 
@@ -156,6 +157,17 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 - **如未配置 `ldap_user_search_attr`**，则直接使用完整的 DN 作为用户标识，组查找时使用认证时记录的 DN 作为 Key。
 
 这种设计使得 LDAP Group Provider 能够适应不同的 LDAP 环境，特别是 Microsoft AD 等复杂环境。
+
+:::
+
+:::tip
+
+**与 `authentication_ldap_simple_bind_dn_pattern` 的配合**
+
+当使用 DN pattern 认证（如 `uid=${USER}@abc.com,ou=People,dc=example,dc=com`），且 `${USER}` 替换后的属性值中包含非用户名部分时：
+
+- **建议**：不配置 `ldap_user_search_attr`。系统将使用完整 DN 进行组匹配，避免提取错误。
+- **如确需配置**：需使用正则表达式精确提取用户名部分。例如 DN pattern 为 `uid=${USER}@abc.com,ou=People,dc=example,dc=com` 时，应将 `ldap_user_search_attr` 设为 `uid=([^,@]+)@abc.com`，仅提取 `${USER}` 对应的部分。若简单配置为 `uid` 或 `uid=([^,]+)`，会错误地提取出 `alice@abc.com` 而非 `alice`。
 
 :::
 

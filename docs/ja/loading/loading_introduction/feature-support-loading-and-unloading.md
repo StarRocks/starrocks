@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "StarRocks のデータロードおよびアンロード方法における機能サポートとファイル形式の互換性リファレンス。"
 sidebar_label: 機能サポート
 ---
 
@@ -15,7 +17,7 @@ sidebar_label: 機能サポート
     <tr>
         <th rowspan="2"></th>
         <th rowspan="2">データソース</th>
-        <th colspan="7">ファイル形式</th>
+        <th colspan="8">ファイル形式</th>
     </tr>
     <tr>
         <th>CSV</th>
@@ -25,6 +27,7 @@ sidebar_label: 機能サポート
         <th>Avro</th>
         <th>ProtoBuf</th>
         <th>Thrift</th>
+        <th>Arrow</th>
     </tr>
     <tr>
         <td>Stream Load</td>
@@ -34,6 +37,7 @@ sidebar_label: 機能サポート
         <td>サポート予定</td>
         <td>サポート予定</td>
         <td colspan="3">サポート予定</td>
+        <td>Yes</td>
     </tr>
     <tr>
         <td>INSERT from FILES</td>
@@ -44,6 +48,7 @@ sidebar_label: 機能サポート
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.4.4+)</td>
         <td colspan="2">サポート予定</td>
+        <td>サポート予定</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -51,7 +56,7 @@ sidebar_label: 機能サポート
         <td>Yes (v3.2.3+)</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">サポート予定</td>
+        <td colspan="4">サポート予定</td>
     </tr>
     <tr>
         <td>Routine Load</td>
@@ -63,6 +68,7 @@ sidebar_label: 機能サポート
         <td>Yes (v3.0+) [1]</td>
         <td>サポート予定</td>
         <td>サポート予定</td>
+        <td>サポート予定</td>
     </tr>
     <tr>
         <td>Spark Load</td>
@@ -71,7 +77,7 @@ sidebar_label: 機能サポート
         <td>サポート予定</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">サポート予定</td>
+        <td colspan="4">サポート予定</td>
     </tr>
     <tr>
         <td>コネクタ</td>
@@ -80,7 +86,7 @@ sidebar_label: 機能サポート
         <td>Yes</td>
         <td>サポート予定</td>
         <td>サポート予定</td>
-        <td colspan="3">サポート予定</td>
+        <td colspan="4">サポート予定</td>
     </tr>
     <tr>
         <td>Kafka Connector [2]</td>
@@ -90,10 +96,11 @@ sidebar_label: 機能サポート
         <td>サポート予定</td>
         <td colspan="2">Yes (v3.0+)</td>
         <td>サポート予定</td>
+        <td>サポート予定</td>
     </tr>
     <tr>
         <td>PIPE [4]</td>
-        <td colspan="8">INSERT from FILES と一致</td>
+        <td colspan="9">INSERT from FILES と一致</td>
     </tr>
 </table>
 
@@ -308,13 +315,28 @@ sidebar_label: 機能サポート
         <th>EXPORT</th>
     </tr>
     <tr>
-        <td rowspan="2">CSV</td>
+        <td rowspan="5">CSV</td>
         <td>column_separator</td>
         <td rowspan="2">Yes (v3.3+)</td>
         <td rowspan="2">Yes</td>
     </tr>
     <tr>
         <td>line_delimiter [1]</td>
+    </tr>
+    <tr>
+        <td>enclose</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>escape</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>include_header</td>
+        <td>Yes</td>
+        <td>No</td>
     </tr>
 </table>
 
@@ -384,6 +406,20 @@ sidebar_label: 機能サポート
     </tr>
     <tr>
         <td>ORC</td>
+    </tr>
+    <tr>
+        <td>Arrow</td>
+        <td>
+            <ul>
+                <li>lz4</li>
+                <li>zstd</li>
+            </ul>
+        </td>
+        <td>Yes [4]</td>
+        <td>サポート予定</td>
+        <td>サポート予定</td>
+        <td>サポート予定</td>
+        <td>サポート予定</td>
     </tr>
 </table>
 

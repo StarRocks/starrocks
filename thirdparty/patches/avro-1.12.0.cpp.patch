@@ -2,6 +2,18 @@ diff --git a/lang/c++/CMakeLists.txt b/lang/c++/CMakeLists.txt
 index 19059a41b..a09b9ca94 100644
 --- a/lang/c++/CMakeLists.txt
 +++ b/lang/c++/CMakeLists.txt
+@@ -83,9 +83,2 @@
+-include(FetchContent)
+-FetchContent_Declare(
+-        fmt
+-        GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
+-        GIT_TAG         10.2.1
+-        GIT_PROGRESS    TRUE
+-        USES_TERMINAL_DOWNLOAD TRUE
+-)
+-FetchContent_MakeAvailable(fmt)
++# Use StarRocks thirdparty fmt instead of FetchContent.
++find_package(fmt REQUIRED CONFIG)
 @@ -198,7 +198,7 @@ enable_testing()
  
  macro (unittest name)

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Overview of StarRocks catalog, database, and table organization: internal vs external catalogs, databases, and table objects."
 sidebar_position: 5
 ---
 

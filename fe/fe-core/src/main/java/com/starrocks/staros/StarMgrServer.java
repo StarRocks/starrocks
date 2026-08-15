@@ -31,6 +31,7 @@ import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
+import com.starrocks.qe.JournalObservable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
@@ -51,7 +52,9 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
-    private CheckpointController checkpointController = null;
+    // Package-private so same-package tests can inject a mock controller and verify
+    // stopCheckpointController without reflection.
+    CheckpointController checkpointController = null;
     private CheckpointWorker checkpointWorker = null;
     private boolean checkpointWorkerStarted = false;
     private static long checkpointThreadId = -1;
@@ -91,6 +94,7 @@ public class StarMgrServer {
 
     private StarManagerServer starMgrServer;
     private StarOSBDBJEJournalSystem journalSystem;
+    private final JournalObservable starMgrJournalObservable = new JournalObservable();
     private ThreadPoolExecutor grpcExecutor;
 
     public StarMgrServer() {
@@ -140,6 +144,7 @@ public class StarMgrServer {
 
     private void initializeImpl(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
         this.journalSystem = bdbJournalSystem;
+        this.journalSystem.setJournalObservable(starMgrJournalObservable);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -151,7 +156,9 @@ public class StarMgrServer {
         com.staros.util.Config.DEFAULT_FS_TYPE = "";
 
         // use tablet_sched_disable_balance
+        // TODO: shard check will be bound to a different Config var
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_GROUP_BALANCE_CHECK = Config.tablet_sched_disable_balance;
         // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
         com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
         // set the same heartbeat configuration to starmgr, but not able to change in runtime.
@@ -168,7 +175,9 @@ public class StarMgrServer {
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            // TODO: shard check will be bound to a different Config var
             com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+            com.staros.util.Config.DISABLE_BACKGROUND_SHARD_GROUP_BALANCE_CHECK = Config.tablet_sched_disable_balance;
             com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
             com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
             com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
@@ -220,6 +229,21 @@ public class StarMgrServer {
         checkpointController = new CheckpointController(
                 "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
         checkpointController.start();
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startCheckpointController()}. Fire-and-forget stop for leader
+     * demotion: requests stop on the StarMgr-side CheckpointController without joining, so the single
+     * state-change thread is not blocked. The controller's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. The field is left
+     * as-is because {@link #startCheckpointController()} unconditionally replaces it with a fresh
+     * instance on re-election; the old one becomes garbage once its worker exits.
+     */
+    public void stopCheckpointController() {
+        CheckpointController controller = checkpointController;
+        if (controller != null) {
+            controller.stopBestEffort();
+        }
     }
 
     private void becomeFollower() {
@@ -304,6 +328,10 @@ public class StarMgrServer {
             return;
         }
         PrometheusRegistryHelper.visitPrometheusRegistry(MetricsSystem.METRIC_REGISTRY, visitor);
+    }
+
+    public JournalObservable getStarMgrJournalObservable() {
+        return starMgrJournalObservable;
     }
 
     public long getMaxJournalId() {

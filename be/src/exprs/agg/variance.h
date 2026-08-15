@@ -162,8 +162,10 @@ public:
         size_t old_size = bytes.size();
 
         size_t one_element_size = sizeof(TResult) * 2 + sizeof(int64_t);
-        bytes.resize(one_element_size * chunk_size);
-        dst_column->get_offset().resize(chunk_size + 1);
+        const size_t final_size = old_size + one_element_size * chunk_size;
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
 
         const auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
@@ -182,7 +184,7 @@ public:
             memcpy(bytes.data() + old_size + sizeof(TResult), &m2, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult) * 2, &count, sizeof(int64_t));
             old_size += one_element_size;
-            dst_column->get_offset()[i + 1] = old_size;
+            offsets.set(i + 1, old_size);
         }
     }
 

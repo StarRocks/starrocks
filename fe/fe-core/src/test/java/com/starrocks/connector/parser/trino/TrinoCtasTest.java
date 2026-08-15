@@ -73,4 +73,49 @@ public class TrinoCtasTest extends TrinoTestBase {
             connectContext.getSessionVariable().setSqlDialect("trino");
         }
     }
+
+    @Test
+    public void testCtasWithTrinoWithClause() throws Exception {
+        // Native Trino CTAS uses WITH (key = value) instead of PROPERTIES.
+        // Keys are identifiers (quoted when they contain dots/hyphens) and
+        // values can be string/int/double/boolean literals or identifiers.
+        String ctasSql = "create table test.t_with_clause "
+                + "with (replication_num = '1', file_format = 'parquet', "
+                + "\"write.parquet.compression-codec\" = 'zstd') "
+                + "as select doy(date '2022-03-06')";
+        try {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) SqlParser.parse(ctasSql, connectContext.getSessionVariable()).get(0);
+            Assertions.assertEquals("1",
+                    ctasStmt.getCreateTableStmt().getProperties().get("replication_num"));
+            Assertions.assertEquals("parquet",
+                    ctasStmt.getCreateTableStmt().getProperties().get("file_format"));
+            Assertions.assertEquals("zstd",
+                    ctasStmt.getCreateTableStmt().getProperties().get("write.parquet.compression-codec"));
+            assertPlanContains(ctasStmt.getQueryStatement(), "dayofyear('2022-03-06 00:00:00')");
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+        }
+    }
+
+    @Test
+    public void testCtasWithPropertySetToDefaultIsRejected() throws Exception {
+        // Trino's "key = DEFAULT" asks the connector to use its built-in default.
+        // StarRocks' property map has no unset-vs-empty distinction, so silently
+        // mapping DEFAULT to "" would override connector defaults with the empty
+        // string. Ensure the parser rejects this case explicitly.
+        String ctasSql = "create table test.t_default_prop "
+                + "with (replication_num = DEFAULT) "
+                + "as select 1";
+        try {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+            Exception ex = Assertions.assertThrows(Exception.class,
+                    () -> SqlParser.parse(ctasSql, connectContext.getSessionVariable()));
+            Assertions.assertTrue(ex.getMessage().toLowerCase().contains("default"),
+                    "expected error about SET DEFAULT, got: " + ex.getMessage());
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+        }
+    }
 }

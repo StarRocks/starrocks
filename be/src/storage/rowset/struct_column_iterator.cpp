@@ -22,8 +22,8 @@
 #include "column/struct_column.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

@@ -38,16 +38,18 @@
 #include <vector>
 
 #include "gutil/macros.h"
-#include "storage/store_path.h"
+#include "platform/store_path.h"
 
 namespace starrocks {
+
+class ProcessMetricsRegistry;
 
 class Daemon {
 public:
     Daemon() = default;
     ~Daemon() = default;
 
-    void init(bool as_cn, const std::vector<StorePath>& paths);
+    void init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetricsRegistry* process_metrics_registry);
     void stop();
     bool stopped();
 

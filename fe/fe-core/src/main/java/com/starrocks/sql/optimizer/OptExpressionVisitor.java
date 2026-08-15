@@ -174,6 +174,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+    public R visitPhysicalFlussScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
     public R visitPhysicalSchemaScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
@@ -295,18 +299,6 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalNoCTE(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
-    }
-
-    public R visitPhysicalStreamScan(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
-    }
-
-    public R visitPhysicalStreamJoin(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
-    }
-
-    public R visitPhysicalStreamAgg(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

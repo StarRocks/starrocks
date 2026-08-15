@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE STORAGE VOLUME creates a storage volume for a remote storage system."
 ---
 
 # CREATE STORAGE VOLUME
@@ -11,6 +12,8 @@ A storage volume consists of the properties and credential information of the re
 > **CAUTION**
 >
 > Only users with the CREATE STORAGE VOLUME privilege on the SYSTEM level can perform this operation.
+>
+> In shared-data mode, StarRocks performs a storage accessibility check for each `LOCATION` during `CREATE STORAGE VOLUME` when the FE configuration item `enable_storage_volume_access_check` is enabled (enabled by default). If this check is enabled and credential, endpoint, or network access is invalid, the statement fails immediately. You can turn off this check by disabling `enable_storage_volume_access_check`.
 
 ## Syntax
 
@@ -46,6 +49,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.endpoint                     | The endpoint URL used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. [Preview] From v3.3.0 onwards, the Amazon S3 Express One Zone storage class is supported, for example, `https://s3express.us-west-2.amazonaws.com`.  <Beta /> |
 | aws.s3.use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
 | aws.s3.use_instance_profile         | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default).<ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws.s3.access_key` and `aws.s3.secret_key`.</li><li>If you use Instance Profile to access S3, you must specify this item as `true`.</li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws.s3.iam_role_arn`.</li><li>And if you use an external AWS account, you must specify this item as `true`, and specify `aws.s3.iam_role_arn` and `aws.s3.external_id`.</li></ul> |
+| aws.s3.use_web_identity_token_file  | Whether to use a web identity token file to access S3. Valid values: `true` and `false` (Default). When enabled, the AWS SDK on each worker reads the token file and IAM role from the `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` environment variables. |
 | aws.s3.access_key                   | The Access Key ID used to access your S3 bucket.             |
 | aws.s3.secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws.s3.iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
@@ -59,7 +63,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.sas_token               | The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2. |
 | azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
 | azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
-| azure.adls2.oauth2_client_id        | The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_client_id        | <ul><li>For Managed Identity Authentication: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.</li><li>For Workload Identity: The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity.</li></ul> |
+| azure.adls2.oauth2_token_file       | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
 | gcp.gcs.service_account_email	      | The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`. |
 | gcp.gcs.service_account_private_key_id | The Private Key ID in the JSON file generated at the creation of the Service Account. |
 | gcp.gcs.service_account_private_key | The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`. |
@@ -77,6 +82,9 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.num_partitioned_prefix       | The number of prefixes to be created for the storage volume. Default: `256`. Valid range: [4, 1024].|
 
 #### Credential information
+
+For a comparison of credential combinations supported by FE and storage volumes, see
+[AWS credential support for storage volumes](AWS_CREDENTIAL_SUPPORT.md).
 
 ##### AWS S3
 
@@ -110,6 +118,27 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
   "aws.s3.use_aws_sdk_default_behavior" = "false",
   "aws.s3.use_instance_profile" = "true"
   ```
+
+- If you use a web identity token file, such as an EKS IAM role for a service account (IRSA), set the following
+  properties. Set `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` in the environment of every worker that accesses the
+  storage volume.
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "aws.s3.region" = "<region>",
+  "aws.s3.endpoint" = "<endpoint_url>",
+  "aws.s3.use_aws_sdk_default_behavior" = "false",
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.use_web_identity_token_file" = "true"
+  ```
+
+  To assume another IAM role after obtaining credentials through web identity, additionally set
+  `aws.s3.iam_role_arn`. For cross-account access, you can also set `aws.s3.external_id`.
+
+  :::caution
+  Before using web identity for a storage volume, make sure every FE, StarManager, BE, and CN in the cluster supports
+  this authentication method. During a rolling upgrade, do not use the storage volume until all nodes are upgraded.
+  :::
 
 - If you use Assumed Role to access S3, set the following properties:
 
@@ -205,6 +234,16 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
   "azure.adls2.oauth2_client_id" = "<client_id>" 
   ```
 
+- If you use Workload Identity to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
 :::note
 Azure Data Lake Storage Gen1 is not supported.
 :::
@@ -242,7 +281,7 @@ Azure Data Lake Storage Gen1 is not supported.
 - If you use S3 protocol with the IAM user-based authentication to access Google Storage, set the following properties:
 
   :::tip 
-  Google Storage is supported using the [XML API](https://cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
+  Google Storage is supported using the [XML API](https://docs.cloud.google.com/storage/docs/interoperability), and the settings use the AWS S3 syntax. In this case, you must set `TYPE` as `S3` and `LOCATIONS` to an S3 protocol-compatible storage location.
   :::
 
   ```SQL

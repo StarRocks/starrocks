@@ -914,3 +914,53 @@ FROM (
 ) t
 WHERE LENGTH(`text`) > 10
 order by 1,2 limit 10;
+
+CREATE TABLE multi_column_table (
+    id INT,
+    `s1` VARCHAR(100),
+    `s2` VARCHAR(100)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+INSERT INTO multi_column_table VALUES (0, 'a', 'x');
+INSERT INTO multi_column_table VALUES (1, 'b', 'y');
+
+[UC]analyze full multi_column_table;
+
+function: wait_global_dict_ready('`s1`', 'multi_column_table')
+function: wait_global_dict_ready('`s2`', 'multi_column_table')
+
+-- test_same_constant_in_multiple_branches
+WITH T AS (SELECT 'g' AS const FROM test_table_1),
+T2 AS (
+    SELECT s1, s2 FROM multi_column_table
+    UNION ALL 
+    SELECT const, const FROM T
+)
+SELECT * FROM T2 ORDER BY 1, 2;
+
+SELECT * FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T
+ORDER BY 1, 2;
+
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'true');
+
+SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T;
+
+SELECT max(upper(source)), sum(length(source)), max(upper(value)), sum(length(value))
+FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T;
+
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "キーと値のペアをセットで保存する複雑なデータ型で最大 14 レベルのネスト可能。"
 ---
 
 # MAP

@@ -1,7 +1,8 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
+description: "Reference for all raw metrics emitted by StarRocks Query Profile, organized by operator type."
 ---
 
 # Query Profile Metrics
@@ -100,6 +101,37 @@ High-level execution statistics:
 | QueryCumulativeScanTime | Total Scan node IO time | |
 | QueryPeakScheduleTime | Maximum Pipeline ScheduleTime | < 1s normal for simple queries |
 | QuerySpillBytes | Data spilled to disk | < 1GB normal |
+
+### Per-Table Scan Stats
+
+A `PerTableScanStats` summary is attached to the merged query profile, breaking down scan
+work by table and by backend host. It is built by walking the per-instance profile tree
+before the isomorphic merge collapses host-level information, aggregating the `RowsRead`,
+`BytesRead`, and `RawRowsRead` counters that scan operators publish on `UniqueMetrics`
+together with the `Database` and `Table` info strings. The key is qualified with the
+database name so that same-named tables in different databases (for example `db1.orders`
+vs `db2.orders`) are kept in separate buckets. If the BE does not report a database for a
+given scan, the bare table name is used as a fallback. Useful for spotting data skew
+across BE nodes and identifying which tables dominate a query's scan cost.
+
+Structure:
+
+```
+PerTableScanStats
+  TableNum / ScanRows / ScanBytes / RawScanRows   -- query-wide totals
+  Table: <database>.<table>                       -- bare <table> if database absent
+    HostNum / ScanRows / ScanBytes / RawScanRows  -- per-table totals
+    Host: <host:port>
+      ScanRows / ScanBytes / RawScanRows          -- per (table, host)
+```
+
+| Metric | Description |
+|--------|-------------|
+| TableNum | Number of distinct tables scanned (top-level only) |
+| HostNum | Number of BE hosts that scanned this table (table-level only) |
+| ScanRows | Filtered rows read, aggregated by scope |
+| ScanBytes | Bytes read after filtering, aggregated by scope (not reported by every connector) |
+| RawScanRows | Raw rows read before predicate filtering, aggregated by scope |
 
 ### Fragment Metrics
 
@@ -228,6 +260,9 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | SubmitTaskTime | Time taken to submit tasks. | 
 | PeakIOTasks | Peak number of IO tasks. | 
 | PeakScanTaskQueueSize | Peak size of the IO task queue. | 
+| RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
+| RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
+| RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
 
 ### Exchange Operator
 
@@ -257,7 +292,8 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | BytesPassThrough | If the destination node is the current node, data will not be transmitted over the network, which is called passthrough data. This metric indicates the size of such passthrough data. Passthrough is controlled by `enable_exchange_pass_through`. |
 | PassThroughBufferPeakMemoryUsage | Peak memory usage of the PassThrough Buffer. |
 | CompressTime | Compression time. |
-| CompressedBytes | Size of compressed data. |
+| CompressedInputBytes | Size of the serialized (pre-compression) data that was actually fed to the compressor. Chunks skipped by the adaptive compression strategy are not counted. `CompressedInputBytes / CompressedBytes` gives the compression ratio, and `SerializedBytes - CompressedInputBytes` is the size of data that was not compressed. |
+| CompressedBytes | Size of compressed data. Only chunks that were actually compressed are counted. |
 | OverallThroughput | Throughput rate. |
 | NetworkTime | Time taken for data packet transmission (excluding post-reception processing time). |
 | NetworkBandwidth | Estimated network bandwidth. |

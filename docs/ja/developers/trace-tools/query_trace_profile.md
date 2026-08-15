@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "クエリトレースプロファイルを取得・分析してクエリ実行をデバッグする方法。"
 ---
 
 # Query Trace Profile

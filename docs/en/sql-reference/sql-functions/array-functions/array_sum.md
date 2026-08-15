@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Sums all the elements in an array."
 ---
 
 # array_sum

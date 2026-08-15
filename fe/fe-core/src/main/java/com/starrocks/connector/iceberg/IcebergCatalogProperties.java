@@ -32,18 +32,20 @@ public class IcebergCatalogProperties {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
+    public static final String ICEBERG_JDBC_PASSWORD = "jdbc.password";
+    public static final String ICEBERG_JDBC_CATALOG_NAME = "jdbc.catalog-name";
     public static final String ENABLE_ICEBERG_METADATA_CACHE = "enable_iceberg_metadata_cache";
     public static final String ENABLE_ICEBERG_TABLE_CACHE = "enable_iceberg_table_cache";
     public static final String ICEBERG_META_CACHE_TTL = "iceberg_meta_cache_ttl_sec"; // implicit for user
     public static final String ICEBERG_TABLE_CACHE_REFRESH_INVERVAL_SEC = "iceberg_table_cache_refresh_interval_sec";
     public static final String ICEBERG_JOB_PLANNING_THREAD_NUM = "iceberg_job_planning_thread_num";
-    public static final String REFRESH_OTHER_FE_ICEBERG_CACHE_THREAD_NUM = "refresh_other_fe_iceberg_cache_thread_num";
     public static final String BACKGROUND_ICEBERG_JOB_PLANNING_THREAD_NUM = "background_iceberg_job_planning_thread_num";
     public static final String ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS = "iceberg_manifest_cache_with_column_statistics";
     public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
     public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
+    public static final String ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO = "iceberg_partition_cache_memory_usage_ratio";
 
     // internal config
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
@@ -59,7 +61,6 @@ public class IcebergCatalogProperties {
     private long icebergMetaCacheTtlSec;
     private int icebergJobPlanningThreadNum;
     private int backgroundIcebergJobPlanningThreadNum;
-    private int refreshOtherFeIcebergCacheThreadNum;
     private boolean icebergManifestCacheWithColumnStatistics;
     private long refreshIcebergManifestMinLength;
     private long localPlanningMaxSlotBytes;
@@ -68,6 +69,7 @@ public class IcebergCatalogProperties {
     private double icebergDataFileCacheMemoryUsageRatio;
     private double icebergDeleteFileCacheMemoryUsageRatio;
     private double icebergTableCacheMemoryUsageRatio;
+    private double icebergPartitionCacheMemoryUsageRatio;
     private long icebergTableCacheRefreshIntervalSec;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
@@ -108,6 +110,8 @@ public class IcebergCatalogProperties {
                     properties, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergTableCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
                     properties, ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, 0.1);
+        this.icebergPartitionCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
+                    properties, ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
                 properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
@@ -119,8 +123,6 @@ public class IcebergCatalogProperties {
     private void initThreadPoolNum() {
         this.icebergJobPlanningThreadNum = Math.max(2,
                 PropertyUtil.propertyAsInt(properties, ICEBERG_JOB_PLANNING_THREAD_NUM, Config.iceberg_worker_num_threads));
-        this.refreshOtherFeIcebergCacheThreadNum = Math.max(2,
-                PropertyUtil.propertyAsInt(properties, REFRESH_OTHER_FE_ICEBERG_CACHE_THREAD_NUM, 4));
         this.backgroundIcebergJobPlanningThreadNum =
                 PropertyUtil.propertyAsInt(properties, BACKGROUND_ICEBERG_JOB_PLANNING_THREAD_NUM,
                         Math.max(2, Runtime.getRuntime().availableProcessors() / 8));
@@ -157,10 +159,6 @@ public class IcebergCatalogProperties {
         return icebergJobPlanningThreadNum;
     }
 
-    public int getRefreshOtherFeIcebergCacheThreadNum() {
-        return refreshOtherFeIcebergCacheThreadNum;
-    }
-
     public int getBackgroundIcebergJobPlanningThreadNum() {
         return backgroundIcebergJobPlanningThreadNum;
     }
@@ -187,6 +185,10 @@ public class IcebergCatalogProperties {
 
     public double getIcebergTableCacheMemoryUsageRatio() {
         return icebergTableCacheMemoryUsageRatio;
+    }
+
+    public double getIcebergPartitionCacheMemoryUsageRatio() {
+        return icebergPartitionCacheMemoryUsageRatio;
     }
 
     public long getRefreshIcebergManifestMinLength() {

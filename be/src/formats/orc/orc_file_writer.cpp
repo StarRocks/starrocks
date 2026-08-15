@@ -25,16 +25,16 @@
 #include "common/http/content_type.h"
 #include "common/util/debug_util.h"
 #include "formats/column_evaluator.h"
+#include "formats/io/async_flush_output_stream.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
-#include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::formats {
 
-AsyncOrcOutputStream::AsyncOrcOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {}
+AsyncOrcOutputStream::AsyncOrcOutputStream(formats::AsyncFlushOutputStream* stream) : _stream(stream) {}
 
 uint64_t AsyncOrcOutputStream::getLength() const {
     return _stream->tell();
@@ -116,8 +116,8 @@ Status ORCFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ORCFileWriter::close() {
-    CommitResult result{
+FileCommitResult ORCFileWriter::close() {
+    FileCommitResult result{
             .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
@@ -138,8 +138,8 @@ FileWriter::CommitResult ORCFileWriter::close() {
         result.file_statistics.file_size = _output_stream->getLength();
     }
 
-    auto promise = std::make_shared<std::promise<CommitResult>>();
-    std::future<CommitResult> future = promise->get_future();
+    auto promise = std::make_shared<std::promise<FileCommitResult>>();
+    std::future<FileCommitResult> future = promise->get_future();
 
     _writer = nullptr;
     return result;
@@ -507,7 +507,7 @@ StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto async_output_stream =
-            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto orc_output_stream = std::make_shared<AsyncOrcOutputStream>(async_output_stream.get());
     auto writer =
             std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types, std::move(column_evaluators),

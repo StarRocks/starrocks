@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "配列内のすべての要素を合計します。"
 ---
 
 # array_sum

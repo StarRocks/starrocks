@@ -1347,3 +1347,79 @@ order by 1,2 limit 10;
 9	filter_case_9
 10	filter_case_10
 -- !result
+CREATE TABLE multi_column_table (
+    id INT,
+    `s1` VARCHAR(100),
+    `s2` VARCHAR(100)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO multi_column_table VALUES (0, 'a', 'x');
+-- result:
+-- !result
+INSERT INTO multi_column_table VALUES (1, 'b', 'y');
+-- result:
+-- !result
+[UC]analyze full multi_column_table; 
+function: wait_global_dict_ready('`s1`', 'multi_column_table')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('`s2`', 'multi_column_table')
+-- result:
+
+-- !result
+WITH T AS (SELECT 'g' AS const FROM test_table_1),
+T2 AS (
+    SELECT s1, s2 FROM multi_column_table
+    UNION ALL 
+    SELECT const, const FROM T
+)
+SELECT * FROM T2 ORDER BY 1, 2;
+-- result:
+a	x
+b	y
+g	g
+g	g
+g	g
+-- !result
+SELECT * FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T
+ORDER BY 1, 2;
+-- result:
+test_table_1	a
+test_table_1	b
+test_table_1	c
+test_table_2	d
+test_table_2	e
+test_table_2	f
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'true');
+-- result:
+-- !result
+SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T;
+-- result:
+test_table_2	test_table_1	6	f	a	6
+-- !result
+SELECT max(upper(source)), sum(length(source)), max(upper(value)), sum(length(value))
+FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T;
+-- result:
+TEST_TABLE_2	72	F	6
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');
+-- result:
+-- !result

@@ -73,8 +73,8 @@ public class LakeRollupJobTest {
     @BeforeAll
     public static void setUp() throws Exception {
         new MockUp<MaterializedViewHandler>() {
-            @Mock protected void runAfterCatalogReady() {
-                System.out.println("Mocked MaterializedViewHandler.runAfterCatalogReady() called");
+            @Mock protected void runAfterLeaseValid() {
+                System.out.println("Mocked MaterializedViewHandler.runAfterLeaseValid() called");
             }
         };
 
@@ -298,7 +298,8 @@ public class LakeRollupJobTest {
             public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
                     long baseVersion, ComputeResource computeResource,
                     Map<Long, Double> compactionScores,
-                    Map<Long, Long> tabletRowNum)
+                    Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                    java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos)
                     throws NoAliveBackendException, RpcException {
                 // Do nothing, just return successfully
             }
@@ -376,5 +377,43 @@ public class LakeRollupJobTest {
         Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> lakeRollupJob3.runPendingJob());
         Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
+    }
+
+    @Test
+    public void testLightWeightTabletCreationSkipsSendTask() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_table_lw\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('light_weight_tablet_creation' = 'true');");
+
+        LakeRollupJob job = createJob(
+                "create materialized view mv_lw as select k2, k1 from base_table_lw order by k2;");
+        OlapTable lwTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB).getTable("base_table_lw");
+        Assertions.assertTrue(lwTable.isLightWeightTabletCreation());
+
+        java.util.concurrent.atomic.AtomicBoolean sendCalled =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                                             com.starrocks.common.util.concurrent.MarkedCountDownLatch<Long, Long> latch,
+                                             long timeoutSeconds) {
+                sendCalled.set(true);
+            }
+        };
+
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+        Assertions.assertFalse(sendCalled.get(),
+                "sendAgentTaskAndWait must not be invoked when light_weight_tablet_creation is enabled");
     }
 }

@@ -17,7 +17,7 @@
 #include <string>
 
 #include "common/status.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
@@ -31,6 +31,8 @@ public:
     ~ProcProfileFileAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
 private:
     bool is_valid_filename(const std::string& filename);

@@ -36,12 +36,12 @@ public enum OperatorType {
     LOGICAL_ODPS_SCAN,
     LOGICAL_ICEBERG_METADATA_SCAN,
     LOGICAL_KUDU_SCAN,
+    LOGICAL_FLUSS_SCAN,
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
     LOGICAL_META_SCAN,
     LOGICAL_JDBC_SCAN,
-    LOGICAL_BINLOG_SCAN,
     LOGICAL_VIEW_SCAN,
     LOGICAL_TABLE_FUNCTION_TABLE_SCAN,
     LOGICAL_JOIN,
@@ -87,6 +87,7 @@ public enum OperatorType {
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
+    PHYSICAL_FLUSS_SCAN,
     PHYSICAL_ODPS_SCAN,
     PHYSICAL_ICEBERG_METADATA_SCAN,
     PHYSICAL_KUDU_SCAN,
@@ -118,9 +119,6 @@ public enum OperatorType {
     PHYSICAL_CTE_CONSUME,
     PHYSICAL_NO_CTE,
 
-    PHYSICAL_STREAM_SCAN,
-    PHYSICAL_STREAM_JOIN,
-    PHYSICAL_STREAM_AGG,
     PHYSICAL_TABLE_FUNCTION_TABLE_SCAN,
     PHYSICAL_SPLIT_PRODUCE,
     PHYSICAL_SPLIT_CONSUME,
@@ -175,7 +173,6 @@ public enum OperatorType {
     private static final Set<OperatorType> PHYSICAL_SCANS =
             Arrays.stream(OperatorType.values())
                     .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
-                    .filter(x -> !x.equals(PHYSICAL_STREAM_SCAN))
                     .collect(Collectors.toUnmodifiableSet());
 
     public boolean isPhysicalScan() {

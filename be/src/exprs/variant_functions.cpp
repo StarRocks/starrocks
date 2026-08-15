@@ -78,8 +78,6 @@ Status VariantFunctions::variant_segments_prepare(FunctionContext* context, Func
     auto variant_path_status = VariantPathParser::parse(path_string);
     RETURN_IF(!variant_path_status.ok(), variant_path_status.status());
     context->set_function_state(scope, new VariantPath(std::move(variant_path_status.value())));
-    VLOG(10) << "Preloaded variant path: " << path_string;
-
     return Status::OK();
 }
 

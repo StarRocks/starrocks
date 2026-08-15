@@ -18,10 +18,11 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "column/type_converter.h"
 #include "exprs/expr_factory.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -54,9 +55,9 @@ ChunkChanger::~ChunkChanger() {
     }
 }
 
-void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
-    _state = _obj_pool.add(
-            new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
+void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals,
+                                      ExecEnv* exec_env) {
+    _state = _obj_pool.add(new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, exec_env));
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
@@ -239,6 +240,13 @@ StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
 
 bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
                                    const Schema& new_schema, MemPool* mem_pool) {
+    TypeInfoAllocator type_info_allocator;
+    const TypeInfoAllocator* allocator = nullptr;
+    if (mem_pool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mem_pool);
+        allocator = &type_info_allocator;
+    }
+
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -262,7 +270,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
             auto filter = std::move(res.value());
             // If no filtered rows are left, return directly
-            if (SIMD::count_nonzero(filter) == 0) {
+            if (SIMD::all_zeros(filter)) {
                 base_chunk->set_num_rows(0);
                 return true;
             }
@@ -337,7 +345,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
-                                                      new_col->as_mutable_raw_ptr(), mem_pool);
+                                                      new_col->as_mutable_raw_ptr(), allocator);
                 if (!st.ok()) {
                     LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
                                  << logical_type_to_string(new_type);
@@ -397,13 +405,22 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
     }
 
     for (auto it : _gc_exprs) {
+        // |it.first| is the generated column's position in the new schema and comes from the FE,
+        // never index the chunk with it without checking.
+        if (it.first < 0 || it.first >= static_cast<int>(new_chunk->num_columns())) {
+            return Status::InternalError("generated column index out of range: " + std::to_string(it.first) +
+                                         ", new schema has " + std::to_string(new_chunk->num_columns()) + " columns");
+        }
+        Column* target = new_chunk->get_column_raw_ptr_by_index(it.first);
+        if (!target->is_nullable()) {
+            return Status::InternalError("generated column is expected to be nullable: " + std::to_string(it.first));
+        }
         ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(new_chunk.get()));
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            auto* col = new_chunk->get_column_raw_ptr_by_index(it.first);
-            col->reset_column();
-            col->append_nulls(new_chunk->num_rows());
+            target->reset_column();
+            target->append_nulls(new_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
@@ -411,7 +428,7 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
             // it maybe a constant column or some other column type.
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
-            auto* col = down_cast<NullableColumn*>(new_chunk->get_column_raw_ptr_by_index(it.first));
+            auto* col = down_cast<NullableColumn*>(target);
             col->swap_by_data_column(output_column);
         }
     }
@@ -479,7 +496,7 @@ Status ChunkChanger::prepare() {
 
 Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
                                               const std::vector<uint32_t>& all_ref_columns_ids,
-                                              int base_schema_columns) {
+                                              const std::vector<uint32_t>& new_columns_ids) {
     if (_gc_exprs.size() == 0) {
         return Status::OK();
     }
@@ -492,14 +509,33 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
 
     auto tmp_new_chunk = new_chunk->clone_empty();
 
-    for (auto it : _gc_exprs) {
-        // cid for new partial schema
-        int cid = it.first - base_schema_columns;
-        ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(read_chunk.get()));
+    // |new_columns_ids| is the very vector the partial schema was built from, so its i-th entry is
+    // the generated column that sits in the i-th chunk column. Walk it instead of deriving the
+    // chunk index from the column id: any such derivation silently breaks as soon as something
+    // shifts the generated columns inside the new schema, e.g. an ordinary column added by the
+    // same ALTER, which is placed before them.
+    if (new_columns_ids.size() != tmp_new_chunk->num_columns()) {
+        return Status::InternalError("partial schema has " + std::to_string(tmp_new_chunk->num_columns()) +
+                                     " columns but " + std::to_string(new_columns_ids.size()) +
+                                     " generated columns are expected");
+    }
+
+    for (size_t cid = 0; cid < new_columns_ids.size(); ++cid) {
+        auto expr_iter = _gc_exprs.find(static_cast<int>(new_columns_ids[cid]));
+        if (expr_iter == _gc_exprs.end()) {
+            return Status::InternalError("no generated column expression for column " +
+                                         std::to_string(new_columns_ids[cid]));
+        }
+        Column* target = tmp_new_chunk->get_column_raw_ptr_by_index(cid);
+        if (!target->is_nullable()) {
+            return Status::InternalError("generated column is expected to be nullable: " +
+                                         std::to_string(new_columns_ids[cid]));
+        }
+        ASSIGN_OR_RETURN(ColumnPtr tmp, expr_iter->second->evaluate(read_chunk.get()));
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            auto* col = down_cast<NullableColumn*>(tmp_new_chunk->get_column_raw_ptr_by_index(cid));
+            auto* col = down_cast<NullableColumn*>(target);
             col->reset_column();
             col->append_nulls(read_chunk->num_rows());
         } else if (tmp->is_nullable()) {
@@ -509,7 +545,7 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
             // it maybe a constant column or some other column type
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
-            auto* col = down_cast<NullableColumn*>(tmp_new_chunk->get_column_raw_ptr_by_index(cid));
+            auto* col = down_cast<NullableColumn*>(target);
             col->swap_by_data_column(output_column);
         }
     }

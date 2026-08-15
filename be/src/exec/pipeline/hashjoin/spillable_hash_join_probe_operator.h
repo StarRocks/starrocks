@@ -23,11 +23,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/spill/partition.h"
+#include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
-#include "exec/spill/partition.h"
-#include "exec/spill/spill_components.h"
-#include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
@@ -91,7 +91,7 @@ private:
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
     // acquire next build-side partitions
-    void _acquire_next_partitions();
+    void _acquire_next_partitions(RuntimeState* state);
 
     bool _all_loaded_partition_data_ready();
 

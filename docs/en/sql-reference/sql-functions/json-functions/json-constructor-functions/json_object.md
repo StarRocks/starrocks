@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts one or more key-value pairs to a JSON object that consists of the key-value pairs."
 ---
 
 # json_object

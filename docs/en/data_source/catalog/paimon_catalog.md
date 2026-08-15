@@ -1,6 +1,8 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "StarRocks supports Paimon catalogs from v3.1 onwards."
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -64,7 +66,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 
@@ -180,7 +182,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -289,6 +291,22 @@ If you choose Data Lake Storage Gen2 as storage for your Paimon cluster, take on
   | azure.adls2.oauth2_client_id       | Yes      | The client (application) ID of the service principal.        |
   | azure.adls2.oauth2_client_secret   | Yes      | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes      | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -564,6 +582,21 @@ PROPERTIES
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 

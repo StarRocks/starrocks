@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "グループ化後のビットマップの共通部分を計算します。"
 ---
 
 # bitmap_intersect

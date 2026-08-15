@@ -18,11 +18,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.IndexParams.IndexParamItem;
-import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
 import com.starrocks.common.VectorIndexParams.IndexParamsKey;
 import com.starrocks.common.VectorIndexParams.MetricsType;
+import com.starrocks.common.VectorIndexParams.QuantizerType;
 import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
@@ -53,7 +53,6 @@ public class VectorIndexTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        Config.enable_experimental_vector = true;
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +
@@ -180,6 +179,293 @@ public class VectorIndexTest extends PlanTestBase {
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(c4, null, KeysType.DUP_KEYS),
                 "The vector index does not support shared data mode");
+    }
+
+    @Test
+    public void testQuantizerPropertyRegistration() {
+        // Covers C1 wiring: the quantizer/m_pq/nbits_pq keys are registered in
+        // IndexParams and their single-field check() is dispatched by the
+        // analyzer. Backward compatibility (no property) is the key invariant
+        // since existing indexes must keep parsing.
+        Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
+
+        // Quantizer omitted -> backward-compat flat behaviour.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                }}, KeysType.DUP_KEYS));
+
+        // Quantizer=sq8 with L2 metric: the new key is accepted.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.SQ8.name());
+                }}, KeysType.DUP_KEYS));
+
+        // Unknown quantizer name is rejected by the per-key check().
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), "bogus");
+                }}, KeysType.DUP_KEYS));
+
+        // NBITS_PQ range (single-field) is enforced via the enum's check().
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                    put(IndexParamsKey.NBITS_PQ.name(), "2");
+                }}, KeysType.DUP_KEYS),
+                "Value of `NBITS_PQ` must be in [4, 16]");
+    }
+
+    @Test
+    public void testQuantizerCrossFieldValidation() {
+        // Covers C2 cross-field rules in IndexAnalyzer. Single-field wiring is
+        // already covered by testQuantizerPropertyRegistration.
+        Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
+
+        // PQ happy path: m_pq divides dim, nbits_pq in range.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                    put(IndexParamsKey.NBITS_PQ.name(), "8");
+                }}, KeysType.DUP_KEYS));
+
+        // Quantized HNSW (SQ/PQ) on cosine_similarity: tenann composes the factory
+        // string with an `L2Norm` pre-transform when is_vector_normed = false, so
+        // cosine + SQ/PQ is supported end-to-end. Just check the DDL is accepted.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.COSINE_SIMILARITY.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.SQ8.name());
+                }}, KeysType.DUP_KEYS));
+
+        // PQ requires m_pq — tenann/faiss cannot infer it.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                }}, KeysType.DUP_KEYS),
+                "`M_PQ` is required when QUANTIZER = pq");
+
+        // dim must be divisible by m_pq — otherwise faiss index_factory throws at BE.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "10");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "3");
+                }}, KeysType.DUP_KEYS),
+                "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+
+        // M_PQ supplied with a non-PQ quantizer is rejected (BE ignores it; failing
+        // loudly avoids silently accepting an ineffective config).
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.SQ8.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                }}, KeysType.DUP_KEYS),
+                "`M_PQ` is only allowed when QUANTIZER = pq");
+
+        // NBITS_PQ supplied without QUANTIZER (defaults to flat) is rejected.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.NBITS_PQ.name(), "8");
+                }}, KeysType.DUP_KEYS),
+                "`NBITS_PQ` is only allowed when QUANTIZER = pq");
+    }
+
+    @Test
+    public void testIvfpqBuildThresholdCrossFieldValidation() {
+        Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
+
+        // test 1: threshold below an explicit nlist is rejected at DDL time
+        SemanticException e1 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "10");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e1.getMessage().contains(
+                "`index_build_threshold` (10) must be >= `nlist` (128) for IVFPQ index"));
+
+        // test 2: mixed-case property key hits the same rejection (keys are not normalized yet)
+        SemanticException e2 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put("Index_Build_Threshold", "10");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e2.getMessage().contains(
+                "`index_build_threshold` (10) must be >= `nlist` (128) for IVFPQ index"));
+
+        // test 3: nlist omitted, threshold is compared against the registered default (16)
+        SemanticException e3 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "10");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e3.getMessage().contains(
+                "`index_build_threshold` (10) must be >= `nlist` (16) for IVFPQ index"));
+
+        // test 4: threshold >= nlist passes
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "200");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // test 5: threshold == nlist is the exact boundary of the '<' rule and passes
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "128");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // test 6: threshold omitted skips the cross-field check
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // test 7: HNSW has no nlist, a small threshold stays legal
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "10");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                }}, KeysType.DUP_KEYS));
+
+        // test 8: non-integer threshold is rejected by the per-key check()
+        SemanticException e8 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "abc");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e8.getMessage().contains("Value of `INDEX_BUILD_THRESHOLD` must be a integer"));
+
+        // test 9: non-positive threshold is rejected by the per-key check()
+        SemanticException e9 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "-5");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e9.getMessage().contains("Value of `INDEX_BUILD_THRESHOLD` must be >= 1"));
     }
 
     @Test

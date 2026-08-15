@@ -38,9 +38,12 @@ public class EliminateSortColumnWithEqualityPredicateTest extends PlanTestBase {
                 "ORDER BY v2 DESC \n" +
                 "LIMIT 30;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
-                "\n" +
-                "  0:OlapScanNode\n" +
+        // The pinned sort column is eliminated, but a GLOBAL limit (gather exchange) must remain so
+        // the limit is enforced after the merge instead of only per scan instance. Otherwise the
+        // limit applied independently per tablet would inflate downstream consumers (e.g. count(*)).
+        assertContains(plan, "  1:EXCHANGE\n" +
+                "     limit: 30");
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: v2 = 111\n" +
@@ -49,8 +52,7 @@ public class EliminateSortColumnWithEqualityPredicateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     limit: 30");
+                "     avgRowSize=3.0");
 
         sql = "select v1, v2, v3  FROM t0 WHERE v2 = 111 and v3 > 0 \n" +
                 "ORDER BY v2, v3 DESC \n" +
@@ -85,5 +87,40 @@ public class EliminateSortColumnWithEqualityPredicateTest extends PlanTestBase {
                 "LIMIT 30;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "order by: <slot 2> 2: v2 DESC");
+    }
+
+    @Test
+    public void testCountOverEliminatedSortKeepsGlobalLimit() throws Exception {
+        // Regression for the wrong-result bug: count(*) over a derived table whose only ORDER BY
+        // column is pinned by an equality predicate. The sort is eliminated; without a GLOBAL limit
+        // the limit becomes a per-tablet scan cap and the 2-phase count sums the per-instance counts
+        // (e.g. returns 100 instead of 50). The plan must keep a global limit feeding the aggregate.
+        String sql = "select count(*) from " +
+                "(select v1, v2, v3 from t0 where v2 = 111 order by v2 limit 30) t;";
+        String plan = getFragmentPlan(sql);
+        // count(*) runs after a global limit gather, not over a per-tablet scan-only limit.
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 30");
+        // the scan still feeds the global limit (no scan-local limit; the gather enforces the bound)
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 2: v2 = 111");
+
+        // offset variant: the global limit must carry the offset; the gather enforces offset + limit.
+        sql = "select count(*) from " +
+                "(select v1, v2, v3 from t0 where v2 = 111 order by v2 limit 10, 30) t;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     offset: 10\n" +
+                "     limit: 30");
     }
 }

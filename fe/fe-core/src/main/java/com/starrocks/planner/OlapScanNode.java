@@ -76,11 +76,13 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.expression.Expr;
@@ -95,6 +97,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNormalOlapScanNode;
@@ -108,6 +111,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
+import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -129,7 +133,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+
+import javax.annotation.Nullable;
 
 public class OlapScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
@@ -139,11 +144,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    private final ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
     public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
@@ -201,16 +205,28 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     private boolean enableGlobalLateMaterialization = false;
+    private List<Expr> partitionConjuncts = Lists.newArrayList();
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
+
+    // Set once the scan-range heap-safety warning has been evaluated for this scan node. MUST stay an
+    // instance field: a method-local flag makes planning quadratic in the number of physical
+    // partitions, which is the regression #64158 introduced and this field restores.
+    private boolean alreadyCheckedScanRangeNumSafe = false;
+
+    private boolean usePreparedPhysicalSplitScan = false;
 
     boolean enableTopnFilterBackPressure = false;
     long backPressureThrottleTimeUpperBound = -1;
     int backPressureMaxRounds = -1;
     long backPressureThrottleTime = -1;
     long backPressureNumRows = -1;
+    // Set when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline breaker
+    // (blocking sort, analytic/window). Sent to BE to suppress TopN back-pressure on this scan for BOTH
+    // the FE-driven and the lake/connector self-enable paths (the RF cannot arrive while the scan reads).
+    boolean topnFilterBackPressureDisabled = false;
 
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId) {
         super(id, desc, planNodeName, (OlapTable) desc.getTable(), selectedIndexId);
@@ -244,6 +260,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public boolean isPreAggregation() {
         return isPreAggregation;
+    }
+
+    public List<Expr> getPartitionConjuncts() {
+        return partitionConjuncts;
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
@@ -284,14 +304,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
         this.selectedPartitionIds = selectedPartitionIds;
+        this.selectedPartitionNum = selectedPartitionIds.size();
     }
 
     public List<String> getSelectedPartitionNames() {
         return selectedPartitionNames;
-    }
-
-    public List<Long> getSelectedPartitionVersions() {
-        return selectedPartitionVersions;
     }
 
     public List<Expr> getPrunedPartitionPredicates() {
@@ -320,14 +337,46 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     @Override
+    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeqToLocations() {
+        return bucketSeq2locations;
+    }
+
+    @Override
     public int getBucketNums() {
-        int bucketNum = olapTable.getDefaultDistributionInfo().getBucketNum();
-        if (getSelectedPartitionIds().size() <= 1) {
-            for (Long pid : getSelectedPartitionIds()) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+        return computeBucketNums(olapTable, index.indexMetaId, getSelectedPartitionIds(),
+                getSelectedPhysicalPartitions(), tabletId2BucketSeq);
+    }
+
+    /**
+     * Returns the physical partitions that actually contribute scan tablets.
+     * Optimizer path: derived from {@link #partitionToScanTabletMap} (skip
+     * empty entries — those were pruned out). Legacy path: every sub-partition
+     * of every selected logical partition.
+     */
+    private List<PhysicalPartition> getSelectedPhysicalPartitions() {
+        List<PhysicalPartition> result = new ArrayList<>();
+        if (partitionToScanTabletMap != null) {
+            for (Map.Entry<Long, List<Long>> entry : partitionToScanTabletMap.entrySet()) {
+                if (entry.getValue() == null || entry.getValue().isEmpty()) {
+                    continue;
+                }
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(entry.getKey());
+                if (physicalPartition != null) {
+                    result.add(physicalPartition);
+                }
+            }
+            return result;
+        }
+        for (Long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                result.add(physicalPartition);
             }
         }
-        return bucketNum;
+        return result;
     }
 
     @Override
@@ -426,7 +475,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             return distributionPruner.prune();
         } else if (DistributionInfo.DistributionInfoType.RANGE == distributionInfo.getType()) {
             RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
-                    MetaUtils.getRangeDistributionColumns(olapTable), columnFilters);
+                    MetaUtils.getRangeDistributionColumns(olapTable, index.getMetaId()), columnFilters);
             return pruner.prune();
         } else {
             return null;
@@ -550,10 +599,28 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         alreadyFoundSomeLivingCn = true;
     }
 
+    /**
+     * Returns the version to use when scanning {@code physicalPartitionId}.
+     * If {@code override} contains an entry for this partition, that version is returned;
+     * otherwise {@code visibleVersion} is returned unchanged.
+     * Passing {@code null} for {@code override} is equivalent to an empty map.
+     */
+    public static long chooseScanVersion(long visibleVersion, long physicalPartitionId,
+                                         @Nullable Map<Long, Long> override) {
+        if (override != null) {
+            Long overriddenVersion = override.get(physicalPartitionId);
+            if (overriddenVersion != null) {
+                return overriddenVersion;
+            }
+        }
+        return visibleVersion;
+    }
+
     public void addScanRangeLocations(Partition partition,
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
+                                      List<TKeyRange> partitionRanges,
                                       long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
@@ -562,15 +629,15 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
         String schemaHashStr = String.valueOf(schemaHash);
-        long visibleVersion = physicalPartition.getVisibleVersion();
+        ConnectContext ctx = ConnectContext.get();
+        long visibleVersion = chooseScanVersion(physicalPartition.getVisibleVersion(), physicalPartition.getId(),
+                ctx == null ? null : ctx.getScanVersionOverride());
         scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
-        selectedPartitionVersions.add(visibleVersion);
 
         checkSomeAliveComputeNode();
-        boolean checkScanRangeSize = false;
 
         // Batch retrieve all tablets' location info in shared-data mode
         Map<Long, List<Long>> tabletLocationInfo = new HashMap<>();
@@ -595,6 +662,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(physicalPartition.getId());
+            internalRange.setPartition_column_ranges(partitionRanges);
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
@@ -698,11 +766,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             scanRangeLocations.setScan_range(scanRange);
 
             bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
-            if (!checkScanRangeSize) {
-                long scanRangeSize = getEstimatedScanRangeFootprint(scanRange);
-                checkIfScanRangeNumSafe(scanRangeSize);
-                checkScanRangeSize = true;
-            }
+            checkScanRangeNumSafeOnce(scanRange);
 
             result.add(scanRangeLocations);
         }
@@ -768,6 +832,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
@@ -788,17 +853,44 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                for (int i = 0; i < allTabletIds.size(); i++) {
-                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                }
+                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
-                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
             }
         }
     }
 
-    public void checkIfScanRangeNumSafe(long scanRangeSize) {
+    /**
+     * Runs {@link #checkIfScanRangeNumSafe} the first time it is called on this scan node, and does
+     * nothing on every later call -- every call after the first is a single field read, so this is
+     * safe to call from the per-tablet loop.
+     *
+     * <p>The guard lives here rather than at the call site on purpose. The check is O(selected
+     * physical partitions), while callers run once per physical partition, so a caller-side guard is
+     * what made planning quadratic (#64158). Keeping it here means a new call site cannot
+     * reintroduce that by forgetting to hoist a flag.
+     *
+     * <p>{@code sampleScanRange} is only a size sample: {@link #getEstimatedScanRangeFootprint}
+     * measures it once per JVM and reuses that figure for every table thereafter.
+     */
+    private void checkScanRangeNumSafeOnce(TScanRange sampleScanRange) {
+        if (alreadyCheckedScanRangeNumSafe) {
+            return;
+        }
+        checkIfScanRangeNumSafe(getEstimatedScanRangeFootprint(sampleScanRange));
+        alreadyCheckedScanRangeNumSafe = true;
+    }
+
+    /**
+     * Warn when this scan node's scan ranges look large enough to threaten the FE heap.
+     * Diagnostic only: it never alters the plan.
+     *
+     * <p>O(selected physical partitions). Do not call directly from a per-partition or per-tablet
+     * loop -- go through {@link #checkScanRangeNumSafeOnce}.
+     */
+    @VisibleForTesting // package-private, not private: this JMockit version cannot fake private methods
+    void checkIfScanRangeNumSafe(long scanRangeSize) {
         long totalPartitionNum = 0;
         long totalTabletsNum = 0;
         for (long partitionId : selectedPartitionIds) {
@@ -834,6 +926,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         return result;
     }
 
+    public void setUsePreparedPhysicalSplitScan(boolean usePreparedPhysicalSplitScan) {
+        this.usePreparedPhysicalSplitScan = usePreparedPhysicalSplitScan;
+    }
+
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
@@ -852,7 +948,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
 
-        if (Config.enable_experimental_vector) {
+        // Only report the ANN state for tables that actually carry a vector index, so plans of
+        // ordinary tables stay unchanged.
+        boolean hasVectorIndex = olapTable.getIndexes().stream()
+                .anyMatch(idx -> idx.getIndexType() == IndexDef.IndexType.VECTOR);
+        if (hasVectorIndex) {
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 output.append(vectorSearchOptions.getExplainString(prefix));
             } else {
@@ -991,6 +1091,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             output.append(prefix).append("MaterializedView: true\n");
         }
 
+        if (usePreparedPhysicalSplitScan) {
+            output.append(prefix).append("Prepared Physical Split Scan: true\n");
+        }
+
         if (rowStoreKeyLiterals.size() != 0 && rowStoreKeyLiterals.get(0).size() != 0) {
             output.append(prefix).append("Short Circuit Scan: true\n");
         }
@@ -1090,6 +1194,12 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
                 msg.lake_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
             }
+            if (topnFilterBackPressureDisabled) {
+                msg.lake_scan_node.setTopn_filter_back_pressure_disabled(true);
+            }
+            if (usePreparedPhysicalSplitScan) {
+                msg.lake_scan_node.setUse_prepared_physical_split_scan(true);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1124,12 +1234,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                msg.lake_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
             if (enableGlobalLateMaterialization) {
                 msg.lake_scan_node.setEnable_global_late_materialization(true);
             }
 
+            if (sample != null && sample.isUseSampling()) {
+                TTableSampleOptions sampleOptions = new TTableSampleOptions();
+                msg.lake_scan_node.setSample_options(sampleOptions);
+                sample.toThrift(sampleOptions);
+            }
+
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
+
+            msg.lake_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -1144,6 +1266,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setBack_pressure_num_rows(backPressureNumRows);
                 msg.olap_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
                 msg.olap_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
+            if (topnFilterBackPressureDisabled) {
+                msg.olap_scan_node.setTopn_filter_back_pressure_disabled(true);
             }
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -1197,6 +1322,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setSample_options(sampleOptions);
                 sample.toThrift(sampleOptions);
             }
+            msg.olap_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         }
     }
 
@@ -1542,19 +1668,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                             .collect(Collectors.toSet());
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
         } else {
-            List<Long> partitionIds = getSelectedPartitionIds();
+            // scanPartitionVersions is keyed by physical partition id and is populated in
+            // addScanRangeLocations() with exactly the physical partitions that were actually
+            // scanned, so it is the authoritative physicalPartitionId -> version source -- no need
+            // to re-derive physical ids by re-expanding getSelectedPartitionIds() (logical ids).
+            Map<Long, Long> partitionVersions = getScanPartitionVersions();
 
-            List<Long> physicalPartitionIds = new ArrayList<>();
-            for (Long partitionId : partitionIds) {
-                Partition partition = olapTable.getPartition(partitionId);
-                physicalPartitionIds.addAll(partition.getSubPartitions().stream()
-                        .map(PhysicalPartition::getId).collect(Collectors.toList()));
+            // Sanity check: every physical partition actually scanned must belong to a selected
+            // logical partition. Cheap and harmless; guards against the two structures drifting
+            // apart in the future.
+            Set<Long> selectedLogicalPartitionIds = Sets.newHashSet(getSelectedPartitionIds());
+            for (Long physicalPartitionId : partitionVersions.keySet()) {
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null &&
+                        selectedLogicalPartitionIds.contains(physicalPartition.getParentId()));
             }
 
-            List<Long> partitionVersions = getSelectedPartitionVersions();
-            Preconditions.checkState(physicalPartitionIds.size() == partitionVersions.size());
-            List<Pair<Long, Long>> partitionVersionAndIds = IntStream.range(0, physicalPartitionIds.size())
-                    .mapToObj(i -> Pair.create(partitionVersions.get(i), physicalPartitionIds.get(i)))
+            List<Pair<Long, Long>> partitionVersionAndIds = partitionVersions.entrySet().stream()
+                    .map(e -> Pair.create(e.getValue(), e.getKey()))
                     .sorted(Pair.comparingBySecond()).collect(Collectors.toList());
             scanNode.setSelected_partition_ids(
                     partitionVersionAndIds.stream().map(p -> p.second).collect(Collectors.toList()));
@@ -1577,6 +1708,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         }
         scanNode.setKey_column_names(keyColumnNames);
         scanNode.setKey_column_types(keyColumnTypes);
+        // A fast schema evolution changes what this scan returns without touching any partition
+        // version, so the schema has to be part of the key or pre-DDL entries stay live. See the
+        // note on TNormalOlapScanNode.schema_id.
+        //
+        // Only when it actually carries information. MaterializedIndexMeta starts life with
+        // schemaId == indexMetaId and only diverges once a schema change assigns a new schema, and
+        // index_id is already in the digest above -- so for a table that has never been altered the
+        // field would be a second copy of a value the key already has. Emitting it unconditionally
+        // would still change the serialized bytes, which would invalidate every existing entry on
+        // upgrade for no gain. Written only when it differs, the digests of unaltered tables are
+        // byte-identical to before this fix and only the tables that were altered lose their
+        // entries -- which is exactly the set that has to.
+        if (selectedIndexMetaId != -1) {
+            MaterializedIndexMeta selectedIndexMeta = olapTable.getIndexMetaByMetaId(selectedIndexMetaId);
+            if (selectedIndexMeta != null && selectedIndexMeta.getSchemaId() != selectedIndexMetaId) {
+                scanNode.setSchema_id(selectedIndexMeta.getSchemaId());
+            }
+        }
         scanNode.setIs_preaggregation(isPreAggregation);
         scanNode.setSort_column(sortColumn);
         scanNode.setRollup_name(olapTable.getIndexNameByMetaId(selectedIndexMetaId));
@@ -1586,6 +1735,36 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
+
+        if (sample != null && sample.isUseSampling()) {
+            TTableSampleOptions sampleOptions = new TTableSampleOptions();
+            sample.toThrift(sampleOptions);
+            scanNode.setSample_options(sampleOptions);
+        }
+
+        // See the note on TNormalOlapScanNode.vector_search_options: the ANN spec is the only
+        // place the query vector and the folded distance bound survive, so it must be in the key.
+        if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+            TVectorSearchOptions annOptions = vectorSearchOptions.toThrift();
+            // Per-query state, not semantics -- drop it so equivalent plans still share entries.
+            annOptions.unsetVector_slot_id();
+            annOptions.unsetVector_distance_column_name();
+            // ann_params, k_factor and pq_refine_factor reach the backend through TQueryOptions, not
+            // through this struct: OlapChunkSource overwrites query_params/k_factor/pq_refine_factor
+            // from RuntimeState::query_options() after reading the plan, so whatever the plan carries
+            // in those three fields is discarded. They are not cosmetic -- an explicit efSearch in
+            // ann_params turns off the per-segment adaptive scaling and k_factor changes how many
+            // candidates the index returns, so two sessions differing only in them get different
+            // rows out of the same plan. Copying the session's values in here puts them in the
+            // digest without a new thrift field, and only for plans that actually use ANN, so no
+            // other query's digest moves.
+            SessionVariable sessionVariable = normalizer.getExecPlan().getConnectContext().getSessionVariable();
+            annOptions.setQuery_params(sessionVariable.getAnnParams());
+            annOptions.setK_factor(sessionVariable.getKFactor());
+            annOptions.setPq_refine_factor(sessionVariable.getPqRefineFactor());
+            scanNode.setVector_search_options(normalizer.normalizeThrift(annOptions));
+        }
+
         planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
@@ -1678,7 +1857,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     public void clearScanNodeForThriftBuild() {
         sortColumn = null;
         selectedPartitionNames.clear();
-        selectedPartitionVersions.clear();
         result.clear();
         scanBackendIds.clear();
         appliedDictStringColumns.clear();
@@ -1704,18 +1882,26 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         boolean accept = super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
         if (accept && context.getDescription().runtimeFilterType()
                 .equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
-            boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
-            int backPressureMode = Optional.ofNullable(ConnectContext.get())
-                    .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
-                    .orElse(0);
-            if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
-                this.enableTopnFilterBackPressure = true;
-                this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
-                this.backPressureThrottleTimeUpperBound =
-                        ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
-                this.backPressureNumRows = 10 * context.getDescription().getTopN();
-                this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
-                        Math.max(this.backPressureMaxRounds, 1);
+            if (context.crossedNonAggPipelineBreaker()) {
+                // The TopN RF reaches this scan only across a deterministic non-aggregation pipeline
+                // breaker (blocking sort, analytic/window), so it cannot arrive while the scan is still
+                // reading. Suppress back-pressure for this scan (the flag is sent to BE so the
+                // lake/connector self-enable path honors it too); throttling would only stall the scan.
+                this.topnFilterBackPressureDisabled = true;
+            } else {
+                boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
+                int backPressureMode = Optional.ofNullable(ConnectContext.get())
+                        .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
+                        .orElse(0);
+                if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
+                    this.enableTopnFilterBackPressure = true;
+                    this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
+                    this.backPressureThrottleTimeUpperBound =
+                            ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
+                    this.backPressureNumRows = 10 * context.getDescription().getTopN();
+                    this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
+                            Math.max(this.backPressureMaxRounds, 1);
+                }
             }
         }
         return accept;

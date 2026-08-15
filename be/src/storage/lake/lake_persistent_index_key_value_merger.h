@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
@@ -74,7 +76,11 @@ private:
 private:
     std::string _key;
     uint64_t _max_rss_rowid = 0;
-    std::list<IndexValueWithVer> _index_value_vers;
+    // Holds the winning (version, IndexValue) for the current key, or empty
+    // between flushes. The merge algorithm only ever tracks a single best entry
+    // per key, so storing it inline avoids the per-key heap allocation pair
+    // that std::list<IndexValueWithVer> would incur on every input row.
+    std::optional<IndexValueWithVer> _current_value;
     // If do merge base level, that means we can delete NullIndexValue items safely.
     bool _merge_base_level = false;
     TabletManager* _tablet_mgr = nullptr;
@@ -83,6 +89,11 @@ private:
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
     std::vector<TableBuilderWrapper> _output_builders;
+    // Scratch buffers reused across merge()/flush() to avoid per-key protobuf
+    // allocator churn. Cleared between calls so internal capacity is retained.
+    IndexValuesWithVerPB _merge_pb_scratch;
+    IndexValuesWithVerPB _flush_pb_scratch;
+    std::string _flush_serialized_scratch;
 };
 } // namespace lake
 } // namespace starrocks

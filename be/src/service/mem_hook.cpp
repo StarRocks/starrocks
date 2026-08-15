@@ -14,20 +14,37 @@
 
 #include "mem_hook.h"
 
+#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
+
 #include <iostream>
 
 #include "base/failpoint/fail_point.h"
 #include "common/compiler_util.h"
 #include "common/config_memory_allocator_fwd.h"
+#include "common/stack_util.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/counting_allocator.h"
-#include "util/stack_util.h"
 
 #ifndef BE_TEST
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #endif
+
+#endif
+
+static int64_t g_large_memory_alloc_failure_threshold = 0;
+
+namespace starrocks {
+// thread-safety is not a concern here since this is a really rare op
+int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
+    int64_t old_val = g_large_memory_alloc_failure_threshold;
+    g_large_memory_alloc_failure_threshold = val;
+    return old_val;
+}
+} // namespace starrocks
+
+#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
@@ -89,7 +106,7 @@
         }                                                                                   \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
+    starrocks::tls_exceed_mem_tracker = starrocks::RuntimeEnv::GetInstance()->process_mem_tracker()
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_is_catched
 #else
 std::atomic<int64_t> g_mem_usage(0);
@@ -101,17 +118,6 @@ std::atomic<int64_t> g_mem_usage(0);
 #define SET_EXCEED_MEM_TRACKER() (void)0
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
-
-static int64_t g_large_memory_alloc_failure_threshold = 0;
-
-namespace starrocks {
-// thread-safety is not a concern here since this is a really rare op
-int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
-    int64_t old_val = g_large_memory_alloc_failure_threshold;
-    g_large_memory_alloc_failure_threshold = val;
-    return old_val;
-}
-} // namespace starrocks
 
 const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
@@ -484,3 +490,5 @@ void* __libc_memalign(size_t alignment, size_t size) {
 }
 #endif
 }
+
+#endif // STARROCKS_ENABLE_JEMALLOC_MEM_HOOK

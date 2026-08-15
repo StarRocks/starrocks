@@ -35,16 +35,21 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
@@ -78,6 +83,14 @@ import java.util.stream.Collectors;
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
 
+    // Internal-trust header used by RejectedRecordSyncDaemon (BE-side) to
+    // post rejected_records to the FE Stream Load endpoint without Basic
+    // auth. The header value is the FE cluster token, which the FE master
+    // distributes to every BE through heartbeats and stays inside the
+    // VPC. Bypass is gated to the `_statistics_.rejected_records` table
+    // only so a leaked token cannot be reused to write any other table.
+    static final String INTERNAL_TOKEN_HEADER = "X-StarRocks-Internal-Token";
+
     public LoadAction(ActionController controller) {
         super(controller);
     }
@@ -86,6 +99,57 @@ public class LoadAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.PUT,
                 "/api/{" + DB_KEY + "}/{" + TABLE_KEY + "}/_stream_load",
                 new LoadAction(controller));
+    }
+
+    @Override
+    public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+        if (tryInternalTokenBypass(request, response)) {
+            return;
+        }
+        super.execute(request, response);
+    }
+
+    // Returns true iff the request carried a valid internal-trust token
+    // for `_statistics_.rejected_records` and the request has been
+    // dispatched as ROOT. Returning false leaves the request untouched
+    // for the normal Basic-auth-and-checkPassword pipeline.
+    //
+    // Package-private for testability: each fall-through branch is
+    // exercised independently in LoadActionInternalTokenTest.
+    boolean tryInternalTokenBypass(BaseRequest request, BaseResponse response)
+            throws DdlException, AccessDeniedException {
+        String token = request.getRequest().headers().get(INTERNAL_TOKEN_HEADER);
+        if (Strings.isNullOrEmpty(token)) {
+            return false;
+        }
+        String dbName = request.getSingleParameter(DB_KEY);
+        String tableName = request.getSingleParameter(TABLE_KEY);
+        if (!RejectedRecordsTable.DATABASE_NAME.equals(dbName)
+                || !RejectedRecordsTable.TABLE_NAME.equals(tableName)) {
+            // The internal token only authorizes one specific system table.
+            // Anything else falls through to Basic auth so we don't leak
+            // whether the token was wrong vs the path was wrong.
+            return false;
+        }
+        String expected = GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        if (Strings.isNullOrEmpty(expected) || !expected.equals(token)) {
+            // Same: don't reveal whether the token was missing on the FE
+            // side or just mismatched -- fall back and let Basic auth
+            // produce a generic 401.
+            return false;
+        }
+
+        HttpConnectContext ctx = request.getConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(UserIdentity.ROOT.getUser());
+        ctx.setNettyChannel(request.getContext());
+        ctx.setQueryId(UUIDUtil.genUUID());
+        try (var scope = ctx.bindScope()) {
+            executeWithoutPassword(request, response);
+        }
+        return true;
     }
 
     public static List<Long> selectNodes(ComputeResource computeResource) throws DdlException {

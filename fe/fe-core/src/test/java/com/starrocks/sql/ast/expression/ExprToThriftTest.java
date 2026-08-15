@@ -185,10 +185,12 @@ public class ExprToThriftTest {
                     StarRocksPlannerException.class));
             cases.add(exceptionCase("ArrowExpr", ExprCaseFactory::buildArrowExpr,
                     StarRocksPlannerException.class));
+            // A subquery has to be rewritten into a join/apply by the optimizer. Serializing one used to
+            // produce a TExprNode without a node_type, which the BE rejects with an unhelpful thrift error.
+            cases.add(exceptionCase("Subquery", ExprCaseFactory::buildSubquery,
+                    StarRocksPlannerException.class));
 
             // Miscellaneous
-            cases.add(nodeCase("Subquery", ExprCaseFactory::buildSubquery, null,
-                    node -> Assertions.assertFalse(node.isSetNode_type())));
             cases.add(nodeCase("DefaultValueExpr", ExprCaseFactory::buildDefaultValueExpr, null,
                     node -> Assertions.assertFalse(node.isSetNode_type())));
             cases.add(exceptionCase("IntervalLiteral", ExprCaseFactory::buildIntervalLiteral,

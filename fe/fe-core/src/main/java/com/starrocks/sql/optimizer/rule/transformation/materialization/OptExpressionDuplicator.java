@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -229,7 +230,7 @@ public class OptExpressionDuplicator {
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
-            // process HashDistributionSpec
+            // process HashDistributionSpec / RangeDistributionSpec
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
@@ -237,6 +238,10 @@ public class OptExpressionDuplicator {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                } else if (olapScan.getDistributionSpec() instanceof RangeDistributionSpec) {
+                    RangeDistributionSpec newRangeSpec =
+                            processRangeDistributionSpec((RangeDistributionSpec) olapScan.getDistributionSpec());
+                    olapScanBuilder.setDistributionSpec(newRangeSpec);
                 }
 
                 if (isResetSelectedPartitions) {
@@ -740,6 +745,26 @@ public class OptExpressionDuplicator {
             updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
             updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
+        }
+
+        // Rewrite colocate columns and the EquivalentDescriptor inside a
+        // RangeDistributionSpec, mirroring processHashDistributionSpec above.
+        // Column ids change when the scan is duplicated for MV rewrite.
+        private RangeDistributionSpec processRangeDistributionSpec(RangeDistributionSpec originSpec) {
+            final List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol col : originSpec.getColocateColumns()) {
+                final ColumnRefOperator newRefOperator = getNewDistributionColRef(col);
+                Preconditions.checkNotNull(newRefOperator);
+                newColumns.add(new DistributionCol(newRefOperator.getId(), col.isNullStrict()));
+            }
+            Preconditions.checkState(newColumns.size() == originSpec.getColocateColumns().size());
+
+            final EquivalentDescriptor equivDesc = originSpec.getEquivalentDescriptor();
+            final EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(),
+                    equivDesc.getPartitionIds());
+            updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
+            updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
+            return new RangeDistributionSpec(newColumns, newEquivDesc);
         }
 
         private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,

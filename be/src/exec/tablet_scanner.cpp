@@ -21,19 +21,19 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
-#include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/projection_iterator.h"
 
 namespace starrocks {
 
@@ -65,6 +65,16 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
     RETURN_IF_ERROR(_init_global_dicts());
+    // _init_global_dicts intersects the FE-level dict map with this scan's
+    // materialized tablet schema, so the resulting size counts columns that
+    // will actually flow through the encoded path on this scan instance.
+    // Mirrors the marker emitted from the pipeline scan paths.
+    if (_params.global_dictmaps != nullptr && !_params.global_dictmaps->empty() &&
+        _parent->runtime_profile() != nullptr) {
+        _parent->runtime_profile()->add_info_string("GlobalDictOptApplied", "true");
+        _parent->runtime_profile()->add_info_string("GlobalDictAppliedSlots",
+                                                    std::to_string(_params.global_dictmaps->size()));
+    }
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, _reader_columns);
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
@@ -376,6 +386,22 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_parent->_vector_index_timer,
+                   _reader->stats().vector_index_load_ns + _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_parent->_vector_index_load_timer, _reader->stats().vector_index_load_ns);
+    COUNTER_UPDATE(_parent->_get_row_ranges_by_vector_index_timer,
+                   _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_parent->_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_parent->_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
+    COUNTER_UPDATE(_parent->_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_parent->_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
+    COUNTER_UPDATE(_parent->_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_parent->_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
+    COUNTER_UPDATE(_parent->_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
+    COUNTER_UPDATE(_parent->_vector_search_timer, _reader->stats().vector_search_timer);
+    COUNTER_UPDATE(_parent->_process_vector_distance_and_id_timer,
+                   _reader->stats().process_vector_distance_and_id_timer);
+    COUNTER_UPDATE(_parent->_vector_index_filtered_counter, _reader->stats().rows_vector_index_filtered);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_parent->_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
@@ -394,8 +420,8 @@ void TabletScanner::update_counter() {
 
     COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+    QueryScanMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
+    QueryScanMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_parent->_scan_profile, "DictDecode");
@@ -408,8 +434,10 @@ void TabletScanner::update_counter() {
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_TIMER(_parent->_scan_profile, "DeleteFilter");
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_parent->_scan_profile, "DeleteFilterRows", TUnit::UNIT);
+        RuntimeProfile::Counter* c3 = ADD_COUNTER(_parent->_scan_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+        COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
     }
     if (_reader->stats().flat_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");

@@ -1,5 +1,7 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
+description: "StarRocks v2.3 以降の external catalog を通じた外部データソース管理とデータレイク分析の機能サポート。"
 sidebar_label: 機能サポート
 ---
 
@@ -120,9 +122,9 @@ StarRocks はクエリ中に以下のメタデータをキャッシュします:
 
 | 構成項目                                           | デフォルト                              | 説明                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | 定期的なメタデータキャッシュのリフレッシュを有効にするかどうか。これが有効になると、StarRocks はメタストアをポーリングし、頻繁にアクセスされる外部カタログのキャッシュされたメタデータをリフレッシュしてデータの変更を認識します。`true` は Hive メタデータキャッシュのリフレッシュを有効にし、`false` はそれを無効にします。この項目は [FE 動的パラメータ](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
-| background_refresh_metadata_interval_millis                  | `600000` (10 分)                | 2回の連続したメタデータキャッシュリフレッシュの間隔。単位: ミリ秒。この項目は [FE 動的パラメータ](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 時間)                   | メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた外部カタログについて、指定された時間以上アクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない外部カタログについては、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。単位: 秒。この項目は [FE 動的パラメータ](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | 定期的なメタデータキャッシュのリフレッシュを有効にするかどうか。これが有効になると、StarRocks はメタストアをポーリングし、頻繁にアクセスされる外部カタログのキャッシュされたメタデータをリフレッシュしてデータの変更を認識します。`true` は Hive メタデータキャッシュのリフレッシュを有効にし、`false` はそれを無効にします。この項目は [FE 動的パラメータ](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| background_refresh_metadata_interval_millis                  | `600000` (10 分)                | 2回の連続したメタデータキャッシュリフレッシュの間隔。単位: ミリ秒。この項目は [FE 動的パラメータ](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 時間)                   | メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた外部カタログについて、指定された時間以上アクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない外部カタログについては、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。単位: 秒。この項目は [FE 動的パラメータ](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
 
 ### メタデータキャッシュの動作
 
@@ -262,9 +264,9 @@ StarRocks はクエリ中に以下のメタデータをキャッシュします:
 
 | 構成項目                                           | デフォルト                              | 説明                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | 定期的なメタデータキャッシュのリフレッシュを有効にするかどうか。これが有効になると、StarRocks はメタストアをポーリングし、頻繁にアクセスされる外部カタログのキャッシュされたメタデータをリフレッシュしてデータの変更を認識します。`true` は Hive メタデータキャッシュのリフレッシュを有効にし、`false` はそれを無効にします。この項目は [FE 動的パラメータ](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
-| background_refresh_metadata_interval_millis                  | `600000` (10 分)                | 2回の連続したメタデータキャッシュリフレッシュの間隔。単位: ミリ秒。この項目は [FE 動的パラメータ](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 時間)                   | メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた外部カタログについて、指定された時間以上アクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない外部カタログについては、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。単位: 秒。この項目は [FE 動的パラメータ](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | 定期的なメタデータキャッシュのリフレッシュを有効にするかどうか。これが有効になると、StarRocks はメタストアをポーリングし、頻繁にアクセスされる外部カタログのキャッシュされたメタデータをリフレッシュしてデータの変更を認識します。`true` は Hive メタデータキャッシュのリフレッシュを有効にし、`false` はそれを無効にします。この項目は [FE 動的パラメータ](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| background_refresh_metadata_interval_millis                  | `600000` (10 分)                | 2回の連続したメタデータキャッシュリフレッシュの間隔。単位: ミリ秒。この項目は [FE 動的パラメータ](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 時間)                   | メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた外部カタログについて、指定された時間以上アクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない外部カタログについては、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。単位: 秒。この項目は [FE 動的パラメータ](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) です。[ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) コマンドを使用して変更できます。 |
 
 ### メタデータキャッシュの動作
 
@@ -321,7 +323,7 @@ v3.3.0以降、StarRocksは上記のメタデータ読み取りおよびキャ�
 
 ### Iceberg ビュー
 
-StarRocks は、v3.3.2 以降、Iceberg ビューのクエリにサポートし、v3.5 以降、Iceberg ビューの作成にサポートしています。
+StarRocks は、v3.3.2 以降で REST 上の Iceberg ビューを、v3.4.1 以降で Hive 上の Iceberg ビューをサポートしています。
 
 現在、StarRocks を通じて作成された Iceberg ビューのみがサポートされています。v3.5 から、既存の Iceberg ビューに StarRocks の構文スタイル定義を追加できるようになりました。
 

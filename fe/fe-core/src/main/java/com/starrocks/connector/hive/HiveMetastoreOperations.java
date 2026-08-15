@@ -191,7 +191,7 @@ public class HiveMetastoreOperations {
             tableType = HiveTable.HiveTableType.EXTERNAL_TABLE;
         }
         HiveTable.Builder builder = HiveTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(tableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
@@ -335,7 +335,6 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String catalogName = (table).getCatalogName();
         String dbName = (table).getCatalogDBName();
         String tblName = (table).getCatalogTableName();
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()

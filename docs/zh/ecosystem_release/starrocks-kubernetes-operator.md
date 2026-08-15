@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集群。"
 ---
 
 # Kubernetes Operator 版本发布

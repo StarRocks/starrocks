@@ -43,6 +43,7 @@ import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
@@ -82,11 +83,15 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -474,7 +479,14 @@ public class GlobalTransactionMgrTest {
                         partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
-        TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(1L), 1L, "label", null,
+        // The table id must differ from the db id (1L): finishTransactionNew acquires an
+        // INTENTION_EXCLUSIVE lock on the db rid and a WRITE lock on each table rid, and LockManager
+        // forbids requesting a WRITE lock on a rid that already holds an intention lock. Use a dummy
+        // id that is not a real table in the test catalog, so updateCatalogAfterVisible stays a no-op
+        // and the metric entity stays isolated from sibling tests (which commit to table 2).
+        long loadTableId = 1000L;
+        TransactionState transactionState =
+                new TransactionState(1L, Lists.newArrayList(loadTableId), 1L, "label", null,
                 LoadJobSourceType.ROUTINE_LOAD_TASK, new TxnCoordinator(TxnSourceType.BE, "be1"),
                 routineLoadJob.getId(),
                 Config.stream_load_default_timeout_second);
@@ -537,21 +549,18 @@ public class GlobalTransactionMgrTest {
         // todo(ml): change to assert queue
         // Assert.assertEquals(1, routineLoadManager.getNeedScheduleTasksQueue().size());
         // Assert.assertNotEquals("label", routineLoadManager.getNeedScheduleTasksQueue().peek().getId());
-        boolean oldValue = Config.lock_manager_enabled;
-        Config.lock_manager_enabled = false;
         TransactionState originalState = masterTransMgr.getTransactionState(1L, 1L);
         TransactionStatus originalStatus = originalState.getTransactionStatus();
         transactionState = masterTransMgr.finishTransactionNew(originalState, Sets.newHashSet());
         Assertions.assertNotSame(originalState, transactionState);
         assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
         assertEquals(originalStatus, originalState.getTransactionStatus());
-        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(1L);
+        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(loadTableId);
         assertEquals(100, entity.counterRoutineLoadRowsTotal.getValue().intValue());
         assertEquals(10000, entity.counterRoutineLoadBytesTotal.getValue().intValue());
         assertEquals(1, entity.counterRoutineLoadFinishedTotal.getValue().intValue());
         assertEquals(1, entity.counterRoutineLoadErrorRowsTotal.getValue().intValue());
         assertEquals(1, entity.counterRoutineLoadUnselectedRowsTotal.getValue().intValue());
-        Config.lock_manager_enabled = oldValue;
     }
 
     @Test
@@ -1081,7 +1090,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testSaveLoadJsonFormatImage() throws Exception {
-        long transactionId = masterTransMgr
+        masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable1,
                         transactionSource,
@@ -1119,6 +1128,70 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+    public void testRetryCommitPreparedOnRateLimitExceeded() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+        VisibleStateWaiter waiter = new VisibleStateWaiter(new TransactionState());
+
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001L);
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doThrow(new CommitRateExceededException(1001, System.currentTimeMillis()))
+                .doReturn(waiter)
+                .when(dbTransactionMgr)
+                .commitPreparedTransaction(1001L);
+
+        Assertions.assertSame(waiter,
+                globalTransactionMgr.retryCommitPreparedOnRateLimitExceeded(db, 1001L, 1000L));
+
+        Mockito.verify(dbTransactionMgr, Mockito.times(2)).commitPreparedTransaction(1001L);
+    }
+
+    @Test
+    public void testRetryCommitPreparedUsesRemainingLockTimeout() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        VisibleStateWaiter waiter = new VisibleStateWaiter(new TransactionState());
+        long timeoutMs = 1000L;
+
+        doThrow(new CommitRateExceededException(1001L, System.currentTimeMillis() + 50L))
+                .doReturn(waiter)
+                .when(globalTransactionMgr)
+                .commitPreparedTransactionUnderIntensiveDbLock(
+                        Mockito.eq(db), Mockito.eq(1001L), Mockito.anyLong());
+
+        Assertions.assertSame(waiter,
+                globalTransactionMgr.retryCommitPreparedOnRateLimitExceeded(db, 1001L, timeoutMs));
+
+        ArgumentCaptor<Long> lockTimeoutCaptor = ArgumentCaptor.forClass(Long.class);
+        Mockito.verify(globalTransactionMgr, Mockito.times(2))
+                .commitPreparedTransactionUnderIntensiveDbLock(
+                        Mockito.eq(db), Mockito.eq(1001L), lockTimeoutCaptor.capture());
+        List<Long> lockTimeouts = lockTimeoutCaptor.getAllValues();
+        Assertions.assertEquals(timeoutMs, lockTimeouts.get(0));
+        Assertions.assertTrue(lockTimeouts.get(1) > 0L);
+        Assertions.assertTrue(lockTimeouts.get(1) < timeoutMs);
+    }
+
+    @Test
+    public void testRetryCommitPreparedOnRateLimitExceededTimeout() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001L);
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doThrow(new CommitRateExceededException(1001, System.currentTimeMillis() + 60_000L))
+                .when(dbTransactionMgr)
+                .commitPreparedTransaction(1001L);
+
+        Assertions.assertThrows(CommitRateExceededException.class,
+                () -> globalTransactionMgr.retryCommitPreparedOnRateLimitExceeded(db, 1001L, 10L));
+    }
+
+    @Test
     public void testPublishVersionTimeout()
             throws StarRocksException, LockTimeoutException {
         Database db = new Database(10, "db0");
@@ -1126,7 +1199,6 @@ public class GlobalTransactionMgrTest {
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
         TransactionState transactionState = spy(new TransactionState());
 
-        long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
         doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
         doReturn(new VisibleStateWaiter(new TransactionState()))
@@ -1134,6 +1206,31 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assertions.assertFalse(globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 2, null));
+    }
+
+    @Test
+    public void testPublishWaitStopsAfterCommitWhenLeaderDemotes()
+            throws Exception {
+        Database db = new Database(10, "db0");
+        GlobalStateMgr globalStateMgr = spy(GlobalStateMgrTestUtil.createTestState());
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(globalStateMgr));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, globalStateMgr));
+        TransactionState transactionState = spy(new TransactionState());
+
+        doReturn(true).when(globalStateMgr).isLeader();
+        doReturn(false).when(globalStateMgr).isLeaderWorkAdmissionOpen();
+        doReturn(false).when(globalStateMgr).isLeaderDemoting();
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
+        doReturn(new VisibleStateWaiter(new TransactionState()))
+                .when(dbTransactionMgr)
+                .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
+
+        long startMs = System.currentTimeMillis();
+        Assertions.assertFalse(globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+                Collections.emptyList(), Collections.emptyList(), 1500, null));
+        long elapsedMs = System.currentTimeMillis() - startMs;
+        Assertions.assertTrue(elapsedMs < 1000, "publish wait should stop quickly after leader demotion");
     }
 
     @Test
@@ -1149,6 +1246,20 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assertions.assertThrows(StarRocksException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
+    }
+
+    @Test
+    public void testRetryCommitMissingTransactionDoesNotThrowNpe()
+            throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+
+        doReturn(null).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
+                        Collections.emptyList(), Collections.emptyList(), 10, null));
+        Assertions.assertTrue(exception.getMessage().contains("transaction not found: 1001"));
+        Assertions.assertFalse(exception.getMessage().contains("Cannot invoke"));
     }
 
     @Test
@@ -1280,5 +1391,220 @@ public class GlobalTransactionMgrTest {
     private void assertEditLogWriteFailed(RuntimeException exception) {
         Assertions.assertTrue(exception.getMessage().contains("EditLog write failed")
                 || exception.getCause() != null && exception.getCause().getMessage().contains("EditLog write failed"));
+    }
+
+    // ===========================================================================
+    // Tests for ADMIN SKIP COMMITTED TRANSACTION
+    // (DatabaseTransactionMgr.markCommittedTransactionAsNoOpPublish &
+    //  GlobalTransactionMgr.markCommittedTransactionAsNoOpPublish)
+    // ===========================================================================
+
+    @Test
+    public void testMarkNoOpPublishRejectsWhenConfigDisabled() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // Begin and commit a transaction so it sits in COMMITTED state.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+        assertEquals(TransactionStatus.COMMITTED,
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId).getTransactionStatus());
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = false;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "disabled-test"));
+            Assertions.assertTrue(ex.getMessage().contains("disabled"),
+                    "error must mention the config gate, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishRejectsNonCommittedState() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // Begin only — the txn is in PREPARE, not COMMITTED.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        assertEquals(TransactionStatus.PREPARE,
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId).getTransactionStatus());
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "wrong-state"));
+            Assertions.assertTrue(ex.getMessage().contains("COMMITTED"),
+                    "error must mention COMMITTED requirement, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishRejectsUnsupportedSourceType() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // DELETE is not in the supported source-type whitelist.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.DELETE, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "wrong-source-type"));
+            Assertions.assertTrue(ex.getMessage().contains("source type"),
+                    "error must mention source type rejection, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishHappyPath() throws Exception {
+        // Make the OlapTable fixture look like a lake table with file_bundling=true
+        // so the full success path executes (state validation, idempotency check,
+        // mark+persist via edit log, audit log). Without this MockUp the fixture's
+        // regular OlapTable is rejected at the lake-table validation.
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isCloudNativeTable() {
+                return true;
+            }
+            @Mock
+            public Boolean isFileBundling() {
+                return Boolean.TRUE;
+            }
+        };
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId).getTransactionStatus());
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "happy-path-test");
+
+            TransactionState state = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId);
+            Assertions.assertNotNull(state);
+            Assertions.assertTrue(state.isNoOpPublish(),
+                    "txn must be marked as no-op publish after successful call");
+            Assertions.assertEquals("happy-path-test", state.getNoOpPublishReason());
+            // Status remains COMMITTED — the daemon will later flip it to VISIBLE
+            // after BE handles the no-op publish RPC.
+            Assertions.assertEquals(TransactionStatus.COMMITTED, state.getTransactionStatus());
+
+            // Second invocation is idempotent (state is already marked).
+            masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "second-call-ignored");
+            TransactionState stateAfter = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, txnId);
+            // Reason from the FIRST call is preserved, not overwritten.
+            Assertions.assertEquals("happy-path-test", stateAfter.getNoOpPublishReason());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testMarkNoOpPublishRejectsNonLakeTable() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // The test fixture's testTableId1 is a regular OlapTable (not cloud-native),
+        // so the lake-table validation must reject this txn.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                UUIDUtil.genUUID().toString(), transactionSource,
+                LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                buildTabletCommitInfos(), Lists.newArrayList(), null);
+
+        boolean original = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
+                    () -> masterTransMgr.markCommittedTransactionAsNoOpPublish(txnId, "non-lake-test"));
+            Assertions.assertTrue(ex.getMessage().contains("shared-data") || ex.getMessage().contains("lake"),
+                    "error must mention shared-data/lake requirement, got: " + ex.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testExistCommittedTxnsReturnsFalseForAbsentDb() {
+        // existCommittedTxns is invoked lock-free by the online optimize visibility gate. When the database
+        // was dropped concurrently its DatabaseTransactionMgr is absent; the method must short-circuit to
+        // "no committed txns" (return false) instead of NPEing on the missing manager.
+        long absentDbId = 987654321L;
+        Assertions.assertFalse(masterTransMgr.existCommittedTxns(absentDbId, 1L, 1L),
+                "existCommittedTxns must return false (not NPE) for an absent DatabaseTransactionMgr");
+    }
+
+    @Test
+    public void testExistCommittedTxnsTrueForPopulatedPartitionCommitInfo() {
+        // A registered db whose committed txn lists the table and has a populated TableCommitInfo with the
+        // queried PartitionCommitInfo must report an existing committed txn.
+        long dbId = 222333444L;
+        long tableId = 555L;
+        long partitionId = 666L;
+
+        TableCommitInfo tableCommitInfo = Mockito.mock(TableCommitInfo.class);
+        Mockito.when(tableCommitInfo.getPartitionCommitInfo(partitionId))
+                .thenReturn(Mockito.mock(PartitionCommitInfo.class));
+        TransactionState txnState = Mockito.mock(TransactionState.class);
+        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
+        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(tableCommitInfo);
+        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
+        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
+
+        Map<Long, DatabaseTransactionMgr> dbMgrs = masterTransMgr.getAllDatabaseTransactionMgrs();
+        dbMgrs.put(dbId, dbTransactionMgr);
+        try {
+            Assertions.assertTrue(masterTransMgr.existCommittedTxns(dbId, tableId, partitionId),
+                    "existCommittedTxns must report the committed txn whose TableCommitInfo is populated");
+        } finally {
+            dbMgrs.remove(dbId);
+        }
+    }
+
+    @Test
+    public void testExistCommittedTxnsFalseWhenTableCommitInfoNull() {
+        // A committed txn can list the table in its tableIdList before its TableCommitInfo is populated.
+        // With a non-null partitionId, the `tableCommitInfo != null` guard must short-circuit and the method
+        // must fall through to return false rather than NPE (it is called lock-free by the optimize gate).
+        long dbId = 222333445L;
+        long tableId = 777L;
+        long partitionId = 888L;
+
+        TransactionState txnState = Mockito.mock(TransactionState.class);
+        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
+        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(null);
+        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
+        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
+
+        Map<Long, DatabaseTransactionMgr> dbMgrs = masterTransMgr.getAllDatabaseTransactionMgrs();
+        dbMgrs.put(dbId, dbTransactionMgr);
+        try {
+            Assertions.assertFalse(masterTransMgr.existCommittedTxns(dbId, tableId, partitionId),
+                    "existCommittedTxns must return false (not NPE) when the committed txn's TableCommitInfo "
+                            + "is not yet populated");
+        } finally {
+            dbMgrs.remove(dbId);
+        }
     }
 }

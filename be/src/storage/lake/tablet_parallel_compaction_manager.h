@@ -29,8 +29,8 @@
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_splitter.h"
-#include "storage/olap_tuple.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/olap_tuple.h"
 
 namespace starrocks {
 class ThreadPool;
@@ -87,6 +87,7 @@ struct SubtaskInfo {
     std::vector<uint32_t> input_rowset_ids;
     int64_t input_bytes = 0;
     int64_t start_time = 0;
+    int64_t enqueue_time_ns = 0;
     // Pointer to the running context (valid only during execution)
     // Used to get real-time progress and status in list_tasks()
     CompactionTaskContext* context = nullptr;

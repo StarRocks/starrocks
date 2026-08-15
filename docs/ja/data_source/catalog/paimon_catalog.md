@@ -1,5 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
+description: "StarRocks v3.1 以降の Paimon catalog で、Apache Paimon からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
 ---
 
@@ -64,7 +66,7 @@ Paimon クラスターが AWS S3 をストレージとして使用している�
 
 上記の3つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
 
-詳細については、[AWS IAM での認証準備](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)を参照してください。
+詳細については、[AWS IAM での認証準備](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)を参照してください。
 
 ### HDFS
 
@@ -180,7 +182,7 @@ Paimon クラスターのストレージとして AWS S3 を選択する場合�
 | aws.s3.access_key           | いいえ | IAM ユーザーのアクセスキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | いいえ | IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
 
 ##### S3 互換ストレージシステム
 
@@ -289,6 +291,22 @@ Data Lake Storage Gen2 を Paimon クラスターのストレージとして選�
   | azure.adls2.oauth2_client_id       | はい | サービスプリンシパルのクライアント (アプリケーション) ID。        |
   | azure.adls2.oauth2_client_secret   | はい | 作成された新しいクライアント (アプリケーション) シークレットの値。    |
   | azure.adls2.oauth2_client_endpoint | はい | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント (v1)。 |
+
+- ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  次の表は、`StorageCredentialParams` で構成する必要があるパラメータを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
+  | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -564,6 +582,21 @@ PROPERTIES
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+- ワークロード ID 認証方法を選択する場合、以下のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 

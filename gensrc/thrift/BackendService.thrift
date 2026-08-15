@@ -53,6 +53,13 @@ struct TTabletStat {
     2: optional i64 data_size
     3: optional i64 row_num
     4: optional i64 version_count
+    // The tablet version data_size/row_num were computed from. The BE rebuilds this snapshot only
+    // every tablet_stat_cache_update_interval_second, so a successful RPC does not by itself mean
+    // the numbers cover the version the FE currently considers visible. A version is used rather
+    // than a timestamp on purpose: it is assigned by the FE and replicated, so it is comparable
+    // across machines, whereas any wall clock here would belong to the BE. Unset by older BEs,
+    // which the FE treats as "unknown" and therefore untrusted for exact row counts.
+    5: optional i64 version
 }
 
 struct TTabletStatResult {
@@ -65,6 +72,14 @@ struct TKafkaLoadInfo {
     3: required map<i32, i64> partition_begin_offset;
     4: optional map<string, string> properties;
     5: optional string confluent_schema_registry_url;
+    // Whether the job's INCLUDE METADATA clause declares any source-metadata column. The consumer
+    // attaches the extended per-message metadata (topic/timestamp/key/headers) to the buffer only when
+    // this is set.
+    6: optional bool need_source_metadata;
+    // Finer gates within need_source_metadata: only extract the (potentially large) message key/headers
+    // when the clause declares a KEY / HEADERS column. Scalar metadata is cheap and not separately gated.
+    7: optional bool need_message_key;
+    8: optional bool need_message_headers;
 }
 
 struct TPulsarLoadInfo {
@@ -74,6 +89,12 @@ struct TPulsarLoadInfo {
     4: required list<string> partitions;
     5: optional map<string, i64> initial_positions;
     6: optional map<string, string> properties;
+    // Like TKafkaLoadInfo, except that for Pulsar need_source_metadata gates attaching per-message
+    // metadata at all; the other two gate extraction of the message key (partition key) / headers
+    // (properties).
+    7: optional bool need_source_metadata;
+    8: optional bool need_message_key;
+    9: optional bool need_message_headers;
 }
 
 struct TRoutineLoadTask {

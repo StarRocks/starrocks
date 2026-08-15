@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use Skew Join V2 in StarRocks to optimize JOIN queries with data skew by broadcasting skew values, improving performance for heavily skewed data..."
 ---
 
 # Skew Join V2
@@ -104,7 +105,7 @@ Do not omit the brackets in the skew hint.
     ```SQL
     SELECT o.order_id, c.customer_name, o.amount
     FROM orders o 
-    JOIN [skew|o.customer_id(1001)] c 
+    JOIN [skew|o.customer_id(1001)] customers c 
     ON o.customer_id = c.customer_id;
     ```
 
