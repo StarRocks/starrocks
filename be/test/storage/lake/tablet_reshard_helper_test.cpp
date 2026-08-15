@@ -487,19 +487,40 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset
     EXPECT_EQ(1, total_rows) << "the siblings' shares must still sum to the source";
 }
 
-// A sibling PROVEN to own none of the keys gets a true zero, so the appliers drop the rowset for it
-// and the siblings' stats still sum to the source instead of spreading phantom rows over everyone.
-TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_zeroes_a_non_overlapping_rowset) {
+// A sibling PROVEN to own none of the keys carries none of the rowset's segments. Presence is keyed
+// off the segments, so this has to be an explicit removal -- zeroing the counters no longer drops it.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_drops_a_non_overlapping_rowset) {
     RowsetMetadataPB rowset;
     rowset.set_num_rows(10);
     rowset.set_data_size(1000);
     rowset.set_num_dels(3);
+    rowset.set_overlapped(true);
+    rowset.add_segment_metas()->set_filename("seg_a");
+    rowset.add_segment_metas()->set_filename("seg_b");
+    rowset.add_deprecated_segments("seg_a");
+    rowset.add_deprecated_segments("seg_b");
 
     RowsetMetadataPB child = rowset;
     update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/0, RangeOverlap::kNo);
+    EXPECT_EQ(0, child.segment_metas_size()) << "a sibling that owns nothing must not carry the data";
+    EXPECT_EQ(0, child.deprecated_segments_size()) << "the legacy array is back-filled from, so it goes too";
+    EXPECT_FALSE(child.overlapped());
     EXPECT_EQ(0, child.num_rows());
     EXPECT_EQ(0, child.data_size());
     EXPECT_EQ(0, child.num_dels());
+}
+
+// ... but a kYes sibling keeps every segment: the envelope only proves "may own", so the data stays
+// and the tablet range decides at read time.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset_keeps_segments) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.add_segment_metas()->set_filename("seg_a");
+    rowset.add_segment_metas()->set_filename("seg_b");
+
+    RowsetMetadataPB child = rowset;
+    update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/3, RangeOverlap::kYes);
+    EXPECT_EQ(2, child.segment_metas_size());
 }
 
 // kUnknown (no sort-key bounds to classify with) keeps the pre-existing apportionment byte for byte,

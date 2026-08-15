@@ -204,8 +204,11 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
 
 // Build rssid_remap for DCG application during replication.
 // Maps source rssid to target rssid based on which op_writes will actually be applied.
-// For PK tables: an op_write is applied when dels_size > 0 || num_rows > 0 || has_delete_predicate.
-// For Non-PK tables: an op_write is applied when has_rowset && (num_rows > 0 || has_delete_predicate).
+// The predicates below must stay identical to the ones the two appliers use to decide whether an
+// op_write carries anything -- they model the same target_id advance. See the note on
+// PrimaryKeyTxnLogApplier::apply_write_log for why presence keys off the payload and not num_rows.
+// For PK tables: an op_write is applied when segments > 0 || dels > 0 || del_ssts > 0 || has_delete_predicate.
+// For Non-PK tables: an op_write is applied when has_rowset && (segments > 0 || has_delete_predicate).
 std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplication& op_replication,
                                                          uint32_t start_target_id, bool is_pk) {
     std::unordered_map<uint32_t, uint32_t> rssid_remap;
@@ -216,10 +219,10 @@ std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplic
         }
         bool included = false;
         if (is_pk) {
-            included = op_write.dels_meta_size() > 0 || op_write.rowset().num_rows() > 0 ||
-                       op_write.rowset().has_delete_predicate();
+            included = op_write.rowset().segment_metas_size() > 0 || op_write.dels_meta_size() > 0 ||
+                       op_write.del_ssts_size() > 0 || op_write.rowset().has_delete_predicate();
         } else {
-            included = op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
+            included = op_write.rowset().segment_metas_size() > 0 || op_write.rowset().has_delete_predicate();
         }
         if (included) {
             uint32_t source_id = op_write.rowset().id();

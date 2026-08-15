@@ -683,9 +683,23 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
     if (split_count <= 1) return;
 
     if (overlap == RangeOverlap::kNo) {
-        // Proven to own none of the rowset's keys: a true zero, not an apportionment artifact. The
-        // appliers drop the rowset for this sibling, which is exactly right -- and it keeps the
-        // siblings' stats summing to the source instead of spreading phantom rows over everyone.
+        // Proven to own none of the rowset's keys, so drop its segments outright rather than hand
+        // this sibling data it can never read. Presence is decided by what the op carries, so this
+        // has to be an explicit removal -- zeroing the counters no longer takes the rowset with it.
+        //
+        // Only the segments go. A del file must still be replayed against this sibling's own index
+        // (that is why the splitter keeps a del-file-carrying rowset whatever its range says), and
+        // dels_meta/del_ssts live on the op_write, not here.
+        rowset->clear_segment_metas();
+        // The legacy arrays are dual-written for rollback, so they have to go with segment_metas or
+        // a pre-feature reader would still see the segments (lake_proto_normalizer back-fills from
+        // them).
+        rowset->clear_deprecated_segments();
+        rowset->clear_deprecated_segment_size();
+        rowset->clear_deprecated_segment_encryption_metas();
+        rowset->clear_deprecated_shared_segments();
+        rowset->clear_deprecated_bundle_file_offsets();
+        rowset->set_overlapped(false);
         if (rowset->has_num_rows()) rowset->set_num_rows(0);
         if (rowset->has_data_size()) rowset->set_data_size(0);
         if (rowset->has_num_dels()) rowset->set_num_dels(0);
