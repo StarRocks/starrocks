@@ -24,7 +24,7 @@ jobs:
   kick-scan-pending:
     # sync-normal = the reverse-sync glue pool (pr-info / pending-scan live there too);
     # bare [sync] is the FORWARD trigger's pool — keep reverse work off it.
-    runs-on: [self-hosted, sync-normal]
+    runs-on: [self-hosted, sync-normal, ubuntu]
     if: >
       github.repository == 'StarRocks/starrocks' &&
       github.event.pull_request.merged == true &&

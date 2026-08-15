@@ -29,7 +29,7 @@ jobs:
     # /var/lib/elastic-service, which is exactly how the only prior run of this workflow
     # failed (2026-08-04, landed on such a runner). The reverse-sync prereqs live on the
     # sg-ubuntu-sync-sr machines, which carry sync-normal.
-    runs-on: [self-hosted, sync-normal]
+    runs-on: [self-hosted, sync-normal, ubuntu]
     if: github.repository == 'StarRocks/starrocks'
     steps:
       - name: scan
