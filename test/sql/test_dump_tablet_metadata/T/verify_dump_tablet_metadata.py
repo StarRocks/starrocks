@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Verify exact standalone and bundle tablet-metadata diagnostic reads."""
+"""Verify cache-local standalone and bundled tablet-metadata diagnostic reads."""
 
 import base64
 import configparser
 import csv
 import functools
+import ipaddress
 import io
 import json
 import os
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -71,15 +73,25 @@ def first_value(rows, field, description):
     return rows[0][field]
 
 
-def find_compute_node():
+def find_alive_compute_nodes():
+    nodes = []
     for row in query_rows("SHOW COMPUTE NODES"):
         alive = row.get("Alive", "").lower()
         if alive in ("true", "1"):
             host = row.get("IP") or row.get("Host")
             port = row.get("HttpPort")
-            if host and port:
-                return host, port
-    raise RuntimeError("no alive compute node with HTTP endpoint")
+            if not host or not port:
+                raise RuntimeError("alive compute node is missing an HTTP endpoint")
+            try:
+                valid_port = 0 < int(port) <= 65535
+            except ValueError:
+                valid_port = False
+            if not valid_port:
+                raise RuntimeError("alive compute node has an invalid HTTP endpoint")
+            nodes.append((host, port))
+    if not nodes:
+        raise RuntimeError("no alive compute node with HTTP endpoint")
+    return nodes
 
 
 def table_info(database, table):
@@ -121,22 +133,17 @@ def request(url, read_body):
             error.close()
 
 
-def verify_exact(base_url, tablet_id, version, is_bundle):
-    status, headers, body = request(
-        "{}/api/cloudnative/dump_tablet_metadata/{}?version={}&is_bundle={}".format(
-            base_url, tablet_id, version, str(is_bundle).lower()
-        ),
-        True,
-    )
-    if status != 200:
-        raise RuntimeError("exact metadata read failed")
+def verify_metadata_envelope(headers, body, tablet_id, version):
     if headers.get("Content-Type") != "application/json":
         raise RuntimeError("unexpected content type")
     if headers.get("Cache-Control") != "no-store":
         raise RuntimeError("unexpected cache control")
     if headers.get("X-Content-Type-Options") != "nosniff":
         raise RuntimeError("unexpected content type options")
-    document = json.loads(body)
+    try:
+        document = json.loads(body)
+    except (TypeError, ValueError):
+        raise RuntimeError("metadata response was not valid JSON") from None
     document_fields = set(document)
     if "metadata" not in document_fields or not document_fields.issubset({"metadata", "redacted_fields"}):
         raise RuntimeError("unexpected metadata envelope")
@@ -149,17 +156,81 @@ def verify_exact(base_url, tablet_id, version, is_bundle):
         ):
             raise RuntimeError("unexpected redacted fields")
     metadata = document["metadata"]
-    if metadata.get("id") != tablet_id or metadata.get("version") != version:
+    if not isinstance(metadata, dict) or metadata.get("id") != tablet_id or metadata.get("version") != version:
         raise RuntimeError("metadata id or version mismatch")
     if has_encryption_meta(document):
         raise RuntimeError("metadata response contains encryption material")
 
 
-def require_status(url, expected):
-    status, _, _ = request(url, False)
-    if status != expected:
-        raise RuntimeError("unexpected diagnostic status")
-    return status
+def verify_not_cached_response(headers, body):
+    if headers.get("Content-Type") != "application/json":
+        raise RuntimeError("cache miss had unexpected content type")
+    if headers.get("Cache-Control") != "no-store":
+        raise RuntimeError("cache miss had unexpected cache control")
+    if headers.get("X-Content-Type-Options") != "nosniff":
+        raise RuntimeError("cache miss had unexpected content type options")
+    try:
+        document = json.loads(body)
+    except (TypeError, ValueError):
+        raise RuntimeError("cache miss response was not valid JSON") from None
+    if set(document) != {"code", "message"} or document.get("code") != "METADATA_NOT_CACHED":
+        raise RuntimeError("cache miss response had an unexpected error envelope")
+    message = document.get("message")
+    if not isinstance(message, str) or not all(
+        fragment in message
+        for fragment in ("current compute node", "in-memory metadata cache", "AWS CLI", "meta_tool")
+    ):
+        raise RuntimeError("cache miss response was not actionable")
+
+
+def format_authority_host(host):
+    address, separator, zone = host.partition("%")
+    try:
+        ipaddress.IPv6Address(address)
+    except ValueError:
+        return host
+    if separator:
+        return "[{}%25{}]".format(address, urllib.parse.quote(zone, safe=""))
+    return "[{}]".format(address)
+
+
+def endpoint_url(host, port, tablet_id, query):
+    path = "http://{}:{}/api/cloudnative/dump_tablet_metadata/{}".format(
+        format_authority_host(host), port, tablet_id
+    )
+    return path if not query else path + "?" + query
+
+
+def verify_exact_fixture_on_all_nodes(nodes, tablet_id, version):
+    cache_hits = 0
+    for host, port in nodes:
+        status, headers, body = request(endpoint_url(host, port, tablet_id, "version={}".format(version)), True)
+        if status == 200:
+            verify_metadata_envelope(headers, body, tablet_id, version)
+            cache_hits += 1
+        elif status == 404:
+            verify_not_cached_response(headers, body)
+        else:
+            raise RuntimeError("exact metadata request returned status={}".format(status))
+    if cache_hits == 0:
+        raise RuntimeError("metadata was not cached on any alive compute node")
+
+
+def verify_impossible_version_on_all_nodes(nodes, tablet_id):
+    for host, port in nodes:
+        status, headers, body = request(
+            endpoint_url(host, port, tablet_id, "version=9223372036854775807"), True
+        )
+        if status != 404:
+            raise RuntimeError("impossible-version request returned status={}".format(status))
+        verify_not_cached_response(headers, body)
+
+
+def require_status_on_all_nodes(nodes, tablet_id, query, expected):
+    for host, port in nodes:
+        status, _, _ = request(endpoint_url(host, port, tablet_id, query), False)
+        if status != expected:
+            raise RuntimeError("diagnostic request returned status={}".format(status))
 
 
 def main():
@@ -171,28 +242,21 @@ def main():
         return 2
 
     database, standalone_table, bundled_table = sys.argv[1:]
-    host, port = find_compute_node()
-    base_url = "http://{}:{}".format(host, port)
+    nodes = find_alive_compute_nodes()
     standalone_id, standalone_version = table_info(database, standalone_table)
     bundled_id, bundled_version = table_info(database, bundled_table)
 
-    verify_exact(base_url, standalone_id, standalone_version, False)
-    verify_exact(base_url, bundled_id, bundled_version, True)
-    unknown_parameter = require_status(
-        "{}/api/cloudnative/dump_tablet_metadata/{}?version={}&is_bundle=false&pretty=true".format(
-            base_url, standalone_id, standalone_version
-        ),
-        400,
-    )
-    missing_version = require_status(
-        "{}/api/cloudnative/dump_tablet_metadata/{}?is_bundle=false".format(base_url, standalone_id),
-        400,
-    )
+    verify_exact_fixture_on_all_nodes(nodes, standalone_id, standalone_version)
+    verify_exact_fixture_on_all_nodes(nodes, bundled_id, bundled_version)
+    verify_impossible_version_on_all_nodes(nodes, standalone_id)
+    require_status_on_all_nodes(nodes, standalone_id, "version={}&is_bundle=false".format(standalone_version), 400)
+    require_status_on_all_nodes(nodes, standalone_id, "", 400)
 
-    print("standalone_exact=PASS")
-    print("bundle_exact=PASS")
-    print("unknown_parameter_status={}".format(unknown_parameter))
-    print("missing_version_status={}".format(missing_version))
+    print("standalone_cache_local=PASS")
+    print("bundle_cache_local=PASS")
+    print("impossible_version_all_nodes=PASS")
+    print("removed_is_bundle_all_nodes=PASS")
+    print("missing_version_all_nodes=PASS")
     return 0
 
 

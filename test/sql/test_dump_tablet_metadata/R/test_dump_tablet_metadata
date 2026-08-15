@@ -1,4 +1,4 @@
--- name: test_dump_tablet_metadata_exact_reads @cloud @sequential
+-- name: test_dump_tablet_metadata_cache_local_reads @cloud @sequential
 CREATE DATABASE db_${uuid0};
 -- result:
 -- !result
@@ -26,10 +26,11 @@ INSERT INTO bundled_meta VALUES (1);
 shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata.py db_${uuid0} standalone_meta bundled_meta
 -- result:
 0
-standalone_exact=PASS
-bundle_exact=PASS
-unknown_parameter_status=400
-missing_version_status=400
+standalone_cache_local=PASS
+bundle_cache_local=PASS
+impossible_version_all_nodes=PASS
+removed_is_bundle_all_nodes=PASS
+missing_version_all_nodes=PASS
 -- !result
 CLEANUP {
     DROP DATABASE IF EXISTS ${db[0]} FORCE;

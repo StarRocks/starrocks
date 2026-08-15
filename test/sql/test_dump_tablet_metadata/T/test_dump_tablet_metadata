@@ -1,4 +1,4 @@
--- name: test_dump_tablet_metadata_exact_reads @cloud @sequential
+-- name: test_dump_tablet_metadata_cache_local_reads @cloud @sequential
 
 CREATE DATABASE db_${uuid0};
 USE db_${uuid0};

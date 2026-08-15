@@ -86,15 +86,6 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
-### lake_dump_tablet_metadata_max_object_size_bytes
-
-- Default: 33554432
-- Type: Long
-- Unit: Bytes
-- Is mutable: Yes
-- Description: The maximum size of a physical metadata object that the `dump_tablet_metadata` diagnostic API can read from object storage after an exact-version metadata-cache miss. A logical metadata-cache hit is returned directly and is not subject to this physical-object limit. A value less than or equal to `0` rejects all cache-miss reads. This limit does not affect normal tablet metadata reads. For larger or more complex offline diagnostics, retrieve the object with a specialized storage tool and use `meta_tool` to inspect it.
-- Introduced in: v4.2
-
 ### lake_enable_pk_preserve_txn_delete_order
 
 - Default: true

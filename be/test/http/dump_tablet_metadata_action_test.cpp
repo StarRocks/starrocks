@@ -30,7 +30,6 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -43,7 +42,6 @@
 
 #include "base/testutil/assert.h"
 #include "base/url_coding.h"
-#include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "http/action/lake/dump_tablet_metadata_serializer.h"
@@ -55,7 +53,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/protobuf_file.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
@@ -108,11 +106,10 @@ struct SyntheticRequest {
 };
 
 SyntheticRequest valid_request(DumpTabletMetadataAction* action, std::string tablet_id = "17",
-                               std::string version = "2", std::string is_bundle = "false") {
+                               std::string version = "2") {
     SyntheticRequest holder(action);
     holder.set_route(std::move(tablet_id));
     holder.add_query("version", std::move(version));
-    holder.add_query("is_bundle", std::move(is_bundle));
     return holder;
 }
 
@@ -154,6 +151,17 @@ public:
 
 private:
     DiagnosticLogSink _sink;
+};
+
+class ScopedDeathTestStyle {
+public:
+    ScopedDeathTestStyle() : _previous(::testing::FLAGS_gtest_death_test_style) {
+        ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+    }
+    ~ScopedDeathTestStyle() { ::testing::FLAGS_gtest_death_test_style = _previous; }
+
+private:
+    std::string _previous;
 };
 
 void expect_diagnostic_headers(evhttp_request* request) {
@@ -438,58 +446,7 @@ TEST(DumpTabletMetadataSerializerTest, RejectsSinkRefusalEvenWhenJson2pbReportsS
     EXPECT_TRUE(result.status().is_capacity_limit_exceeded()) << result.status();
 }
 
-TEST(DumpTabletMetadataActionTest, RejectsEveryInputOutsideTheExactReadContractBeforeAdmission) {
-    ScopedReplyCapture capture;
-    DumpTabletMetadataAction action(nullptr);
-    struct InvalidRequest {
-        const char* tablet_id;
-        const char* version;
-        const char* is_bundle;
-        bool add_unknown = false;
-    };
-    const std::vector<InvalidRequest> invalid = {
-            {nullptr, "2", "false"},  {"", "2", "false"},
-            {"+1", "2", "false"},     {" 1", "2", "false"},
-            {"0", "2", "false"},      {"-1", "2", "false"},
-            {"0x10", "2", "false"},   {"9223372036854775808", "2", "false"},
-            {"17", nullptr, "false"}, {"17", "", "false"},
-            {"17", "+2", "false"},    {"17", " 2", "false"},
-            {"17", "0", "false"},     {"17", "-2", "false"},
-            {"17", "0x2", "false"},   {"17", "9223372036854775808", "false"},
-            {"17", "2", nullptr},     {"17", "2", "TRUE"},
-            {"17", "2", "False"},     {"17", "2", "false", true},
-    };
-
-    for (const auto& test_case : invalid) {
-        SCOPED_TRACE(
-                testing::Message() << "tablet=" << (test_case.tablet_id == nullptr ? "<missing>" : test_case.tablet_id)
-                                   << " version=" << (test_case.version == nullptr ? "<missing>" : test_case.version)
-                                   << " bundle="
-                                   << (test_case.is_bundle == nullptr ? "<missing>" : test_case.is_bundle));
-        SyntheticRequest request(&action);
-        if (test_case.tablet_id != nullptr) {
-            request.set_route(test_case.tablet_id);
-        }
-        if (test_case.version != nullptr) {
-            request.add_query("version", test_case.version);
-        }
-        if (test_case.is_bundle != nullptr) {
-            request.add_query("is_bundle", test_case.is_bundle);
-        }
-        if (test_case.add_unknown) {
-            request.add_query("pretty", "true");
-        }
-        g_response_status = HttpStatus::OK;
-        g_response_body.clear();
-        EXPECT_EQ(-1, action.on_header(request.request.get()));
-        EXPECT_EQ(HttpStatus::BAD_REQUEST, g_response_status);
-        EXPECT_EQ(R"({"code":"INVALID_ARGUMENT","message":"invalid diagnostic request"})", g_response_body);
-        EXPECT_EQ(nullptr, request.request->handler_ctx());
-        expect_diagnostic_headers(request.ev_req);
-    }
-}
-
-class DumpTabletMetadataActionStorageTest : public testing::Test {
+class DumpTabletMetadataActionTest : public testing::Test {
 protected:
     void SetUp() override {
         _root = "/tmp/starrocks-dump-tablet-metadata-action-" + std::to_string(getpid());
@@ -497,13 +454,11 @@ protected:
         ASSERT_OK(fs::create_directories(join_path(_root, kMetadataDirectoryName)));
         _provider = std::make_shared<FixedLocationProvider>(_root);
         _tablet_manager = std::make_unique<TabletManager>(_provider, 1 << 20);
-        _saved_max_object_size = config::lake_dump_tablet_metadata_max_object_size_bytes;
         s_injected_send_reply = capture_reply;
     }
 
     void TearDown() override {
         s_injected_send_reply = nullptr;
-        config::lake_dump_tablet_metadata_max_object_size_bytes = _saved_max_object_size;
         _tablet_manager.reset();
         _provider.reset();
         (void)fs::remove_all(_root);
@@ -518,46 +473,77 @@ protected:
         ASSERT_OK(_tablet_manager->put_tablet_metadata(metadata));
     }
 
-    void put_shared_initial_metadata(int64_t anchor_tablet_id) {
-        TabletMetadataPB metadata;
-        metadata.set_id(anchor_tablet_id);
-        metadata.set_version(1);
-        metadata.mutable_schema()->set_id(701);
-        metadata.mutable_schema()->set_keys_type(DUP_KEYS);
-        const std::string path = _tablet_manager->tablet_initial_metadata_location(anchor_tablet_id);
-        ProtobufFileWithHeader file(path, LAKE_META_HEADER_MAGIC_NUMBER,
-                                    /*allow_plain_protobuf_fallback=*/true);
-        ASSERT_OK(file.save(metadata));
-    }
-
-    void put_bundle_metadata(int64_t tablet_id, int64_t version, int64_t historical_schema_id = 0) {
-        std::map<int64_t, TabletMetadataPB> metadata_by_tablet;
-        auto& metadata = metadata_by_tablet[tablet_id];
-        metadata.set_id(tablet_id);
-        metadata.set_version(version);
-        metadata.mutable_schema()->set_id(703);
-        metadata.mutable_schema()->set_keys_type(DUP_KEYS);
-        if (historical_schema_id > 0) {
-            auto& historical_schema = (*metadata.mutable_historical_schemas())[historical_schema_id];
-            historical_schema.set_id(historical_schema_id);
-            historical_schema.set_keys_type(UNIQUE_KEYS);
-            (*metadata.mutable_rowset_to_schema())[11] = historical_schema_id;
-        }
-        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadata_by_tablet));
-    }
-
     std::string _root;
     std::shared_ptr<FixedLocationProvider> _provider;
     std::unique_ptr<TabletManager> _tablet_manager;
-    int64_t _saved_max_object_size = 0;
 };
 
-TEST_F(DumpTabletMetadataActionStorageTest, ReturnsOneCompactStandaloneObjectAndSecurityHeaders) {
+TEST_F(DumpTabletMetadataActionTest, RejectsEveryInputOutsideTheExactCacheReadContractBeforeAdmission) {
+    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
+    struct InvalidRequest {
+        const char* tablet_id;
+        const char* version;
+        const char* unexpected_query = nullptr;
+    };
+    const std::vector<InvalidRequest> invalid = {
+            {nullptr, "2"},
+            {"", "2"},
+            {"+1", "2"},
+            {" 1", "2"},
+            {"0", "2"},
+            {"-1", "2"},
+            {"0x10", "2"},
+            {"9223372036854775808", "2"},
+            {"17", nullptr},
+            {"17", ""},
+            {"17", "+2"},
+            {"17", " 2"},
+            {"17", "0"},
+            {"17", "-2"},
+            {"17", "0x2"},
+            {"17", "9223372036854775808"},
+            {"17", "2", "is_bundle"},
+            {"17", "2", "pretty"},
+    };
+
+    for (const auto& test_case : invalid) {
+        SCOPED_TRACE(
+                testing::Message() << "tablet=" << (test_case.tablet_id == nullptr ? "<missing>" : test_case.tablet_id)
+                                   << " version=" << (test_case.version == nullptr ? "<missing>" : test_case.version)
+                                   << " unexpected_query="
+                                   << (test_case.unexpected_query == nullptr ? "<none>" : test_case.unexpected_query));
+        SyntheticRequest request(&action);
+        if (test_case.tablet_id != nullptr) {
+            request.set_route(test_case.tablet_id);
+        }
+        if (test_case.version != nullptr) {
+            request.add_query("version", test_case.version);
+        }
+        if (test_case.unexpected_query != nullptr) {
+            request.add_query(test_case.unexpected_query, "true");
+        }
+        g_response_status = HttpStatus::OK;
+        g_response_body.clear();
+        EXPECT_EQ(-1, action.on_header(request.request.get()));
+        EXPECT_EQ(HttpStatus::BAD_REQUEST, g_response_status);
+        EXPECT_EQ(R"({"code":"INVALID_ARGUMENT","message":"invalid diagnostic request"})", g_response_body);
+        EXPECT_EQ(nullptr, request.request->handler_ctx());
+        expect_diagnostic_headers(request.ev_req);
+    }
+}
+
+TEST_F(DumpTabletMetadataActionTest, ReturnsDirectlyCachedRequestedMetadataAndSecurityHeaders) {
     constexpr int64_t kTabletId = 11979;
     constexpr int64_t kVersion = 23;
-    put_metadata(kTabletId, kVersion);
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(kVersion);
+    metadata->mutable_schema()->set_id(702);
+    metadata->mutable_schema()->set_keys_type(DUP_KEYS);
+    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
+                                                        metadata);
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-    auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion), "false");
+    auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
 
     ASSERT_EQ(0, action.on_header(request.request.get()));
     action.handle(request.request.get());
@@ -578,180 +564,50 @@ TEST_F(DumpTabletMetadataActionStorageTest, ReturnsOneCompactStandaloneObjectAnd
     expect_diagnostic_headers(request.ev_req);
 }
 
-TEST_F(DumpTabletMetadataActionStorageTest, ReadsBundledVersionOneFromSharedInitialObject) {
-    constexpr int64_t kRequestedTabletId = 11979;
-    constexpr int64_t kPhysicalAnchorTabletId = 11980;
-    put_shared_initial_metadata(kPhysicalAnchorTabletId);
+TEST_F(DumpTabletMetadataActionTest, ReturnsCacheScopeErrorWhenDurableMetadataIsNotCached) {
+    constexpr int64_t kTabletId = 11979;
+    constexpr int64_t kVersion = 23;
+    put_metadata(kTabletId, kVersion);
+    const std::string key = _tablet_manager->tablet_metadata_location(kTabletId, kVersion);
+    _tablet_manager->metacache()->erase(key);
+    ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(key));
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-    auto request = valid_request(&action, std::to_string(kRequestedTabletId), "1", "true");
-
-    ASSERT_EQ(0, action.on_header(request.request.get()));
-    action.handle(request.request.get());
-
-    ASSERT_EQ(HttpStatus::OK, g_response_status) << g_response_body;
-    rapidjson::Document document;
-    ASSERT_FALSE(document.Parse(g_response_body.data(), g_response_body.size()).HasParseError()) << g_response_body;
-    ASSERT_TRUE(document.HasMember("metadata"));
-    EXPECT_EQ(kRequestedTabletId, document["metadata"]["id"].GetInt64());
-    EXPECT_EQ(1, document["metadata"]["version"].GetInt64());
-}
-
-TEST_F(DumpTabletMetadataActionStorageTest, DoesNotFallbackFromNonBundledVersionOneToSharedInitialObject) {
-    constexpr int64_t kRequestedTabletId = 11979;
-    put_shared_initial_metadata(11980);
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-    auto request = valid_request(&action, std::to_string(kRequestedTabletId), "1", "false");
+    auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion));
 
     ASSERT_EQ(0, action.on_header(request.request.get()));
     action.handle(request.request.get());
 
     EXPECT_EQ(HttpStatus::NOT_FOUND, g_response_status);
-    EXPECT_EQ(R"({"code":"METADATA_NOT_FOUND","message":"tablet metadata is unavailable"})", g_response_body);
+    EXPECT_EQ(
+            R"({"code":"METADATA_NOT_CACHED","message":"tablet metadata is not cached on this compute node; this API only inspects the current compute node's in-memory metadata cache. To inspect metadata in object storage, download the file with the AWS CLI and parse it with meta_tool"})",
+            g_response_body);
+    expect_diagnostic_headers(request.ev_req);
 }
 
-TEST_F(DumpTabletMetadataActionStorageTest, ReturnsExactMetadataCacheHitWithoutReadingPhysicalObject) {
-    constexpr int64_t kTabletId = 11979;
-    constexpr int64_t kVersion = 23;
-    auto metadata = std::make_shared<TabletMetadataPB>();
-    metadata->set_id(kTabletId);
-    metadata->set_version(kVersion);
-    metadata->mutable_schema()->set_id(702);
-    metadata->mutable_schema()->set_keys_type(DUP_KEYS);
-    _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(kTabletId, kVersion),
-                                                        metadata);
-    config::lake_dump_tablet_metadata_max_object_size_bytes = 1;
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-
-    // The existing metacache stores logical (tablet, version) metadata and has no
-    // physical-layout provenance, so a hit is valid for either request layout.
-    for (const char* is_bundle : {"false", "true"}) {
-        auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion), is_bundle);
-        ASSERT_EQ(0, action.on_header(request.request.get()));
-        action.handle(request.request.get());
-
-        ASSERT_EQ(HttpStatus::OK, g_response_status) << g_response_body;
-        rapidjson::Document document;
-        ASSERT_FALSE(document.Parse(g_response_body.data(), g_response_body.size()).HasParseError()) << g_response_body;
-        ASSERT_TRUE(document.HasMember("metadata"));
-        EXPECT_EQ(kTabletId, document["metadata"]["id"].GetInt64());
-        EXPECT_EQ(kVersion, document["metadata"]["version"].GetInt64());
-    }
+TEST_F(DumpTabletMetadataActionTest, ReturnsDiagnosticUnavailableWhenNoTabletManagerExists) {
+    ScopedDeathTestStyle death_test_style;
+    ASSERT_EXIT(
+            {
+                StorageEnv::GetInstance()->destroy();
+                if (StorageEnv::GetInstance()->lake_tablet_manager() != nullptr) {
+                    _exit(1);
+                }
+                DumpTabletMetadataAction action(nullptr);
+                auto request = valid_request(&action);
+                if (action.on_header(request.request.get()) != 0) {
+                    _exit(1);
+                }
+                action.handle(request.request.get());
+                _exit(g_response_status == HttpStatus::SERVICE_UNAVAILABLE &&
+                                      g_response_body ==
+                                              R"({"code":"DIAGNOSTIC_UNAVAILABLE","message":"tablet metadata diagnostic is unavailable"})"
+                              ? 0
+                              : 1);
+            },
+            ::testing::ExitedWithCode(0), "");
 }
 
-TEST_F(DumpTabletMetadataActionStorageTest, PhysicalReadsDoNotPopulateMetadataCache) {
-    constexpr int64_t kStandaloneTabletId = 11979;
-    constexpr int64_t kBundleTabletId = 11980;
-    constexpr int64_t kVersion = 23;
-    put_metadata(kStandaloneTabletId, kVersion);
-    put_bundle_metadata(kBundleTabletId, kVersion);
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-
-    for (const auto& [tablet_id, is_bundle] :
-         std::array<std::pair<int64_t, const char*>, 2>{{{kStandaloneTabletId, "false"}, {kBundleTabletId, "true"}}}) {
-        const std::string logical_path = _tablet_manager->tablet_metadata_location(tablet_id, kVersion);
-        _tablet_manager->metacache()->erase(logical_path);
-        ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(logical_path));
-
-        auto request = valid_request(&action, std::to_string(tablet_id), std::to_string(kVersion), is_bundle);
-        ASSERT_EQ(0, action.on_header(request.request.get()));
-        action.handle(request.request.get());
-        ASSERT_EQ(HttpStatus::OK, g_response_status) << g_response_body;
-        EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(logical_path));
-    }
-}
-
-TEST_F(DumpTabletMetadataActionStorageTest, RestoresCurrentAndHistoricalSchemasFromBundle) {
-    constexpr int64_t kTabletId = 11980;
-    constexpr int64_t kVersion = 23;
-    constexpr int64_t kHistoricalSchemaId = 704;
-    put_bundle_metadata(kTabletId, kVersion, kHistoricalSchemaId);
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-    auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion), "true");
-
-    ASSERT_EQ(0, action.on_header(request.request.get()));
-    action.handle(request.request.get());
-
-    ASSERT_EQ(HttpStatus::OK, g_response_status) << g_response_body;
-    rapidjson::Document document;
-    ASSERT_FALSE(document.Parse(g_response_body.data(), g_response_body.size()).HasParseError()) << g_response_body;
-    ASSERT_EQ(703, document["metadata"]["schema"]["id"].GetInt64());
-    ASSERT_TRUE(document["metadata"]["historical_schemas"].IsArray());
-    bool found_historical_schema = false;
-    for (const auto& entry : document["metadata"]["historical_schemas"].GetArray()) {
-        if (entry["key"].GetInt64() == kHistoricalSchemaId) {
-            EXPECT_EQ(kHistoricalSchemaId, entry["value"]["id"].GetInt64());
-            found_historical_schema = true;
-        }
-    }
-    EXPECT_TRUE(found_historical_schema);
-}
-
-TEST_F(DumpTabletMetadataActionStorageTest, RejectsOversizedStandaloneAndBundleObjectsWithBadRequest) {
-    constexpr int64_t kStandaloneTabletId = 11979;
-    constexpr int64_t kBundleTabletId = 11980;
-    constexpr int64_t kVersion = 23;
-    put_metadata(kStandaloneTabletId, kVersion);
-    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(kStandaloneTabletId, kVersion));
-    put_bundle_metadata(kBundleTabletId, kVersion);
-    config::lake_dump_tablet_metadata_max_object_size_bytes = 1;
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-
-    for (const auto& [tablet_id, is_bundle] :
-         std::array<std::pair<int64_t, const char*>, 2>{{{kStandaloneTabletId, "false"}, {kBundleTabletId, "true"}}}) {
-        SCOPED_TRACE(testing::Message() << "tablet_id=" << tablet_id << " is_bundle=" << is_bundle);
-        auto request = valid_request(&action, std::to_string(tablet_id), std::to_string(kVersion), is_bundle);
-        ASSERT_EQ(0, action.on_header(request.request.get()));
-        action.handle(request.request.get());
-        EXPECT_EQ(HttpStatus::BAD_REQUEST, g_response_status);
-        EXPECT_EQ(R"({"code":"METADATA_TOO_LARGE","message":"tablet metadata exceeds a diagnostic limit"})",
-                  g_response_body);
-    }
-}
-
-TEST_F(DumpTabletMetadataActionStorageTest, NonPositiveObjectLimitFailsClosedOnCacheMiss) {
-    constexpr int64_t kTabletId = 11979;
-    constexpr int64_t kVersion = 23;
-    put_metadata(kTabletId, kVersion);
-    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(kTabletId, kVersion));
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-
-    for (const int64_t limit : {0, -1}) {
-        config::lake_dump_tablet_metadata_max_object_size_bytes = limit;
-        auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion), "false");
-        ASSERT_EQ(0, action.on_header(request.request.get()));
-        action.handle(request.request.get());
-        EXPECT_EQ(HttpStatus::BAD_REQUEST, g_response_status);
-        EXPECT_EQ(R"({"code":"METADATA_TOO_LARGE","message":"tablet metadata exceeds a diagnostic limit"})",
-                  g_response_body);
-    }
-}
-
-TEST_F(DumpTabletMetadataActionStorageTest, UsesStableSanitizedErrorsForMissingAndWrongLayout) {
-    constexpr int64_t kTabletId = 41;
-    constexpr int64_t kVersion = 4;
-    put_metadata(kTabletId, kVersion);
-    DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
-
-    {
-        auto request = valid_request(&action, "999", "4", "false");
-        ASSERT_EQ(0, action.on_header(request.request.get()));
-        action.handle(request.request.get());
-        EXPECT_EQ(HttpStatus::NOT_FOUND, g_response_status);
-        EXPECT_EQ(R"({"code":"METADATA_NOT_FOUND","message":"tablet metadata is unavailable"})", g_response_body);
-        expect_diagnostic_headers(request.ev_req);
-    }
-    {
-        _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(kTabletId, kVersion));
-        auto request = valid_request(&action, std::to_string(kTabletId), std::to_string(kVersion), "true");
-        ASSERT_EQ(0, action.on_header(request.request.get()));
-        action.handle(request.request.get());
-        EXPECT_EQ(HttpStatus::NOT_FOUND, g_response_status);
-        EXPECT_EQ(R"({"code":"METADATA_NOT_FOUND","message":"tablet metadata is unavailable"})", g_response_body);
-        expect_diagnostic_headers(request.ev_req);
-    }
-}
-
-TEST_F(DumpTabletMetadataActionStorageTest, HoldsAdmissionUntilRequestFreeAndDoesNotQueue) {
+TEST_F(DumpTabletMetadataActionTest, HoldsAdmissionUntilRequestFreeAndDoesNotQueue) {
     DumpTabletMetadataAction action(nullptr, _tablet_manager.get());
     auto first = std::make_unique<SyntheticRequest>(valid_request(&action));
     ASSERT_EQ(0, action.on_header(first->request.get()));

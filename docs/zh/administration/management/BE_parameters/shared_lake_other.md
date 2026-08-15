@@ -83,15 +83,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
-### lake_dump_tablet_metadata_max_object_size_bytes
-
-- 默认值：33554432
-- 类型：Long
-- 单位：Bytes
-- 是否动态：是
-- 描述：`dump_tablet_metadata` 诊断 API 在精确版本的元数据缓存未命中后，允许从对象存储读取的物理元数据对象最大大小。若命中逻辑元数据缓存，则直接返回结果，不受此物理对象大小限制。设置为小于或等于 `0` 时，拒绝所有缓存未命中的读取。该配置不影响正常的 Tablet 元数据读取。对于更大或更复杂的离线诊断，建议使用专业存储工具获取对象，再通过 `meta_tool` 检查。
-- 引入版本：v4.2
-
 ### lake_enable_pk_preserve_txn_delete_order
 
 - 默认值：true

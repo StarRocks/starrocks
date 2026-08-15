@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include "base/concurrency/concurrent_limiter.h"
 #include "gutil/macros.h"
 #include "platform/http/http_handler.h"
