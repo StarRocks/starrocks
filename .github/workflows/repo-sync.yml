@@ -28,6 +28,8 @@ run-name: Repo Sync(${{ inputs.COMMIT_ID }} [${{ inputs.BRANCH }}])
 # PR's URL is commented back onto the CD source PR instead (the linkage lives on the
 # private side only).
 #
+# Runner pools (mirror of the forward's three): sync-normal = glue (pr-info, both
+# machines), sync-main / sync-branch = one machine each (executor serialization).
 # Runner prerequisites (SR-side self-hosted sync runner):
 #   - /var/lib/starrocks           : target working copy (StarRocks)
 #   - /var/lib/elastic-service     : sync tooling
@@ -67,7 +69,10 @@ jobs:
 
   pr-info:
     name: Add PR Information
-    runs-on: [self-hosted, sync, ubuntu]
+    # sync-normal = the parallel-safe glue pool (mirror of the forward's sync-normal);
+    # both sync-sr machines carry it. The bare `sync` label was retired from these
+    # machines (it belongs to the legacy forward-trigger glue runners).
+    runs-on: [self-hosted, sync-normal]
     env:
       PR_ID: ${{ inputs.PR_ID }}
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
