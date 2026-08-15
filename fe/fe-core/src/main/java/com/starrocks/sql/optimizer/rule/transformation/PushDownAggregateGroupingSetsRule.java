@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
@@ -206,10 +207,12 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             Preconditions.checkState(countFn instanceof AggregateFunction);
 
             if (sumArg.getType().isDecimalOfAnyVersion()) {
-                // the registered SUM signature is a wildcard decimal type; rectify it to the concrete
-                // argument precision/scale before use, same as the rollup level below and the analyzer path.
-                sumFn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) sumFn,
-                        sumArg.getType(), sumArg.getType());
+                // decimal SUM always widens its accumulator to DECIMAL128(38, scale) - narrowing the
+                // return type to the argument's own (possibly DECIMAL32/64) precision would both mismatch
+                // the BE's registered decimal_sum signature and lose the accumulator width SUM needs to
+                // avoid overflow. Reuse the canonical decimal-SUM synthesis helper instead of rectifying
+                // by hand, so this stays in sync with how MV rewrite already builds a decimal SUM.
+                sumFn = ScalarOperatorUtil.findSumFn(new Type[] {sumArg.getType()});
             }
 
             CallOperator sumCall = new CallOperator(FunctionSet.SUM, sumFn.getReturnType(),

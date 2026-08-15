@@ -342,11 +342,17 @@ public class GroupingSetsTest extends PlanTestBase {
             // decimal128 return type registered on the builtin SUM signature
             String sql = "select t1b, t1c, t1d, avg(id_decimal) " +
                     "   from test_all_type group by rollup(t1b, t1c, t1d)";
-            String plan = getFragmentPlan(sql);
+            String plan = getVerboseExplain(sql);
+            // id_decimal is DECIMAL64(10,2); the synthesized sum must widen its result to
+            // DECIMAL128(38, 2) - the BE's registered decimal_sum accumulator width - not stay
+            // narrowed to the argument's own DECIMAL64 precision
             assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
-                    "  |  output: sum(10: id_decimal), count(10: id_decimal)\n" +
-                    "  |  group by: 2: t1b, 3: t1c, 4: t1d");
+                    "  |  aggregate: sum[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; " +
+                    "result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
+                    "count[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; result: BIGINT; " +
+                    "args nullable: true; result nullable: false]\n" +
+                    "  |  group by: [2: t1b, SMALLINT, true], [3: t1c, INT, true], [4: t1d, BIGINT, true]");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
