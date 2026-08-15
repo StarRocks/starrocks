@@ -206,9 +206,9 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
 // Maps source rssid to target rssid based on which op_writes will actually be applied.
 // The predicates below must stay identical to the ones the two appliers use to decide whether an
 // op_write carries anything -- they model the same target_id advance. See the note on
-// PrimaryKeyTxnLogApplier::apply_write_log for why presence keys off the payload and not num_rows.
-// For PK tables: an op_write is applied when segments > 0 || dels > 0 || del_ssts > 0 || has_delete_predicate.
-// For Non-PK tables: an op_write is applied when has_rowset && (segments > 0 || has_delete_predicate).
+// PrimaryKeyTxnLogApplier::apply_write_log for why segments count alongside num_rows.
+// For PK tables: an op_write is applied when segments > 0 || dels > 0 || num_rows > 0 || has_delete_predicate.
+// For Non-PK tables: an op_write is applied when has_rowset && (segments > 0 || num_rows > 0 || has_delete_predicate).
 std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplication& op_replication,
                                                          uint32_t start_target_id, bool is_pk) {
     std::unordered_map<uint32_t, uint32_t> rssid_remap;
@@ -220,9 +220,10 @@ std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplic
         bool included = false;
         if (is_pk) {
             included = op_write.rowset().segment_metas_size() > 0 || op_write.dels_meta_size() > 0 ||
-                       op_write.del_ssts_size() > 0 || op_write.rowset().has_delete_predicate();
+                       op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
         } else {
-            included = op_write.rowset().segment_metas_size() > 0 || op_write.rowset().has_delete_predicate();
+            included = op_write.rowset().segment_metas_size() > 0 || op_write.rowset().num_rows() > 0 ||
+                       op_write.rowset().has_delete_predicate();
         }
         if (included) {
             uint32_t source_id = op_write.rowset().id();
@@ -582,14 +583,13 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        // Presence is decided by what the op carries, never by num_rows. On a cross publish that
-        // count is apportioned per sibling, so a rowset whose segments hold this tablet's rows can
-        // still arrive with num_rows == 0; keying the skip off it drops those segments and the rows
-        // vanish while the transaction reports success. Everywhere else the two agree: a writer that
-        // produced no rows produces no segments either, so this is not a behaviour change for an
-        // ordinary publish.
+        // Segments count as payload alongside num_rows. On a cross publish that count is
+        // apportioned per sibling, so a rowset whose segments hold this tablet's rows can still
+        // arrive with num_rows == 0; skipping on the count alone drops those segments and the rows
+        // vanish while the transaction reports success. The check is additive on purpose -- every
+        // op an ordinary publish used to attach is still attached, byte for byte.
         if (op_write.rowset().segment_metas_size() == 0 && op_write.dels_meta_size() == 0 &&
-            op_write.del_ssts_size() == 0 && !op_write.rowset().has_delete_predicate()) {
+            op_write.rowset().num_rows() == 0 && !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
@@ -1129,10 +1129,12 @@ private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
-        // Carries data if it carries segments -- see the note on the primary-key applier: num_rows is
-        // apportioned per sibling on a cross publish and must not decide whether the rowset exists.
+        // Carries data if it carries segments too -- see the note on the primary-key applier:
+        // num_rows is apportioned per sibling on a cross publish and cannot be the only witness
+        // that the rowset exists.
         if (op_write.has_rowset() &&
-            (op_write.rowset().segment_metas_size() > 0 || op_write.rowset().has_delete_predicate())) {
+            (op_write.rowset().segment_metas_size() > 0 || op_write.rowset().num_rows() > 0 ||
+             op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());

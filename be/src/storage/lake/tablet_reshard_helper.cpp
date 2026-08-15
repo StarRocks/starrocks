@@ -709,22 +709,12 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
     // kYes / kUnknown: spread the source's counters over the siblings. These are statistics only --
     // the appliers decide a rowset's presence from its segments, so a zero here costs accuracy in
     // compaction scoring and `SHOW`, never data.
-    //
-    // The one zero worth avoiding is a rowset that still carries segments reporting num_rows == 0:
-    // that reads as "empty" to every consumer of the statistic, and with the kNo siblings now zeroed
-    // outright it is reachable whenever the owning sibling's index draws no remainder -- one row
-    // split four ways and owned by child 3 leaves every sibling at zero. Floor those at 1. It
-    // over-counts by at most split_count - 1, and only for a rowset holding fewer rows than the
-    // split count; an exact per-sibling count needs the real row selection, not an index-based
-    // share, because no sibling can see which of its peers the classifier ruled out.
-    const bool carries_segments = rowset->segment_metas_size() > 0;
     auto apportion = [split_count, split_index](int64_t value) {
         return value / split_count + (split_index < value % split_count ? 1 : 0);
     };
 
     if (rowset->has_num_rows()) {
-        const int64_t scaled = apportion(rowset->num_rows());
-        rowset->set_num_rows((carries_segments && rowset->num_rows() > 0) ? std::max<int64_t>(1, scaled) : scaled);
+        rowset->set_num_rows(apportion(rowset->num_rows()));
     }
     if (rowset->has_data_size()) {
         rowset->set_data_size(apportion(rowset->data_size()));

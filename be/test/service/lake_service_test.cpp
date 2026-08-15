@@ -4095,20 +4095,28 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_pk_approximate_mode) {
     int64_t pk_tablet_id = pk_metadata->id();
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(pk_metadata));
 
-    // Simulate a rowset with num_rows=100 and num_dels=20 (80 live rows). Write the published
-    // metadata directly: what is under test is how get_tablet_stats counts, not how a publish
-    // gets there, and a rowset only exists if it carries a segment.
-    auto metadata_v2 = std::make_shared<TabletMetadataPB>(*pk_metadata);
-    metadata_v2->set_version(2);
-    metadata_v2->set_next_rowset_id(2);
-    auto* rowset = metadata_v2->add_rowsets();
-    rowset->set_id(1);
-    rowset->set_overlapped(false);
+    // Simulate a rowset with num_rows=100 and num_dels=20 (80 live rows)
+    auto txn_id = next_id();
+    TxnLog txn_log;
+    txn_log.set_tablet_id(pk_tablet_id);
+    txn_log.set_partition_id(_partition_id);
+    txn_log.set_txn_id(txn_id);
+    auto* rowset = txn_log.mutable_op_write()->mutable_rowset();
     rowset->set_num_rows(100);
     rowset->set_data_size(4096);
     rowset->set_num_dels(20); // 20 rows deleted but not yet compacted
-    rowset->add_segment_metas()->set_filename(lake::gen_segment_filename(next_id()));
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata_v2));
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(pk_tablet_id);
+        req.add_txn_ids(txn_id);
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
 
     // Force approximate mode for this case, independent of global default value.
     bool old_value = config::lake_enable_accurate_pk_row_count;
@@ -4137,19 +4145,28 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_pk_accurate_mode) {
     int64_t pk_tablet_id = pk_metadata->id();
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(pk_metadata));
 
-    // Simulate a rowset with num_rows=200 and num_dels=50. Written straight into the published
-    // metadata for the same reason as the approximate-mode case above.
-    auto metadata_v2 = std::make_shared<TabletMetadataPB>(*pk_metadata);
-    metadata_v2->set_version(2);
-    metadata_v2->set_next_rowset_id(2);
-    auto* rowset = metadata_v2->add_rowsets();
-    rowset->set_id(1);
-    rowset->set_overlapped(false);
+    // Simulate a rowset with num_rows=200 and num_dels=50
+    auto txn_id = next_id();
+    TxnLog txn_log;
+    txn_log.set_tablet_id(pk_tablet_id);
+    txn_log.set_partition_id(_partition_id);
+    txn_log.set_txn_id(txn_id);
+    auto* rowset = txn_log.mutable_op_write()->mutable_rowset();
     rowset->set_num_rows(200);
     rowset->set_data_size(8192);
     rowset->set_num_dels(50);
-    rowset->add_segment_metas()->set_filename(lake::gen_segment_filename(next_id()));
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata_v2));
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(pk_tablet_id);
+        req.add_txn_ids(txn_id);
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
 
     // Enable accurate mode
     bool old_value = config::lake_enable_accurate_pk_row_count;
