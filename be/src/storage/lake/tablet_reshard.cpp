@@ -31,6 +31,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
+#include "storage/tablet_schema.h"
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
