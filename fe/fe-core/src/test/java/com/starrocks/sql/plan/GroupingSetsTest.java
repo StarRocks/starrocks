@@ -359,6 +359,42 @@ public class GroupingSetsTest extends PlanTestBase {
     }
 
     @Test
+    public void testPushDownGroupingSetAvgDecimal256() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        starRocksAssert.withTable("CREATE TABLE test_decimal256_avg (\n" +
+                "  `k1` int NULL,\n" +
+                "  `k2` int NULL,\n" +
+                "  `k3` int NULL,\n" +
+                "  `k4` int NULL,\n" +
+                "  `v` decimal(76, 10) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        try {
+            // v is DECIMAL256(76,10); the BE registers a dedicated decimal256->decimal256 decimal_sum
+            // mapping (unlike decimal32/64/128, which all widen to DECIMAL128), so the synthesized sum
+            // must stay in DECIMAL256, not get force-widened down to DECIMAL128
+            String sql = "select k1, k2, k3, k4, avg(v) " +
+                    "   from test_decimal256_avg group by rollup(k1, k2, k3, k4)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: sum[([5: v, DECIMAL256(76,10), true]); args: DECIMAL256; " +
+                    "result: DECIMAL256(76,10); args nullable: true; result nullable: true], " +
+                    "count[([5: v, DECIMAL256(76,10), true]); args: DECIMAL256; result: BIGINT; " +
+                    "args nullable: true; result nullable: false]");
+            // the rolled-up sum must also stay in DECIMAL256, never narrow to DECIMAL128
+            assertContains(plan, "sum[([16: sum, DECIMAL256(76,10), true]); args: DECIMAL256; " +
+                    "result: DECIMAL256(76,10); args nullable: true; result nullable: true]");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+            starRocksAssert.dropTable("test_decimal256_avg");
+        }
+    }
+
+    @Test
     public void testPushDownGroupingSetCount() throws Exception {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
         try {

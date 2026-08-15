@@ -42,7 +42,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
@@ -52,7 +51,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.common.Ag
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -207,12 +208,19 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             Preconditions.checkState(countFn instanceof AggregateFunction);
 
             if (sumArg.getType().isDecimalOfAnyVersion()) {
-                // decimal SUM always widens its accumulator to DECIMAL128(38, scale) - narrowing the
-                // return type to the argument's own (possibly DECIMAL32/64) precision would both mismatch
-                // the BE's registered decimal_sum signature and lose the accumulator width SUM needs to
-                // avoid overflow. Reuse the canonical decimal-SUM synthesis helper instead of rectifying
-                // by hand, so this stays in sync with how MV rewrite already builds a decimal SUM.
-                sumFn = ScalarOperatorUtil.findSumFn(new Type[] {sumArg.getType()});
+                // decimal SUM always widens its accumulator - to DECIMAL128(38, scale) for decimal32/64/128
+                // inputs, or DECIMAL256(76, scale) for decimal256 inputs, since the BE registers a
+                // dedicated decimal256->decimal256 decimal_sum mapping (see
+                // aggregate_resolver_sumcount.cpp's SumDispatcher). Narrowing to the argument's own
+                // precision - or always widening to DECIMAL128 regardless of input width, as
+                // ScalarOperatorUtil.findSumFn does - would both mismatch the BE's registered accumulator.
+                ScalarType decimalArgType = (ScalarType) sumArg.getType();
+                int widePrecision = decimalArgType.isDecimal256() ? 76 : 38;
+                AggregateFunction decimalSumFn = (AggregateFunction) sumFn.copy();
+                decimalSumFn.setArgsType(new Type[] {decimalArgType});
+                decimalSumFn.setRetType(TypeFactory.createDecimalV3NarrowestType(widePrecision,
+                        decimalArgType.getScalarScale()));
+                sumFn = decimalSumFn;
             }
 
             CallOperator sumCall = new CallOperator(FunctionSet.SUM, sumFn.getReturnType(),
