@@ -2,7 +2,7 @@ name: IMAGE REBUILD (three-digit branches)
 
 # Mirrors only the `thirdparty-filter` + `thirdparty-update-image` jobs
 # from ci-merged.yml, scoped to three-digit patch branches
-# (branch-X.Y.Z) which ci-merged.yml's branch pattern `branch-[0-9].[0-9]`
+# (branch-X.Y.Z) which ci-merged.yml's branch pattern `branch-[0-9]+.[0-9]+`
 # does NOT match. Without this, a PR that touches thirdparty/** merged
 # into a three-digit branch leaves the official dev-env image stale,
 # causing:

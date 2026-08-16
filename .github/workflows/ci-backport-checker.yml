@@ -4,8 +4,8 @@ run-name: BACKPORT NOTIFICATION - (#${{ github.event.number }}[${{ github.head_r
 on:
   pull_request_target:
     branches:
-      - 'branch-[0-9].[0-9]'
-      - 'branch-[0-9].[0-9].[0-9]'
+      - 'branch-[0-9]+.[0-9]+'
+      - 'branch-[0-9]+.[0-9]+.[0-9]+'
     types:
       - labeled
 
