@@ -8319,6 +8319,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_mixed_refs_
     // ctx_b (ctx[1], rssid_offset=1): rowset 1 shared-ancestor + rowset 2
     // child-local + non-shared sstable that mixes refs to BOTH (= post-
     // split PK-index compaction's signature output).
+    //
+    // ctx_a's next_rowset_id is 3 while its only live rowset is 1: id 2 was
+    // allocated and later compacted away. That gap is what makes ctx_b's
+    // shift non-zero. compute_rssid_offset takes the floor over the rowsets
+    // ctx_b actually EMITS -- its rowset 1 dedups into ctx_a's canonical and
+    // is discarded, so the floor is rowset 2 -- giving rssid_offset = 3 - 2 = 1.
+    // Without the gap the floor would land exactly on ctx_a's ceiling, ctx_b's
+    // natural map would agree with the plan, and the metadata-only fast path
+    // (covered by the T1 sibling above) would be correct instead.
     const std::string ns_filename = "ns_mixed.sst";
     const auto ns_path = _tablet_manager->sst_location(child_b, ns_filename);
     const uint64_t ns_filesize = write_legacy_pk_sstable(
@@ -8327,7 +8336,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_mixed_refs_
     auto meta_a = std::make_shared<TabletMetadataPB>();
     meta_a->set_id(child_a);
     meta_a->set_version(base_version);
-    meta_a->set_next_rowset_id(2);
+    meta_a->set_next_rowset_id(3);
     set_primary_key_schema(meta_a.get(), 1001);
     auto* rs_a1 = meta_a->add_rowsets();
     rs_a1->set_id(1);
