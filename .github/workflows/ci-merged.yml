@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.2", "4.1", "4.0", "3.5"]
+        version: ["26.2", "4.1", "4.0", "3.5"]
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -46,18 +46,18 @@ jobs:
         with:
           labels: ${{ matrix.version }}
 
-  # INTERIM (pre-reconcile): branch-4.2 is CD-exclusive — StarRocks has no 4.2 branch, so a
-  # fix synced onto the shared branch-4.1 line has no other way to reach 4.2. When a SYNCED
-  # PR MERGES into branch-4.1, ask Mergify to also backport it to branch-4.2. Keyed on the
+  # INTERIM (pre-reconcile): branch-26.2 is CD-exclusive — StarRocks has no 26.2 branch, so a
+  # fix synced onto the shared branch-4.1 line has no other way to reach 26.2. When a SYNCED
+  # PR MERGES into branch-4.1, ask Mergify to also backport it to branch-26.2. Keyed on the
   # MERGE (not sync-PR creation): repo-sync pending PRs get closed & recreated, so acting at
   # creation would double-post; only the single final merge fires this. REMOVE once
-  # reconcile --synced derives the full CD window incl 4.2 for synced PRs.
+  # reconcile --synced derives the full CD window incl 26.2 for synced PRs.
   #
   # Discriminator = the machine-generated head branch `branch-4.1-sync-pr-<N>` (repo-sync's
   # `${BRANCH}-sync-pr-${PR_ID}`), AND the `sync` label. Both are set by repo-sync and always
   # co-occur, so no miss; requiring the head pattern makes a human-mislabeled PR unable to
   # trigger this write action (the `sync` label alone could be added by hand).
-  synced-branch-4-1-imply-4-2:
+  synced-branch-4-1-imply-26-2:
     runs-on: [ self-hosted, quick ]
     if: >
       github.event.pull_request.merged == true &&
@@ -69,9 +69,9 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
     steps:
-      - name: also backport this merged branch-4.1 synced fix to branch-4.2
+      - name: also backport this merged branch-4.1 synced fix to branch-26.2
         run: |
-          gh pr comment "${PR_NUMBER}" -R "${GITHUB_REPOSITORY}" --body "@Mergifyio backport branch-4.2"
+          gh pr comment "${PR_NUMBER}" -R "${GITHUB_REPOSITORY}" --body "@Mergifyio backport branch-26.2"
 
   # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
   # job above and only PRINTS the computed target set (never posts @Mergifyio), for
@@ -101,7 +101,7 @@ jobs:
   # Backport fan-out — SYNC-EXCLUSIVE dry-run shadow. Fires ONLY on sync PRs (SR -> CD
   # forward sync merged to main), the mirror of the job above (which excludes them).
   # Restricts the target set to release lines CD has but SR LACKS (e.g. enterprise-only
-  # branch-4.2, when SR tops out at 4.1): shared lines arrive by syncing SR's own
+  # branch-26.2, when SR tops out at 4.1): shared lines arrive by syncing SR's own
   # backports, so only CD-exclusive lines need a local fan-out. DRY-RUN (prints only) +
   # continue-on-error during shadow. Depends on ci-tool #4918 (--exclusive-vs) on the runner.
   backport-fanout-sync-shadow:

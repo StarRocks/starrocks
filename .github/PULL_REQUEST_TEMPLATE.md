@@ -37,6 +37,6 @@ If yes, please specify the type of change:
 
 ## Bugfix cherry-pick branch check:
 - [ ] I have checked the version labels which the pr will be auto-backported to the target branch
-  - [ ] 4.2
+  - [ ] 26.2
   - [ ] 4.1
   - [ ] 4.0
