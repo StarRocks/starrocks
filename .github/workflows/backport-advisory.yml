@@ -1,0 +1,168 @@
+name: BACKPORT ADVISORY
+
+# Pre-merge, for a backportable PR ([BugFix]/[Enhancement]/[Doc]/[UT]) (unified
+# checkbox-driven model). Two jobs:
+#   compute (read-only token) : `claude` derives the affected release lines from the
+#     (untrusted) PR content and exposes them as a sanitized job OUTPUT.
+#   apply   (write PAT)       : upserts a single "<!-- backport-advisory -->" comment
+#     (English) showing the AI set vs the author's checkbox.
+# COMMENT ONLY (staged rollout): this workflow NEVER touches the body version checkboxes —
+# the author reads the advisory and ticks them BY HAND. The checkboxes stay 100%
+# author-owned; pr-checker then converts checkbox -> label and the static backport matrix
+# executes at merge. This NEVER posts @Mergifyio directly. (Auto-seeding the checkboxes
+# from the AI set is a possible later phase, once the advisory has proven accurate.)
+#
+# Affected lines are derived by `claude` over local git + gh (no plugin / no code_kb),
+# see ci-tool/bin/ai_backport_decide.sh.
+#
+# SECURITY — token isolation across a JOB boundary (codex P1). This is a
+# `pull_request_target` job, so it can read the base repo's secrets even for external-fork
+# PRs, and `claude` reads attacker-controlled PR content. A two-step-one-job split is NOT
+# enough: an injected claude can tamper with files in the shared workspace (init.sh,
+# ai_backport_decide.sh, ...) that a later PAT step would then source. So the two phases
+# are SEPARATE JOBS:
+#   - `compute` runs claude under a READ-ONLY token (github.token; workflow `permissions`
+#     are read-only). It exports ONLY the affected list, as a job output.
+#   - `apply` runs the write path under `secrets.PAT` and NO claude. It re-copies ci-tool
+#     FRESH from /var/lib/ci-tool + `git pull` (resets tracked scripts to origin) and
+#     consumes ONLY the compute output after STRICT validation (a JSON array of two-digit
+#     version strings — nothing else crosses the boundary). This severs the tamper path;
+#     the residual (untracked tampering of the shared /var/lib/ci-tool install) is the
+#     systemic ci-tool-invocation risk, mitigated by the fresh `git pull`.
+#
+# ACCEPTED RESIDUAL — host persistence (codex "isolate the PAT job from the AI runner").
+# Both jobs run directly on the dedicated [self-hosted, ubuntu, ai] host: that is the org's
+# AI-execution model (all AI jobs are consolidating onto this host; the legacy claude-cli
+# Docker sandbox used by ai-sr-skills is being retired, so containerizing claude is NOT the
+# direction). An injected claude could therefore persist state on the host that the same-pool
+# apply job inherits. The IN-BAND mitigation is the read-only-token boundary above: claude
+# never holds a write-capable credential, and only a strict-validated version list crosses to
+# the PAT job. Full host-level isolation (ephemeral/single-use runners) is an infra decision
+# beyond this workflow and shared by every AI-on-host workflow, not specific to this one.
+#
+# Runner: [self-hosted, ubuntu, ai]. Requires ci-tool: ai_backport_decide.sh
+# (--compute-only / --skip-ai) on the runner.
+
+on:
+  pull_request_target:
+    # `synchronize` too: new commits change which release lines are affected, so the
+    # advisory COMMENT must re-run to avoid describing a stale diff (codex P2).
+    types: [opened, edited, reopened, synchronize]
+
+# Per-PR concurrency (codex P2): overlapping runs (e.g. rapid pushes -> multiple
+# `synchronize`) must not finish out-of-order and clobber the advisory with a stale head's
+# result. Cancel the older run when a newer event arrives.
+concurrency:
+  group: backport-advisory-${{ github.event.number }}
+  cancel-in-progress: true
+
+# Read-only by default: constrains the github.token the AI (claude) job runs under. The
+# apply job overrides token env with secrets.PAT explicitly.
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  compute:
+    runs-on: [self-hosted, ubuntu, ai]
+    # Runs on any BACKPORTABLE main PR — the same title set pr-checker's backport-check-subtask
+    # gates on ([BugFix]/[Enhancement]/[Doc]/[UT]) — not just [BugFix], so every PR that CAN
+    # be backported gets the advisory comment. node1 decides the CD backport
+    # lines (incl CD-exclusive 4.2). base==main + guards exclude branch/backport/cherry-pick.
+    if: >
+      github.repository == 'CelerData/celerdata-enterprise' &&
+      github.base_ref == 'main' &&
+      (
+        startsWith(github.event.pull_request.title, '[BugFix]') ||
+        startsWith(github.event.pull_request.title, '[Enhancement]') ||
+        startsWith(github.event.pull_request.title, '[Doc]') ||
+        startsWith(github.event.pull_request.title, '[UT]')
+      ) &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      # Sanitized-at-source affected list (a JSON array string). The `apply` job re-validates
+      # it before use — this is the ONLY data that crosses the token boundary.
+      affected: ${{ steps.compute.outputs.affected }}
+      # true only when claude actually produced a decision. A transient claude/API failure
+      # yields ok=false so `apply` is skipped and the existing advisory is PRESERVED rather
+      # than overwritten with a spurious empty result (codex P2).
+      ok: ${{ steps.compute.outputs.ok }}
+    steps:
+      # AI compute under a READ-ONLY token. claude reads the (untrusted) PR content to derive
+      # the affected release lines. No write-capable credential is present, so prompt
+      # injection cannot exfiltrate a PAT, and any workspace tampering it does is confined
+      # to this job (the apply job starts from a fresh ci-tool copy).
+      - name: node1 compute affected (read-only token, claude)
+        id: compute
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          # --compute-only exits non-zero if claude failed (it does NOT launder a failure into
+          # []). Capture that so a transient failure is reported as ok=false (advisory preserved)
+          # rather than a real "no affected" decision.
+          set +e
+          ./bin/ai_backport_decide.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --compute-only
+          rc=$?
+          set -e
+          AFF="${RUNNER_TEMP:-/tmp}/affected_${PR_NUMBER}.json"
+          if [ "${rc}" -eq 0 ] && [ -s "${AFF}" ]; then
+            echo "ok=true" >> "${GITHUB_OUTPUT}"
+            echo "affected=$(tr -d '\n\r ' < "${AFF}")" >> "${GITHUB_OUTPUT}"
+          else
+            echo "compute failed (rc=${rc}); ok=false -> apply skipped, existing advisory preserved"
+            echo "ok=false" >> "${GITHUB_OUTPUT}"
+            echo "affected=[]" >> "${GITHUB_OUTPUT}"
+          fi
+
+  apply:
+    needs: compute
+    # Run only when compute succeeded AND claude actually decided (ok=true). On a compute
+    # failure (ok=false) apply is skipped, so the sticky advisory is left untouched
+    # instead of overwritten (codex P2). compute has continue-on-error, so its job
+    # result stays 'success'; the ok output is the real success signal.
+    if: ${{ !cancelled() && needs.compute.result == 'success' && needs.compute.outputs.ok == 'true' }}
+    runs-on: [self-hosted, ubuntu, ai]
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      # From the read-only job; re-validated below before it is trusted.
+      AFFECTED_RAW: ${{ needs.compute.outputs.affected }}
+    steps:
+      # Write path under the PAT, NO claude. Fresh ci-tool (git pull resets tracked scripts),
+      # then STRICT-validate the cross-job affected list before handing it to the reconcile.
+      - name: post advisory comment (write PAT, no AI)
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          # Materialize the validated affected set the reconcile (--skip-ai) will read. Only
+          # two-digit version strings survive; anything else claude could have emitted is
+          # dropped. This is the sole datum crossing the read-only -> write boundary.
+          AFF="${RUNNER_TEMP:-/tmp}/affected_${PR_NUMBER}.json"
+          python3 - "$AFF" <<'PY'
+          import json, os, re, sys
+          raw = os.environ.get("AFFECTED_RAW", "[]") or "[]"
+          try:
+              v = json.loads(raw)
+              assert isinstance(v, list)
+              v = [x for x in v if isinstance(x, str) and re.fullmatch(r"\d+\.\d+", x)]
+          except Exception:
+              v = []
+          json.dump(v, open(sys.argv[1], "w"))
+          print("validated affected:", v)
+          PY
+
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+
+          # Refresh the advisory COMMENT (keeps guidance live on synchronize/edited);
+          # --skip-ai reuses the validated ${AFF} (no claude here). COMMENT ONLY: the body
+          # version checkboxes are never touched — the author ticks them by hand guided by
+          # the advisory (see the staged-rollout note in the header).
+          ./bin/ai_backport_decide.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --ai-lead --advisory --no-dry-run --skip-ai
