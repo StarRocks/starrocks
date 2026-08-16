@@ -381,23 +381,28 @@ public class RangerInterfaceTest {
 
         // A view in an external catalog must be checked under its own catalog, not default_catalog,
         // otherwise existing Ranger policies for external views stop matching.
-        controller.checkViewAction(ctx, new TableName("iceberg_cat", "db", "v1"), PrivilegeType.SELECT);
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkViewAction(ctx, new TableName("iceberg_cat", "db", "v1"), PrivilegeType.SELECT));
         Assertions.assertEquals("iceberg_cat", captured.get("catalog"));
         Assertions.assertEquals("v1", captured.get("view"));
 
         captured.clear();
-        controller.checkAnyActionOnView(ctx, new TableName("iceberg_cat", "db", "v1"));
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkAnyActionOnView(ctx, new TableName("iceberg_cat", "db", "v1")));
         Assertions.assertEquals("iceberg_cat", captured.get("catalog"));
         Assertions.assertEquals("v1", captured.get("view"));
 
         captured.clear();
-        controller.checkMaterializedViewAction(ctx, new TableName("iceberg_cat", "db", "mv1"), PrivilegeType.SELECT);
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkMaterializedViewAction(ctx, new TableName("iceberg_cat", "db", "mv1"),
+                        PrivilegeType.SELECT));
         Assertions.assertEquals("iceberg_cat", captured.get("catalog"));
         Assertions.assertEquals("mv1", captured.get("materialized_view"));
 
         // A view without an explicit catalog still resolves to the internal catalog.
         captured.clear();
-        controller.checkViewAction(ctx, new TableName(null, "db", "v1"), PrivilegeType.SELECT);
+        Assertions.assertDoesNotThrow(() ->
+                controller.checkViewAction(ctx, new TableName(null, "db", "v1"), PrivilegeType.SELECT));
         Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, captured.get("catalog"));
     }
 
