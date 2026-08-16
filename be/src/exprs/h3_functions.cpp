@@ -34,8 +34,8 @@ namespace starrocks {
 // row_is_null[i] == true → that row's array is NULL.
 // rows[i] holds the BIGINT values for row i (empty when null).
 // ────────────────────────────────────────────────────────────────────────────
-static ColumnPtr build_bigint_array(const std::vector<std::vector<int64_t>>& rows,
-                                    const std::vector<bool>& row_is_null, bool all_const) {
+static ColumnPtr build_bigint_array(const std::vector<std::vector<int64_t>>& rows, const std::vector<bool>& row_is_null,
+                                    bool all_const) {
     auto offsets = UInt32Column::create();
     auto elements = Int64Column::create();
     offsets->reserve(rows.size() + 1);
@@ -71,8 +71,8 @@ static ColumnPtr build_bigint_array(const std::vector<std::vector<int64_t>>& row
 }
 
 // Same helper for INT (icosahedron faces).
-static ColumnPtr build_int_array(const std::vector<std::vector<int32_t>>& rows,
-                                 const std::vector<bool>& row_is_null, bool all_const) {
+static ColumnPtr build_int_array(const std::vector<std::vector<int32_t>>& rows, const std::vector<bool>& row_is_null,
+                                 bool all_const) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();
     offsets->reserve(rows.size() + 1);
@@ -245,9 +245,15 @@ StatusOr<ColumnPtr> H3Functions::h3_edge_angle(FunctionContext* ctx, const Colum
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { result.append_null(); continue; }
+        if (res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double rads;
-        if (edgeLengthRads(res_col.value(row), &rads) != E_SUCCESS) { result.append_null(); continue; }
+        if (edgeLengthRads(res_col.value(row), &rads) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(radsToDegs(rads));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -259,9 +265,15 @@ StatusOr<ColumnPtr> H3Functions::h3_edge_length_m(FunctionContext* ctx, const Co
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { result.append_null(); continue; }
+        if (res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double len;
-        if (edgeLengthM(res_col.value(row), &len) != E_SUCCESS) { result.append_null(); continue; }
+        if (edgeLengthM(res_col.value(row), &len) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(len);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -273,9 +285,15 @@ StatusOr<ColumnPtr> H3Functions::h3_edge_length_km(FunctionContext* ctx, const C
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { result.append_null(); continue; }
+        if (res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double len;
-        if (edgeLengthKm(res_col.value(row), &len) != E_SUCCESS) { result.append_null(); continue; }
+        if (edgeLengthKm(res_col.value(row), &len) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(len);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -287,9 +305,15 @@ StatusOr<ColumnPtr> H3Functions::h3_hex_area_m2(FunctionContext* ctx, const Colu
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { result.append_null(); continue; }
+        if (res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double area;
-        if (getHexagonAreaAvgM2(res_col.value(row), &area) != E_SUCCESS) { result.append_null(); continue; }
+        if (getHexagonAreaAvgM2(res_col.value(row), &area) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(area);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -301,9 +325,15 @@ StatusOr<ColumnPtr> H3Functions::h3_hex_area_km2(FunctionContext* ctx, const Col
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { result.append_null(); continue; }
+        if (res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double area;
-        if (getHexagonAreaAvgKm2(res_col.value(row), &area) != E_SUCCESS) { result.append_null(); continue; }
+        if (getHexagonAreaAvgKm2(res_col.value(row), &area) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(area);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -315,9 +345,15 @@ StatusOr<ColumnPtr> H3Functions::h3_num_hexagons(FunctionContext* ctx, const Col
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { result.append_null(); continue; }
+        if (res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         int64_t num;
-        if (getNumCells(res_col.value(row), &num) != E_SUCCESS) { result.append_null(); continue; }
+        if (getNumCells(res_col.value(row), &num) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(num);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -333,7 +369,10 @@ StatusOr<ColumnPtr> H3Functions::h3_get_base_cell(FunctionContext* ctx, const Co
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         result.append(getBaseCellNumber(static_cast<H3Index>(h3_col.value(row))));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -345,7 +384,10 @@ StatusOr<ColumnPtr> H3Functions::h3_is_res_class_iii(FunctionContext* ctx, const
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         result.append(isResClassIII(static_cast<H3Index>(h3_col.value(row))) != 0);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -357,7 +399,10 @@ StatusOr<ColumnPtr> H3Functions::h3_is_pentagon(FunctionContext* ctx, const Colu
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         result.append(isPentagon(static_cast<H3Index>(h3_col.value(row))) != 0);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -369,10 +414,14 @@ StatusOr<ColumnPtr> H3Functions::h3_cell_area_m2(FunctionContext* ctx, const Col
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double area;
         if (cellAreaM2(static_cast<H3Index>(h3_col.value(row)), &area) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(area);
     }
@@ -385,10 +434,14 @@ StatusOr<ColumnPtr> H3Functions::h3_cell_area_rads2(FunctionContext* ctx, const 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double area;
         if (cellAreaRads2(static_cast<H3Index>(h3_col.value(row)), &area) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(area);
     }
@@ -401,10 +454,14 @@ StatusOr<ColumnPtr> H3Functions::h3_exact_edge_length_m(FunctionContext* ctx, co
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double len;
         if (edgeLengthM(static_cast<H3Index>(h3_col.value(row)), &len) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(len);
     }
@@ -417,10 +474,14 @@ StatusOr<ColumnPtr> H3Functions::h3_exact_edge_length_km(FunctionContext* ctx, c
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double len;
         if (edgeLengthKm(static_cast<H3Index>(h3_col.value(row)), &len) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(len);
     }
@@ -433,10 +494,14 @@ StatusOr<ColumnPtr> H3Functions::h3_exact_edge_length_rads(FunctionContext* ctx,
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         double len;
         if (edgeLengthRads(static_cast<H3Index>(h3_col.value(row)), &len) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(len);
     }
@@ -449,10 +514,14 @@ StatusOr<ColumnPtr> H3Functions::h3_to_string(FunctionContext* ctx, const Column
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         char buf[17]; // 15 hex chars + null; extra byte for safety
         if (h3ToString(static_cast<H3Index>(h3_col.value(row)), buf, sizeof(buf)) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(Slice(buf));
     }
@@ -460,29 +529,35 @@ StatusOr<ColumnPtr> H3Functions::h3_to_string(FunctionContext* ctx, const Column
 }
 
 // h3UnidirectionalEdgeIsValid(edge BIGINT) -> BOOLEAN
-StatusOr<ColumnPtr> H3Functions::h3_unidirectional_edge_is_valid(FunctionContext* ctx,
-                                                                   const Columns& columns) {
+StatusOr<ColumnPtr> H3Functions::h3_unidirectional_edge_is_valid(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_BIGINT> h3_col(columns[0]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         result.append(isValidDirectedEdge(static_cast<H3Index>(h3_col.value(row))) != 0);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
 // h3GetOriginIndexFromUnidirectionalEdge(edge BIGINT) -> BIGINT
-StatusOr<ColumnPtr> H3Functions::h3_get_origin_index_from_unidirectional_edge(
-        FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> H3Functions::h3_get_origin_index_from_unidirectional_edge(FunctionContext* ctx,
+                                                                              const Columns& columns) {
     ColumnViewer<TYPE_BIGINT> h3_col(columns[0]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         H3Index origin;
         if (getDirectedEdgeOrigin(static_cast<H3Index>(h3_col.value(row)), &origin) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(static_cast<int64_t>(origin));
     }
@@ -490,16 +565,20 @@ StatusOr<ColumnPtr> H3Functions::h3_get_origin_index_from_unidirectional_edge(
 }
 
 // h3GetDestinationIndexFromUnidirectionalEdge(edge BIGINT) -> BIGINT
-StatusOr<ColumnPtr> H3Functions::h3_get_destination_index_from_unidirectional_edge(
-        FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> H3Functions::h3_get_destination_index_from_unidirectional_edge(FunctionContext* ctx,
+                                                                                   const Columns& columns) {
     ColumnViewer<TYPE_BIGINT> h3_col(columns[0]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         H3Index dest;
         if (getDirectedEdgeDestination(static_cast<H3Index>(h3_col.value(row)), &dest) != E_SUCCESS) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(static_cast<int64_t>(dest));
     }
@@ -516,11 +595,17 @@ StatusOr<ColumnPtr> H3Functions::string_to_h3(FunctionContext* ctx, const Column
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (str_col.is_null(row)) { result.append_null(); continue; }
+        if (str_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         Slice s = str_col.value(row);
         std::string str(s.data, s.size); // ensures null-termination for H3 API
         H3Index h;
-        if (stringToH3(str.c_str(), &h) != E_SUCCESS) { result.append_null(); continue; }
+        if (stringToH3(str.c_str(), &h) != E_SUCCESS) {
+            result.append_null();
+            continue;
+        }
         result.append(static_cast<int64_t>(h));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -531,18 +616,21 @@ StatusOr<ColumnPtr> H3Functions::string_to_h3(FunctionContext* ctx, const Column
 // ────────────────────────────────────────────────────────────────────────────
 
 // h3IndexesAreNeighbors(idx1 BIGINT, idx2 BIGINT) -> BOOLEAN
-StatusOr<ColumnPtr> H3Functions::h3_indexes_are_neighbors(FunctionContext* ctx,
-                                                            const Columns& columns) {
+StatusOr<ColumnPtr> H3Functions::h3_indexes_are_neighbors(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_BIGINT> h1_col(columns[0]);
     ColumnViewer<TYPE_BIGINT> h2_col(columns[1]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h1_col.is_null(row) || h2_col.is_null(row)) { result.append_null(); continue; }
+        if (h1_col.is_null(row) || h2_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         int out;
-        if (areNeighborCells(static_cast<H3Index>(h1_col.value(row)),
-                             static_cast<H3Index>(h2_col.value(row)), &out) != E_SUCCESS) {
-            result.append_null(); continue;
+        if (areNeighborCells(static_cast<H3Index>(h1_col.value(row)), static_cast<H3Index>(h2_col.value(row)), &out) !=
+            E_SUCCESS) {
+            result.append_null();
+            continue;
         }
         result.append(out != 0);
     }
@@ -556,11 +644,15 @@ StatusOr<ColumnPtr> H3Functions::h3_distance(FunctionContext* ctx, const Columns
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h1_col.is_null(row) || h2_col.is_null(row)) { result.append_null(); continue; }
+        if (h1_col.is_null(row) || h2_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         int64_t dist;
-        if (gridDistance(static_cast<H3Index>(h1_col.value(row)),
-                         static_cast<H3Index>(h2_col.value(row)), &dist) != E_SUCCESS) {
-            result.append_null(); continue;
+        if (gridDistance(static_cast<H3Index>(h1_col.value(row)), static_cast<H3Index>(h2_col.value(row)), &dist) !=
+            E_SUCCESS) {
+            result.append_null();
+            continue;
         }
         result.append(dist);
     }
@@ -568,18 +660,21 @@ StatusOr<ColumnPtr> H3Functions::h3_distance(FunctionContext* ctx, const Columns
 }
 
 // h3GetUnidirectionalEdge(origin BIGINT, destination BIGINT) -> BIGINT
-StatusOr<ColumnPtr> H3Functions::h3_get_unidirectional_edge(FunctionContext* ctx,
-                                                              const Columns& columns) {
+StatusOr<ColumnPtr> H3Functions::h3_get_unidirectional_edge(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_BIGINT> h1_col(columns[0]);
     ColumnViewer<TYPE_BIGINT> h2_col(columns[1]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h1_col.is_null(row) || h2_col.is_null(row)) { result.append_null(); continue; }
+        if (h1_col.is_null(row) || h2_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         H3Index edge;
-        if (cellsToDirectedEdge(static_cast<H3Index>(h1_col.value(row)),
-                                static_cast<H3Index>(h2_col.value(row)), &edge) != E_SUCCESS) {
-            result.append_null(); continue;
+        if (cellsToDirectedEdge(static_cast<H3Index>(h1_col.value(row)), static_cast<H3Index>(h2_col.value(row)),
+                                &edge) != E_SUCCESS) {
+            result.append_null();
+            continue;
         }
         result.append(static_cast<int64_t>(edge));
     }
@@ -597,11 +692,14 @@ StatusOr<ColumnPtr> H3Functions::h3_to_parent(FunctionContext* ctx, const Column
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row) || res_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row) || res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         H3Index parent;
-        if (cellToParent(static_cast<H3Index>(h3_col.value(row)), res_col.value(row), &parent) !=
-            E_SUCCESS) {
-            result.append_null(); continue;
+        if (cellToParent(static_cast<H3Index>(h3_col.value(row)), res_col.value(row), &parent) != E_SUCCESS) {
+            result.append_null();
+            continue;
         }
         result.append(static_cast<int64_t>(parent));
     }
@@ -615,11 +713,14 @@ StatusOr<ColumnPtr> H3Functions::h3_to_center_child(FunctionContext* ctx, const 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row) || res_col.is_null(row)) { result.append_null(); continue; }
+        if (h3_col.is_null(row) || res_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         H3Index child;
-        if (cellToCenterChild(static_cast<H3Index>(h3_col.value(row)), res_col.value(row), &child) !=
-            E_SUCCESS) {
-            result.append_null(); continue;
+        if (cellToCenterChild(static_cast<H3Index>(h3_col.value(row)), res_col.value(row), &child) != E_SUCCESS) {
+            result.append_null();
+            continue;
         }
         result.append(static_cast<int64_t>(child));
     }
@@ -638,7 +739,8 @@ StatusOr<ColumnPtr> H3Functions::h3_point_dist_m(FunctionContext* ctx, const Col
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         if (lat1.is_null(row) || lon1.is_null(row) || lat2.is_null(row) || lon2.is_null(row)) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         LatLng a{degsToRads(lat1.value(row)), degsToRads(lon1.value(row))};
         LatLng b{degsToRads(lat2.value(row)), degsToRads(lon2.value(row))};
@@ -655,7 +757,8 @@ StatusOr<ColumnPtr> H3Functions::h3_point_dist_km(FunctionContext* ctx, const Co
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         if (lat1.is_null(row) || lon1.is_null(row) || lat2.is_null(row) || lon2.is_null(row)) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         LatLng a{degsToRads(lat1.value(row)), degsToRads(lon1.value(row))};
         LatLng b{degsToRads(lat2.value(row)), degsToRads(lon2.value(row))};
@@ -672,7 +775,8 @@ StatusOr<ColumnPtr> H3Functions::h3_point_dist_rads(FunctionContext* ctx, const 
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         if (lat1.is_null(row) || lon1.is_null(row) || lat2.is_null(row) || lon2.is_null(row)) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         LatLng a{degsToRads(lat1.value(row)), degsToRads(lon1.value(row))};
         LatLng b{degsToRads(lat2.value(row)), degsToRads(lon2.value(row))};
@@ -696,12 +800,20 @@ StatusOr<ColumnPtr> H3Functions::h3k_ring(FunctionContext* ctx, const Columns& c
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row) || k_col.is_null(row)) { nulls[row] = true; continue; }
+        if (h3_col.is_null(row) || k_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         int64_t buf_size;
-        if (maxGridDiskSize(k_col.value(row), &buf_size) != E_SUCCESS) { nulls[row] = true; continue; }
+        if (maxGridDiskSize(k_col.value(row), &buf_size) != E_SUCCESS) {
+            nulls[row] = true;
+            continue;
+        }
         std::vector<H3Index> buf(buf_size, 0);
-        if (gridDisk(static_cast<H3Index>(h3_col.value(row)), k_col.value(row), buf.data()) !=
-            E_SUCCESS) { nulls[row] = true; continue; }
+        if (gridDisk(static_cast<H3Index>(h3_col.value(row)), k_col.value(row), buf.data()) != E_SUCCESS) {
+            nulls[row] = true;
+            continue;
+        }
         for (auto h : buf) {
             if (h != 0) rows[row].push_back(static_cast<int64_t>(h));
         }
@@ -720,15 +832,20 @@ StatusOr<ColumnPtr> H3Functions::h3_to_children(FunctionContext* ctx, const Colu
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row) || res_col.is_null(row)) { nulls[row] = true; continue; }
+        if (h3_col.is_null(row) || res_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         H3Index h = static_cast<H3Index>(h3_col.value(row));
         int64_t child_size;
         if (cellToChildrenSize(h, res_col.value(row), &child_size) != E_SUCCESS) {
-            nulls[row] = true; continue;
+            nulls[row] = true;
+            continue;
         }
         std::vector<H3Index> buf(child_size, 0);
         if (cellToChildren(h, res_col.value(row), buf.data()) != E_SUCCESS) {
-            nulls[row] = true; continue;
+            nulls[row] = true;
+            continue;
         }
         for (auto c : buf) {
             if (c != 0) rows[row].push_back(static_cast<int64_t>(c));
@@ -747,12 +864,21 @@ StatusOr<ColumnPtr> H3Functions::h3_get_faces(FunctionContext* ctx, const Column
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { nulls[row] = true; continue; }
+        if (h3_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         H3Index h = static_cast<H3Index>(h3_col.value(row));
         int max_faces;
-        if (maxFaceCount(h, &max_faces) != E_SUCCESS) { nulls[row] = true; continue; }
+        if (maxFaceCount(h, &max_faces) != E_SUCCESS) {
+            nulls[row] = true;
+            continue;
+        }
         std::vector<int> buf(max_faces, -1);
-        if (getIcosahedronFaces(h, buf.data()) != E_SUCCESS) { nulls[row] = true; continue; }
+        if (getIcosahedronFaces(h, buf.data()) != E_SUCCESS) {
+            nulls[row] = true;
+            continue;
+        }
         for (auto f : buf) {
             if (f != -1) rows[row].push_back(static_cast<int32_t>(f));
         }
@@ -789,8 +915,7 @@ StatusOr<ColumnPtr> H3Functions::h3_get_res0_indexes(FunctionContext* ctx, const
 }
 
 // h3GetPentagonIndexes(resolution INT) -> ARRAY(BIGINT)
-StatusOr<ColumnPtr> H3Functions::h3_get_pentagon_indexes(FunctionContext* ctx,
-                                                           const Columns& columns) {
+StatusOr<ColumnPtr> H3Functions::h3_get_pentagon_indexes(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_INT> res_col(columns[0]);
     auto size = columns[0]->size();
     bool all_const = ColumnHelper::is_all_const(columns);
@@ -800,10 +925,14 @@ StatusOr<ColumnPtr> H3Functions::h3_get_pentagon_indexes(FunctionContext* ctx,
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (res_col.is_null(row)) { nulls[row] = true; continue; }
+        if (res_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         std::vector<H3Index> buf(pcount, 0);
         if (getPentagons(res_col.value(row), buf.data()) != E_SUCCESS) {
-            nulls[row] = true; continue;
+            nulls[row] = true;
+            continue;
         }
         for (auto h : buf) {
             if (h != 0) rows[row].push_back(static_cast<int64_t>(h));
@@ -823,13 +952,22 @@ StatusOr<ColumnPtr> H3Functions::h3_line(FunctionContext* ctx, const Columns& co
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (h1_col.is_null(row) || h2_col.is_null(row)) { nulls[row] = true; continue; }
+        if (h1_col.is_null(row) || h2_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         H3Index start = static_cast<H3Index>(h1_col.value(row));
         H3Index end = static_cast<H3Index>(h2_col.value(row));
         int64_t path_size;
-        if (gridPathCellsSize(start, end, &path_size) != E_SUCCESS) { nulls[row] = true; continue; }
+        if (gridPathCellsSize(start, end, &path_size) != E_SUCCESS) {
+            nulls[row] = true;
+            continue;
+        }
         std::vector<H3Index> buf(path_size, 0);
-        if (gridPathCells(start, end, buf.data()) != E_SUCCESS) { nulls[row] = true; continue; }
+        if (gridPathCells(start, end, buf.data()) != E_SUCCESS) {
+            nulls[row] = true;
+            continue;
+        }
         for (auto h : buf) {
             if (h != 0) rows[row].push_back(static_cast<int64_t>(h));
         }
@@ -848,12 +986,16 @@ StatusOr<ColumnPtr> H3Functions::h3_hex_ring(FunctionContext* ctx, const Columns
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row) || k_col.is_null(row)) { nulls[row] = true; continue; }
+        if (h3_col.is_null(row) || k_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         int k = k_col.value(row);
         int64_t ring_size = (k == 0) ? 1 : (int64_t)6 * k;
         std::vector<H3Index> buf(ring_size, 0);
         if (gridRingUnsafe(static_cast<H3Index>(h3_col.value(row)), k, buf.data()) != E_SUCCESS) {
-            nulls[row] = true; continue;
+            nulls[row] = true;
+            continue;
         }
         for (auto h : buf) {
             if (h != 0) rows[row].push_back(static_cast<int64_t>(h));
@@ -864,7 +1006,7 @@ StatusOr<ColumnPtr> H3Functions::h3_hex_ring(FunctionContext* ctx, const Columns
 
 // h3GetUnidirectionalEdgesFromHexagon(h3index BIGINT) -> ARRAY(BIGINT)
 StatusOr<ColumnPtr> H3Functions::h3_get_unidirectional_edges_from_hexagon(FunctionContext* ctx,
-                                                                            const Columns& columns) {
+                                                                          const Columns& columns) {
     ColumnViewer<TYPE_BIGINT> h3_col(columns[0]);
     auto size = columns[0]->size();
     bool all_const = ColumnHelper::is_all_const(columns);
@@ -875,10 +1017,14 @@ StatusOr<ColumnPtr> H3Functions::h3_get_unidirectional_edges_from_hexagon(Functi
     std::vector<bool> nulls(size, false);
 
     for (int row = 0; row < size; ++row) {
-        if (h3_col.is_null(row)) { nulls[row] = true; continue; }
+        if (h3_col.is_null(row)) {
+            nulls[row] = true;
+            continue;
+        }
         H3Index buf[kMaxEdges] = {};
         if (originToDirectedEdges(static_cast<H3Index>(h3_col.value(row)), buf) != E_SUCCESS) {
-            nulls[row] = true; continue;
+            nulls[row] = true;
+            continue;
         }
         for (auto e : buf) {
             if (e != 0) rows[row].push_back(static_cast<int64_t>(e));
