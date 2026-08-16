@@ -37,20 +37,20 @@ namespace mgrs_detail {
 
 // ── WGS84 / UTM constants ────────────────────────────────────────────────────
 
-static constexpr double WGS84_A         = 6378137.0;
-static constexpr double WGS84_ECC_SQ    = 0.0066943799901413165;
-static constexpr double UTM_SCALE       = 0.9996;
-static constexpr double FALSE_EASTING   = 500000.0;
-static constexpr double FALSE_NORTHING  = 10000000.0;
-static constexpr double DEG_TO_RAD      = M_PI / 180.0;
-static constexpr double RAD_TO_DEG      = 180.0 / M_PI;
+static constexpr double WGS84_A = 6378137.0;
+static constexpr double WGS84_ECC_SQ = 0.0066943799901413165;
+static constexpr double UTM_SCALE = 0.9996;
+static constexpr double FALSE_EASTING = 500000.0;
+static constexpr double FALSE_NORTHING = 10000000.0;
+static constexpr double DEG_TO_RAD = M_PI / 180.0;
+static constexpr double RAD_TO_DEG = 180.0 / M_PI;
 
 // MGRS latitude bands C–X (skipping I, O); X covers 72°–84°.
 static constexpr std::string_view BAND_LETTERS = "CDEFGHJKLMNPQRSTUVWX";
 
 static constexpr int NUM_100K_SETS = 6;
 static constexpr std::string_view SET_ORIGIN_COLUMN_LETTERS = "AJSAJS";
-static constexpr std::string_view SET_ORIGIN_ROW_LETTERS    = "AFAFAF";
+static constexpr std::string_view SET_ORIGIN_ROW_LETTERS = "AFAFAF";
 
 static constexpr int MGRS_MGRS_A_ASCII = 'A';
 static constexpr int MGRS_MGRS_I_ASCII = 'I';
@@ -71,25 +71,31 @@ inline std::string getLetter100kID(int column, int row, int set) {
     int row_letter = SET_ORIGIN_ROW_LETTERS[index] + row;
     bool rollover = false;
 
-    if (col > MGRS_Z_ASCII) { col = col - MGRS_Z_ASCII + MGRS_A_ASCII - 1; rollover = true; }
-    if (col == MGRS_I_ASCII || (SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_I_ASCII && col > MGRS_I_ASCII)
-        || ((col > MGRS_I_ASCII || SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_I_ASCII) && rollover))
+    if (col > MGRS_Z_ASCII) {
+        col = col - MGRS_Z_ASCII + MGRS_A_ASCII - 1;
+        rollover = true;
+    }
+    if (col == MGRS_I_ASCII || (SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_I_ASCII && col > MGRS_I_ASCII) ||
+        ((col > MGRS_I_ASCII || SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_I_ASCII) && rollover))
         ++col;
-    if (col == MGRS_O_ASCII || (SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_O_ASCII && col > MGRS_O_ASCII)
-        || ((col > MGRS_O_ASCII || SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_O_ASCII) && rollover)) {
+    if (col == MGRS_O_ASCII || (SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_O_ASCII && col > MGRS_O_ASCII) ||
+        ((col > MGRS_O_ASCII || SET_ORIGIN_COLUMN_LETTERS[index] < MGRS_O_ASCII) && rollover)) {
         ++col;
         if (col == MGRS_I_ASCII) ++col;
     }
     if (col > MGRS_Z_ASCII) col = col - MGRS_Z_ASCII + MGRS_A_ASCII - 1;
 
-    if (row_letter > MGRS_V_ASCII) { row_letter = row_letter - MGRS_V_ASCII + MGRS_A_ASCII - 1; rollover = true; }
-    else rollover = false;
+    if (row_letter > MGRS_V_ASCII) {
+        row_letter = row_letter - MGRS_V_ASCII + MGRS_A_ASCII - 1;
+        rollover = true;
+    } else
+        rollover = false;
 
-    if (row_letter == MGRS_I_ASCII || (SET_ORIGIN_ROW_LETTERS[index] < MGRS_I_ASCII && row_letter > MGRS_I_ASCII)
-        || ((row_letter > MGRS_I_ASCII || SET_ORIGIN_ROW_LETTERS[index] < MGRS_I_ASCII) && rollover))
+    if (row_letter == MGRS_I_ASCII || (SET_ORIGIN_ROW_LETTERS[index] < MGRS_I_ASCII && row_letter > MGRS_I_ASCII) ||
+        ((row_letter > MGRS_I_ASCII || SET_ORIGIN_ROW_LETTERS[index] < MGRS_I_ASCII) && rollover))
         ++row_letter;
-    if (row_letter == MGRS_O_ASCII || (SET_ORIGIN_ROW_LETTERS[index] < MGRS_O_ASCII && row_letter > MGRS_O_ASCII)
-        || ((row_letter > MGRS_O_ASCII || SET_ORIGIN_ROW_LETTERS[index] < MGRS_O_ASCII) && rollover)) {
+    if (row_letter == MGRS_O_ASCII || (SET_ORIGIN_ROW_LETTERS[index] < MGRS_O_ASCII && row_letter > MGRS_O_ASCII) ||
+        ((row_letter > MGRS_O_ASCII || SET_ORIGIN_ROW_LETTERS[index] < MGRS_O_ASCII) && rollover)) {
         ++row_letter;
         if (row_letter == MGRS_I_ASCII) ++row_letter;
     }
@@ -102,25 +108,56 @@ inline std::string getLetter100kID(int column, int row, int set) {
 }
 
 inline std::string get100kID(double easting, double northing, int zone) {
-    const int set       = get100kSetForZone(zone);
-    const int set_col   = static_cast<int>(std::floor(easting  / 100000.0));
-    const int set_row   = static_cast<int>(std::floor(northing / 100000.0)) % 20;
+    const int set = get100kSetForZone(zone);
+    const int set_col = static_cast<int>(std::floor(easting / 100000.0));
+    const int set_row = static_cast<int>(std::floor(northing / 100000.0)) % 20;
     return getLetter100kID(set_col, set_row, set);
 }
 
 inline double getMinNorthing(char band) {
     switch (band) {
-        case 'C': return 1100000.0;  case 'D': return 2000000.0;
-        case 'E': return 2800000.0;  case 'F': return 3700000.0;
-        case 'G': return 4600000.0;  case 'H': return 5500000.0;
-        case 'J': return 6400000.0;  case 'K': return 7300000.0;
-        case 'L': return 8200000.0;  case 'M': return 9100000.0;
-        case 'N': return 0.0;        case 'P': return 800000.0;
-        case 'Q': return 1700000.0;  case 'R': return 2600000.0;
-        case 'S': return 3500000.0;  case 'T': return 4400000.0;
-        case 'U': return 5300000.0;  case 'V': return 6200000.0;
-        case 'W': return 7000000.0;  case 'X': return 7900000.0;
-        default:  return -1.0; // invalid
+    case 'C':
+        return 1100000.0;
+    case 'D':
+        return 2000000.0;
+    case 'E':
+        return 2800000.0;
+    case 'F':
+        return 3700000.0;
+    case 'G':
+        return 4600000.0;
+    case 'H':
+        return 5500000.0;
+    case 'J':
+        return 6400000.0;
+    case 'K':
+        return 7300000.0;
+    case 'L':
+        return 8200000.0;
+    case 'M':
+        return 9100000.0;
+    case 'N':
+        return 0.0;
+    case 'P':
+        return 800000.0;
+    case 'Q':
+        return 1700000.0;
+    case 'R':
+        return 2600000.0;
+    case 'S':
+        return 3500000.0;
+    case 'T':
+        return 4400000.0;
+    case 'U':
+        return 5300000.0;
+    case 'V':
+        return 6200000.0;
+    case 'W':
+        return 7000000.0;
+    case 'X':
+        return 7900000.0;
+    default:
+        return -1.0; // invalid
     }
 }
 
@@ -178,31 +215,33 @@ inline char utmLatitudeBand(double latitude) {
 // Converts WGS84 (longitude, latitude) in degrees to UTM.
 // Returns false if lat/lon are outside the UTM domain.
 // On success fills E, N (metres), zone (1–60), band letter.
-inline bool wgs84ToUTM(double longitude, double latitude,
-                        double& E, double& N, int& zone, char& band) {
+inline bool wgs84ToUTM(double longitude, double latitude, double& E, double& N, int& zone, char& band) {
     band = utmLatitudeBand(latitude);
     if (band == '\0') return false;
     if (longitude < -180.0 || longitude > 180.0) return false;
 
-    const double lat_rad = latitude  * DEG_TO_RAD;
+    const double lat_rad = latitude * DEG_TO_RAD;
     const double lon_rad = longitude * DEG_TO_RAD;
 
     zone = std::clamp(static_cast<int>(std::floor((longitude + 180.0) / 6.0)) + 1, 1, 60);
 
     // Western Norway exception
-    if (latitude >= 56.0 && latitude < 64.0 && longitude >= 3.0 && longitude < 12.0)
-        zone = 32;
+    if (latitude >= 56.0 && latitude < 64.0 && longitude >= 3.0 && longitude < 12.0) zone = 32;
 
     // Svalbard exceptions
     if (latitude >= 72.0 && latitude <= 84.0) {
-        if      (longitude >= 0.0  && longitude <  9.0) zone = 31;
-        else if (longitude >= 9.0  && longitude < 21.0) zone = 33;
-        else if (longitude >= 21.0 && longitude < 33.0) zone = 35;
-        else if (longitude >= 33.0 && longitude < 42.0) zone = 37;
+        if (longitude >= 0.0 && longitude < 9.0)
+            zone = 31;
+        else if (longitude >= 9.0 && longitude < 21.0)
+            zone = 33;
+        else if (longitude >= 21.0 && longitude < 33.0)
+            zone = 35;
+        else if (longitude >= 33.0 && longitude < 42.0)
+            zone = 37;
     }
 
     const double lon_origin_rad = ((zone - 1) * 6.0 - 180.0 + 3.0) * DEG_TO_RAD;
-    const double ecc_prime_sq   = WGS84_ECC_SQ / (1.0 - WGS84_ECC_SQ);
+    const double ecc_prime_sq = WGS84_ECC_SQ / (1.0 - WGS84_ECC_SQ);
     const double sin_lat = std::sin(lat_rad);
     const double cos_lat = std::cos(lat_rad);
     const double tan_lat = std::tan(lat_rad);
@@ -211,45 +250,42 @@ inline bool wgs84ToUTM(double longitude, double latitude,
     const double c = ecc_prime_sq * cos_lat * cos_lat;
     const double a = cos_lat * (lon_rad - lon_origin_rad);
     const double e2 = WGS84_ECC_SQ;
-    const double m = WGS84_A
-        * ((1.0 - e2/4.0 - 3.0*e2*e2/64.0 - 5.0*e2*e2*e2/256.0) * lat_rad
-           - (3.0*e2/8.0 + 3.0*e2*e2/32.0 + 45.0*e2*e2*e2/1024.0) * std::sin(2.0*lat_rad)
-           + (15.0*e2*e2/256.0 + 45.0*e2*e2*e2/1024.0)             * std::sin(4.0*lat_rad)
-           - (35.0*e2*e2*e2/3072.0)                                 * std::sin(6.0*lat_rad));
+    const double m = WGS84_A *
+                     ((1.0 - e2 / 4.0 - 3.0 * e2 * e2 / 64.0 - 5.0 * e2 * e2 * e2 / 256.0) * lat_rad -
+                      (3.0 * e2 / 8.0 + 3.0 * e2 * e2 / 32.0 + 45.0 * e2 * e2 * e2 / 1024.0) * std::sin(2.0 * lat_rad) +
+                      (15.0 * e2 * e2 / 256.0 + 45.0 * e2 * e2 * e2 / 1024.0) * std::sin(4.0 * lat_rad) -
+                      (35.0 * e2 * e2 * e2 / 3072.0) * std::sin(6.0 * lat_rad));
 
-    E = UTM_SCALE * n
-            * (a + (1.0 - t + c) * a*a*a / 6.0
-               + (5.0 - 18.0*t + t*t + 72.0*c - 58.0*ecc_prime_sq) * a*a*a*a*a / 120.0)
-        + FALSE_EASTING;
+    E = UTM_SCALE * n *
+                (a + (1.0 - t + c) * a * a * a / 6.0 +
+                 (5.0 - 18.0 * t + t * t + 72.0 * c - 58.0 * ecc_prime_sq) * a * a * a * a * a / 120.0) +
+        FALSE_EASTING;
 
-    N = UTM_SCALE
-        * (m + n * tan_lat
-               * (a*a / 2.0
-                  + (5.0 - t + 9.0*c + 4.0*c*c) * a*a*a*a / 24.0
-                  + (61.0 - 58.0*t + t*t + 600.0*c - 330.0*ecc_prime_sq) * a*a*a*a*a*a / 720.0));
+    N = UTM_SCALE *
+        (m + n * tan_lat *
+                     (a * a / 2.0 + (5.0 - t + 9.0 * c + 4.0 * c * c) * a * a * a * a / 24.0 +
+                      (61.0 - 58.0 * t + t * t + 600.0 * c - 330.0 * ecc_prime_sq) * a * a * a * a * a * a / 720.0));
 
     if (latitude < 0.0) N += FALSE_NORTHING;
     return true;
 }
 
 // Converts UTM back to WGS84 (longitude, latitude) in degrees.
-inline bool utmToWGS84(double easting, double northing, int zone, bool is_north,
-                        double& longitude, double& latitude) {
+inline bool utmToWGS84(double easting, double northing, int zone, bool is_north, double& longitude, double& latitude) {
     const double e2 = WGS84_ECC_SQ;
     const double e1 = (1.0 - std::sqrt(1.0 - e2)) / (1.0 + std::sqrt(1.0 - e2));
-    const double x  = easting - FALSE_EASTING;
+    const double x = easting - FALSE_EASTING;
     double y = northing;
     if (!is_north) y -= FALSE_NORTHING;
 
-    const double lon_origin   = (zone - 1) * 6.0 - 180.0 + 3.0;
+    const double lon_origin = (zone - 1) * 6.0 - 180.0 + 3.0;
     const double ecc_prime_sq = e2 / (1.0 - e2);
-    const double m  = y / UTM_SCALE;
-    const double mu = m / (WGS84_A * (1.0 - e2/4.0 - 3.0*e2*e2/64.0 - 5.0*e2*e2*e2/256.0));
+    const double m = y / UTM_SCALE;
+    const double mu = m / (WGS84_A * (1.0 - e2 / 4.0 - 3.0 * e2 * e2 / 64.0 - 5.0 * e2 * e2 * e2 / 256.0));
 
-    const double phi1 = mu
-        + (3.0*e1/2.0 - 27.0*e1*e1*e1/32.0) * std::sin(2.0*mu)
-        + (21.0*e1*e1/16.0 - 55.0*e1*e1*e1*e1/32.0) * std::sin(4.0*mu)
-        + (151.0*e1*e1*e1/96.0) * std::sin(6.0*mu);
+    const double phi1 = mu + (3.0 * e1 / 2.0 - 27.0 * e1 * e1 * e1 / 32.0) * std::sin(2.0 * mu) +
+                        (21.0 * e1 * e1 / 16.0 - 55.0 * e1 * e1 * e1 * e1 / 32.0) * std::sin(4.0 * mu) +
+                        (151.0 * e1 * e1 * e1 / 96.0) * std::sin(6.0 * mu);
 
     const double sin_phi1 = std::sin(phi1);
     const double cos_phi1 = std::cos(phi1);
@@ -258,21 +294,20 @@ inline bool utmToWGS84(double easting, double northing, int zone, bool is_north,
     const double t1 = tan_phi1 * tan_phi1;
     const double c1 = ecc_prime_sq * cos_phi1 * cos_phi1;
     const double r1 = WGS84_A * (1.0 - e2) / std::pow(1.0 - e2 * sin_phi1 * sin_phi1, 1.5);
-    const double d  = x / (n1 * UTM_SCALE);
+    const double d = x / (n1 * UTM_SCALE);
 
-    const double lat_rad = phi1
-        - (n1 * tan_phi1 / r1)
-            * (d*d / 2.0
-               - (5.0 + 3.0*t1 + 10.0*c1 - 4.0*c1*c1 - 9.0*ecc_prime_sq) * d*d*d*d / 24.0
-               + (61.0 + 90.0*t1 + 298.0*c1 + 45.0*t1*t1 - 252.0*ecc_prime_sq - 3.0*c1*c1)
-                   * d*d*d*d*d*d / 720.0);
+    const double lat_rad =
+            phi1 - (n1 * tan_phi1 / r1) *
+                           (d * d / 2.0 -
+                            (5.0 + 3.0 * t1 + 10.0 * c1 - 4.0 * c1 * c1 - 9.0 * ecc_prime_sq) * d * d * d * d / 24.0 +
+                            (61.0 + 90.0 * t1 + 298.0 * c1 + 45.0 * t1 * t1 - 252.0 * ecc_prime_sq - 3.0 * c1 * c1) *
+                                    d * d * d * d * d * d / 720.0);
     latitude = lat_rad * RAD_TO_DEG;
 
-    const double lon_rad = (d
-               - (1.0 + 2.0*t1 + c1) * d*d*d / 6.0
-               + (5.0 - 2.0*c1 + 28.0*t1 - 3.0*c1*c1 + 8.0*ecc_prime_sq + 24.0*t1*t1)
-                   * d*d*d*d*d / 120.0)
-        / cos_phi1;
+    const double lon_rad = (d - (1.0 + 2.0 * t1 + c1) * d * d * d / 6.0 +
+                            (5.0 - 2.0 * c1 + 28.0 * t1 - 3.0 * c1 * c1 + 8.0 * ecc_prime_sq + 24.0 * t1 * t1) * d * d *
+                                    d * d * d / 120.0) /
+                           cos_phi1;
     longitude = lon_origin + lon_rad * RAD_TO_DEG;
     return true;
 }
@@ -281,7 +316,9 @@ inline bool utmToWGS84(double easting, double northing, int zone, bool is_north,
 // Caller must have already validated that lat ∈ [-80, 84] and lon ∈ [-180, 180].
 inline std::string mgrsEncode(double longitude, double latitude, uint8_t precision) {
     precision = std::min<uint8_t>(precision, 5);
-    double E, N; int zone; char band;
+    double E, N;
+    int zone;
+    char band;
     if (!wgs84ToUTM(longitude, latitude, E, N, zone, band)) return {};
 
     const int64_t E_int = static_cast<int64_t>(std::floor(E));
@@ -296,7 +333,10 @@ inline std::string mgrsEncode(double longitude, double latitude, uint8_t precisi
             int64_t within = value % 100000;
             if (within < 0) within += 100000;
             char buf[5];
-            for (int i = 4; i >= 0; --i) { buf[i] = static_cast<char>('0' + within % 10); within /= 10; }
+            for (int i = 4; i >= 0; --i) {
+                buf[i] = static_cast<char>('0' + within % 10);
+                within /= 10;
+            }
             return std::string(buf, buf + precision);
         };
         result += most_significant(E_int);
@@ -356,17 +396,16 @@ inline bool mgrsDecode(std::string_view mgrs, double& longitude, double& latitud
         cell_size = 100000.0 / std::pow(10.0, static_cast<double>(per));
         const std::string east_str(clean.data() + i, per);
         const std::string north_str(clean.data() + i + per, per);
-        easting  += std::stod(east_str)  * cell_size;
+        easting += std::stod(east_str) * cell_size;
         northing += std::stod(north_str) * cell_size;
     }
 
     // Return centre of the referenced square.
-    easting  += cell_size / 2.0;
+    easting += cell_size / 2.0;
     northing += cell_size / 2.0;
 
     const bool is_north = band >= 'N';
-    if (!utmToWGS84(easting, northing, static_cast<uint8_t>(zone), is_north, longitude, latitude))
-        return false;
+    if (!utmToWGS84(easting, northing, static_cast<uint8_t>(zone), is_north, longitude, latitude)) return false;
 
     // Validate that decoded latitude falls within the declared band (±1° tolerance).
     const size_t band_index = BAND_LETTERS.find(band);

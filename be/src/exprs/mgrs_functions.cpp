@@ -14,11 +14,10 @@
 
 #include "exprs/mgrs_functions.h"
 
-#include "exprs/mgrs_math.h"
-
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exprs/mgrs_math.h"
 
 namespace starrocks {
 
@@ -38,8 +37,7 @@ StatusOr<ColumnPtr> MgrsFunctions::geo_to_mgrs(FunctionContext* ctx, const Colum
     ColumnBuilder<TYPE_VARCHAR> result(size);
 
     for (int row = 0; row < size; ++row) {
-        if (lng_col.is_null(row) || lat_col.is_null(row)
-            || (has_precision && prec_col->is_null(row))) {
+        if (lng_col.is_null(row) || lat_col.is_null(row) || (has_precision && prec_col->is_null(row))) {
             result.append_null();
             continue;
         }
@@ -56,12 +54,18 @@ StatusOr<ColumnPtr> MgrsFunctions::geo_to_mgrs(FunctionContext* ctx, const Colum
         uint8_t precision = 5;
         if (has_precision) {
             const int32_t p = prec_col->value(row);
-            if (p < 0 || p > 5) { result.append_null(); continue; }
+            if (p < 0 || p > 5) {
+                result.append_null();
+                continue;
+            }
             precision = static_cast<uint8_t>(p);
         }
 
         const std::string mgrs = mgrsEncode(lng, lat, precision);
-        if (mgrs.empty()) { result.append_null(); continue; }
+        if (mgrs.empty()) {
+            result.append_null();
+            continue;
+        }
         result.append(Slice(mgrs));
     }
 
@@ -75,11 +79,15 @@ StatusOr<ColumnPtr> MgrsFunctions::mgrs_to_lat(FunctionContext* ctx, const Colum
     ColumnBuilder<TYPE_DOUBLE> result(size);
 
     for (int row = 0; row < size; ++row) {
-        if (str_col.is_null(row)) { result.append_null(); continue; }
+        if (str_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         Slice s = str_col.value(row);
         double lon, lat;
         if (!mgrsDecode(std::string_view(s.data, s.size), lon, lat)) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(lat);
     }
@@ -94,11 +102,15 @@ StatusOr<ColumnPtr> MgrsFunctions::mgrs_to_lng(FunctionContext* ctx, const Colum
     ColumnBuilder<TYPE_DOUBLE> result(size);
 
     for (int row = 0; row < size; ++row) {
-        if (str_col.is_null(row)) { result.append_null(); continue; }
+        if (str_col.is_null(row)) {
+            result.append_null();
+            continue;
+        }
         Slice s = str_col.value(row);
         double lon, lat;
         if (!mgrsDecode(std::string_view(s.data, s.size), lon, lat)) {
-            result.append_null(); continue;
+            result.append_null();
+            continue;
         }
         result.append(lon);
     }
