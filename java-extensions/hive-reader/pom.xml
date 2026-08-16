@@ -112,6 +112,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/hive-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeScope>runtime</includeScope>
                         </configuration>
                     </execution>
                 </executions>

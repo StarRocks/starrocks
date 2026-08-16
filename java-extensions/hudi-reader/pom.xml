@@ -175,6 +175,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/hudi-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeScope>runtime</includeScope>
                         </configuration>
                     </execution>
                 </executions>
