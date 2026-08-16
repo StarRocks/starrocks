@@ -1,31 +1,88 @@
-name: Sync CD to SR
-run-name: Sync CD to SR (dry_run=${{ inputs.dry_run }})
+name: REVERSE SYNC ON MERGE
+run-name: Reverse Sync (#${{ github.event.inputs.pr || github.event.number }})
+
+# Event-driven CelerData -> StarRocks reverse-sync trigger — the MIRROR of the forward
+# SR->CD trigger (StarRocks ci-sync.yml), handling main AND shared release branches. When
+# a NATIVE CelerData [BugFix]/[Enhancement] PR MERGES on main / branch-4.1 / branch-4.0,
+# run the decision hub (ci-tool/bin/reverse_sync_decide.sh):
+#   base=main   -> node2 (enterprise-only?): open-source => dispatch SR repo-sync.yml BRANCH=main
+#                 (the executor marks the CD PR `sr-synced` — provenance for the branches).
+#   base=branch -> reuse the main decision: the "(backport #N)" main PR carries `sr-synced`?
+#                 yes => dispatch BRANCH=<same branch>. StarRocks receives each shared-line
+#                 fix DIRECTLY via branch-sync (like forward), not via self-backport.
+#
+# Anti-loop: a StarRocks-origin PR carries "(sync #" in its title (load-bearing — mergify
+# backports do NOT inherit the `sync` label, only that title marker) / a `sync` label /
+# a `-sync-` head; all are skipped so a fix never bounces back to SR.
+#
+# `on.branches` lists the SHARED branches only (SR has no branch-4.2), so CD-exclusive
+# branch merges never fire this. Keep in sync with pr_sequence_checker_reverse.SYNC_BRANCHES.
+#
+# Gated by repo variable REVERSE_SYNC_REAL:
+#   unset/off -> skip (infrastructure ships inert, per the 2026-08-11 parking decision)
+#   dry       -> decide + log only (no dispatch)
+#   on        -> decide + dispatch the SR executor
+# Runner [self-hosted, ubuntu, ai] (node2 calls claude). Requires ci-tool on the runner
+# and, for `on`, a token with StarRocks actions:write to dispatch repo-sync.yml.
 
 on:
+  pull_request_target:
+    types: [closed]
+    branches: [main, branch-4.1, branch-4.0]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Only print candidate PRs, do not sync'
+      pr:
+        description: 'CD PR number to (re-)evaluate for reverse sync'
         required: true
-        type: boolean
-        default: true
+        type: string
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: write
 
 jobs:
-  scan:
-    runs-on: [self-hosted, sync-normal]
+  reverse-sync-decide:
+    runs-on: [self-hosted, ubuntu, ai]
+    # Native CD backportable merge ([BugFix]/[Enhancement]/[Doc]/[UT], matching
+    # pr-checker's backport-check-subtask + the advisory) on a shared branch (main/4.1/4.0),
+    # not a StarRocks-origin (`(sync #` / `sync` / `-sync-`) PR, not a manual cherry-pick.
+    # Branch backports (title "...(backport #N)") ARE included — they are the per-branch
+    # fixes to sync. workflow_dispatch bypasses the event-only guards for a manual re-run.
+    if: >
+      github.repository == 'CelerData/celerdata-enterprise' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.merged == true &&
+          (startsWith(github.event.pull_request.title, '[BugFix]') ||
+           startsWith(github.event.pull_request.title, '[Enhancement]') ||
+           startsWith(github.event.pull_request.title, '[Doc]') ||
+           startsWith(github.event.pull_request.title, '[UT]')) &&
+          !contains(github.event.pull_request.title, 'cherry-pick') &&
+          !contains(github.event.pull_request.title, '(sync #') &&
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          !contains(github.head_ref, '-sync-')
+        )
+      )
     env:
-      GH_TOKEN: ${{ secrets.SYNC_PAT }}
+      PR_NUMBER: ${{ github.event.inputs.pr || github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
     steps:
-      - name: checkout tools
+      - name: reverse-sync decision + dispatch (gated by REVERSE_SYNC_REAL)
         run: |
-          cp -rf /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull || echo "git pull failed, using cached"
-      - name: run scanner
-        run: |
-          cd elastic-service
+          MODE="${{ vars.REVERSE_SYNC_REAL }}"
+          if [ -z "${MODE}" ] || [ "${MODE}" = "off" ]; then
+            echo "REVERSE_SYNC_REAL is off/unset -> reverse sync disabled; skipping ${GITHUB_REPOSITORY}#${PR_NUMBER}"
+            exit 0
+          fi
           FLAG="--dry-run"
-          if [[ "${{ inputs.dry_run }}" == "false" ]]; then FLAG="--no-dry-run"; fi
-          python3 lib/sync_cd_to_sr.py $FLAG
+          if [ "${MODE}" = "on" ]; then FLAG="--no-dry-run"; fi
+
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+
+          # The hub reads the PR's base branch itself and picks main (node2) vs branch
+          # (provenance) mode; no affected/checkbox computation here (branch-sync delivers
+          # each branch directly, so there is no self-backport target set to pass).
+          ./bin/reverse_sync_decide.sh --repo "${GITHUB_REPOSITORY}" --pr "${PR_NUMBER}" ${FLAG}
