@@ -1441,7 +1441,6 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
-<<<<<<< HEAD
      * A derived table over an append-only (Iceberg) base has no retractable row id, so rewriteSubqueryRelation
      * forwards the inner block's non-retractability and the MV falls back to AUTO_INCREMENT.
      */
@@ -1463,7 +1462,9 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(result.isPresent(), "append-only derived-table MV must produce an IVM rewrite result");
         assertEquals(RowIdStrategy.AUTO_INCREMENT, result.get().rowIdStrategy(),
                 "a derived table over an append-only base has no retractable row id");
-=======
+    }
+
+    /**
      * An incremental mv is keyed by {@code __ROW_ID__} alone, so its {@code ORDER BY} becomes a sort key of
      * its own instead of widening the primary key.
      */
@@ -1609,7 +1610,6 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
 
     private static List<Integer> sortKeyIdxes(MaterializedView mv) {
         return mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getSortKeyIdxes();
->>>>>>> 636d501a586... [BugFix] ORDER BY on an incremental MV widened its primary key instead of sorting (#77680)
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
