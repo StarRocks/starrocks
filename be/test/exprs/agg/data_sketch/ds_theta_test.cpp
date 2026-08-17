@@ -358,8 +358,7 @@ static std::unique_ptr<FunctionContext> make_cond_agg_ctx() {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
                                              TypeDescriptor::from_logical_type(TYPE_INT)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
-    return std::unique_ptr<FunctionContext>(
-            FunctionContext::create_test_context(std::move(arg_types), return_type));
+    return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context(std::move(arg_types), return_type));
 }
 
 // Feed rows into ds_theta_intersect_cond_agg one at a time.
@@ -381,8 +380,8 @@ TEST_F(DataSketchsThetaTest, TestIntersectCondAggHappyPath) {
     ASSERT_NE(nullptr, func);
     auto state = ManagedAggrState::create(local_ctx.get(), func);
 
-    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 1000), 1);    // anchor
-    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 1000), 0);  // window
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 1000), 1);   // anchor
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 1000), 0); // window
 
     ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
     auto result_col = DoubleColumn::create();

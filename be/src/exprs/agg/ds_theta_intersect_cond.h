@@ -180,8 +180,7 @@ public:
         const Column* src0 = src[0].get();
         const BinaryColumn* sketch_col = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(src0));
         const Column* src1 = src[1].get();
-        const auto* flag_col =
-                down_cast<const FixedLengthColumn<int32_t>*>(ColumnHelper::get_data_column(src1));
+        const auto* flag_col = down_cast<const FixedLengthColumn<int32_t>*>(ColumnHelper::get_data_column(src1));
         auto* out = down_cast<BinaryColumn*>(dst.get());
 
         for (size_t i = 0; i < chunk_size; ++i) {
