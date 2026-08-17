@@ -67,8 +67,8 @@ StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes) 
     // Raw content, always: the page holds a verbatim sample of the column's own data, and
     // ZSTD_dct_rawContent keeps a sample that happens to begin with ZSTD_MAGIC_DICTIONARY
     // from being misparsed as a structured dictionary.
-    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy,
-                                              ZSTD_dct_rawContent, ZSTD_defaultCMem);
+    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, ZSTD_dct_rawContent,
+                                              ZSTD_defaultCMem);
     if (d == nullptr) {
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
     }
