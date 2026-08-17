@@ -432,6 +432,15 @@ if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
     touch $PATCHED_MARK
 fi
+# Patches added after PATCHED_MARK was introduced carry their own mark: a
+# source directory unpacked by an older revision already has PATCHED_MARK,
+# so the block above never runs there and the build would keep the unpatched
+# sources. Replaying that block instead is not an option, its patches are
+# already applied in such a directory.
+if [ ! -f $PATCHED_MARK.usable_size_minimal_tsd ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+    patch -p0 < $TP_PATCH_DIR/jemalloc_malloc_usable_size_minimal_tsd.patch
+    touch $PATCHED_MARK.usable_size_minimal_tsd
+fi
 cd -
 echo "Finished patching $JEMALLOC_SOURCE"
 
