@@ -3581,11 +3581,13 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     for (auto it = rows.new_iterator(); it.has_more();) {
         Range<> r = it.next(4096);
         MutableColumnPtr col = ChunkFactory::column_from_field(*field);
-        // next_batch reads from the current page and does not seek internally; position first.
         RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
-        SparseRange<> sub;
-        sub.add(r);
-        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(sub, col.get()));
+        // Array row ordinals are rowid_t, but their flattened element ordinals are 64-bit and can
+        // exceed UINT32_MAX. Do not wrap this contiguous row range in SparseRange<rowid_t>: the Array
+        // iterator would truncate the element range before passing it to the element iterator.
+        size_t rows_to_read = r.span_size();
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(&rows_to_read, col.get()));
+        DCHECK_EQ(rows_to_read, r.span_size());
         auto dist = _brute_force_distance_column(col.get());
         const auto& dvals = dist->get_data();
         const uint32_t bn = r.end() - r.begin();
