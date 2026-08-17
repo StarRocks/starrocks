@@ -727,13 +727,22 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "          part n2\n" +
                 "      ) t1\n" +
                 "  ) t2;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "12:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(11: count)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  11:Project\n" +
-                "  |  <slot 11> : 11: count");
+        // Both sides are the same scalar aggregation over an unfiltered `part`, so
+        // MergeSamePredicateAggCrossJoinRule would collapse them into a single scan and remove the join
+        // altogether. That is a valid rewrite, but it would leave this test with no broadcast join to assert on,
+        // so keep the rule out of the way and let the test cover the shape it was written for.
+        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(false);
+        try {
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "12:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(11: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  11:Project\n" +
+                    "  |  <slot 11> : 11: count");
+        } finally {
+            connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(true);
+        }
     }
 
     @Test

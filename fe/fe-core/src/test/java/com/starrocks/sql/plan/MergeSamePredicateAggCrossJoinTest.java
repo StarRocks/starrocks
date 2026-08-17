@@ -242,6 +242,16 @@ public class MergeSamePredicateAggCrossJoinTest extends TPCDSPlanTestBase {
     }
 
     @Test
+    public void testChainCollapsesToSingleInputDropsJoin() throws Exception {
+        // when every input of the chain merges into one branch there is no edge left, so the join disappears
+        String sql = "select * from (select count(v1) c1 from t0) a, (select count(v1) c2 from t0) b";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: t0"));
+        Assertions.assertEquals(0, countOccurrences(plan, "NESTLOOP JOIN"));
+        Assertions.assertEquals(0, countOccurrences(plan, "CROSS JOIN"));
+    }
+
+    @Test
     public void testNonDeterministicOuterProjectionStillCorrect() throws Exception {
         String sql = "select rand() r, (select count(*) from t0 where v1 = 1), (select sum(v2) from t0 where v1 = 1)"
                 + " from t1";
