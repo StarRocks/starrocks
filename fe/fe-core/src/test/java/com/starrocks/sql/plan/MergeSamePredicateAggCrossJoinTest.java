@@ -224,4 +224,28 @@ public class MergeSamePredicateAggCrossJoinTest extends TPCDSPlanTestBase {
                 + " (select sum(v) from mspa_part where k = 1)";
         Assertions.assertEquals(2, scanCount(sql, "mspa_part"));
     }
+
+    // ------------------------------------------------------------------------------------------------
+    // chain rebuilding: the surviving edges must keep their own join operators, and an interleaved
+    // projection must not be hoisted across joins when it is non-deterministic
+    // ------------------------------------------------------------------------------------------------
+
+    @Test
+    public void testMixedChainKeepsPerEdgeJoins() throws Exception {
+        // the t1/t2 edge comes from the transformer and carries no hint, while the two apply-generated edges
+        // carry BROADCAST; rebuilding must not copy one edge's operator onto the others
+        String sql = "select (select count(*) from t0 where v1 = 1), (select sum(v2) from t0 where v1 = 1)"
+                + " from t1, t2";
+        Assertions.assertEquals(1, scanCount(sql, "t0"));
+        Assertions.assertEquals(1, scanCount(sql, "t1"));
+        Assertions.assertEquals(1, scanCount(sql, "t2"));
+    }
+
+    @Test
+    public void testNonDeterministicOuterProjectionStillCorrect() throws Exception {
+        String sql = "select rand() r, (select count(*) from t0 where v1 = 1), (select sum(v2) from t0 where v1 = 1)"
+                + " from t1";
+        Assertions.assertEquals(1, scanCount(sql, "t0"));
+        Assertions.assertEquals(1, countOccurrences(getFragmentPlan(sql), "rand()"));
+    }
 }

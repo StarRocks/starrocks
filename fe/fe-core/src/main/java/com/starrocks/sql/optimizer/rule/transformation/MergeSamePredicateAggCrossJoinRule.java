@@ -168,6 +168,7 @@ public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
         }
 
         List<OptExpression> newInputs = new ArrayList<>();
+        List<LogicalJoinOperator> newJoins = new ArrayList<>();
         ColumnRefSet available = new ColumnRefSet();
         for (int i = 0; i < chain.inputs.size(); i++) {
             if (dropped.contains(i)) {
@@ -181,11 +182,15 @@ public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
                 // freshly built, no logical property derived yet
                 outputColumnsOf(child).forEach(available::union);
             }
+            if (!newInputs.isEmpty()) {
+                // every input except the leftmost keeps the very edge that attached it
+                newJoins.add(chain.joins.get(i - 1));
+            }
             newInputs.add(child);
         }
 
         Map<ColumnRefOperator, ScalarOperator> topProjectMap = composeProjects(chain.projects);
-        OptExpression newChain = buildJoinChain(newInputs, (LogicalJoinOperator) input.getOp());
+        OptExpression newChain = buildJoinChain(newInputs, newJoins);
         if (topProjectMap == null) {
             return Lists.newArrayList(newChain);
         }
@@ -219,6 +224,11 @@ public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
     private static class ChainInfo {
         // cross-joined inputs, left to right
         private final List<OptExpression> inputs = new ArrayList<>();
+        // the join operator that attached inputs.get(i + 1), so this list is always one shorter than inputs.
+        // Each edge is kept separately rather than cloning one template: a chain can mix joins from different
+        // sources (the transformer's own cross joins carry no hint, ScalarApply2JoinRule's carry BROADCAST), and
+        // copying one edge's hint onto all of them could force a large residual relation to be broadcast.
+        private final List<LogicalJoinOperator> joins = new ArrayList<>();
         // LogicalProjectOperators interleaved in the left spine, shallowest first
         private final List<LogicalProjectOperator> projects = new ArrayList<>();
     }
@@ -226,7 +236,15 @@ public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
     private boolean collectChain(OptExpression node, ChainInfo chain) {
         Operator op = node.getOp();
         if (op instanceof LogicalProjectOperator && isPassThroughNode(op)) {
-            chain.projects.add((LogicalProjectOperator) op);
+            LogicalProjectOperator project = (LogicalProjectOperator) op;
+            // An interleaved projection is recreated above the *whole* rebuilt chain. For a deterministic
+            // expression that is harmless, but a non-deterministic one would go from being evaluated once per row
+            // at its original depth to once per final joined row - observably different as soon as a multi-row
+            // input sits above its original position, where before one value was replicated across those rows.
+            if (project.getColumnRefMap().values().stream().anyMatch(Utils::hasNonDeterministicFunc)) {
+                return false;
+            }
+            chain.projects.add(project);
             return collectChain(node.inputAt(0), chain);
         }
         if (isChainJoin(op)) {
@@ -234,6 +252,7 @@ public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
                 return false;
             }
             chain.inputs.add(node.inputAt(1));
+            chain.joins.add((LogicalJoinOperator) op);
             return true;
         }
         chain.inputs.add(node);
@@ -280,10 +299,11 @@ public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
         return composed;
     }
 
-    private OptExpression buildJoinChain(List<OptExpression> inputs, LogicalJoinOperator template) {
+    /** Rebuild the left-deep chain, each surviving edge keeping the join operator it originally had. */
+    private OptExpression buildJoinChain(List<OptExpression> inputs, List<LogicalJoinOperator> joins) {
         OptExpression current = inputs.get(0);
         for (int i = 1; i < inputs.size(); i++) {
-            LogicalJoinOperator join = LogicalJoinOperator.builder().withOperator(template).build();
+            LogicalJoinOperator join = LogicalJoinOperator.builder().withOperator(joins.get(i - 1)).build();
             current = OptExpression.create(join, current, inputs.get(i));
         }
         return current;
