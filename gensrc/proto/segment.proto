@@ -238,15 +238,10 @@ message ColumnMetaPB {
     // written with a per-column ZSTD compression dictionary; left unset for every
     // other column, so a segment without such a column serializes byte-identically
     // to before.
+    // The bytes are always raw content -- a verbatim sample of the column's own
+    // data -- and are loaded with ZSTD_dct_rawContent, so a sample that happens to
+    // begin with ZSTD_MAGIC_DICTIONARY is never misparsed as a structured dictionary.
     optional PagePointerPB zstd_compression_dict_page = 35;
-    // How to interpret the bytes in zstd_compression_dict_page.
-    //   unset/false -> raw content (a verbatim data sample); MUST be loaded with
-    //                  ZSTD_dct_rawContent so a sample that happens to begin with
-    //                  ZSTD_MAGIC_DICTIONARY is never misparsed as a structured
-    //                  dictionary.
-    //   true        -> a ZDICT-trained dictionary (own magic + entropy tables);
-    //                  MUST be loaded as a full dictionary.
-    optional bool zstd_compression_dict_trained = 36;
 }
 
 enum VectorIndexStorageTypePB {

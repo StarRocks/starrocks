@@ -301,10 +301,6 @@ private:
     // The DDict is built once per (segment, column) and then referenced on every
     // data-page decompression.
     PagePointer _zstd_compression_dict_page_pointer;
-    // how to interpret the compression-dict page bytes (ColumnMetaPB
-    // .zstd_compression_dict_trained). false = raw content sample, true = ZDICT-trained
-    // dictionary. Must match what the writer used or decoding is wrong.
-    bool _zstd_compression_dict_trained = false;
     std::shared_ptr<compression::ZstdDDict> _zstd_compression_ddict;
     OnceFlag _zstd_compression_ddict_once;
     uint64_t _total_mem_footprint = 0;

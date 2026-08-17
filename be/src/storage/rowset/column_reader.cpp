@@ -148,7 +148,6 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     // has_zstd_compression_dict() is false and the read path is unchanged).
     if (meta->has_zstd_compression_dict_page()) {
         _zstd_compression_dict_page_pointer = PagePointer(meta->zstd_compression_dict_page());
-        _zstd_compression_dict_trained = meta->zstd_compression_dict_trained();
     }
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
@@ -543,7 +542,7 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                             RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
                             // ZSTD copies the dictionary bytes internally, so the
                             // page handle may be released after create().
-                            auto ddict_or = compression::ZstdDDict::create(body, _zstd_compression_dict_trained);
+                            auto ddict_or = compression::ZstdDDict::create(body);
                             RETURN_IF_ERROR(ddict_or.status());
                             _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
                             // The DDict holds its own copy of the dictionary and lives as long

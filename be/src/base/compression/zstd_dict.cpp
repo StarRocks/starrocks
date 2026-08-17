@@ -27,7 +27,6 @@
 #include <zstd/zstd.h>
 #endif
 
-#include <atomic>
 #include <cstring>
 
 #include "base/compression/zstd_dict.h"
@@ -61,31 +60,22 @@ ZstdCDict::~ZstdCDict() {
     }
 }
 
-StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, bool trained) {
+StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes) {
     if (dict_bytes.size == 0) {
         return Status::InvalidArgument("cannot build shared ZSTD ddict from empty bytes");
     }
-    // The `trained` flag is the persisted contract (ColumnMetaPB field 36), so honor it
-    // exactly: ZSTD_dct_fullDict rejects bytes that are not a structured dictionary
-    // instead of quietly reinterpreting them as raw content, which would turn wrong
-    // metadata into a decode failure somewhere further away.
-    const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_fullDict : ZSTD_dct_rawContent;
-    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type,
-                                              ZSTD_defaultCMem);
+    // Raw content, always: the page holds a verbatim sample of the column's own data, and
+    // ZSTD_dct_rawContent keeps a sample that happens to begin with ZSTD_MAGIC_DICTIONARY
+    // from being misparsed as a structured dictionary.
+    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy,
+                                              ZSTD_dct_rawContent, ZSTD_defaultCMem);
     if (d == nullptr) {
-        if (trained) {
-            return Status::Corruption("the dictionary page is marked as a trained ZSTD dictionary but is not one");
-        }
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
     }
     return std::unique_ptr<ZstdDDict>(new ZstdDDict(d));
 }
 
-namespace {
-std::atomic<uint64_t> g_ddict_id_seq{1};
-} // namespace
-
-ZstdDDict::ZstdDDict(ZSTD_DDict* d) : _dict(d), _id(g_ddict_id_seq.fetch_add(1, std::memory_order_relaxed)) {}
+ZstdDDict::ZstdDDict(ZSTD_DDict* d) : _dict(d) {}
 
 size_t ZstdDDict::mem_usage() const {
     return _dict != nullptr ? ZSTD_sizeof_DDict(_dict) : 0;

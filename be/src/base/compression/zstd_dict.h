@@ -64,24 +64,17 @@ private:
 // per-page into the codec via ZSTD_DCtx_refDDict.
 class ZstdDDict {
 public:
-    // Build a DDict from the bytes of the compression-dict page. `trained` must match
-    // what the writer used (ColumnMetaPB.zstd_compression_dict_trained); see ZstdCDict.
+    // Build a DDict from the bytes of the compression-dict page. The bytes are a
+    // verbatim sample of the column's own data, so they are loaded as raw content.
     // ZSTD copies the bytes internally, so the page handle may be released
     // afterward.
-    static StatusOr<std::unique_ptr<ZstdDDict>> create(const Slice& dict_bytes, bool trained = false);
+    static StatusOr<std::unique_ptr<ZstdDDict>> create(const Slice& dict_bytes);
 
     ~ZstdDDict();
     ZstdDDict(const ZstdDDict&) = delete;
     ZstdDDict& operator=(const ZstdDDict&) = delete;
 
     ZSTD_DDict* dict() const { return _dict; }
-
-    // Process-unique, monotonically increasing identity. The decompression path
-    // caches decompression contexts that already have a dictionary loaded, keyed
-    // by this id rather than by the object address: an address can be recycled by
-    // a later allocation (ABA), which would make a stale cache entry look like a
-    // hit and decode against the wrong -- possibly freed -- dictionary.
-    uint64_t id() const { return _id; }
 
     // Bytes this dictionary actually occupies (ZSTD_sizeof_DDict). A DDict copies
     // the dictionary content, and it is held for as long as the ColumnReader that
@@ -91,7 +84,6 @@ public:
 private:
     explicit ZstdDDict(ZSTD_DDict* d);
     ZSTD_DDict* _dict = nullptr;
-    uint64_t _id = 0;
 };
 
 } // namespace starrocks::compression

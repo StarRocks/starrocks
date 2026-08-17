@@ -595,15 +595,6 @@ This topic introduces the following types of BE configurations:
 - Description: Threshold used by the serialization compression strategy to judge whether observed LZ4 compression is "good". In compress_strategy.cpp this value divides the observed compress_ratio when computing a reward metric together with lz4_expected_compression_speed_mbps; if the combined reward `>` 1.0 the strategy records positive feedback. Increasing this value raises the expected compression ratio (making the condition harder to satisfy), while lowering it makes it easier for observed compression to be considered satisfactory. Tune to match typical data compressibility. Valid range: MIN=1, MAX=65537.
 - Introduced in: v3.4.1, 3.5.0, 4.0.0
 
-### enable_zstd_compression_dict_ctx_cache
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to keep dictionary-loaded ZSTD decompression contexts warm in a small thread-local set instead of borrowing them from the shared context pool. Resetting a context borrowed from the shared pool clears the sticky `refDDict`, which forces the dictionary to be reloaded into a cold context once per page. On a paired full-column scan, keeping the contexts warm brought the dictionary read overhead down from +20-25% to +5.6-8.6%, removing roughly 55% to 60% of it. The optimization is exposed as a switch so that it can be turned off in production without a rollback, and so that its effect can be A/B tested on a single cluster. Each thread that reads such a column holds up to four contexts until it exits. This parameter affects only the reads of columns whose segments carry a compression dictionary; it has no effect on any other column.
-- Introduced in: v4.2
-
 ### lz4_expected_compression_speed_mbps
 
 - Default: 600
