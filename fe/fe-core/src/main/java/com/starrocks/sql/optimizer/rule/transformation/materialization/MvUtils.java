@@ -1290,7 +1290,11 @@ public class MvUtils {
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
-            if (viewScanOperator.getPredicate() != null) {
+            // A view scan may carry a merged projection even without a predicate (e.g. an unfiltered
+            // view usage, or the null-supplying side of an outer join). Keep the projection in that
+            // case too; dropping it leaves parents referencing columns the inlined plan no longer
+            // produces, which later hard-errors in statistics derivation.
+            if (viewScanOperator.getPredicate() != null || viewScanOperator.getProjection() != null) {
                 Operator inlineViewOp = inlineViewPlan.getOp();
 
                 // original map records inlined view's column ref to non-inlined view's column ref mapping,

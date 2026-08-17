@@ -18,6 +18,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
+#include "storage/lake/pk_index_utils.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -25,6 +26,7 @@ namespace starrocks::lake {
 Status SegmentPKIterator::_load() {
     TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
     auto chunk_container = _pk_column_chunk->clone_empty();
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     if (_iter != nullptr) {
         while (true) {
             chunk_container->reset();
@@ -54,7 +56,7 @@ Status SegmentPKIterator::_load() {
             }
             TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
             if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                               _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
+                               _pk_column_chunk->num_rows() >= min_rows_per_task)) {
                 break;
             }
         }

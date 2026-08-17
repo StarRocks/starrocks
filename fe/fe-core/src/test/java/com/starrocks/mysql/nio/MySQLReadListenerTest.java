@@ -14,6 +14,7 @@
 
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -22,14 +23,21 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.xnio.XnioWorker;
+import org.xnio.conduits.ConduitStreamSourceChannel;
 
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MySQLReadListenerTest {
     @Mocked
@@ -219,5 +227,55 @@ public class MySQLReadListenerTest {
 
         Assertions.assertFalse(result,
                 "isTerminated should return false when graceful exit is active but statement is connection_id()");
+    }
+
+    @Test
+    public void testClientDisconnectHandsTheKillToAWorker(@Mocked ConduitStreamSourceChannel channel,
+                                                          @Mocked XnioWorker worker) throws Exception {
+        boolean savedKillAfterDisconnect = Config.mysql_service_kill_after_disconnect;
+        Config.mysql_service_kill_after_disconnect = true;
+        List<Runnable> handedToWorker = new ArrayList<>();
+        try {
+            new Expectations() {
+                {
+                    channel.read((ByteBuffer) any);
+                    result = -1;
+                    channel.getWorker();
+                    result = worker;
+                    worker.execute((Runnable) any);
+                    result = new Delegate<Void>() {
+                        @SuppressWarnings("unused")
+                        void execute(Runnable task) {
+                            handedToWorker.add(task);
+                        }
+                    };
+                }
+            };
+
+            listener.handleEvent(channel);
+
+            // handleEvent runs on a shared XNIO I/O thread. Killing the running query takes the
+            // coordinator's lock, which the query's own thread holds across fragment deployment,
+            // so none of it may happen before handleEvent returns.
+            Assertions.assertEquals(1, handedToWorker.size(),
+                    "the disconnect kill should have been handed to a worker");
+            new Verifications() {
+                {
+                    ctx.cleanup();
+                    times = 0;
+                }
+            };
+
+            handedToWorker.get(0).run();
+
+            new Verifications() {
+                {
+                    ctx.cleanup();
+                    times = 1;
+                }
+            };
+        } finally {
+            Config.mysql_service_kill_after_disconnect = savedKillAfterDisconnect;
+        }
     }
 }

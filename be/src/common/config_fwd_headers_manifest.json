@@ -352,7 +352,11 @@
         "vector_query_cache_capacity",
         "vector_index_cache_expire_sec",
         "enable_vector_index_block_cache",
+        "enable_vector_index_cache_async_load_on_miss",
+        "vector_index_cache_async_load_threads",
+        "vector_index_cache_loading_wait_timeout_ms",
         "enable_vector_index_cache_on_build",
+        "vector_index_cosine_backend",
         "config_vector_index_build_concurrency",
         "config_vector_index_default_build_threshold",
         "vector_index_build_max_cpu_ratio",
@@ -361,6 +365,7 @@
         "vector_adaptive_ef_cap",
         "vector_adaptive_ef_baseline_rows",
         "vector_index_brute_selectivity_threshold",
+        "enable_vector_index_topk_underfill_fallback",
         "vector_index_build_flush_threshold_rows"
       ]
     },
@@ -719,6 +724,7 @@
         "meta_threshold_to_manual_compact",
         "lake_compaction_stream_buffer_size_bytes",
         "lake_compaction_check_valid_interval_minutes",
+        "lake_compact_slow_log_ms",
         "lake_compaction_max_bytes_per_subtask",
         "lake_compaction_max_rowset_size",
         "lake_enable_compaction_async_write",

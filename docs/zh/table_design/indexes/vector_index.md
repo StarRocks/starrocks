@@ -116,6 +116,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 - **描述**: 向量索引的度量类型（测量函数）。有效值：
   - `l2_distance`: 欧氏距离。值越小，相似度越高。
   - `cosine_similarity`: 余弦相似度。值越大，相似度越高。
+  - `inner_product`: 内积。值越大，相似度越高。与余弦相似度不同，内积保留向量模长。精确计算使用 `inner_product`，向量索引 top-k 或范围查询使用 `approx_inner_product`。
 
 ##### is_vector_normed
 
@@ -125,7 +126,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 
 ##### index_build_threshold
 
-- **默认值**: 10000（由 BE 配置项 [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) 决定）
+- **默认值**: 10000（由 BE 配置项 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) 决定）
 - **必需**: 否
 - **描述**: 触发向量索引构建的行数阈值。写入的数据行数低于该阈值时不构建索引，查询回退到暴力检索。取值必须为大于等于 `1` 的整数。对于 IVFPQ 索引，该值还必须大于等于 `nlist`，因为 IVFPQ 的 k-means 训练至少需要 `nlist` 条向量。违反该约束的 DDL 语句会被拒绝。
 
@@ -135,7 +136,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 - **必需**: 否
 - **描述**: 存算分离集群中的索引构建方式。有效值：
   - `sync`：在数据写入时同步构建索引。查询可立即使用索引，但导入延迟较高。
-  - `async`：数据写入完成后由后台任务构建索引。在构建完成前，涉及相应 Segment 的查询自动回退到暴力检索。可以通过 [`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) 选择构建 Warehouse，并通过 [`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) 控制 Load Tail 的调度延迟。
+  - `async`：数据写入完成后由后台任务构建索引。在构建完成前，涉及相应 Segment 的查询自动回退到暴力检索。可以通过 [`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) 选择构建 Warehouse，并通过 [`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) 控制 Load Tail 的调度延迟。
 
 ##### M
 
@@ -276,18 +277,21 @@ LIMIT 10
     - `<vector_index_distance_func>`的函数名要求：
       - 如果`metric_type`是`l2_distance`，函数名必须是`approx_l2_distance`。
       - 如果`metric_type`是`cosine_similarity`，函数名必须是`approx_cosine_similarity`。
+      - 如果`metric_type`是`inner_product`，函数名必须是`approx_inner_product`。
     - `<vector_index_distance_func>`的参数要求：
       - `constant_array`必须是一个与向量索引`dim`匹配的常量`ARRAY<FLOAT>`。
       - `vector_column`必须是与向量索引对应的列。
   - ORDER方向要求：
     - 如果`metric_type`是`l2_distance`，顺序必须是`ASC`。
     - 如果`metric_type`是`cosine_similarity`，顺序必须是`DESC`。
+    - 如果`metric_type`是`inner_product`，顺序必须是`DESC`。
   - 必须有`LIMIT N`子句。
 - **谓词要求：**
   - 所有谓词必须是`<vector_index_distance_func>`表达式，通过`AND`和比较运算符（`>`或`<`）组合。比较运算符的方向必须与`ASC`/`DESC`顺序一致。具体来说：
   - 要求1：
     - 如果`metric_type`是`l2_distance`：`col_ref <= constant`。
     - 如果`metric_type`是`cosine_similarity`：`col_ref >= constant`。
+    - 如果`metric_type`是`inner_product`：`col_ref >= constant`，其中常量可以为负数。
     - 这里，`col_ref`指的是`<vector_index_distance_func>(vector_column, constant_array)`的结果，可以转换为`FLOAT`或`DOUBLE`类型，例如：
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`

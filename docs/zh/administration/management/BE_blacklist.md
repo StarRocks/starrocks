@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "Configure BE and CN blacklist in StarRocks to exclude problematic nodes from query execution."
 ---
@@ -97,7 +98,7 @@ SHOW COMPUTE NODE BLACKLIST;
 
 每当 BE/CN 节点与 FE 节点失去连接，或由于 BE/CN 节点上的超时导致查询失败时，FE 节点会将 BE/CN 节点添加到其 BE 和 CN 黑名单中。FE 节点将通过统计其在特定时间段内的连接失败次数来持续评估黑名单中 BE/CN 节点的连接性。只有当黑名单中的 BE/CN 节点的连接失败次数低于预设的阈值时，StarRocks 才会将其移除。
 
-您可以使用以下 [FE 配置](./FE_configuration.md) 配置 BE 和 CN 黑名单的自动管理：
+您可以使用以下 [FE 配置](../configuration/FE_parameters/FE_parameters.md) 配置 BE 和 CN 黑名单的自动管理：
 
 - `black_host_history_sec`：在黑名单中保留 BE/CN 节点历史连接失败的时间长度。
 - `black_host_connect_failures_within_time`：允许黑名单中 BE/CN 节点的连接失败次数阈值。
