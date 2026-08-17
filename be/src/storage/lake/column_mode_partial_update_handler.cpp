@@ -706,6 +706,14 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
         sparse_chunk->get_column_by_index(c + 1)->as_mutable_raw_ptr()->swap_column(
                 *value_chunk->get_column_by_index(c)->as_mutable_raw_ptr());
     }
+    // The dense path checks capacity on every range it streams; this builder had no equivalent, so the
+    // only bound on how much it materialises was the ROW cap (sdcg_sparse_max_rows). Rows are the wrong
+    // unit for that: the layer's size is rows x value width, and a wide column makes those diverge by
+    // orders of magnitude -- at the row cap, kilobyte-scale VARCHAR values are tens of gigabytes with no
+    // rejection point anywhere on the path. Fail with a localized error instead.
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
+            *sparse_chunk, "sdcg sparse overlay chunk",
+            _rowset_ptr != nullptr ? _rowset_ptr->tablet_id() : 0, _txn_id));
     return sparse_chunk;
 }
 
@@ -1210,6 +1218,24 @@ struct SdcgAutoSignals {
 // masked-dense). The column-vs-ROW decision is a per-load (level-1) choice made at the writer, since ROW
 // (masked full-row rewrite) is a separate apply path the handler cannot emit; allow_row=true is used only
 // for the shadow log's full-picture recommendation.
+// Whether a batch's SHAPE permits a sparse overlay at all, independent of which decision procedure
+// asked. Both callers -- the explicit column path and the auto cost model -- must consult this, and it
+// lives in one place because they previously did not: the explicit path enforced the three thresholds
+// while `auto` re-enabled the shapes they forbid, so the same table and payload obeyed or ignored the
+// same configs depending only on which mode the load happened to name.
+//
+//   K > 0                          an empty batch has nothing to write sparsely
+//   K < sdcg_sparse_max_rows       bounds how much one layer materialises; the sparse builder has no
+//                                  byte-capacity rejection of its own, so this cap is what limits it
+//   M >= sdcg_sparse_min_segment_rows   a small segment (many buckets, many partitions) is cheaper to
+//                                  rewrite densely, and reads flatter afterwards
+//   K/M < sdcg_dense_threshold     past this share of the segment, dense wins outright
+static bool sparse_shape_gates_pass(int64_t K, int64_t source_num_rows) {
+    return K > 0 && K < config::sdcg_sparse_max_rows &&
+           source_num_rows >= config::sdcg_sparse_min_segment_rows &&
+           (static_cast<double>(K) / static_cast<double>(source_num_rows) < config::sdcg_dense_threshold);
+}
+
 static SdcgAutoMode select_write_mode(const SdcgAutoSignals& s, bool allow_row) {
     const double W_upd = std::max(1.0, s.W_upd);
     const double W_row = std::max(W_upd, s.W_row);
@@ -1528,10 +1554,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     // genuinely costly, which scales with M (source_num_rows). Small M (or K spread thin
                     // across many small segments) -> dense is faster and reads flatter. Then the K/M ratio +
                     // absolute K cap as before.
-                    take_sparse = K > 0 && K < config::sdcg_sparse_max_rows &&
-                                  source_num_rows >= config::sdcg_sparse_min_segment_rows &&
-                                  (static_cast<double>(K) / static_cast<double>(source_num_rows) <
-                                   config::sdcg_dense_threshold);
+                    take_sparse = sparse_shape_gates_pass(K, source_num_rows);
                 }
 
                 // Unified read-amp budget (config::sdcg_read_amp_budget): R_max==0 (read-strict) forbids any
@@ -1644,6 +1667,20 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                         bool want_sparse = sdcg_enabled &&
                                            (rec == SdcgAutoMode::COLUMN_SPARSE || rec == SdcgAutoMode::PACKED_SPARSE);
                         if (want_sparse && (sh_chain + 1) > config::sdcg_promotion_hard_count) {
+                            want_sparse = false;
+                        }
+                        // The SAME shape gates the explicit column path applies (see take_sparse above).
+                        // select_write_mode is a pure cost model over K, M, width and chain depth -- it never
+                        // consults these three configs -- so without this, `auto` silently re-enabled exactly
+                        // the shapes the gates exist to forbid: a sparse layer on a segment below the row
+                        // floor, or one holding far more than sdcg_sparse_max_rows rows. The second is the
+                        // dangerous one, because the sparse builder has no byte-capacity rejection point of
+                        // its own: the cap is the only thing bounding how much it materialises.
+                        //
+                        // A tuning knob has to mean the same thing regardless of which mode selected the
+                        // write; otherwise lowering the floor to make sparse rarer would leave `auto`
+                        // unaffected, which is not a behaviour anyone could reason about.
+                        if (want_sparse && !sparse_shape_gates_pass(K, source_num_rows)) {
                             want_sparse = false;
                         }
                         take_sparse = want_sparse;
