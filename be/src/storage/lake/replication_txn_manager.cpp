@@ -494,6 +494,8 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string old_del_filename = rowset_id + '_' + std::to_string(del_id) + ".del";
         std::string new_del_filename = gen_del_filename(transaction_id);
 
+        // No crc32c: the content is produced by the snapshot download (and possibly re-encoded by
+        // DelFileStreamConverter), so it is not known here. Absent means readers skip verification.
         auto* del_meta = op_write->add_dels_meta();
         del_meta->set_name(new_del_filename);
         FileEncryptionPair encryption_pair;
