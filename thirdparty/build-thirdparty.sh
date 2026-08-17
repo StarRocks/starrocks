@@ -1355,7 +1355,6 @@ build_jemalloc() {
         # 64K for arm architecture
         addition_opts=" --with-lg-page=16"
     else
-        # default 4K on x86 for performance
         addition_opts=" --with-lg-page=12"
     fi
     # build jemalloc with release
@@ -1367,7 +1366,13 @@ build_jemalloc() {
     mkdir -p ${TP_INSTALL_DIR}/jemalloc/lib-static/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.so* ${TP_INSTALL_DIR}/jemalloc/lib-shared/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.a ${TP_INSTALL_DIR}/jemalloc/lib-static/
-    # build jemalloc with debug options
+    # build jemalloc with debug options. Each subsequent ./configure below
+    # reuses this same source tree with different flags (page size,
+    # --disable-static, --enable-debug); autotools' generated Makefile
+    # doesn't reliably detect a configure-option change and rebuild the
+    # affected objects, so force a clean rebuild before every configure
+    # pass after the first.
+    make distclean
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
@@ -1382,15 +1387,15 @@ build_jemalloc() {
         # pair matching the host via getconf PAGESIZE.
         local page4k_opts=" --with-lg-page=12"
 
+        make distclean
         CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
-        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-pg4k --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl $page4k_opts
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --disable-cxx --disable-libdl $page4k_opts
         make -j$PARALLEL
         make install
-        mkdir -p ${TP_INSTALL_DIR}/jemalloc-pg4k/lib-shared/
-        mv ${TP_INSTALL_DIR}/jemalloc-pg4k/lib/*.so* ${TP_INSTALL_DIR}/jemalloc-pg4k/lib-shared/
 
+        make distclean
         CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
-        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl $page4k_opts
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl $page4k_opts
         make -j$PARALLEL
         make install
     fi
