@@ -1,0 +1,23 @@
+-- name: test_encode_row_id
+create table t2 (id int not null, tag bigint not null, stag varchar(16) not null) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t2 select generate_series, 7, 'STARROCKS' from TABLE(generate_series(1, 5000));
+-- result:
+-- !result
+select count(*), sum(case when a = b then 0 else 1 end) from (select FROM_BINARY(ENCODE_SORT_KEY(cast(7 as bigint), id), 'hex') a, FROM_BINARY(ENCODE_SORT_KEY(tag, id), 'hex') b from t2) x;
+-- result:
+5000	0
+-- !result
+select count(*), sum(case when a = b then 0 else 1 end) from (select FROM_BINARY(ENCODE_SORT_KEY('STARROCKS', id), 'hex') a, FROM_BINARY(ENCODE_SORT_KEY(stag, id), 'hex') b from t2) x;
+-- result:
+5000	0
+-- !result
+select count(distinct length(FROM_BINARY(ENCODE_SORT_KEY(cast(7 as bigint), id), 'hex'))) from t2;
+-- result:
+1
+-- !result
+select count(distinct length(FROM_BINARY(ENCODE_SORT_KEY(NULL, id), 'hex'))) from t2;
+-- result:
+1
+-- !result
