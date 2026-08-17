@@ -775,4 +775,34 @@ public class ResourceGroupMgrConcurrencyTest {
         Assertions.assertEquals(original.getId(), current.getId());
         Assertions.assertEquals(TWorkGroupType.WG_MV, current.getResourceGroupType());
     }
+
+    @Test
+    public void testReplaceResourceGroupWithNullClassifiers() throws Exception {
+        ResourceGroup rgNullCls = new ResourceGroup();
+        rgNullCls.setName("rg_null_cls");
+        rgNullCls.setId(777L);
+        rgNullCls.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        rgNullCls.setMemLimit(0.5);
+        rgNullCls.setClassifiers(null);
+
+        java.lang.reflect.Method addMethod =
+                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
+        addMethod.setAccessible(true);
+        // Must not throw NPE when classifiers is null
+        Assertions.assertDoesNotThrow(() -> addMethod.invoke(mgr, rgNullCls));
+
+        ResourceGroup rgNew = new ResourceGroup();
+        rgNew.setName("rg_null_cls");
+        rgNew.setId(777L);
+        rgNew.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        rgNew.setMemLimit(0.6);
+        rgNew.setClassifiers(null);
+
+        java.lang.reflect.Method replaceMethod =
+                ResourceGroupMgr.class.getDeclaredMethod("replaceResourceGroupInternal", String.class, ResourceGroup.class);
+        replaceMethod.setAccessible(true);
+        // Must not throw NPE when replacing group with null classifiers
+        Assertions.assertDoesNotThrow(() -> replaceMethod.invoke(mgr, "rg_null_cls", rgNew));
+        Assertions.assertEquals(0.6, mgr.getResourceGroup("rg_null_cls").getMemLimit());
+    }
 }
