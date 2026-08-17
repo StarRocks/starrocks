@@ -101,6 +101,33 @@ uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const Rowset
     return get_max_segment_idx(rowset_meta);
 }
 
+// Shared body of the two verify_del_file_crc32c() overloads: FileMetaPB (txn log `dels_meta`) and
+// DelfileWithRowsetId (persisted `del_files`) carry the same optional crc32c/name pair but are
+// unrelated protobuf types.
+template <typename DelMetaPB>
+static Status do_verify_del_file_crc32c(const DelMetaPB& del_meta, int64_t tablet_id, std::string_view content) {
+    if (!del_meta.has_crc32c() || !config::lake_enable_del_file_crc_check) {
+        return Status::OK();
+    }
+    const uint32_t expect = crc32c::Unmask(del_meta.crc32c());
+    const uint32_t actual = crc32c::Value(content.data(), content.size());
+    if (expect == actual) {
+        return Status::OK();
+    }
+    auto msg = fmt::format("del file crc32c mismatch, tablet: {}, file: {}, size: {}, expect: {}, actual: {}",
+                           tablet_id, del_meta.name(), content.size(), expect, actual);
+    LOG(ERROR) << msg;
+    return Status::Corruption(msg);
+}
+
+Status verify_del_file_crc32c(const FileMetaPB& del_meta, int64_t tablet_id, std::string_view content) {
+    return do_verify_del_file_crc32c(del_meta, tablet_id, content);
+}
+
+Status verify_del_file_crc32c(const DelfileWithRowsetId& del_meta, int64_t tablet_id, std::string_view content) {
+    return do_verify_del_file_crc32c(del_meta, tablet_id, content);
+}
+
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
@@ -283,6 +310,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         // toward the PK index rebuild-rows threshold. Absent/misaligned means "not recorded" -> 0.
         if (del_id < op_write.del_num_rows_size()) {
             del_file_with_rid.set_num_rows(op_write.del_num_rows(del_id));
+        }
+        // Carry the content checksum recorded at write time. Absent (older writer / replication
+        // transcode) stays absent, which readers treat as "not recorded" and skip verifying.
+        if (del_meta.has_crc32c()) {
+            del_file_with_rid.set_crc32c(del_meta.crc32c());
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
@@ -1487,6 +1519,10 @@ Status MetaFileBuilder::set_final_rowset() {
         // rebuild-rows threshold. The writer always provides a count (0 when a del carries none).
         if (i < _pending_rowset_data.del_num_rows.size()) {
             del_file_with_rid.set_num_rows(_pending_rowset_data.del_num_rows[i]);
+        }
+        // Carry the content checksum recorded at write time (see apply_opwrite).
+        if (del.has_crc32c()) {
+            del_file_with_rid.set_crc32c(del.crc32c());
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }

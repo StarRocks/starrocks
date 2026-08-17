@@ -749,6 +749,125 @@ static ChunkPtr make_op_chunk(int n, int value_shift, bool upsert, const Chunk::
     return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, slot_cid_map);
 }
 
+// A del file's content checksum is stamped by the writer into the txn log's dels_meta and carried
+// into the persisted del file metadata at apply time, so both readers (publish and PK index rebuild)
+// can verify it.
+TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_persisted) {
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    // v2: populate keys 0..n-1 so the delete below has rows to remove.
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_one_txn(make_op_chunk(n, 0, true, _slot_cid_map))).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    // v3: a delete-only transaction produces del files, each checksummed at write time.
+    auto delete_txn = write_one_txn(make_op_chunk(n, 0, /*upsert=*/false, _slot_cid_map));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, delete_txn));
+    ASSERT_GE(txn_log->op_write().dels_meta_size(), 1);
+    std::vector<uint32_t> written_crc32c;
+    for (const auto& del_meta : txn_log->op_write().dels_meta()) {
+        ASSERT_TRUE(del_meta.has_crc32c()) << del_meta.name();
+        written_crc32c.push_back(del_meta.crc32c());
+    }
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, delete_txn).status());
+    ASSERT_EQ(0, read_rows(tablet_id, 3));
+
+    // Apply must carry the checksums into the persisted del file metadata unchanged, in order.
+    ASSIGN_OR_ABORT(auto meta_v3, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    std::vector<uint32_t> persisted_crc32c;
+    for (const auto& rs : meta_v3->rowsets()) {
+        for (const auto& del : rs.del_files()) {
+            ASSERT_TRUE(del.has_crc32c()) << del.name();
+            persisted_crc32c.push_back(del.crc32c());
+        }
+    }
+    EXPECT_EQ(written_crc32c, persisted_crc32c);
+}
+
+// A corrupted del file must fail publish rather than erase the wrong primary keys. (The skip rules --
+// absent checksum, verification turned off -- are covered by MetaFileTest.test_verify_del_file_crc32c.)
+TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_detects_corruption) {
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_one_txn(make_op_chunk(n, 0, true, _slot_cid_map))).status());
+
+    auto delete_txn = write_one_txn(make_op_chunk(n, 0, /*upsert=*/false, _slot_cid_map));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, delete_txn));
+    ASSERT_GE(txn_log->op_write().dels_meta_size(), 1);
+    const std::string del_path = _tablet_mgr->del_location(tablet_id, txn_log->op_write().dels_meta(0).name());
+
+    // Flip one byte in place, keeping the file length: only the checksum can catch this, since a
+    // length-preserving single-byte flip still deserializes into a well-formed key column. Read and
+    // rewrite the raw bytes (no encryption info), so under transparent encryption this corrupts the
+    // ciphertext and the reader decrypts it into different plaintext.
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(del_path));
+        ASSIGN_OR_ABORT(auto raw, rf->read_all());
+        ASSERT_FALSE(raw.empty());
+        raw[raw.size() - 1] = static_cast<char>(raw[raw.size() - 1] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, del_path));
+        ASSERT_OK(wf->append(Slice(raw)));
+        ASSERT_OK(wf->close());
+    }
+
+    auto st = publish_single_version(tablet_id, 3, delete_txn).status();
+    // TEST_publish_single_version re-wraps every publish failure as InternalError with the original
+    // status stringified into the message, so the Corruption code does not survive to here -- match
+    // on the message instead.
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("del file crc32c mismatch") != std::string::npos) << st;
+    // Publish did not commit: no version 3 metadata was produced.
+    auto meta_v3 = _tablet_mgr->get_tablet_metadata(tablet_id, 3);
+    EXPECT_TRUE(meta_v3.status().is_not_found()) << meta_v3.status();
+}
+
 // Spill path: the op-aware parallel merge must preserve in-transaction upsert/delete order. Drive the
 // default spill path (enable_load_spill=true) with parallel merge and tiny merge batches so a key that is
 // deleted and then re-upserted across flushes resolves across merge batches; the re-upsert (higher global

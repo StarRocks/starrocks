@@ -1141,6 +1141,9 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
         ASSIGN_OR_RETURN(auto buf, rf->read_all());
+        // Verify before decoding: a corrupt del file that still deserializes cleanly would erase the
+        // wrong primary keys from the index.
+        RETURN_IF_ERROR(verify_del_file_crc32c(del, _tablet_id, buf));
         auto pkc = pk_column->clone();
         const auto* data = reinterpret_cast<const uint8_t*>(buf.data());
         RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(data, data + buf.size(), pkc.get()));
