@@ -1,0 +1,202 @@
+-- name: test_common_subquery_cte
+create table cse_sales (
+    store_sk int,
+    item_sk int,
+    price decimal(10, 2),
+    profit decimal(10, 2)
+) DUPLICATE KEY(store_sk) DISTRIBUTED BY HASH(store_sk) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into cse_sales values
+    (1, 10, 100.00, 5.00),
+    (1, 10, 50.00, 1.00),
+    (1, 11, 20.00, 2.00),
+    (2, 10, 300.00, 7.00),
+    (2, 12, 10.00, 3.00),
+    (3, 13, 40.00, null),
+    (3, 13, null, 4.00);
+-- result:
+-- !result
+create table cse_store (
+    store_sk int,
+    store_name varchar(32)
+) DUPLICATE KEY(store_sk) DISTRIBUTED BY HASH(store_sk) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into cse_store values (1, 's1'), (2, 's2'), (3, 's3'), (4, 's4');
+-- result:
+-- !result
+set enable_common_subquery_cte = false;
+-- result:
+-- !result
+select st.store_name, sc.item_sk, sc.rev
+from cse_store st,
+     (select store_sk, avg(rev) ave
+      from (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sa
+      group by store_sk) sb,
+     (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sc
+where sb.store_sk = sc.store_sk and sc.rev <= 2 * sb.ave and st.store_sk = sc.store_sk
+order by 1, 2, 3;
+-- result:
+s1	10	150.00
+s1	11	20.00
+s2	10	300.00
+s2	12	10.00
+s3	13	40.00
+-- !result
+set enable_common_subquery_cte = true;
+-- result:
+-- !result
+select st.store_name, sc.item_sk, sc.rev
+from cse_store st,
+     (select store_sk, avg(rev) ave
+      from (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sa
+      group by store_sk) sb,
+     (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sc
+where sb.store_sk = sc.store_sk and sc.rev <= 2 * sb.ave and st.store_sk = sc.store_sk
+order by 1, 2, 3;
+-- result:
+s1	10	150.00
+s1	11	20.00
+s2	10	300.00
+s2	12	10.00
+s3	13	40.00
+-- !result
+set cbo_cte_reuse_rate = 0;
+-- result:
+-- !result
+select st.store_name, sc.item_sk, sc.rev
+from cse_store st,
+     (select store_sk, avg(rev) ave
+      from (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sa
+      group by store_sk) sb,
+     (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sc
+where sb.store_sk = sc.store_sk and sc.rev <= 2 * sb.ave and st.store_sk = sc.store_sk
+order by 1, 2, 3;
+-- result:
+s1	10	150.00
+s1	11	20.00
+s2	10	300.00
+s2	12	10.00
+s3	13	40.00
+-- !result
+set cbo_cte_reuse_rate = 1.15;
+-- result:
+-- !result
+set enable_common_subquery_cte = false;
+-- result:
+-- !result
+select a.store_sk, a.s, a.c, b.s, b.c
+from (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) a,
+     (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+-- result:
+1	8.00	3	8.00	3
+2	10.00	2	10.00	2
+3	4.00	2	4.00	2
+-- !result
+set enable_common_subquery_cte = true;
+-- result:
+-- !result
+select a.store_sk, a.s, a.c, b.s, b.c
+from (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) a,
+     (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+-- result:
+1	8.00	3	8.00	3
+2	10.00	2	10.00	2
+3	4.00	2	4.00	2
+-- !result
+set enable_common_subquery_cte = false;
+-- result:
+-- !result
+select count(*) from
+    (select store_sk from cse_sales where store_sk > 1000) a,
+    (select store_sk from cse_sales where store_sk > 1000) b;
+-- result:
+0
+-- !result
+set enable_common_subquery_cte = true;
+-- result:
+-- !result
+select count(*) from
+    (select store_sk from cse_sales where store_sk > 1000) a,
+    (select store_sk from cse_sales where store_sk > 1000) b;
+-- result:
+0
+-- !result
+set enable_common_subquery_cte = false;
+-- result:
+-- !result
+select st.store_name, a.rev, b.rev
+from cse_store st
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) a on st.store_sk = a.store_sk
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) b on st.store_sk = b.store_sk
+order by 1;
+-- result:
+s1	170.00	170.00
+s2	310.00	310.00
+s3	40.00	40.00
+s4	None	None
+-- !result
+set enable_common_subquery_cte = true;
+-- result:
+-- !result
+select st.store_name, a.rev, b.rev
+from cse_store st
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) a on st.store_sk = a.store_sk
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) b on st.store_sk = b.store_sk
+order by 1;
+-- result:
+s1	170.00	170.00
+s2	310.00	310.00
+s3	40.00	40.00
+s4	None	None
+-- !result
+set enable_common_subquery_cte = false;
+-- result:
+-- !result
+with base as (select store_sk, price from cse_sales)
+select a.store_sk, a.rev, b.rev from
+    (select store_sk, sum(price) rev from base group by store_sk) a,
+    (select store_sk, sum(price) rev from base group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+-- result:
+1	170.00	170.00
+2	310.00	310.00
+3	40.00	40.00
+-- !result
+set enable_common_subquery_cte = true;
+-- result:
+-- !result
+with base as (select store_sk, price from cse_sales)
+select a.store_sk, a.rev, b.rev from
+    (select store_sk, sum(price) rev from base group by store_sk) a,
+    (select store_sk, sum(price) rev from base group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+-- result:
+1	170.00	170.00
+2	310.00	310.00
+3	40.00	40.00
+-- !result
+set enable_common_subquery_cte = true;
+-- result:
+-- !result
+select count(*) >= 0 from
+    (select store_sk from cse_sales limit 2) a,
+    (select store_sk from cse_sales limit 2) b;
+-- result:
+1
+-- !result
+select count(*) from
+    (select store_sk, rand() r from cse_sales) a,
+    (select store_sk, rand() r from cse_sales) b
+where a.store_sk = b.store_sk;
+-- result:
+17
+-- !result
+set enable_common_subquery_cte = false;
+-- result:
+-- !result

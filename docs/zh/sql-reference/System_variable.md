@@ -524,6 +524,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.5.0
 
+### enable_common_subquery_cte
+
+* **范围**: Session
+* **描述**: 是否把文本完全相同的派生表提取为一个共享 CTE。有些查询会把同一个子查询写多遍（TPC-DS Q65、Q44 就是如此），不做提取时每一处都会重新扫描、重新计算。开启（`true`）后，重复的派生表会在语义分析之前被改写为一个 CTE，效果等同于用户自己写了 `WITH` 子句。该 CTE 最终是物化并共享，还是重新内联回各处，由现有的 CTE 代价模型决定，参见 `cbo_cte_reuse_rate`。以下情况的子查询不会被提取：使用了 `rand()` 等非确定性函数、带 `LIMIT`、重命名了输出列、位于 `LATERAL` 关联中，或引用了 `WITH` 子句定义的名字。
+* **默认值**: true
+* **数据类型**: boolean
+* **引入版本**: v4.2.0
+
 ### enable_connector_adaptive_io_tasks
 
 * 描述：外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。

@@ -608,6 +608,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: boolean
 * **Introduced in**: v3.5.0
 
+### enable_common_subquery_cte
+
+* **Scope**: Session
+* **Description**: Whether to hoist derived tables that are textually identical into a single shared CTE. Some queries spell the same subquery more than once (TPC-DS Q65 and Q44 do); without this, each occurrence is scanned and computed again. When enabled (`true`), the duplicated derived tables are rewritten into one CTE before analysis, exactly as if the query had been written with a `WITH` clause. Whether the CTE is then materialized and shared, or inlined back into each place, is decided by the existing CTE cost model — see `cbo_cte_reuse_rate`. Subqueries are left alone when they use a non-deterministic function such as `rand()`, carry a `LIMIT`, rename their output columns, appear in a `LATERAL` join, or reference a name defined by a `WITH` clause.
+* **Default**: true
+* **Data type**: boolean
+* **Introduced in**: v4.2.0
+
 ### enable_connector_adaptive_io_tasks
 
 * **Description**: Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value is `true`. If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.

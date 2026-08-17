@@ -297,7 +297,9 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
 
     @Test
     public void testQ44() throws Exception {
-        testAllInlineCTE(Q44);
+        // Q44 spells the same ranking subquery twice; enable_common_subquery_cte turns the pair into one CTE,
+        // so this query now has a CTE the cost model can either reuse or inline.
+        testCTE(Q44);
     }
 
     @Test
@@ -402,7 +404,9 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
 
     @Test
     public void testQ65() throws Exception {
-        testAllInlineCTE(Q65);
+        // Q65 spells the same derived table twice; enable_common_subquery_cte turns the pair into one CTE,
+        // so this query now has a CTE the cost model can either reuse or inline.
+        testCTE(Q65);
     }
 
     @Test

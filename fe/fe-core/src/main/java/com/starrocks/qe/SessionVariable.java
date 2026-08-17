@@ -945,6 +945,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+    public static final String ENABLE_COMMON_SUBQUERY_CTE = "enable_common_subquery_cte";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
     public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
@@ -2247,6 +2248,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
     private boolean enableRewriteSumByAssociativeRule = true;
+
+    // Hoist derived tables that are textually identical into one synthetic CTE, so the shared computation is
+    // expressed once. Whether that CTE is actually materialized and shared, or inlined back into both places,
+    // is left to the existing CTE cost model (see cbo_cte_reuse_rate).
+    @VarAttr(name = ENABLE_COMMON_SUBQUERY_CTE)
+    private boolean enableCommonSubqueryCte = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = true;
@@ -5741,6 +5748,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteSumByAssociativeRule() {
         return this.enableRewriteSumByAssociativeRule;
+    }
+
+    public void setEnableCommonSubqueryCte(boolean enableCommonSubqueryCte) {
+        this.enableCommonSubqueryCte = enableCommonSubqueryCte;
+    }
+
+    public boolean isEnableCommonSubqueryCte() {
+        return this.enableCommonSubqueryCte;
     }
 
     public void setEnableRewriteSimpleAggToMetaScan(boolean enableRewriteSimpleAggToMetaScan) {

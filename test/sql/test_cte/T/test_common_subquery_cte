@@ -1,0 +1,137 @@
+-- name: test_common_subquery_cte
+
+-- Value-level cover for enable_common_subquery_cte: every query is run with the rewrite off and on,
+-- and the two results must agree. The dataset is deliberately tiny and fixed so the expected output is
+-- readable; what is being checked is that hoisting a duplicated derived table into a shared CTE never
+-- changes an answer.
+
+create table cse_sales (
+    store_sk int,
+    item_sk int,
+    price decimal(10, 2),
+    profit decimal(10, 2)
+) DUPLICATE KEY(store_sk) DISTRIBUTED BY HASH(store_sk) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+insert into cse_sales values
+    (1, 10, 100.00, 5.00),
+    (1, 10, 50.00, 1.00),
+    (1, 11, 20.00, 2.00),
+    (2, 10, 300.00, 7.00),
+    (2, 12, 10.00, 3.00),
+    (3, 13, 40.00, null),
+    (3, 13, null, 4.00);
+
+create table cse_store (
+    store_sk int,
+    store_name varchar(32)
+) DUPLICATE KEY(store_sk) DISTRIBUTED BY HASH(store_sk) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+insert into cse_store values (1, 's1'), (2, 's2'), (3, 's3'), (4, 's4');
+
+-- The TPC-DS q65 shape: the same derived table twice, once used directly and once nested inside
+-- another aggregate that is joined back to it.
+set enable_common_subquery_cte = false;
+select st.store_name, sc.item_sk, sc.rev
+from cse_store st,
+     (select store_sk, avg(rev) ave
+      from (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sa
+      group by store_sk) sb,
+     (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sc
+where sb.store_sk = sc.store_sk and sc.rev <= 2 * sb.ave and st.store_sk = sc.store_sk
+order by 1, 2, 3;
+
+set enable_common_subquery_cte = true;
+select st.store_name, sc.item_sk, sc.rev
+from cse_store st,
+     (select store_sk, avg(rev) ave
+      from (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sa
+      group by store_sk) sb,
+     (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sc
+where sb.store_sk = sc.store_sk and sc.rev <= 2 * sb.ave and st.store_sk = sc.store_sk
+order by 1, 2, 3;
+
+-- Forcing the CTE to be materialized exercises the shared/multicast path rather than the inlined one;
+-- a wrong consume-column mapping would show up here and not in the plan-level tests.
+set cbo_cte_reuse_rate = 0;
+select st.store_name, sc.item_sk, sc.rev
+from cse_store st,
+     (select store_sk, avg(rev) ave
+      from (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sa
+      group by store_sk) sb,
+     (select store_sk, item_sk, sum(price) rev from cse_sales group by store_sk, item_sk) sc
+where sb.store_sk = sc.store_sk and sc.rev <= 2 * sb.ave and st.store_sk = sc.store_sk
+order by 1, 2, 3;
+set cbo_cte_reuse_rate = 1.15;
+
+-- NULL-bearing aggregate inputs: sum/avg skip NULLs, count(*) does not.
+set enable_common_subquery_cte = false;
+select a.store_sk, a.s, a.c, b.s, b.c
+from (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) a,
+     (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+
+set enable_common_subquery_cte = true;
+select a.store_sk, a.s, a.c, b.s, b.c
+from (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) a,
+     (select store_sk, sum(profit) s, count(*) c from cse_sales group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+
+-- Empty result on both sides.
+set enable_common_subquery_cte = false;
+select count(*) from
+    (select store_sk from cse_sales where store_sk > 1000) a,
+    (select store_sk from cse_sales where store_sk > 1000) b;
+
+set enable_common_subquery_cte = true;
+select count(*) from
+    (select store_sk from cse_sales where store_sk > 1000) a,
+    (select store_sk from cse_sales where store_sk > 1000) b;
+
+-- An outer join above the shared subquery: the NULL-extended side must stay NULL-extended.
+set enable_common_subquery_cte = false;
+select st.store_name, a.rev, b.rev
+from cse_store st
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) a on st.store_sk = a.store_sk
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) b on st.store_sk = b.store_sk
+order by 1;
+
+set enable_common_subquery_cte = true;
+select st.store_name, a.rev, b.rev
+from cse_store st
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) a on st.store_sk = a.store_sk
+    left join (select store_sk, sum(price) rev from cse_sales group by store_sk) b on st.store_sk = b.store_sk
+order by 1;
+
+-- Both occurrences reference the same user CTE. Such bodies are not hoisted (the name could bind
+-- differently at each site), but the query must still plan and return the same rows.
+set enable_common_subquery_cte = false;
+with base as (select store_sk, price from cse_sales)
+select a.store_sk, a.rev, b.rev from
+    (select store_sk, sum(price) rev from base group by store_sk) a,
+    (select store_sk, sum(price) rev from base group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+
+set enable_common_subquery_cte = true;
+with base as (select store_sk, price from cse_sales)
+select a.store_sk, a.rev, b.rev from
+    (select store_sk, sum(price) rev from base group by store_sk) a,
+    (select store_sk, sum(price) rev from base group by store_sk) b
+where a.store_sk = b.store_sk order by 1;
+
+-- A LIMIT without ORDER BY is left alone, so the two occurrences stay independent; assert only the
+-- shape of the answer, never which rows come back.
+set enable_common_subquery_cte = true;
+select count(*) >= 0 from
+    (select store_sk from cse_sales limit 2) a,
+    (select store_sk from cse_sales limit 2) b;
+
+-- rand() blocks the rewrite; that the two occurrences stay separate is asserted at plan level in
+-- CommonSubqueryCTETest. Here we only pin down that the query still returns the right cardinality.
+select count(*) from
+    (select store_sk, rand() r from cse_sales) a,
+    (select store_sk, rand() r from cse_sales) b
+where a.store_sk = b.store_sk;
+
+set enable_common_subquery_cte = false;

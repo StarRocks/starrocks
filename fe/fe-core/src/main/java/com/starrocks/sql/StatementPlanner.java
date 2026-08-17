@@ -44,6 +44,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.CommonSubqueryCTEHoister;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -290,10 +291,53 @@ public class StatementPlanner {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
                 }
                 takeLock.run();
-                Analyzer.analyze(statement, session);
+                analyzeWithCommonSubqueryCte(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
             }
+        }
+    }
+
+    /**
+     * Analyze a query, optionally hoisting textually identical derived tables into a shared CTE first.
+     *
+     * <p>The hoist is deliberately placed here rather than earlier: the statement digest
+     * ({@code ConnectProcessor#computeStatementDigest}) and any SPM baseline hash are already computed by
+     * now, and the paths that persist AST-derived SQL - CREATE/ALTER VIEW, materialized view definitions,
+     * CTAS, SUBMIT TASK - do not reach {@code StatementPlanner}, so none of them can pick up a synthetic CTE.
+     *
+     * <p>Reverting on an analysis error is a safety net, not a load-bearing guard: StarRocks already
+     * rejects correlated derived tables in FROM on its own, and the hoist targets the outermost query
+     * block, where an unexpected outer reference could only fail to resolve rather than silently rebind.
+     * The fallback exists so that a body no one anticipated degrades into the original plan instead of a
+     * failed query.
+     */
+    private static void analyzeWithCommonSubqueryCte(StatementBase statement, ConnectContext session) {
+        if (!(statement instanceof QueryStatement)
+                || !session.getSessionVariable().isEnableCommonSubqueryCte()) {
+            Analyzer.analyze(statement, session);
+            return;
+        }
+
+        CommonSubqueryCTEHoister.HoistRecord record;
+        try {
+            record = CommonSubqueryCTEHoister.hoist((QueryStatement) statement);
+        } catch (Exception e) {
+            LOG.warn("failed to hoist common subqueries, fall back to the original statement", e);
+            Analyzer.analyze(statement, session);
+            return;
+        }
+        if (record.isEmpty()) {
+            Analyzer.analyze(statement, session);
+            return;
+        }
+
+        try {
+            Analyzer.analyze(statement, session);
+        } catch (Exception e) {
+            LOG.debug("common subquery hoisting produced an unanalyzable statement, reverting", e);
+            record.revert();
+            Analyzer.analyze(statement, session);
         }
     }
 
