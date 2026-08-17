@@ -270,9 +270,10 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Test
     public void testProjectOnTF() throws Exception {
         FeConstants.runningUnitTest = true;
-        // no project on input, and project on tf, prune
+        // UNNEST reads the whole c2 array, so no access path is pushed down and the element type
+        // has to stay as wide as what BE materializes, even though only c2_sub1 is read
         String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         // no project on input, and project on tf all subfiled, no prune
         sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
         assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
@@ -295,7 +296,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     public void testNoOutputOnTF() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select c1 from array_struct_nest, unnest(c2) as t(c2_struct) where c2_struct.c2_sub1 > 0;";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         sql = "select c1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct) where c3_struct.c3_sub1_sub1 > 0;";
         assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         FeConstants.runningUnitTest = false;
@@ -306,7 +307,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c2) as t(c_struct), " +
                 "unnest(c3.c3_sub1) as tt(c3_struct) where c_struct.c2_sub1 > 10";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
@@ -335,17 +336,19 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testUnnestResultTypeNarrowedConsistently() throws Exception {
+    public void testUnnestResultTypeMatchesInputWidth() throws Exception {
         FeConstants.runningUnitTest = true;
-        // When only one subfield of the unnest output struct is used, both the unnest INPUT array
-        // element AND the unnest OUTPUT (returnTypes) must be narrowed to the same width. Previously
-        // the input was narrowed while the output kept full width, so the emitted struct width
-        // differed from its input element -> StructColumn::append field-count mismatch in the BE.
+        // The unnest INPUT array element and the unnest OUTPUT (returnTypes) must always describe the
+        // same width, otherwise the emitted struct differs from its input element and BE hits a
+        // StructColumn::append field-count mismatch. UNNEST reads the whole c2 array, so no
+        // ColumnAccessPath survives for it and BE materializes the full element from the tablet
+        // schema - both stay full. c3 is different: only c3.c3_sub1 is read, that path IS pushed
+        // down, BE prunes the scan schema by it, and the declared types narrow in lockstep.
         String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        // input array element narrowed ...
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
-        // ... and the unnest result type narrowed in sync (this is the fix).
-        assertVerbosePlanContains(sql, "returnTypes: [struct<`c2_sub1` int(11)>]");
+        // input array element stays full - UNNEST gives c2 no access path ...
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
+        // ... and the unnest result type describes exactly that same element
+        assertVerbosePlanContains(sql, "returnTypes: [struct<`c2_sub1` int(11), `c2_sub2` int(11)>]");
 
         // Nested case: unnest over an array nested inside a struct.
         sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
