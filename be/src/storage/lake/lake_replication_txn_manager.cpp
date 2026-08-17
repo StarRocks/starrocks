@@ -506,7 +506,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
         bool is_seg = is_segment(src_file_name);
         bool is_bundled_segment = is_seg && bundled_segment_names.contains(src_file_name);
-        bool is_shared_file = shared_file_names.contains(src_file_name);
+        bool is_shared_file = is_bundled_segment || shared_file_names.contains(src_file_name);
         // Segments and .del files go through download_lake_file_with_converter + file_converters,
         // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
         bool use_converter = is_seg || is_del(src_file_name);
@@ -542,7 +542,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                 if (existing_size.has_value()) {
                     final_file_size = *existing_size;
                     copy_needed = false;
-                    LOG(INFO) << "Skip copying an existing shared range file, src: " << src_file_location
+                    LOG(INFO) << "Skip copying an existing shared physical file, src: " << src_file_location
                               << ", target: " << target_file_location << ", txn_id: " << txn_id
                               << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size;
                 }
@@ -559,7 +559,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                         if (copy_status.is_already_exist()) {
                             ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
                             if (!existing_size.has_value()) {
-                                return Status::Corruption("Shared range file disappeared after concurrent copy: " +
+                                return Status::Corruption("Shared physical file disappeared after concurrent copy: " +
                                                           target_file_location);
                             }
                             final_file_size = *existing_size;
@@ -593,7 +593,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                     if (!copy_result.ok() && is_shared_file && copy_result.status().is_already_exist()) {
                         ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
                         if (!existing_size.has_value()) {
-                            return Status::Corruption("Shared range file disappeared after concurrent copy: " +
+                            return Status::Corruption("Shared physical file disappeared after concurrent copy: " +
                                                       target_file_location);
                         }
                         final_file_size = *existing_size;
