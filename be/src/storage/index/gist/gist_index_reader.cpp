@@ -38,20 +38,17 @@ Status GiSTIndexReader::init(const std::string& index_file_path) {
     return Status::OK();
 }
 
-Status GiSTIndexReader::search_intersects(const MBR& query_mbr,
-                                          std::vector<uint32_t>* result_row_ids) const {
+Status GiSTIndexReader::search_intersects(const MBR& query_mbr, std::vector<uint32_t>* result_row_ids) const {
     rtree_search_intersects(_index_data.data(), _index_data.size(), query_mbr, result_row_ids);
     return Status::OK();
 }
 
-Status GiSTIndexReader::search_within(const MBR& query_mbr,
-                                      std::vector<uint32_t>* result_row_ids) const {
+Status GiSTIndexReader::search_within(const MBR& query_mbr, std::vector<uint32_t>* result_row_ids) const {
     rtree_search_within(_index_data.data(), _index_data.size(), query_mbr, result_row_ids);
     return Status::OK();
 }
 
-Status GiSTIndexReader::search_contains(const MBR& query_mbr,
-                                        std::vector<uint32_t>* result_row_ids) const {
+Status GiSTIndexReader::search_contains(const MBR& query_mbr, std::vector<uint32_t>* result_row_ids) const {
     rtree_search_contains(_index_data.data(), _index_data.size(), query_mbr, result_row_ids);
     return Status::OK();
 }

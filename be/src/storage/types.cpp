@@ -1135,8 +1135,7 @@ struct ScalarTypeInfoImpl<TYPE_GEOMETRY> : public ScalarTypeInfoImpl<TYPE_VARCHA
         size_t value_len = encoded.size();
         if (value_len > get_olap_string_max_length()) {
             return Status::InternalError(
-                    fmt::format("encoded geometry too large ({}), max is {}", value_len,
-                                get_olap_string_max_length()));
+                    fmt::format("encoded geometry too large ({}), max is {}", value_len, get_olap_string_max_length()));
         }
         auto slice = unaligned_load<Slice>(buf);
         memory_copy(slice.data, encoded.data(), value_len);

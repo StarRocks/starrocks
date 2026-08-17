@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exprs/geometry_functions.h"
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -20,7 +22,6 @@
 #include "column/column_helper.h"
 #include "column/double_column.h"
 #include "exprs/function_context.h"
-#include "exprs/geometry_functions.h"
 #include "geo/geo_types.h"
 
 namespace starrocks {
@@ -417,8 +418,10 @@ TEST_F(GeometryFunctionsTest, st_make_point_negative_coords) {
     // Negative coords are valid (southern hemisphere / western longitude)
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto x = DoubleColumn::create(); x->append(-73.935242); // New York
-    auto y = DoubleColumn::create(); y->append(40.730610);
+    auto x = DoubleColumn::create();
+    x->append(-73.935242); // New York
+    auto y = DoubleColumn::create();
+    y->append(40.730610);
     columns.emplace_back(std::move(x));
     columns.emplace_back(std::move(y));
     auto result = GeometryFunctions::st_make_point(ctx.get(), columns).value();
@@ -480,7 +483,9 @@ TEST_F(GeometryFunctionsTest, multi_row_mixed_nulls_and_valid) {
     auto build = [](const std::string& wkt) -> std::string {
         GeoParseStatus st;
         std::unique_ptr<GeoShape> s(GeoShape::from_wkt(wkt.data(), wkt.size(), &st));
-        std::string buf; s->encode_to(&buf); return buf;
+        std::string buf;
+        s->encode_to(&buf);
+        return buf;
     };
 
     auto data_col = BinaryColumn::create();
@@ -518,8 +523,10 @@ TEST_F(GeometryFunctionsTest, st_geom_from_wkb_invalid_bytes_returns_null) {
 
 TEST_F(GeometryFunctionsTest, st_make_point_both_null) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto xc = DoubleColumn::create(); xc->append(1.0);
-    auto yc = DoubleColumn::create(); yc->append(2.0);
+    auto xc = DoubleColumn::create();
+    xc->append(1.0);
+    auto yc = DoubleColumn::create();
+    yc->append(2.0);
     auto xn = NullableColumn::create(std::move(xc), NullColumn::create(1, 1)); // null
     auto yn = NullableColumn::create(std::move(yc), NullColumn::create(1, 1)); // null
     Columns columns;
@@ -536,12 +543,14 @@ TEST_F(GeometryFunctionsTest, st_as_wkb_then_st_geom_from_wkb_polygon) {
     auto poly = make_geometry_column("POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))");
 
     // Step 1: GEOMETRY → WKB
-    Columns c1; c1.emplace_back(poly);
+    Columns c1;
+    c1.emplace_back(poly);
     auto wkb = GeometryFunctions::st_as_wkb(ctx.get(), c1).value();
     ASSERT_FALSE(wkb->is_null(0));
 
     // Step 2: WKB → GEOMETRY
-    Columns c2; c2.emplace_back(wkb);
+    Columns c2;
+    c2.emplace_back(wkb);
     auto geom = GeometryFunctions::st_geom_from_wkb(ctx.get(), c2).value();
     ASSERT_FALSE(geom->is_null(0));
 
@@ -553,14 +562,18 @@ TEST_F(GeometryFunctionsTest, st_within_not_symmetric_with_contains) {
     // contains(A,B) == within(B,A) but NOT contains(A,B) == within(A,B)
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto poly = make_geometry_column("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))");
-    auto pt   = make_geometry_column("POINT (5 5)");
+    auto pt = make_geometry_column("POINT (5 5)");
 
     // contains(poly, pt) should be true
-    Columns c1; c1.emplace_back(poly); c1.emplace_back(pt);
+    Columns c1;
+    c1.emplace_back(poly);
+    c1.emplace_back(pt);
     auto contains_r = GeometryFunctions::st_contains(ctx.get(), c1).value();
 
     // within(poly, pt) should be false (polygon is NOT within a point)
-    Columns c2; c2.emplace_back(poly); c2.emplace_back(pt);
+    Columns c2;
+    c2.emplace_back(poly);
+    c2.emplace_back(pt);
     auto within_r = GeometryFunctions::st_within(ctx.get(), c2).value();
 
     EXPECT_TRUE(ColumnHelper::cast_to<TYPE_BOOLEAN>(contains_r)->immutable_data()[0]);

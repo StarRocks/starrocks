@@ -28,14 +28,12 @@ namespace starrocks {
 
 static constexpr char kNodeCapacityKey[] = "node_capacity";
 
-void GiSTIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
-                             const std::string& index_file_path,
+void GiSTIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& index_file_path,
                              std::unique_ptr<GiSTIndexWriter>* res) {
     *res = std::make_unique<GiSTIndexWriter>(tablet_index, index_file_path);
 }
 
-GiSTIndexWriter::GiSTIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index,
-                                 std::string index_file_path)
+GiSTIndexWriter::GiSTIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index, std::string index_file_path)
         : _tablet_index(tablet_index), _index_file_path(std::move(index_file_path)) {
     // Parse node_capacity from index properties (default 50)
     const auto& props = tablet_index->index_properties();

@@ -173,8 +173,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
-        if (fn.name.function_name == "ntile" ||
-            fn.name.function_name == "st_clusterdbscan" ||
+        if (fn.name.function_name == "ntile" || fn.name.function_name == "st_clusterdbscan" ||
             fn.name.function_name == "st_clusterkmeans") {
             _need_partition_materializing = true;
         }

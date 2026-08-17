@@ -34,12 +34,10 @@ namespace starrocks {
  */
 class GiSTIndexWriter {
 public:
-    static void create(const std::shared_ptr<TabletIndex>& tablet_index,
-                       const std::string& index_file_path,
+    static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& index_file_path,
                        std::unique_ptr<GiSTIndexWriter>* res);
 
-    GiSTIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index,
-                    std::string index_file_path);
+    GiSTIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index, std::string index_file_path);
 
     Status init();
 

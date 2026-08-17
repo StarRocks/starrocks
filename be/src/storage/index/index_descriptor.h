@@ -54,8 +54,8 @@ public:
         return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, "vi");
     }
 
-    static std::string gist_index_file_path(const std::string& rowset_dir, const std::string& rowset_id,
-                                            int segment_id, int64_t index_id) {
+    static std::string gist_index_file_path(const std::string& rowset_dir, const std::string& rowset_id, int segment_id,
+                                            int64_t index_id) {
         // {rowset_dir}/{rowset_id}_{seg_num}_{index_id}.gst
         return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, "gst");
     }

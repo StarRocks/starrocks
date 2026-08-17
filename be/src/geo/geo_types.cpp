@@ -563,8 +563,7 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
 }
 #endif
 
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
-                      double* max_x, double* max_y) {
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y) {
     if (shape == nullptr) return false;
 
     auto update = [&](const S2Point& pt) {

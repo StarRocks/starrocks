@@ -15,12 +15,12 @@
 // Tests for the geo_window_detail DBSCAN and k-means algorithms
 // (tested through the window function state machinery).
 
+#include "exprs/agg/window_geo.h"
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <set>
-
-#include "exprs/agg/window_geo.h"
 
 namespace starrocks {
 
@@ -29,10 +29,11 @@ using namespace geo_window_detail;
 // ============================================================================
 // Helper: build xs, ys, valid vectors from (x,y) pairs
 // ============================================================================
-static void make_coords(const std::vector<std::pair<double,double>>& pts,
-                         std::vector<double>& xs, std::vector<double>& ys,
-                         std::vector<bool>& valid) {
-    xs.resize(pts.size()); ys.resize(pts.size()); valid.assign(pts.size(), true);
+static void make_coords(const std::vector<std::pair<double, double>>& pts, std::vector<double>& xs,
+                        std::vector<double>& ys, std::vector<bool>& valid) {
+    xs.resize(pts.size());
+    ys.resize(pts.size());
+    valid.assign(pts.size(), true);
     for (size_t i = 0; i < pts.size(); ++i) {
         xs[i] = pts[i].first;
         ys[i] = pts[i].second;
@@ -47,7 +48,7 @@ class DBSCANTest : public ::testing::Test {};
 
 TEST_F(DBSCANTest, EmptyInput) {
     std::vector<double> xs, ys;
-    std::vector<bool>   valid;
+    std::vector<bool> valid;
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     EXPECT_TRUE(out.empty());
@@ -55,7 +56,7 @@ TEST_F(DBSCANTest, EmptyInput) {
 
 TEST_F(DBSCANTest, SinglePoint_IsNoise) {
     std::vector<double> xs = {0.0}, ys = {0.0};
-    std::vector<bool>   valid = {true};
+    std::vector<bool> valid = {true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(1u, out.size());
@@ -66,7 +67,7 @@ TEST_F(DBSCANTest, TwoClosePoints_FormCluster) {
     // Two points ~111m apart, eps=200m, minpoints=2 → should form one cluster
     std::vector<double> xs = {0.0, 0.001}; // ~111m apart at equator
     std::vector<double> ys = {0.0, 0.0};
-    std::vector<bool>   valid = {true, true};
+    std::vector<bool> valid = {true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(2u, out.size());
@@ -78,7 +79,7 @@ TEST_F(DBSCANTest, TwoFarPoints_AreNoise) {
     // Two points 1° apart (~111km), eps=200m, minpoints=2 → both noise
     std::vector<double> xs = {0.0, 1.0};
     std::vector<double> ys = {0.0, 0.0};
-    std::vector<bool>   valid = {true, true};
+    std::vector<bool> valid = {true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(2u, out.size());
@@ -89,8 +90,8 @@ TEST_F(DBSCANTest, TwoFarPoints_AreNoise) {
 TEST_F(DBSCANTest, ThreeDenseOneFar_OneCluserOneNoise) {
     // 3 dense points (~111m apart), 1 far outlier → cluster 0 + noise
     std::vector<double> xs = {0.0, 0.001, 0.0, 10.0};
-    std::vector<double> ys = {0.0, 0.0,   0.001, 10.0};
-    std::vector<bool>   valid = {true, true, true, true};
+    std::vector<double> ys = {0.0, 0.0, 0.001, 10.0};
+    std::vector<bool> valid = {true, true, true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(4u, out.size());
@@ -106,7 +107,7 @@ TEST_F(DBSCANTest, TwoSeparateClusters) {
     // Two pairs of close points, pairs far from each other
     std::vector<double> xs = {0.0, 0.001, 5.0, 5.001};
     std::vector<double> ys = {0.0, 0.001, 5.0, 5.001};
-    std::vector<bool>   valid = {true, true, true, true};
+    std::vector<bool> valid = {true, true, true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(4u, out.size());
@@ -121,8 +122,8 @@ TEST_F(DBSCANTest, TwoSeparateClusters) {
 
 TEST_F(DBSCANTest, InvalidPoint_SkippedInClustering) {
     std::vector<double> xs = {0.0, 0.001, 0.0};
-    std::vector<double> ys = {0.0, 0.0,   0.001};
-    std::vector<bool>   valid = {true, true, false}; // third is invalid
+    std::vector<double> ys = {0.0, 0.0, 0.001};
+    std::vector<bool> valid = {true, true, false}; // third is invalid
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 3, out); // minpoints=3 means pair can't form cluster
     ASSERT_EQ(3u, out.size());
@@ -135,7 +136,7 @@ TEST_F(DBSCANTest, InvalidPoint_SkippedInClustering) {
 TEST_F(DBSCANTest, LargeEps_AllPointsInOneCluster) {
     std::vector<double> xs = {0.0, 5.0, 10.0, 50.0};
     std::vector<double> ys = {0.0, 5.0, 10.0, 50.0};
-    std::vector<bool>   valid = {true, true, true, true};
+    std::vector<bool> valid = {true, true, true, true};
     std::vector<int32_t> out;
     // eps = 10,000 km → all within range
     dbscan(xs, ys, valid, 10000000.0, 2, out);
@@ -150,7 +151,7 @@ TEST_F(DBSCANTest, MinPointsOne_AllPointsAreCoreClusters) {
     // With minpoints=1, every isolated point is its own cluster
     std::vector<double> xs = {0.0, 5.0, 10.0};
     std::vector<double> ys = {0.0, 5.0, 10.0};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 10.0, 1, out); // eps=10m, well below 5° separation
     ASSERT_EQ(3u, out.size());
@@ -168,7 +169,7 @@ class KMeansTest : public ::testing::Test {};
 
 TEST_F(KMeansTest, EmptyInput) {
     std::vector<double> xs, ys;
-    std::vector<bool>   valid;
+    std::vector<bool> valid;
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 2, out);
     EXPECT_TRUE(out.empty());
@@ -176,7 +177,7 @@ TEST_F(KMeansTest, EmptyInput) {
 
 TEST_F(KMeansTest, SinglePoint_AssignedToCluster0) {
     std::vector<double> xs = {1.0}, ys = {2.0};
-    std::vector<bool>   valid = {true};
+    std::vector<bool> valid = {true};
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 1, out);
     ASSERT_EQ(1u, out.size());
@@ -186,7 +187,7 @@ TEST_F(KMeansTest, SinglePoint_AssignedToCluster0) {
 TEST_F(KMeansTest, KEqualsN_EachPointOwnCluster) {
     std::vector<double> xs = {0.0, 5.0, 10.0};
     std::vector<double> ys = {0.0, 5.0, 10.0};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 3, out);
     ASSERT_EQ(3u, out.size());
@@ -199,7 +200,7 @@ TEST_F(KMeansTest, TwoClearlySeparatedGroups) {
     // 3 points near (0,0) and 3 points near (100,100)
     std::vector<double> xs = {0.0, 0.001, -0.001, 100.0, 100.001, 99.999};
     std::vector<double> ys = {0.0, 0.001, -0.001, 100.0, 100.001, 99.999};
-    std::vector<bool>   valid(6, true);
+    std::vector<bool> valid(6, true);
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 2, out);
     ASSERT_EQ(6u, out.size());
@@ -214,7 +215,7 @@ TEST_F(KMeansTest, TwoClearlySeparatedGroups) {
 TEST_F(KMeansTest, AllPointsNonNull_NoNoise) {
     std::vector<double> xs = {0.0, 1.0, 2.0, 3.0, 4.0};
     std::vector<double> ys = {0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<bool>   valid(5, true);
+    std::vector<bool> valid(5, true);
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 2, out);
     ASSERT_EQ(5u, out.size());
@@ -225,7 +226,7 @@ TEST_F(KMeansTest, AllPointsNonNull_NoNoise) {
 TEST_F(KMeansTest, KExceedsN_CappedAtN) {
     std::vector<double> xs = {0.0, 1.0};
     std::vector<double> ys = {0.0, 0.0};
-    std::vector<bool>   valid = {true, true};
+    std::vector<bool> valid = {true, true};
     std::vector<int32_t> out;
     // k=10 but only 2 points → k capped at 2
     kmeans(xs, ys, valid, 10, out);
@@ -236,7 +237,7 @@ TEST_F(KMeansTest, KExceedsN_CappedAtN) {
 TEST_F(KMeansTest, InvalidPointsHandled) {
     std::vector<double> xs = {0.0, 5.0, 10.0};
     std::vector<double> ys = {0.0, 5.0, 10.0};
-    std::vector<bool>   valid = {true, false, true}; // middle is invalid
+    std::vector<bool> valid = {true, false, true}; // middle is invalid
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 2, out);
     ASSERT_EQ(3u, out.size());
@@ -248,7 +249,7 @@ TEST_F(KMeansTest, InvalidPointsHandled) {
 TEST_F(KMeansTest, KOne_AllInSameCluster) {
     std::vector<double> xs = {0.0, 5.0, 10.0, 20.0};
     std::vector<double> ys = {0.0, 5.0, 10.0, 20.0};
-    std::vector<bool>   valid(4, true);
+    std::vector<bool> valid(4, true);
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 1, out);
     ASSERT_EQ(4u, out.size());
@@ -304,9 +305,9 @@ TEST_F(DBSCANTest, BorderPoint_AbsorbedFromCoreNeighbor) {
     // A and B are close (form core pair). C is close to B only.
     // C has only 1 neighbor (B), so C is not core. But C is reachable from B → border point.
     // minpoints=2: A-B are core; C is a border point of the same cluster.
-    std::vector<double> xs = {0.0, 0.001, 0.002};   // A, B, C in a line ~111m apart
-    std::vector<double> ys = {0.0, 0.0,   0.0};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<double> xs = {0.0, 0.001, 0.002}; // A, B, C in a line ~111m apart
+    std::vector<double> ys = {0.0, 0.0, 0.0};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     // eps=200m: A-B close, B-C close, A-C at ~222m (just beyond eps)
     dbscan(xs, ys, valid, 200.0, 2, out);
@@ -321,8 +322,8 @@ TEST_F(DBSCANTest, ChainConnectivity) {
     // A-B-C-D chained: each adjacent pair close, non-adjacent pairs far
     // minpoints=2: A-B are core, B-C are core, C-D are core → one big cluster
     std::vector<double> xs = {0.0, 0.001, 0.002, 0.003};
-    std::vector<double> ys = {0.0, 0.0,   0.0,   0.0};
-    std::vector<bool>   valid = {true, true, true, true};
+    std::vector<double> ys = {0.0, 0.0, 0.0, 0.0};
+    std::vector<bool> valid = {true, true, true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(4u, out.size());
@@ -336,7 +337,7 @@ TEST_F(DBSCANTest, ChainConnectivity) {
 TEST_F(DBSCANTest, AllInvalidPoints) {
     std::vector<double> xs = {0.0, 1.0, 2.0};
     std::vector<double> ys = {0.0, 1.0, 2.0};
-    std::vector<bool>   valid = {false, false, false};
+    std::vector<bool> valid = {false, false, false};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 1000.0, 2, out);
     ASSERT_EQ(3u, out.size());
@@ -347,7 +348,7 @@ TEST_F(DBSCANTest, EpsZero_OnlyIdenticalPointsCluster) {
     // With eps=0, only points at exactly the same location form clusters
     std::vector<double> xs = {0.0, 0.0, 1.0};
     std::vector<double> ys = {0.0, 0.0, 0.0};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 0.0, 2, out);
     ASSERT_EQ(3u, out.size());
@@ -359,8 +360,8 @@ TEST_F(DBSCANTest, EpsZero_OnlyIdenticalPointsCluster) {
 
 TEST_F(DBSCANTest, LargeMinpoints_AllNoise) {
     std::vector<double> xs = {0.0, 0.001, 0.002};
-    std::vector<double> ys = {0.0, 0.0,   0.0};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<double> ys = {0.0, 0.0, 0.0};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     // minpoints=10 but only 3 points → no point has 10 neighbors → all noise
     dbscan(xs, ys, valid, 1000.0, 10, out);
@@ -371,7 +372,7 @@ TEST_F(DBSCANTest, AllSameLocation) {
     // All points at same coordinates: all within eps of each other
     std::vector<double> xs(10, 5.0);
     std::vector<double> ys(10, 5.0);
-    std::vector<bool>   valid(10, true);
+    std::vector<bool> valid(10, true);
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 3, out);
     ASSERT_EQ(10u, out.size());
@@ -383,12 +384,16 @@ TEST_F(DBSCANTest, AllSameLocation) {
 TEST_F(DBSCANTest, LargePartition_CorrectCount) {
     // 200 points: 100 in cluster A near (0,0), 100 in cluster B near (10,10)
     std::vector<double> xs, ys;
-    std::vector<bool>   valid;
+    std::vector<bool> valid;
     for (int i = 0; i < 100; ++i) {
-        xs.push_back(i * 0.0001); ys.push_back(0.0); valid.push_back(true); // cluster A
+        xs.push_back(i * 0.0001);
+        ys.push_back(0.0);
+        valid.push_back(true); // cluster A
     }
     for (int i = 0; i < 100; ++i) {
-        xs.push_back(10.0 + i * 0.0001); ys.push_back(10.0); valid.push_back(true); // cluster B
+        xs.push_back(10.0 + i * 0.0001);
+        ys.push_back(10.0);
+        valid.push_back(true); // cluster B
     }
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out); // eps=200m
@@ -396,7 +401,8 @@ TEST_F(DBSCANTest, LargePartition_CorrectCount) {
 
     // Count distinct non-noise cluster IDs
     std::set<int32_t> clusters;
-    for (auto c : out) if (c >= 0) clusters.insert(c);
+    for (auto c : out)
+        if (c >= 0) clusters.insert(c);
     EXPECT_EQ(2u, clusters.size()); // exactly 2 clusters
 
     // All cluster A points should share one cluster ID
@@ -410,8 +416,8 @@ TEST_F(DBSCANTest, LargePartition_CorrectCount) {
 TEST_F(DBSCANTest, NegativeCoordinates) {
     // Points in southern hemisphere / western longitude
     std::vector<double> xs = {-73.5, -73.501, -100.0}; // NYC area + far outlier
-    std::vector<double> ys = {40.7,   40.7,    40.7};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<double> ys = {40.7, 40.7, 40.7};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     dbscan(xs, ys, valid, 200.0, 2, out);
     ASSERT_EQ(3u, out.size());
@@ -427,7 +433,7 @@ TEST_F(DBSCANTest, NegativeCoordinates) {
 TEST_F(KMeansTest, AllInvalidPoints) {
     std::vector<double> xs = {0.0, 1.0, 2.0};
     std::vector<double> ys = {0.0, 1.0, 2.0};
-    std::vector<bool>   valid = {false, false, false};
+    std::vector<bool> valid = {false, false, false};
     std::vector<int32_t> out;
     // Should not crash; all stay at default (0)
     kmeans(xs, ys, valid, 2, out);
@@ -439,7 +445,7 @@ TEST_F(KMeansTest, AllSameCoordinates) {
     // All points at identical coordinates: all should get cluster 0
     std::vector<double> xs(5, 3.0);
     std::vector<double> ys(5, 4.0);
-    std::vector<bool>   valid(5, true);
+    std::vector<bool> valid(5, true);
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 3, out);
     ASSERT_EQ(5u, out.size());
@@ -453,7 +459,7 @@ TEST_F(KMeansTest, AllSameCoordinates) {
 TEST_F(KMeansTest, Determinism_SameSeedSameResult) {
     std::vector<double> xs = {0.0, 5.0, 10.0, 1.0, 6.0, 11.0};
     std::vector<double> ys = {0.0, 5.0, 10.0, 0.5, 5.5, 10.5};
-    std::vector<bool>   valid(6, true);
+    std::vector<bool> valid(6, true);
 
     std::vector<int32_t> out1, out2;
     kmeans(xs, ys, valid, 3, out1);
@@ -467,8 +473,8 @@ TEST_F(KMeansTest, Determinism_SameSeedSameResult) {
 
 TEST_F(KMeansTest, ClusterIdsAreInRange_0_to_k_minus_1) {
     std::vector<double> xs = {0.0, 5.0, 10.0, 15.0, 20.0};
-    std::vector<double> ys = {0.0, 0.0,  0.0,   0.0,  0.0};
-    std::vector<bool>   valid(5, true);
+    std::vector<double> ys = {0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<bool> valid(5, true);
     std::vector<int32_t> out;
     int k = 3;
     kmeans(xs, ys, valid, k, out);
@@ -482,8 +488,8 @@ TEST_F(KMeansTest, NearbyPointsInSameCluster) {
     // Two tight groups: (0,0) area and (100,100) area, k=2
     // Points in same group should share a cluster ID
     std::vector<double> xs = {0.0, 0.0001, 0.0002, 100.0, 100.0001, 100.0002};
-    std::vector<double> ys = {0.0, 0.0,    0.0,    100.0, 100.0,    100.0};
-    std::vector<bool>   valid(6, true);
+    std::vector<double> ys = {0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+    std::vector<bool> valid(6, true);
     std::vector<int32_t> out;
     kmeans(xs, ys, valid, 2, out);
     ASSERT_EQ(6u, out.size());
@@ -499,7 +505,7 @@ TEST_F(KMeansTest, KMeansPlus_FirstCentroid_Deterministic) {
     // (same x and y from the same index). Verify output is consistent.
     std::vector<double> xs = {0.0, 50.0, 100.0};
     std::vector<double> ys = {0.0, 50.0, 100.0};
-    std::vector<bool>   valid = {true, true, true};
+    std::vector<bool> valid = {true, true, true};
     std::vector<int32_t> out;
     // With k=1, all points go to the single centroid — just verify no crash
     kmeans(xs, ys, valid, 1, out);

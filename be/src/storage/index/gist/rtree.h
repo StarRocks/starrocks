@@ -29,19 +29,17 @@ struct MBR {
 };
 
 inline bool mbr_intersects(const MBR& a, const MBR& b) {
-    return a.min_x <= b.max_x && a.max_x >= b.min_x &&
-           a.min_y <= b.max_y && a.max_y >= b.min_y;
+    return a.min_x <= b.max_x && a.max_x >= b.min_x && a.min_y <= b.max_y && a.max_y >= b.min_y;
 }
 
 // a fully contains b
 inline bool mbr_contains(const MBR& a, const MBR& b) {
-    return a.min_x <= b.min_x && a.max_x >= b.max_x &&
-           a.min_y <= b.min_y && a.max_y >= b.max_y;
+    return a.min_x <= b.min_x && a.max_x >= b.max_x && a.min_y <= b.min_y && a.max_y >= b.max_y;
 }
 
 inline MBR mbr_union(const MBR& a, const MBR& b) {
-    return {std::min(a.min_x, b.min_x), std::min(a.min_y, b.min_y),
-            std::max(a.max_x, b.max_x), std::max(a.max_y, b.max_y)};
+    return {std::min(a.min_x, b.min_x), std::min(a.min_y, b.min_y), std::max(a.max_x, b.max_x),
+            std::max(a.max_y, b.max_y)};
 }
 
 // ----------------------------------------------------------------------------
@@ -64,8 +62,8 @@ inline MBR mbr_union(const MBR& a, const MBR& b) {
 // ----------------------------------------------------------------------------
 
 static constexpr uint32_t RTREE_VERSION = 1;
-static constexpr char     RTREE_MAGIC[8] = {'G','S','T','R','O','C','K','S'};
-static constexpr size_t   RTREE_HEADER_SIZE = 40;
+static constexpr char RTREE_MAGIC[8] = {'G', 'S', 'T', 'R', 'O', 'C', 'K', 'S'};
+static constexpr size_t RTREE_HEADER_SIZE = 40;
 
 // ----------------------------------------------------------------------------
 // Leaf entry: one geometry row
@@ -89,26 +87,19 @@ std::string rtree_build_str(std::vector<RTreeLeafEntry>& entries, int node_capac
 // leaf_predicate: called on each leaf MBR — return true to include row_id.
 // result_row_ids is appended (not cleared) with matching row ordinals.
 // ----------------------------------------------------------------------------
-void rtree_search(const char* data, size_t size,
-                  std::function<bool(const MBR&)> node_predicate,
-                  std::function<bool(const MBR&)> leaf_predicate,
-                  std::vector<uint32_t>* result_row_ids);
+void rtree_search(const char* data, size_t size, std::function<bool(const MBR&)> node_predicate,
+                  std::function<bool(const MBR&)> leaf_predicate, std::vector<uint32_t>* result_row_ids);
 
 // Convenience wrappers for the three common spatial predicates ---------------
 
 // Returns rows whose MBR intersects query_mbr (candidate set for ST_Intersects)
-void rtree_search_intersects(const char* data, size_t size,
-                             const MBR& query_mbr,
+void rtree_search_intersects(const char* data, size_t size, const MBR& query_mbr,
                              std::vector<uint32_t>* result_row_ids);
 
 // Returns rows whose MBR is contained within query_mbr (candidate for ST_Within)
-void rtree_search_within(const char* data, size_t size,
-                         const MBR& query_mbr,
-                         std::vector<uint32_t>* result_row_ids);
+void rtree_search_within(const char* data, size_t size, const MBR& query_mbr, std::vector<uint32_t>* result_row_ids);
 
 // Returns rows whose MBR contains query_mbr (candidate for ST_Contains)
-void rtree_search_contains(const char* data, size_t size,
-                           const MBR& query_mbr,
-                           std::vector<uint32_t>* result_row_ids);
+void rtree_search_contains(const char* data, size_t size, const MBR& query_mbr, std::vector<uint32_t>* result_row_ids);
 
 } // namespace starrocks

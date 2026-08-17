@@ -16,11 +16,10 @@
 
 #include <memory>
 
-#include "exprs/agg/window_geo.h"
-
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "exprs/agg/window_geo.h"
 #include "types/logical_type.h"
 #include "udf/java/java_function_fwd.h"
 #include "util/failpoint/fail_point.h"

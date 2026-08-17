@@ -43,12 +43,10 @@ static inline std::pair<double, double> centroid_of(const Column* col, int64_t r
     if (!shape) return {kNaN, kNaN};
     switch (shape->type()) {
     case GEO_SHAPE_POINT:
-        return {static_cast<const GeoPoint*>(shape.get())->x(),
-                static_cast<const GeoPoint*>(shape.get())->y()};
+        return {static_cast<const GeoPoint*>(shape.get())->x(), static_cast<const GeoPoint*>(shape.get())->y()};
     default: {
         double x0, y0, x1, y1;
-        if (geo_bounding_box(shape.get(), &x0, &y0, &x1, &y1))
-            return {(x0 + x1) * 0.5, (y0 + y1) * 0.5};
+        if (geo_bounding_box(shape.get(), &x0, &y0, &x1, &y1)) return {(x0 + x1) * 0.5, (y0 + y1) * 0.5};
         return {kNaN, kNaN};
     }
     }
@@ -65,9 +63,8 @@ static inline double dist_m(double x1, double y1, double x2, double y2) {
 // DBSCAN
 // ============================================================================
 
-static inline void dbscan(const std::vector<double>& xs, const std::vector<double>& ys,
-                           const std::vector<bool>& valid, double eps_m, int min_pts,
-                           std::vector<int32_t>& out) {
+static inline void dbscan(const std::vector<double>& xs, const std::vector<double>& ys, const std::vector<bool>& valid,
+                          double eps_m, int min_pts, std::vector<int32_t>& out) {
     int n = (int)xs.size();
     out.assign(n, -1); // -1 = noise
 
@@ -118,9 +115,8 @@ static inline void dbscan(const std::vector<double>& xs, const std::vector<doubl
 // K-Means (k-means++ init + Lloyd's iterations, max 100 iters)
 // ============================================================================
 
-static inline void kmeans(const std::vector<double>& xs, const std::vector<double>& ys,
-                           const std::vector<bool>& valid, int k,
-                           std::vector<int32_t>& out) {
+static inline void kmeans(const std::vector<double>& xs, const std::vector<double>& ys, const std::vector<bool>& valid,
+                          int k, std::vector<int32_t>& out) {
     int n = (int)xs.size();
     out.assign(n, 0);
     if (k <= 0 || n == 0) return;
@@ -129,7 +125,8 @@ static inline void kmeans(const std::vector<double>& xs, const std::vector<doubl
     // Collect valid indices
     std::vector<int> valid_idx;
     valid_idx.reserve(n);
-    for (int i = 0; i < n; ++i) if (valid[i]) valid_idx.push_back(i);
+    for (int i = 0; i < n; ++i)
+        if (valid[i]) valid_idx.push_back(i);
     if (valid_idx.empty()) return;
 
     // k-means++ initialisation (deterministic seed for reproducibility)
@@ -150,13 +147,22 @@ static inline void kmeans(const std::vector<double>& xs, const std::vector<doubl
             min_d2[vi] = std::min(min_d2[vi], d * d);
             total += min_d2[vi];
         }
-        if (total <= 0.0) { cx[ki] = cx[0]; cy[ki] = cy[0]; continue; }
+        if (total <= 0.0) {
+            cx[ki] = cx[0];
+            cy[ki] = cy[0];
+            continue;
+        }
         double t = std::uniform_real_distribution<double>(0.0, total)(rng);
         double cum = 0.0;
-        cx[ki] = cx[0]; cy[ki] = cy[0];
+        cx[ki] = cx[0];
+        cy[ki] = cy[0];
         for (int vi : valid_idx) {
             cum += min_d2[vi];
-            if (cum >= t) { cx[ki] = xs[vi]; cy[ki] = ys[vi]; break; }
+            if (cum >= t) {
+                cx[ki] = xs[vi];
+                cy[ki] = ys[vi];
+                break;
+            }
         }
     }
 
@@ -169,20 +175,31 @@ static inline void kmeans(const std::vector<double>& xs, const std::vector<doubl
             double best_d = std::numeric_limits<double>::max();
             for (int ki = 0; ki < k; ++ki) {
                 double d = dist_m(xs[vi], ys[vi], cx[ki], cy[ki]);
-                if (d < best_d) { best_d = d; best = ki; }
+                if (d < best_d) {
+                    best_d = d;
+                    best = ki;
+                }
             }
-            if (out[vi] != best) { out[vi] = best; changed = true; }
+            if (out[vi] != best) {
+                out[vi] = best;
+                changed = true;
+            }
         }
         if (!changed) break;
         // Update centroids
         std::vector<double> sx(k, 0.0), sy(k, 0.0);
-        std::vector<int>    cnt(k, 0);
+        std::vector<int> cnt(k, 0);
         for (int vi : valid_idx) {
             int ki = out[vi];
-            sx[ki] += xs[vi]; sy[ki] += ys[vi]; ++cnt[ki];
+            sx[ki] += xs[vi];
+            sy[ki] += ys[vi];
+            ++cnt[ki];
         }
         for (int ki = 0; ki < k; ++ki) {
-            if (cnt[ki] > 0) { cx[ki] = sx[ki] / cnt[ki]; cy[ki] = sy[ki] / cnt[ki]; }
+            if (cnt[ki] > 0) {
+                cx[ki] = sx[ki] / cnt[ki];
+                cy[ki] = sy[ki] / cnt[ki];
+            }
         }
     }
 }
@@ -221,9 +238,8 @@ public:
         s.computed = false;
     }
 
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
-                                              const Column** columns, int64_t peer_group_start,
-                                              int64_t peer_group_end, int64_t frame_start,
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         auto& s = this->data(state);
 
@@ -234,10 +250,11 @@ public:
 
             int n = (int)(peer_group_end - peer_group_start);
             std::vector<double> xs(n), ys(n);
-            std::vector<bool>   valid(n, true);
+            std::vector<bool> valid(n, true);
             for (int i = 0; i < n; ++i) {
                 auto [x, y] = geo_window_detail::centroid_of(columns[0], peer_group_start + i);
-                xs[i] = x; ys[i] = y;
+                xs[i] = x;
+                ys[i] = y;
                 valid[i] = !std::isnan(x) && !std::isnan(y);
             }
             geo_window_detail::dbscan(xs, ys, valid, eps_m, (int)min_pts, s.cluster_ids);
@@ -246,8 +263,8 @@ public:
         ++s.cur_position;
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst,
-                    size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_EQ(end, start + 1);
         const auto& s = this->data(state);
 
@@ -292,9 +309,8 @@ public:
         s.computed = false;
     }
 
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
-                                              const Column** columns, int64_t peer_group_start,
-                                              int64_t peer_group_end, int64_t frame_start,
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         auto& s = this->data(state);
 
@@ -303,10 +319,11 @@ public:
 
             int n = (int)(peer_group_end - peer_group_start);
             std::vector<double> xs(n), ys(n);
-            std::vector<bool>   valid(n, true);
+            std::vector<bool> valid(n, true);
             for (int i = 0; i < n; ++i) {
                 auto [x, y] = geo_window_detail::centroid_of(columns[0], peer_group_start + i);
-                xs[i] = x; ys[i] = y;
+                xs[i] = x;
+                ys[i] = y;
                 valid[i] = !std::isnan(x) && !std::isnan(y);
             }
             geo_window_detail::kmeans(xs, ys, valid, (int)k, s.cluster_ids);
@@ -315,8 +332,8 @@ public:
         ++s.cur_position;
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst,
-                    size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_EQ(end, start + 1);
         const auto& s = this->data(state);
 

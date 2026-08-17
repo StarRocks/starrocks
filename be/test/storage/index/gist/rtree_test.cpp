@@ -63,7 +63,7 @@ TEST(MBRTest, Contains) {
 
 TEST(MBRTest, PointOnBoundary) {
     MBR box{0, 0, 5, 5};
-    MBR pt{5, 5, 5, 5};  // corner point
+    MBR pt{5, 5, 5, 5}; // corner point
     EXPECT_TRUE(mbr_intersects(box, pt));
     EXPECT_TRUE(mbr_contains(box, pt));
 }
@@ -115,8 +115,8 @@ TEST(RTreeTest, HundredPointsIntersects) {
     std::vector<RTreeLeafEntry> entries;
     entries.reserve(N);
     for (int i = 0; i < N; ++i) {
-        double x = (i * 13 % 101) * 0.5;   // pseudo-random spread
-        double y = (i * 7  % 97)  * 0.5;
+        double x = (i * 13 % 101) * 0.5; // pseudo-random spread
+        double y = (i * 7 % 97) * 0.5;
         entries.push_back(make_point(static_cast<uint32_t>(i), x, y));
     }
 
@@ -143,11 +143,11 @@ TEST(RTreeTest, HundredPointsIntersects) {
 
 TEST(RTreeTest, WithinSearch) {
     std::vector<RTreeLeafEntry> entries = {
-        make_point(0, 1, 1),   // inside query box (0,0,10,10)
-        make_point(1, 5, 5),   // inside
-        make_point(2, 15, 15), // outside
-        make_rect(3, 0, 0, 2, 2), // fully inside
-        make_rect(4, 8, 8, 12, 12), // partially outside
+            make_point(0, 1, 1),        // inside query box (0,0,10,10)
+            make_point(1, 5, 5),        // inside
+            make_point(2, 15, 15),      // outside
+            make_rect(3, 0, 0, 2, 2),   // fully inside
+            make_rect(4, 8, 8, 12, 12), // partially outside
     };
 
     std::string data = rtree_build_str(entries, 50);
@@ -171,10 +171,10 @@ TEST(RTreeTest, WithinSearch) {
 
 TEST(RTreeTest, ContainsSearch) {
     std::vector<RTreeLeafEntry> entries = {
-        make_rect(0, 0, 0, 10, 10),  // contains query (3,3,7,7)
-        make_rect(1, 5, 5, 15, 15),  // does not contain query
-        make_rect(2, 2, 2, 8, 8),    // contains query
-        make_point(3, 5, 5),          // does not contain (point)
+            make_rect(0, 0, 0, 10, 10), // contains query (3,3,7,7)
+            make_rect(1, 5, 5, 15, 15), // does not contain query
+            make_rect(2, 2, 2, 8, 8),   // contains query
+            make_point(3, 5, 5),        // does not contain (point)
     };
 
     std::string data = rtree_build_str(entries, 50);
@@ -228,8 +228,7 @@ TEST(RTreeTest, MinNodeCapacity) {
     const int N = 50;
     std::vector<RTreeLeafEntry> entries;
     for (int i = 0; i < N; ++i) {
-        entries.push_back(make_point(static_cast<uint32_t>(i),
-                                     static_cast<double>(i), static_cast<double>(i)));
+        entries.push_back(make_point(static_cast<uint32_t>(i), static_cast<double>(i), static_cast<double>(i)));
     }
 
     std::string data = rtree_build_str(entries, 4);
@@ -278,7 +277,7 @@ TEST(RTreeTest, SearchAppendsToExistingResults) {
 
     ASSERT_EQ(2u, result.size());
     EXPECT_EQ(999u, result[0]); // pre-existing preserved
-    EXPECT_EQ(0u,   result[1]); // new result appended
+    EXPECT_EQ(0u, result[1]);   // new result appended
 }
 
 // -----------------------------------------------------------------------
@@ -286,9 +285,9 @@ TEST(RTreeTest, SearchAppendsToExistingResults) {
 // -----------------------------------------------------------------------
 TEST(RTreeTest, NegativeCoordinates) {
     std::vector<RTreeLeafEntry> entries = {
-        make_point(0, -10.0, -5.0),
-        make_point(1, -0.5,  -0.5),
-        make_point(2,  5.0,   5.0),
+            make_point(0, -10.0, -5.0),
+            make_point(1, -0.5, -0.5),
+            make_point(2, 5.0, 5.0),
     };
     std::string data = rtree_build_str(entries, 50);
 
@@ -344,8 +343,7 @@ TEST(RTreeTest, QueryEncompassesAll) {
     std::string data = rtree_build_str(entries, 8);
 
     std::vector<uint32_t> result;
-    rtree_search_intersects(data.data(), data.size(),
-                            {-1e9, -1e9, 1e9, 1e9}, &result);
+    rtree_search_intersects(data.data(), data.size(), {-1e9, -1e9, 1e9, 1e9}, &result);
     EXPECT_EQ((size_t)N, result.size());
 }
 
@@ -354,8 +352,8 @@ TEST(RTreeTest, QueryEncompassesAll) {
 // -----------------------------------------------------------------------
 TEST(RTreeTest, ZeroAreaQuery) {
     std::vector<RTreeLeafEntry> entries = {
-        make_point(0, 1.0, 1.0),
-        make_point(1, 2.0, 2.0),
+            make_point(0, 1.0, 1.0),
+            make_point(1, 2.0, 2.0),
     };
     std::string data = rtree_build_str(entries, 50);
 
@@ -380,11 +378,11 @@ TEST(MBRTest, NearBoundaryStrictlyOutside) {
 
 TEST(MBRTest, NegativeCoordinateMBR) {
     MBR a{-10.0, -10.0, -5.0, -5.0};
-    MBR b{-7.0,  -7.0,  -3.0, -3.0};
-    MBR c{ 0.0,   0.0,   5.0,  5.0};
+    MBR b{-7.0, -7.0, -3.0, -3.0};
+    MBR c{0.0, 0.0, 5.0, 5.0};
     EXPECT_TRUE(mbr_intersects(a, b));
     EXPECT_FALSE(mbr_intersects(a, c));
-    EXPECT_FALSE(mbr_contains(a, b)); // partial overlap
+    EXPECT_FALSE(mbr_contains(a, b));                       // partial overlap
     EXPECT_TRUE(mbr_contains(b, {-6.0, -6.0, -4.0, -4.0})); // inner box
 }
 
@@ -418,7 +416,7 @@ TEST(RTreeTest, WithinSearch_NoFalsePositives) {
     for (uint32_t id : tree_result) {
         const auto& e = entries[id];
         EXPECT_TRUE(mbr_contains(q, e.mbr))
-            << "False positive: row " << id << " at (" << e.mbr.min_x << "," << e.mbr.min_y << ")";
+                << "False positive: row " << id << " at (" << e.mbr.min_x << "," << e.mbr.min_y << ")";
     }
 }
 
@@ -427,10 +425,10 @@ TEST(RTreeTest, WithinSearch_NoFalsePositives) {
 // -----------------------------------------------------------------------
 TEST(RTreeTest, ContainsSearch_NoFalsePositives) {
     std::vector<RTreeLeafEntry> entries = {
-        make_rect(0, 0, 0, 20, 20),  // large — contains query
-        make_rect(1, 5, 5,  8,  8),  // small — inside query, does not contain it
-        make_rect(2, 3, 3, 18, 18),  // medium — contains query
-        make_rect(3, 0, 0, 10, 10),  // border — contains query on one edge
+            make_rect(0, 0, 0, 20, 20), // large — contains query
+            make_rect(1, 5, 5, 8, 8),   // small — inside query, does not contain it
+            make_rect(2, 3, 3, 18, 18), // medium — contains query
+            make_rect(3, 0, 0, 10, 10), // border — contains query on one edge
     };
     std::string data = rtree_build_str(entries, 50);
     MBR q{4.0, 4.0, 7.0, 7.0};
@@ -440,8 +438,7 @@ TEST(RTreeTest, ContainsSearch_NoFalsePositives) {
 
     for (uint32_t id : result) {
         const auto& e = entries[id];
-        EXPECT_TRUE(mbr_contains(e.mbr, q))
-            << "False positive: row " << id;
+        EXPECT_TRUE(mbr_contains(e.mbr, q)) << "False positive: row " << id;
     }
     // row 1 (smaller than query) must NOT appear
     EXPECT_EQ(result.end(), std::find(result.begin(), result.end(), 1u));
@@ -458,9 +455,8 @@ TEST(RTreeTest, TruncatedData_DoesNotCrash) {
     std::vector<uint32_t> result;
     for (size_t sz = 0; sz <= RTREE_HEADER_SIZE; ++sz) {
         result.clear();
-        EXPECT_NO_FATAL_FAILURE(
-            rtree_search_intersects(data.data(), sz, {0, 0, 10, 10}, &result)
-        ) << "Crashed at size " << sz;
+        EXPECT_NO_FATAL_FAILURE(rtree_search_intersects(data.data(), sz, {0, 0, 10, 10}, &result))
+                << "Crashed at size " << sz;
     }
     EXPECT_TRUE(result.empty());
 }

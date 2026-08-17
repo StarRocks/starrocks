@@ -64,9 +64,8 @@ public:
     // Helper: extract bool at row 0 from result column.
     static bool get_bool(const ColumnPtr& col, int row = 0) {
         if (col->is_null(row)) ADD_FAILURE() << "Unexpected null at row " << row;
-        return ColumnHelper::get_const_value<TYPE_BOOLEAN>(
-                ColumnHelper::create_const_column<TYPE_BOOLEAN>(
-                        ColumnHelper::cast_to<TYPE_BOOLEAN>(col)->immutable_data()[row], 1));
+        return ColumnHelper::get_const_value<TYPE_BOOLEAN>(ColumnHelper::create_const_column<TYPE_BOOLEAN>(
+                ColumnHelper::cast_to<TYPE_BOOLEAN>(col)->immutable_data()[row], 1));
     }
     static bool get_bool_raw(const ColumnPtr& col, int row = 0) {
         return ColumnHelper::cast_to<TYPE_BOOLEAN>(col)->immutable_data()[row];
@@ -293,8 +292,8 @@ TEST_F(GeometryPostGISTest, StDistance_KnownDistance) {
     // Paris (2.35°E, 48.85°N) to London (-0.12°W, 51.51°N) ≈ 340km
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns cols;
-    cols.emplace_back(geom_col("POINT (2.35 48.85)"));   // Paris
-    cols.emplace_back(geom_col("POINT (-0.12 51.51)"));  // London
+    cols.emplace_back(geom_col("POINT (2.35 48.85)"));  // Paris
+    cols.emplace_back(geom_col("POINT (-0.12 51.51)")); // London
     auto r = GeometryFunctions::st_distance_geom(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     double dist_m = get_double(r);
@@ -328,7 +327,7 @@ TEST_F(GeometryPostGISTest, StLength_ZeroDegreeLineShouldBeZero) {
 TEST_F(GeometryPostGISTest, StLength_Equator1DegreeIsAbout111km) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns cols;
-    cols.emplace_back(geom_col("LINESTRING (0 0, 1 0)"));  // 1° along equator
+    cols.emplace_back(geom_col("LINESTRING (0 0, 1 0)")); // 1° along equator
     auto r = GeometryFunctions::st_length(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     double len = get_double(r);
@@ -364,8 +363,8 @@ TEST_F(GeometryPostGISTest, StArea_SmallPolygonPositive) {
     auto r = GeometryFunctions::st_area(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     double area = get_double(r);
-    EXPECT_GT(area, 1.0e10);  // > 10,000 km²
-    EXPECT_LT(area, 1.5e10);  // < 15,000 km²
+    EXPECT_GT(area, 1.0e10); // > 10,000 km²
+    EXPECT_LT(area, 1.5e10); // < 15,000 km²
 }
 
 // ============================================================================
@@ -566,7 +565,7 @@ TEST_F(GeometryPostGISTest, StCoveredBy_PointCoveredByPolygon) {
 TEST_F(GeometryPostGISTest, StCoveredBy_IsSymmetricInverseOfCovers) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto poly = geom_col("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))");
-    auto pt   = geom_col("POINT (5 5)");
+    auto pt = geom_col("POINT (5 5)");
 
     Columns covers_cols = {poly, pt};
     auto covers_r = GeometryFunctions::st_covers(ctx.get(), covers_cols).value();
@@ -816,9 +815,9 @@ TEST_F(GeometryPostGISTest, MultiRow_StGeometryType) {
 
     auto r = GeometryFunctions::st_geometry_type(ctx.get(), cols).value();
     auto bin = ColumnHelper::as_column<BinaryColumn>(r);
-    EXPECT_EQ("ST_Point",      bin->get_data()[0].to_string());
+    EXPECT_EQ("ST_Point", bin->get_data()[0].to_string());
     EXPECT_EQ("ST_LineString", bin->get_data()[1].to_string());
-    EXPECT_EQ("ST_Polygon",    bin->get_data()[2].to_string());
+    EXPECT_EQ("ST_Polygon", bin->get_data()[2].to_string());
 }
 
 TEST_F(GeometryPostGISTest, MultiRow_StIntersects_Mixed) {
@@ -827,17 +826,21 @@ TEST_F(GeometryPostGISTest, MultiRow_StIntersects_Mixed) {
     auto poly_str = [](const std::string& wkt) -> std::string {
         GeoParseStatus st;
         std::unique_ptr<GeoShape> s(GeoShape::from_wkt(wkt.data(), wkt.size(), &st));
-        std::string buf; s->encode_to(&buf); return buf;
+        std::string buf;
+        s->encode_to(&buf);
+        return buf;
     };
 
     std::string box = poly_str("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))");
-    std::string inside  = poly_str("POINT (5 5)");
+    std::string inside = poly_str("POINT (5 5)");
     std::string outside = poly_str("POINT (20 20)");
 
     auto a_col = BinaryColumn::create();
     auto b_col = BinaryColumn::create();
-    a_col->append(Slice(box)); b_col->append(Slice(inside));
-    a_col->append(Slice(box)); b_col->append(Slice(outside));
+    a_col->append(Slice(box));
+    b_col->append(Slice(inside));
+    a_col->append(Slice(box));
+    b_col->append(Slice(outside));
 
     Columns cols;
     cols.emplace_back(std::move(a_col));
@@ -855,17 +858,20 @@ TEST_F(GeometryPostGISTest, MultiRow_StIntersects_Mixed) {
 
 TEST_F(GeometryPostGISTest, StDimension_Point) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POINT (1 2)"));
+    Columns cols;
+    cols.emplace_back(geom_col("POINT (1 2)"));
     EXPECT_EQ(0, get_int(GeometryFunctions::st_dimension(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StDimension_Line) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (0 0, 1 1)"));
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (0 0, 1 1)"));
     EXPECT_EQ(1, get_int(GeometryFunctions::st_dimension(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StDimension_Polygon) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POLYGON ((0 0,1 0,1 1,0 1,0 0))"));
+    Columns cols;
+    cols.emplace_back(geom_col("POLYGON ((0 0,1 0,1 1,0 1,0 0))"));
     EXPECT_EQ(2, get_int(GeometryFunctions::st_dimension(ctx.get(), cols).value()));
 }
 
@@ -875,7 +881,8 @@ TEST_F(GeometryPostGISTest, StDimension_Polygon) {
 
 TEST_F(GeometryPostGISTest, StStartPoint_Line) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (3 4, 7 8, 10 0)"));
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (3 4, 7 8, 10 0)"));
     auto r = GeometryFunctions::st_start_point(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     std::string wkt = as_text(r);
@@ -884,7 +891,8 @@ TEST_F(GeometryPostGISTest, StStartPoint_Line) {
 }
 TEST_F(GeometryPostGISTest, StEndPoint_Line) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (3 4, 7 8, 10 0)"));
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (3 4, 7 8, 10 0)"));
     auto r = GeometryFunctions::st_end_point(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     std::string wkt = as_text(r);
@@ -892,7 +900,8 @@ TEST_F(GeometryPostGISTest, StEndPoint_Line) {
 }
 TEST_F(GeometryPostGISTest, StStartEndPoint_NonLineReturnsNull) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POINT (1 2)"));
+    Columns cols;
+    cols.emplace_back(geom_col("POINT (1 2)"));
     EXPECT_TRUE(GeometryFunctions::st_start_point(ctx.get(), cols).value()->is_null(0));
     EXPECT_TRUE(GeometryFunctions::st_end_point(ctx.get(), cols).value()->is_null(0));
 }
@@ -900,19 +909,24 @@ TEST_F(GeometryPostGISTest, StPointN_SecondVertex) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto int_col = FixedLengthColumn<int32_t>::create();
     int_col->append(2);
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (0 0, 5 5, 10 0)")); cols.emplace_back(int_col);
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (0 0, 5 5, 10 0)"));
+    cols.emplace_back(int_col);
     auto r = GeometryFunctions::st_point_n(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     // Second vertex should be near (5,5)
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns x_cols; x_cols.emplace_back(r);
+    Columns x_cols;
+    x_cols.emplace_back(r);
     EXPECT_NEAR(5.0, get_double(GeometryFunctions::st_x_geom(ctx2.get(), x_cols).value()), 0.01);
 }
 TEST_F(GeometryPostGISTest, StPointN_OutOfBoundsReturnsNull) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto int_col = FixedLengthColumn<int32_t>::create();
     int_col->append(99);
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (0 0, 1 1)")); cols.emplace_back(int_col);
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (0 0, 1 1)"));
+    cols.emplace_back(int_col);
     EXPECT_TRUE(GeometryFunctions::st_point_n(ctx.get(), cols).value()->is_null(0));
 }
 
@@ -922,22 +936,26 @@ TEST_F(GeometryPostGISTest, StPointN_OutOfBoundsReturnsNull) {
 
 TEST_F(GeometryPostGISTest, StIsClosed_OpenLine) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (0 0, 1 1)"));
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (0 0, 1 1)"));
     EXPECT_FALSE(get_bool_raw(GeometryFunctions::st_is_closed(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StIsClosed_PolygonAlwaysTrue) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POLYGON ((0 0,1 0,1 1,0 1,0 0))"));
+    Columns cols;
+    cols.emplace_back(geom_col("POLYGON ((0 0,1 0,1 1,0 1,0 0))"));
     EXPECT_TRUE(get_bool_raw(GeometryFunctions::st_is_closed(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StIsSimple_ValidLineIsSimple) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (0 0, 5 5, 10 0)"));
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (0 0, 5 5, 10 0)"));
     EXPECT_TRUE(get_bool_raw(GeometryFunctions::st_is_simple(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StIsRing_NonClosedLineIsFalse) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("LINESTRING (0 0, 1 1, 2 0)"));
+    Columns cols;
+    cols.emplace_back(geom_col("LINESTRING (0 0, 1 1, 2 0)"));
     EXPECT_FALSE(get_bool_raw(GeometryFunctions::st_is_ring(ctx.get(), cols).value()));
 }
 
@@ -947,21 +965,25 @@ TEST_F(GeometryPostGISTest, StIsRing_NonClosedLineIsFalse) {
 
 TEST_F(GeometryPostGISTest, StNumInteriorRings_NoHoles) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POLYGON ((0 0,10 0,10 10,0 10,0 0))"));
+    Columns cols;
+    cols.emplace_back(geom_col("POLYGON ((0 0,10 0,10 10,0 10,0 0))"));
     EXPECT_EQ(0, get_int(GeometryFunctions::st_num_interior_rings(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StNumInteriorRings_NonPolygonReturnsNull) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POINT (1 2)"));
+    Columns cols;
+    cols.emplace_back(geom_col("POINT (1 2)"));
     EXPECT_TRUE(GeometryFunctions::st_num_interior_rings(ctx.get(), cols).value()->is_null(0));
 }
 TEST_F(GeometryPostGISTest, StExteriorRing_ReturnsLineString) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(geom_col("POLYGON ((0 0,10 0,10 10,0 10,0 0))"));
+    Columns cols;
+    cols.emplace_back(geom_col("POLYGON ((0 0,10 0,10 10,0 10,0 0))"));
     auto r = GeometryFunctions::st_exterior_ring(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns t_cols; t_cols.emplace_back(r);
+    Columns t_cols;
+    t_cols.emplace_back(r);
     auto gt = GeometryFunctions::st_geometry_type(ctx2.get(), t_cols).value();
     EXPECT_EQ("ST_LineString", get_varchar(gt));
 }
@@ -994,16 +1016,16 @@ TEST_F(GeometryPostGISTest, StDWithin_PointsWithinRadius) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns cols;
     cols.emplace_back(geom_col("POINT (0 0)"));
-    cols.emplace_back(geom_col("POINT (0.001 0)"));  // ~111m apart
-    cols.emplace_back(dbl_col(200.0)); // 200m radius
+    cols.emplace_back(geom_col("POINT (0.001 0)")); // ~111m apart
+    cols.emplace_back(dbl_col(200.0));              // 200m radius
     EXPECT_TRUE(get_bool_raw(GeometryFunctions::st_dwithin(ctx.get(), cols).value()));
 }
 TEST_F(GeometryPostGISTest, StDWithin_PointsOutsideRadius) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns cols;
     cols.emplace_back(geom_col("POINT (0 0)"));
-    cols.emplace_back(geom_col("POINT (1 0)"));  // ~111km apart
-    cols.emplace_back(dbl_col(100.0)); // 100m radius — too small
+    cols.emplace_back(geom_col("POINT (1 0)")); // ~111km apart
+    cols.emplace_back(dbl_col(100.0));          // 100m radius — too small
     EXPECT_FALSE(get_bool_raw(GeometryFunctions::st_dwithin(ctx.get(), cols).value()));
 }
 
@@ -1015,7 +1037,8 @@ TEST_F(GeometryPostGISTest, StGeomFromGeoJSON_Point) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto col = BinaryColumn::create();
     col->append(Slice(R"({"type":"Point","coordinates":[3.5,7.25]})"));
-    Columns cols; cols.emplace_back(std::move(col));
+    Columns cols;
+    cols.emplace_back(std::move(col));
     auto r = GeometryFunctions::st_geom_from_geojson(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     std::string wkt = as_text(r);
@@ -1025,12 +1048,14 @@ TEST_F(GeometryPostGISTest, StGeomFromGeoJSON_InvalidReturnsNull) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto col = BinaryColumn::create();
     col->append(Slice(R"({"type":"MultiPoint","coordinates":[]})"));
-    Columns cols; cols.emplace_back(std::move(col));
+    Columns cols;
+    cols.emplace_back(std::move(col));
     EXPECT_TRUE(GeometryFunctions::st_geom_from_geojson(ctx.get(), cols).value()->is_null(0));
 }
 TEST_F(GeometryPostGISTest, StGeomFromGeoJSON_NullReturnsNull) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns cols; cols.emplace_back(null_geom_col());
+    Columns cols;
+    cols.emplace_back(null_geom_col());
     EXPECT_TRUE(GeometryFunctions::st_geom_from_geojson(ctx.get(), cols).value()->is_null(0));
 }
 
@@ -1042,12 +1067,14 @@ TEST_F(GeometryPostGISTest, StBuffer_PointCreatesPolygon) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns cols;
     cols.emplace_back(geom_col("POINT (0 0)"));
-    cols.emplace_back(dbl_col(0.01));  // 0.01 degree radius
+    cols.emplace_back(dbl_col(0.01)); // 0.01 degree radius
     auto r = GeometryFunctions::st_buffer(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     // Buffer polygon should contain the original point
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns c2; c2.emplace_back(r); c2.emplace_back(geom_col("POINT (0 0)"));
+    Columns c2;
+    c2.emplace_back(r);
+    c2.emplace_back(geom_col("POINT (0 0)"));
     EXPECT_TRUE(get_bool_raw(GeometryFunctions::st_contains(ctx2.get(), c2).value()));
 }
 TEST_F(GeometryPostGISTest, StBuffer_ZeroRadiusReturnsGeom) {
@@ -1071,7 +1098,9 @@ TEST_F(GeometryPostGISTest, StConvexHull_Triangle) {
     EXPECT_FALSE(r->is_null(0));
     // Convex hull of a triangle is the triangle — should still contain (5 5)
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns c2; c2.emplace_back(r); c2.emplace_back(geom_col("POINT (5 5)"));
+    Columns c2;
+    c2.emplace_back(r);
+    c2.emplace_back(geom_col("POINT (5 5)"));
     EXPECT_TRUE(get_bool_raw(GeometryFunctions::st_contains(ctx2.get(), c2).value()));
 }
 TEST_F(GeometryPostGISTest, StConvexHull_LineStringReturnsPolygonOrLine) {
@@ -1096,7 +1125,8 @@ TEST_F(GeometryPostGISTest, StSimplify_LargeToleranceReducesPoints) {
     EXPECT_FALSE(r->is_null(0));
     // Simplified line should still be a linestring
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns c2; c2.emplace_back(r);
+    Columns c2;
+    c2.emplace_back(r);
     EXPECT_EQ("ST_LineString", get_varchar(GeometryFunctions::st_geometry_type(ctx2.get(), c2).value()));
 }
 TEST_F(GeometryPostGISTest, StSimplify_ZeroToleranceReturnsSame) {
@@ -1107,7 +1137,8 @@ TEST_F(GeometryPostGISTest, StSimplify_ZeroToleranceReturnsSame) {
     auto r = GeometryFunctions::st_simplify(ctx.get(), cols).value();
     EXPECT_FALSE(r->is_null(0));
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns c2; c2.emplace_back(r);
+    Columns c2;
+    c2.emplace_back(r);
     EXPECT_GE(get_int(GeometryFunctions::st_npoints(ctx2.get(), c2).value()), 2);
 }
 
