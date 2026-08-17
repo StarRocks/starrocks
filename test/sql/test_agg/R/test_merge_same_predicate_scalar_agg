@@ -1,4 +1,4 @@
--- name: test_merge_same_predicate_agg_cross_join
+-- name: test_merge_same_predicate_scalar_agg
 create table t_mspa (
     k int,
     a int,
@@ -9,21 +9,21 @@ create table t_mspa (
 insert into t_mspa values (1, 10, 100), (1, 20, 200), (2, 30, 300), (2, 40, null), (3, null, 500);
 -- result:
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
 -- result:
 2	30
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
 -- result:
 2	30
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 99) c1,
@@ -34,7 +34,7 @@ select (select count(*) from t_mspa where k = 99) c1,
 -- result:
 0	0	None	None	None
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 99) c1,
@@ -45,7 +45,7 @@ select (select count(*) from t_mspa where k = 99) c1,
 -- result:
 0	0	None	None	None
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 3) c1,
@@ -55,7 +55,7 @@ select (select count(*) from t_mspa where k = 3) c1,
 -- result:
 1	0	None	500
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 3) c1,
@@ -65,7 +65,7 @@ select (select count(*) from t_mspa where k = 3) c1,
 -- result:
 1	0	None	500
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 2) c1,
@@ -75,7 +75,7 @@ select (select count(*) from t_mspa where k = 2) c1,
 -- result:
 2	1	300	300.0
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 2) c1,
@@ -85,7 +85,7 @@ select (select count(*) from t_mspa where k = 2) c1,
 -- result:
 2	1	300	300.0
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) c1,
@@ -96,7 +96,7 @@ select (select count(*) from t_mspa where k = 1) c1,
 -- result:
 2	30	20	100	150.0
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) c1,
@@ -107,21 +107,21 @@ select (select count(*) from t_mspa where k = 1) c1,
 -- result:
 2	30	20	100	150.0
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(distinct a) from t_mspa where k = 1) d1, (select sum(b) from t_mspa where k = 1) d2;
 -- result:
 2	300
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(distinct a) from t_mspa where k = 1) d1, (select sum(b) from t_mspa where k = 1) d2;
 -- result:
 2	300
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa where k = 1) g2,
@@ -129,7 +129,7 @@ select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa 
 -- result:
 2	30	2	70
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa where k = 1) g2,
@@ -137,28 +137,28 @@ select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa 
 -- result:
 2	30	2	70
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select * from (select count(*) c from t_mspa where k = 1) x, (select sum(a) s from t_mspa where k = 1) y;
 -- result:
 2	30
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select * from (select count(*) c from t_mspa where k = 1) x, (select sum(a) s from t_mspa where k = 1) y;
 -- result:
 2	30
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select count(a) from t_mspa) n3;
 -- result:
 5	100	4
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select count(a) from t_mspa) n3;

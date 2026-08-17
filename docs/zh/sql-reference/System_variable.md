@@ -692,7 +692,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
-### enable_merge_same_predicate_agg_cross_join
+### enable_merge_same_predicate_scalar_agg
 
 * 描述：是否将 CROSS JOIN 链上「读同一张表、且过滤条件完全相同」的标量聚合分支合并成一次扫描 + 一次聚合。形如 `SELECT (SELECT count(*) FROM t WHERE p), (SELECT sum(a) FROM t WHERE p)` 的查询，未开启时每个子查询各扫一遍 `t`。仅当分支谓词在结构上完全一致时才合并，因此合并后扫描节点的谓词与合并前逐字相同，分区裁剪、zone map、延迟物化的行为均保持不变。适用于 OLAP 内表以及 Hive、Iceberg、Hudi、Delta Lake、Paimon、ODPS 外表。带 GROUP BY、LIMIT、JOIN、非确定性表达式的分支，以及会产生多个 DISTINCT 列的情况，均不会被合并。
 * 类型：Session

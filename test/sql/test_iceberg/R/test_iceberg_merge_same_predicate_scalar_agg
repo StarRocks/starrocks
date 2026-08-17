@@ -1,4 +1,4 @@
--- name: test_iceberg_merge_same_predicate_agg_cross_join
+-- name: test_iceberg_merge_same_predicate_scalar_agg
 create external catalog ice_mspa_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
 -- result:
 -- !result
@@ -23,7 +23,7 @@ set enable_profile = true;
 set enable_async_profile = false;
 -- result:
 -- !result
-set enable_merge_same_predicate_agg_cross_join = true;
+set enable_merge_same_predicate_scalar_agg = true;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
@@ -81,7 +81,7 @@ select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select
 -- result:
 5	100	4
 -- !result
-set enable_merge_same_predicate_agg_cross_join = false;
+set enable_merge_same_predicate_scalar_agg = false;
 -- result:
 -- !result
 select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;

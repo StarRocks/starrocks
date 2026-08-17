@@ -246,7 +246,7 @@ public enum RuleType {
 
     // Append new transformation rule types here: the ordinal indexes the OptimizerOptions disable BitSet,
     // so never insert into the middle of this block.
-    TF_MERGE_SAME_PREDICATE_AGG_CROSS_JOIN,
+    TF_MERGE_SAME_PREDICATE_SCALAR_AGG,
 
     // The following are implementation rules:
     IMPLEMENTATION_RULES,

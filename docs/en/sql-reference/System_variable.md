@@ -821,7 +821,7 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
-### enable_merge_same_predicate_agg_cross_join
+### enable_merge_same_predicate_scalar_agg
 
 * **Description**: Whether to merge cross-joined scalar aggregations that read the same table under an identical predicate into a single scan and a single aggregation. A query such as `SELECT (SELECT count(*) FROM t WHERE p), (SELECT sum(a) FROM t WHERE p)` otherwise scans `t` once per subquery. Only branches whose predicates are structurally identical are merged, so the surviving scan keeps that predicate unchanged and partition pruning, zone maps and late materialization behave exactly as before. Applies to OLAP tables and to Hive, Iceberg, Hudi, Delta Lake, Paimon and ODPS external tables. Branches that carry a GROUP BY, a LIMIT, a join, a non-deterministic expression, or that would produce more than one DISTINCT column are left alone.
 * **Scope**: Session

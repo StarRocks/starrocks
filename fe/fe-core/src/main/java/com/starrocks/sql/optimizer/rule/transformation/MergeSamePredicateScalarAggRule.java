@@ -89,17 +89,17 @@ import java.util.Set;
  * {@link LogicalFilterOperator}, projections have not been folded into {@link Operator#getProjection()}, and scans
  * have not been specialized by partition/tablet pruning.
  */
-public class MergeSamePredicateAggCrossJoinRule extends TransformationRule {
+public class MergeSamePredicateScalarAggRule extends TransformationRule {
     private static final int MIN_MERGE_BRANCHES = 2;
 
-    public MergeSamePredicateAggCrossJoinRule() {
-        super(RuleType.TF_MERGE_SAME_PREDICATE_AGG_CROSS_JOIN,
+    public MergeSamePredicateScalarAggRule() {
+        super(RuleType.TF_MERGE_SAME_PREDICATE_SCALAR_AGG,
                 Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnableMergeSamePredicateAggCrossJoin()) {
+        if (!context.getSessionVariable().isEnableMergeSamePredicateScalarAgg()) {
             return false;
         }
         if (!isChainJoin(input.getOp())) {

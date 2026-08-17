@@ -686,7 +686,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: boolean
 * **導入バージョン**: v3.2.0
 
-### enable_merge_same_predicate_agg_cross_join
+### enable_merge_same_predicate_scalar_agg
 
 * **説明**: 同一のテーブルを同一の述語で読む、CROSS JOIN されたスカラー集計を、1 回のスキャンと 1 回の集計にマージするかどうか。`SELECT (SELECT count(*) FROM t WHERE p), (SELECT sum(a) FROM t WHERE p)` のようなクエリは、この機能が無効な場合サブクエリごとに `t` をスキャンします。述語が構造的に完全に一致するブランチのみがマージされるため、マージ後のスキャンが持つ述語はマージ前と同一であり、パーティションプルーニング、ゾーンマップ、遅延マテリアライゼーションの動作は変わりません。OLAP テーブルおよび Hive、Iceberg、Hudi、Delta Lake、Paimon、ODPS の外部テーブルに適用されます。GROUP BY、LIMIT、JOIN、非決定的な式を含むブランチ、および複数の DISTINCT カラムを生成することになる場合はマージされません。
 * **スコープ**: セッション

@@ -21,21 +21,21 @@ import org.junit.jupiter.api.Test;
 
 /**
  * External-table coverage for {@link com.starrocks.sql.optimizer.rule.transformation
- * .MergeSamePredicateAggCrossJoinRule}. Iceberg is the shape the rule was written for (the TPC-DS benchmark runs on
+ * .MergeSamePredicateScalarAggRule}. Iceberg is the shape the rule was written for (the TPC-DS benchmark runs on
  * Iceberg external tables), and external catalogs hand out different Table/Column instances per scan, so the
  * branch matching cannot rely on object identity.
  */
-public class MergeSamePredicateAggCrossJoinExternalTest extends ConnectorPlanTestBase {
+public class MergeSamePredicateScalarAggExternalTest extends ConnectorPlanTestBase {
     private static final String TBL = "iceberg0.unpartitioned_db.t_numeric";
 
     @BeforeEach
     public void setUp() {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(true);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(true);
     }
 
     @AfterEach
     public void tearDown() {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(true);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(true);
     }
 
     private static int countOccurrences(String text, String pattern) {
@@ -61,7 +61,7 @@ public class MergeSamePredicateAggCrossJoinExternalTest extends ConnectorPlanTes
 
     @Test
     public void testIcebergSamePredicateNotMergedWhenDisabled() throws Exception {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(false);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(false);
         String sql = "select (select count(*) from " + TBL + " where c1 = 1),"
                 + " (select sum(c2) from " + TBL + " where c1 = 1)";
         Assertions.assertEquals(2, scanCount(sql));
@@ -118,7 +118,7 @@ public class MergeSamePredicateAggCrossJoinExternalTest extends ConnectorPlanTes
 
     @Test
     public void testHiveSamePredicateNotMergedWhenDisabled() throws Exception {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(false);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(false);
         String sql = "select (select count(*) from " + HIVE_TBL + " where l_partkey = 1),"
                 + " (select sum(l_quantity) from " + HIVE_TBL + " where l_partkey = 1)";
         Assertions.assertEquals(2, hiveScanCount(sql));

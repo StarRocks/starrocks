@@ -20,7 +20,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class MergeSamePredicateAggCrossJoinTest extends TPCDSPlanTestBase {
+public class MergeSamePredicateScalarAggTest extends TPCDSPlanTestBase {
 
     @BeforeAll
     public static void createRuleTestTables() throws Exception {
@@ -36,12 +36,12 @@ public class MergeSamePredicateAggCrossJoinTest extends TPCDSPlanTestBase {
 
     @BeforeEach
     public void setUp() {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(true);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(true);
     }
 
     @AfterEach
     public void tearDown() {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(true);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(true);
     }
 
     private static int countOccurrences(String text, String pattern) {
@@ -70,7 +70,7 @@ public class MergeSamePredicateAggCrossJoinTest extends TPCDSPlanTestBase {
 
     @Test
     public void testTPCDSQ09NotMergedWhenDisabled() throws Exception {
-        connectContext.getSessionVariable().setEnableMergeSamePredicateAggCrossJoin(false);
+        connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(false);
         Assertions.assertEquals(15, scanCount(Q09, "store_sales"));
     }
 
