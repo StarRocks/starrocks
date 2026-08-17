@@ -377,6 +377,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：预期的 LZ4 压缩比，用于评估压缩收益。
 - 引入版本：-
 
+### enable_zstd_compression_dict_ctx_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否把已加载字典的 ZSTD 解压上下文保留在一个很小的线程局部集合里，而不是每次都从共享上下文池借用。从共享池借来的上下文在归还时会被 reset，粘性的 `refDDict` 随之清空，于是每页都要把字典重新加载进一个冷上下文。在成对的全列扫描测试中，保持上下文常热把字典读开销从 +20~25% 降到 +5.6~8.6%，即消除了其中约 55%~60%。做成开关是为了在生产上无需回滚二进制即可关闭该优化，也便于在同一个集群上做 A/B 对比。每个读取此类列的线程最多持有四个上下文，直到线程退出。该参数只影响 Segment 中带有压缩字典的列的读取，对其他列没有任何影响。
+- 引入版本：v4.2
+
 ### lz4_expected_compression_speed_mbps
 
 - 默认值：500
