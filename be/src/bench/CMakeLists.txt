@@ -37,3 +37,10 @@ ADD_BE_BENCH(${SRC_DIR}/bench/delta_decode_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/table_metrics_mgr_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/json_path_deriver_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/cast_overflow_check_bench)
+<<<<<<< HEAD
+=======
+ADD_BE_BENCH(${SRC_DIR}/bench/agg_simd_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
+# Measure task memory with the same malloc hooks as starrocks_be.
+target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
+>>>>>>> f90926ed48 ([BugFix] Reduce Flat JSON vertical compaction memory usage (#77682))
