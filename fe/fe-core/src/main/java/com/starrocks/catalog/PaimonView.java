@@ -15,29 +15,22 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;
 
-public class IcebergView extends ConnectorView {
-    private final String defaultCatalogName;
-    private final String defaultDbName;
-    private final String location;
-    public static final String STARROCKS_DIALECT = "starrocks";
+public class PaimonView extends ConnectorView {
 
-    public IcebergView(long id, String catalogName, String dbName, String name, List<Column> schema,
-                       String definition, String defaultCatalogName, String defaultDbName, String location) {
-        super(id, catalogName, dbName, name, schema, definition, TableType.ICEBERG_VIEW);
-        this.defaultCatalogName = defaultCatalogName;
-        this.defaultDbName = defaultDbName;
-        this.location = location;
+    public PaimonView(long id, String catalogName, String dbName, String name, List<Column> schema,
+                      String definition) {
+        super(id, catalogName, dbName, name, schema, definition, TableType.PAIMON_VIEW);
     }
 
     @Override
     protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
             TableName name = tableRelation.getName();
+
             // do not fill catalog and database name to cte relation
             if (Strings.isNullOrEmpty(name.getCatalog()) &&
                     Strings.isNullOrEmpty(name.getDb()) &&
@@ -45,22 +38,13 @@ public class IcebergView extends ConnectorView {
                 continue;
             }
 
-            // iceberg view query statement with external catalog which created by starrocks must have catalog name
             if (Strings.isNullOrEmpty(name.getCatalog())) {
-                // iceberg view's default-catalog is optional
-                // When default-catalog is null or not set, the catalog in which the view is stored must
-                // be used as the default catalog.
-                name.setCatalog(Strings.isNullOrEmpty(defaultCatalogName) ? this.catalogName : defaultCatalogName);
+                name.setCatalog(catalogName);
             }
 
-            if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
-                name.setDb(defaultDbName);
+            if (Strings.isNullOrEmpty(name.getDb())) {
+                name.setDb(dbName);
             }
         }
-    }
-
-    @Override
-    public String getTableLocation() {
-        return location;
     }
 }
