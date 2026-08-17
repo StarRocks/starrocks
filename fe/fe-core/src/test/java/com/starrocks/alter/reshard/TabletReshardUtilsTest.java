@@ -16,7 +16,10 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import mockit.Mock;
 import mockit.MockUp;
@@ -30,6 +33,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TabletReshardUtilsTest {
@@ -279,5 +283,110 @@ public class TabletReshardUtilsTest {
         assertEquals(100L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Lists.newArrayList(101L)));
         // empty -> 0
         assertEquals(0L, TabletReshardUtils.minVectorIndexBuiltVersion(index, Collections.emptyList()));
+    }
+
+    // A reshard whose source tablet lives in a materialized index that an earlier reshard already
+    // superseded must be rejected at admission. Such an index passes every other check -- it is
+    // still returned by getIndex, its state is still NORMAL, and it still owns the tablet -- so
+    // without this gate the job is admitted, its publish resolves no live tablet, and it spins in
+    // RUNNING forever with an empty error message. Easy to hit because SHOW TABLET keeps listing
+    // the superseded tablets (after a split the old parent is still the first row).
+    @Test
+    public void checkIndexNotSuperseded_rejectsSupersededIndex() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        // Nothing has superseded it yet: the check passes.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+
+        // A later reshard installs a new version of the same index meta.
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        newIndex.addTablet(new LakeTablet(2000L), null, false);
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+        assertTrue(e.getMessage().contains("superseded by index 200"), e.getMessage());
+        assertTrue(e.getMessage().contains("1000"), e.getMessage());
+        // The replacement tablet ids are spelled out: the partition-level SHOW PROC path this message
+        // used to point at needs system-level OPERATE, which a user holding only ALTER on the table --
+        // enough to trigger this rejection -- does not have.
+        assertTrue(e.getMessage().contains("[2000]"), e.getMessage());
+
+        // The live index is still accepted.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, newIndex, 2000L, "db", "t"));
+    }
+
+    // A partition can hold far more tablets than belong in an error string, so the list is truncated
+    // with the full count kept.
+    @Test
+    public void checkIndexNotSuperseded_truncatesLongTabletList() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        for (int i = 0; i < 25; ++i) {
+            newIndex.addTablet(new LakeTablet(2000L + i), null, false);
+        }
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexNotSuperseded(partition, oldIndex, 1000L, "db", "t"));
+        assertTrue(e.getMessage().contains("2019]"), e.getMessage());
+        assertTrue(e.getMessage().contains("(first 20 of 25)"), e.getMessage());
+        assertFalse(e.getMessage().contains("2020"), e.getMessage());
+    }
+
+    // Admission-time counterpart of the check above. The factory builds a job from a snapshot taken
+    // under a lock it then releases, so a source index that was live at creation can be superseded --
+    // or removed outright -- before the job reserves the table. Both leave the job with nothing live
+    // to reshard, so both are rejected.
+    @Test
+    public void checkIndexStillLatest_rejectsSupersededOrRemovedIndex() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        // Still the latest version of its meta: admission proceeds.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 100L, 100L, "db", "t"));
+
+        // A reshard job admitted first installs a new version of the same index meta.
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        newIndex.addTablet(new LakeTablet(2000L), null, false);
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 100L, 100L, "db", "t"));
+        assertTrue(e.getMessage().contains("superseded by index 200"), e.getMessage());
+        assertTrue(e.getMessage().contains("[2000]"), e.getMessage());
+
+        // The winner of that race is of course still admissible.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 200L, 100L, "db", "t"));
+
+        // Index meta gone from the partition entirely: there is nothing left to reshard, and
+        // installing a successor would fail addMaterializedIndex's precondition well past the job's
+        // no-abort boundary.
+        partition.deleteMaterializedIndexByMetaId(100L);
+        e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 200L, 100L, "db", "t"));
+        assertTrue(e.getMessage().contains("was removed after"), e.getMessage());
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws StarRocksException;
+    }
+
+    private static void assertDoesNotThrowStarRocks(ThrowingRunnable r) {
+        try {
+            r.run();
+        } catch (StarRocksException e) {
+            throw new AssertionError("unexpected StarRocksException: " + e.getMessage(), e);
+        }
     }
 }
