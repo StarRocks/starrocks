@@ -236,6 +236,10 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                         + " in physical partition " + physicalPartition.getId()
                         + " in table " + db.getFullName() + '.' + table.getName());
             }
+            // A superseded index passes every check above (still reachable via getIndex, still NORMAL,
+            // still owns the tablets, still mapped by TabletInvertedIndex), so it needs its own gate.
+            TabletReshardUtils.checkIndexNotSuperseded(physicalPartition, index, firstTabletId,
+                    db.getFullName(), table.getName());
 
             for (long tabletId : group) {
                 TabletMeta meta = tabletMetaMap.get(tabletId);

@@ -156,6 +156,11 @@ public class TabletReshardJobMgrTest {
         public TTabletReshardJobsItem getInfo() {
             return new TTabletReshardJobsItem();
         }
+
+        @Override
+        protected String anyPublishFailureReason() {
+            return null;
+        }
     }
 
     public static class TestAbnormalTabletReshardJob extends TestNormalTabletReshardJob {
