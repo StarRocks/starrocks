@@ -11807,6 +11807,32 @@ TEST_F(LakeTabletReshardTest, test_reshard_flush_stamps_fresh_sstable_with_new_v
                "incremental snapshot keyed on version>pre_version would skip it (data loss)";
 }
 
+// Aggregate publish builds query-parent metadata before persisting the new-version bundle. Its
+// child metadata therefore exists only in memory while merge_sstables flushes each child's PK
+// index. The rebuild must use that supplied metadata for delvec lookup instead of trying to read
+// the not-yet-created bundle from object storage.
+TEST_F(LakeTabletReshardTest, test_reshard_flush_uses_unpersisted_in_memory_metadata) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    const int64_t in_memory_version = 11;
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+
+    constexpr int kNumRows = 16;
+    const std::string seg_name = "seg_unpersisted_bundle.dat";
+    const uint64_t seg_size = write_two_column_segment(tablet_id, seg_name, kNumRows, [](int r) { return r * 10; });
+    auto meta = make_single_segment_pk_tablet(tablet_id, in_memory_version, seg_name, seg_size, kNumRows);
+
+    // Deliberately do not call put_tablet_metadata(meta): this models the metadata returned by the
+    // per-tablet aggregate-publish RPC before the coordinator writes the partition bundle.
+    ASSERT_TRUE(_tablet_manager->get_tablet_metadata(tablet_id, in_memory_version).status().is_not_found());
+
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, in_memory_version));
+    ASSERT_NE(flushed, nullptr);
+    EXPECT_EQ(in_memory_version, flushed->version());
+    ASSERT_EQ(1, flushed->sstable_meta().sstables_size());
+    EXPECT_EQ(in_memory_version, flushed->sstable_meta().sstables(0).generation_version());
+}
+
 // Same rebuild-from-segment source, driven through the real split publish path,
 // guarding that tablet_splitter passes new_version to flush_pk_memtable.
 TEST_F(LakeTabletReshardTest, test_split_publish_stamps_fresh_sstable_with_new_version) {

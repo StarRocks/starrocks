@@ -3073,7 +3073,7 @@ void reconcile_vector_index_built_version(const std::vector<TabletMergeContext>&
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,
-                                                const TxnInfoPB& txn_info) {
+                                                const TxnInfoPB& txn_info, bool skip_sstable_merge) {
     if (old_tablet_metadatas.empty()) {
         return Status::InvalidArgument("No old tablet metadata to merge");
     }
@@ -3171,7 +3171,12 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                       new_tablet_metadata.get()));
     }
 
-    RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));
+    if (skip_sstable_merge) {
+        // Read-only alias: leave it without a primary index rather than paying the rebuild.
+        new_tablet_metadata->clear_sstable_meta();
+    } else {
+        RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));
+    }
 
     // Phase 4: Finalize
     update_next_rowset_id(new_tablet_metadata.get());
