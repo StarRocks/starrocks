@@ -711,9 +711,9 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     // unit for that: the layer's size is rows x value width, and a wide column makes those diverge by
     // orders of magnitude -- at the row cap, kilobyte-scale VARCHAR values are tens of gigabytes with no
     // rejection point anywhere on the path. Fail with a localized error instead.
-    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
-            *sparse_chunk, "sdcg sparse overlay chunk",
-            _rowset_ptr != nullptr ? _rowset_ptr->tablet_id() : 0, _txn_id));
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*sparse_chunk, "sdcg sparse overlay chunk",
+                                                         _rowset_ptr != nullptr ? _rowset_ptr->tablet_id() : 0,
+                                                         _txn_id));
     return sparse_chunk;
 }
 
@@ -1231,8 +1231,7 @@ struct SdcgAutoSignals {
 //                                  rewrite densely, and reads flatter afterwards
 //   K/M < sdcg_dense_threshold     past this share of the segment, dense wins outright
 static bool sparse_shape_gates_pass(int64_t K, int64_t source_num_rows) {
-    return K > 0 && K < config::sdcg_sparse_max_rows &&
-           source_num_rows >= config::sdcg_sparse_min_segment_rows &&
+    return K > 0 && K < config::sdcg_sparse_max_rows && source_num_rows >= config::sdcg_sparse_min_segment_rows &&
            (static_cast<double>(K) / static_cast<double>(source_num_rows) < config::sdcg_dense_threshold);
 }
 
