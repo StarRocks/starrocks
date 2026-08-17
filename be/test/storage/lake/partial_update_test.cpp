@@ -1711,6 +1711,82 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_reads_base_segment_th
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
+// A publish touches every base segment holding a row it updates. When that working set does not fit in
+// the metacache, inserting all of them evicts as fast as it fills -- the hit rate stays at zero while
+// every insert still pays eviction and memory accounting, and the tablet metadata and schemas sharing
+// the cache get flushed out with it. Measured on a cluster at 2.2x slower than not caching at all, so
+// publish stops inserting once the cache is out of room.
+//
+// The decision is observed directly through a sync point rather than through the cache contents: an
+// undersized cache drops oversized inserts on its own, so "the segment is not cached" is true whether
+// or not the guard exists and would make this a test that cannot fail.
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_a_full_metacache) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
+    }
+
+    // TestBase constructs its TabletManager with this metacache capacity.
+    constexpr int64_t kDefaultMetacacheLimit = 1024 * 1024;
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    std::vector<bool> fill_decisions;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp restore([&]() {
+        config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+        _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                                          [&](void* arg) { fill_decisions.push_back(*static_cast<bool*>(arg)); });
+    config::lake_pk_partial_update_use_segment_cache = true;
+
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+
+    const auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    auto write_and_publish = [&](const Chunk& chunk, bool row_mode_partial_update) {
+        const auto txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id());
+        if (row_mode_partial_update) {
+            builder.set_slot_descriptors(&_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+        }
+        ASSIGN_OR_ABORT(auto delta_writer, builder.build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    };
+
+    write_and_publish(chunk_full, /*row_mode_partial_update=*/false);
+
+    // Room to spare: publish fills the cache.
+    fill_decisions.clear();
+    write_and_publish(chunk_partial, /*row_mode_partial_update=*/true);
+    ASSERT_FALSE(fill_decisions.empty()) << "the base-segment read did not run";
+    EXPECT_TRUE(std::all_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
+
+    // No room at all: publish still reads, but stops adding pressure.
+    _tablet_mgr->update_metacache_limit(0);
+    fill_decisions.clear();
+    write_and_publish(chunk_partial, /*row_mode_partial_update=*/true);
+    ASSERT_FALSE(fill_decisions.empty()) << "the base-segment read did not run";
+    EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
+
+    _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+    EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePartialUpdateTest, LakePartialUpdateTest,
                          ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
                                            PrimaryKeyParam{

@@ -41,6 +41,7 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -1886,8 +1887,17 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
             // a cached entry turns the open into a no-op. LakeIOOptions is left at its defaults to
             // keep the data-cache behaviour identical to the static Segment::open below.
-            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{},
-                                               /*fill_meta_cache=*/true, tablet_schema);
+            //
+            // Only insert while the metacache still has room. A publish touches every base segment
+            // holding a row it updates, so when that working set does not fit, inserting all of them
+            // evicts as fast as it fills: the hit rate stays at zero, every insert pays eviction and
+            // memory accounting, and the tablet metadata and schemas sharing this cache get flushed
+            // out too. Measured at 2.2x slower than not caching at all. Above capacity we still take
+            // whatever the cache already holds and simply stop adding pressure.
+            bool fill_meta_cache = tablet_mgr->metacache()->memory_usage() < tablet_mgr->metacache()->capacity();
+            TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &fill_meta_cache);
+            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{}, fill_meta_cache,
+                                               tablet_schema);
         } else {
             segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema);
         }
