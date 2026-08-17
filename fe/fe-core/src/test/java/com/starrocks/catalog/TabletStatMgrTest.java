@@ -662,6 +662,61 @@ public class TabletStatMgrTest {
     }
 
     /** Runs one tablet-stat cycle over such a table and returns the early signal it emitted. */
+    /**
+     * Runs one scan with the leader flag under test and reports whether the reshard work ran at all:
+     * a resolution count of 0 means the eligibility gate short-circuited before the node-count probe.
+     */
+    private int runScanAndCountNodeCountResolutions(boolean leader) {
+        NODE_COUNT_RESOLUTIONS.set(0);
+        STUBBED_NODE_COUNT.set(4);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return leader;
+            }
+        };
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                NODE_COUNT_RESOLUTIONS.incrementAndGet();
+                return STUBBED_NODE_COUNT.get();
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+            }
+        };
+        int savedMaxSplitCount = Config.tablet_reshard_max_split_count;
+        Config.tablet_reshard_max_split_count = 1024;
+        try {
+            registerRangeDistributionTable(5L << 30);
+            new TabletStatMgr().runAfterCatalogReady();
+        } finally {
+            Config.tablet_reshard_max_split_count = savedMaxSplitCount;
+        }
+        return NODE_COUNT_RESOLUTIONS.get();
+    }
+
+    @Test
+    public void aFollowerResolvesNoNodeCount() {
+        // TabletStatMgr runs on every FE, but reshard is leader-only. Without this, every follower
+        // would resolve a compute-node count per eligible table on every scan, and the probe behind
+        // that resolution reaches StarMgr.
+        assertEquals(0, runScanAndCountNodeCountResolutions(false),
+                "a follower must not resolve a compute-node count");
+    }
+
+    @Test
+    public void aLeaderResolvesTheNodeCountOnce() {
+        // The companion to the above: the same fixture on a leader must reach the probe exactly once,
+        // so the follower case above is demonstrably about the leader flag and not about the fixture
+        // failing to reach the code at all.
+        assertEquals(1, runScanAndCountNodeCountResolutions(true),
+                "a leader must resolve the compute-node count exactly once per eligible table");
+    }
+
     private long runScanAndCaptureEarlySignal(int stubbedNodeCount, long... tabletSizes) {
         long[] captured = {-1L};
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
