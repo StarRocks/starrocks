@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <sstream>
 
+#include "base/compression/block_compression.h"
 #include "base/string/parse_util.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config_exec_env_fwd.h"
@@ -35,6 +36,44 @@
 #include "types/hll.h"
 
 namespace starrocks {
+
+namespace {
+// The per-thread ZSTD dictionary decompression contexts (base/compression) are created
+// on whichever thread first decodes a dictionary page and live until that thread exits.
+// Global malloc is hooked, so without this they would be charged to whatever tracker was
+// current at creation -- usually a query's -- and stay charged there long after the query
+// finished. Switching the thread-local tracker across the allocation MOVES that charge to
+// the process tracker; it does not add a second one. set_mem_tracker() commits whatever
+// the allocation cache is holding to the OLD tracker before it switches, so nothing lands
+// on the wrong side of the swap.
+//
+// The tracker is resolved on every enter through RuntimeEnv::is_init() rather than cached:
+// a thread can exit after the environment is torn down (its thread_local cache destructor
+// frees the contexts then), and a cached MemTracker* would dangle. When the environment is
+// gone the scope does nothing and the free is simply charged wherever the thread already
+// points, which is a shutdown-time accounting detail and not a correctness one.
+//
+// The depth counter keeps a future nested use honest: only the outermost scope saves and
+// restores, so an inner one cannot overwrite what the outer one has to put back.
+thread_local MemTracker* tls_saved_dctx_tracker = nullptr;
+thread_local int tls_dctx_scope_depth = 0;
+
+void enter_dctx_alloc_scope() {
+    if (tls_dctx_scope_depth++ > 0) return;
+    tls_saved_dctx_tracker = CurrentThread::mem_tracker();
+    if (RuntimeEnv::is_init()) {
+        (void)tls_thread_status.set_mem_tracker(RuntimeEnv::GetInstance()->process_mem_tracker());
+    }
+}
+
+void leave_dctx_alloc_scope() {
+    if (--tls_dctx_scope_depth > 0) return;
+    tls_dctx_scope_depth = 0;
+    (void)tls_thread_status.set_mem_tracker(tls_saved_dctx_tracker);
+    tls_saved_dctx_tracker = nullptr;
+}
+} // namespace
+
 
 RuntimeEnv::RuntimeEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
 
@@ -196,6 +235,9 @@ Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     }
 
     _process_mem_tracker = regist_tracker(MemTrackerType::PROCESS, bytes_limit, nullptr);
+    // Give the dictionary decompression contexts a stable home before anything can read
+    // a segment; see the hooks above.
+    set_dict_dctx_alloc_scope(&enter_dctx_alloc_scope, &leave_dctx_alloc_scope);
     _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);

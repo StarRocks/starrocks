@@ -76,6 +76,13 @@ public:
 
     ZSTD_DDict* dict() const { return _dict; }
 
+    // Process-unique, monotonically increasing identity. The decompression path
+    // caches decompression contexts that already have a dictionary loaded, keyed
+    // by this id rather than by the object address: an address can be recycled by
+    // a later allocation (ABA), which would make a stale cache entry look like a
+    // hit and decode against the wrong -- possibly freed -- dictionary.
+    uint64_t id() const { return _id; }
+
     // Bytes this dictionary actually occupies (ZSTD_sizeof_DDict). A DDict copies
     // the dictionary content, and it is held for as long as the ColumnReader that
     // built it, so the segment's memory accounting has to know about it.
@@ -84,6 +91,7 @@ public:
 private:
     explicit ZstdDDict(ZSTD_DDict* d);
     ZSTD_DDict* _dict = nullptr;
+    uint64_t _id = 0;
 };
 
 } // namespace starrocks::compression

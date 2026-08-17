@@ -37,6 +37,8 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <set>
+#include <atomic>
 #include <thread>
 
 #include "base/compression/compression_context_pool_singletons.h"
@@ -773,19 +775,22 @@ TEST_F(BlockCompressionTest, dict_overload_not_supported_on_non_zstd) {
     ASSERT_TRUE(s2.is_not_supported());
 }
 
-// Dictionary decompression borrows a context from the same shared pool as everything
-// else and references the dictionary for that call only. Pin the two properties that
-// could break:
-//   1. alternating between SEVERAL dictionaries stays correct -- each page must be
-//      decoded against its own dictionary, never against the previous page's;
-//   2. it does not disturb the shared pool -- interleaved no-dict decompression still
-//      matches a clean reference, i.e. no dictionary survives on a returned context.
-static void run_multi_dict_interleave() {
+// The dictionary decompression path uses its own thread-local contexts (kept warm
+// so consecutive pages do not re-establish the dictionary session) instead of the
+// shared pool. Pin the two properties that could break:
+//   1. alternating between SEVERAL dictionaries stays correct (the cache is keyed
+//      by dictionary identity, and a stale entry must never be treated as a hit);
+//   2. it does not disturb the shared pool -- interleaved no-dict decompression
+//      still matches a clean reference.
+// `use_ctx_cache` is not an operator switch -- reads always pass true. It exists so the
+// pooled path stays reachable from a test: that path is also where a context-allocation
+// failure lands, and it must decode correctly there too. Both values are exercised.
+static void run_multi_dict_interleave(bool use_ctx_cache) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
-    // Several dictionaries alive at once, so a page decoded against the wrong one
-    // would be caught rather than happening to match.
+    // One more dictionary than the cache has slots (kDictDCtxCacheSize == 4), so a
+    // full round is guaranteed to evict, whatever the thread's slots held before.
     struct Arm {
         std::string sample, body, compressed;
         std::unique_ptr<compression::ZstdDDict> ddict;
@@ -810,6 +815,11 @@ static void run_multi_dict_interleave() {
         ASSERT_TRUE(codec->compress(in, &out, false, arms[i].body.size(), nullptr, nullptr, cd.value().get()).ok());
         arms[i].compressed.resize(out.size);
     }
+    // Every dictionary must have a distinct identity, which is what the cache keys on.
+    std::set<uint64_t> ids;
+    for (const auto& arm : arms) {
+        ASSERT_TRUE(ids.insert(arm.ddict->id()).second);
+    }
 
     // A clean no-dict reference to compare the interleaved no-dict work against.
     std::string plain = generate_str(4000);
@@ -818,12 +828,13 @@ static void run_multi_dict_interleave() {
     ASSERT_TRUE(codec->compress(plain, &pc).ok());
     plain_c.resize(pc.size);
 
-    // Interleave: dict 0..4, then round again, plus no-dict in between.
+    // Interleave: dict 0..4, then round again, plus no-dict in between. Five
+    // identities against four slots means each round evicts and re-loads.
     for (int round = 0; round < 25; round++) {
         for (int i = 0; i < kArms; i++) {
             std::string got(arms[i].body.size(), '\0');
             Slice g(got);
-            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok())
+            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get(), use_ctx_cache).ok())
                     << "round " << round << " dict " << i;
             ASSERT_EQ(arms[i].body, std::string(g.data, g.size)) << "round " << round << " dict " << i;
         }
@@ -834,8 +845,22 @@ static void run_multi_dict_interleave() {
     }
 }
 
-TEST_F(BlockCompressionTest, dict_multi_dict_and_pool_isolation) {
-    run_multi_dict_interleave();
+// Run on a fresh thread: the cache is thread-local, so on a thread another test has
+// already used, "evicted" could mean "replaced an entry that test left behind" and the
+// coverage would depend on test order.
+static void run_multi_dict_interleave_on_fresh_thread(bool use_ctx_cache) {
+    std::thread t([use_ctx_cache] { run_multi_dict_interleave(use_ctx_cache); });
+    t.join();
+}
+
+TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
+    run_multi_dict_interleave_on_fresh_thread(/*use_ctx_cache=*/true);
+}
+
+// Same, with the context cache turned off: every page then goes through the shared
+// pool, which must load the dictionary per call and drop it again on return.
+TEST_F(BlockCompressionTest, dict_pooled_ctx_multi_dict_and_pool_isolation) {
+    run_multi_dict_interleave_on_fresh_thread(/*use_ctx_cache=*/false);
 }
 
 // A page that fails to decompress leaves the context in an undefined state, so the
@@ -919,6 +944,75 @@ TEST_F(BlockCompressionTest, dict_builders_reject_bad_input) {
     std::string sample = generate_str(64 * 1024);
     ASSERT_TRUE(compression::ZstdCDict::create(Slice(sample), 3).ok());
     ASSERT_TRUE(compression::ZstdDDict::create(Slice(sample)).ok());
+}
+
+// The cached contexts are ~94 KB each and live until their thread exits, so the bytes
+// have to be both visible and returned. Pins three things: the counter rises when a
+// thread first decodes a dictionary page, the installed allocation scope is entered and
+// left in pairs (that is what moves the charge off whatever query created the context),
+// and everything is given back when the thread goes away.
+namespace {
+std::atomic<int> g_scope_enters{0};
+std::atomic<int> g_scope_leaves{0};
+void count_enter() {
+    g_scope_enters.fetch_add(1);
+}
+void count_leave() {
+    g_scope_leaves.fetch_add(1);
+}
+} // namespace
+
+TEST_F(BlockCompressionTest, dict_ctx_cache_memory_is_accounted_and_returned) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int k = 0; k < 400; k++) {
+        sample += "recurring phrase " + std::to_string(k % 40) + " ";
+    }
+    std::string body;
+    for (int k = 0; k < 800; k++) {
+        body += "recurring phrase " + std::to_string(k % 40) + " payload ";
+    }
+    auto cd = compression::ZstdCDict::create(Slice(sample), 3);
+    ASSERT_TRUE(cd.ok());
+    auto dd = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(dd.ok());
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice out(compressed);
+    std::vector<Slice> in{Slice(body)};
+    ASSERT_TRUE(codec->compress(in, &out, false, body.size(), nullptr, nullptr, cd.value().get()).ok());
+    compressed.resize(out.size);
+
+    const size_t before = dict_dctx_cache_memory_bytes();
+    g_scope_enters.store(0);
+    g_scope_leaves.store(0);
+    set_dict_dctx_alloc_scope(&count_enter, &count_leave);
+
+    size_t peak = 0;
+    // a fresh thread, so the accounting is this thread's and not something an earlier
+    // test left cached
+    std::thread t([&] {
+        for (int i = 0; i < 4; i++) {
+            std::string got(body.size(), '\0');
+            Slice g(got);
+            ASSERT_TRUE(codec->decompress(Slice(compressed), &g, dd.value().get()).ok());
+            ASSERT_EQ(body, std::string(g.data, g.size));
+        }
+        peak = dict_dctx_cache_memory_bytes();
+    });
+    t.join();
+
+    set_dict_dctx_alloc_scope(nullptr, nullptr);
+
+    // one context for this dictionary, held while the thread ran
+    ASSERT_GT(peak, before) << "the context was never accounted";
+    ASSERT_GE(peak - before, 1024u) << "a ZSTD_DCtx is tens of KB, not a handful of bytes";
+    // and handed back when the thread exited
+    ASSERT_EQ(before, dict_dctx_cache_memory_bytes()) << "the context was not returned at thread exit";
+    // the scope was entered and left in pairs, around both the create and the free
+    ASSERT_GT(g_scope_enters.load(), 0);
+    ASSERT_EQ(g_scope_enters.load(), g_scope_leaves.load());
 }
 
 } // namespace starrocks
