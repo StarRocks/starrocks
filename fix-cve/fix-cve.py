@@ -57,6 +57,7 @@ fixed_poms = [
     ("commons-beanutils:commons-beanutils", "1.11.0"),
     ("org.apache.httpcomponents.client5:httpclient5", "5.4.3"),
     ("org.apache.httpcomponents.core5:httpcore5", "5.4.3"),
+    ("org.apache.httpcomponents.core5:httpcore5-h2", "5.4.3"),
     ("io.airlift:aircompressor", "2.0.3"),
     ("org.jline:jline-remote-telnet", "4.2.1"),
 ]
