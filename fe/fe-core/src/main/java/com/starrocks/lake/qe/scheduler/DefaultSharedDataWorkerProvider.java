@@ -94,8 +94,13 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             final ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
             final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
-            computeNodeIds.forEach(nodeId -> builder.put(nodeId,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
+            for (Long nodeId : computeNodeIds) {
+                ComputeNode node = systemInfoService.getBackendOrComputeNode(nodeId);
+                if (node == null) {
+                    continue;
+                }
+                builder.put(nodeId, node);
+            }
             ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
@@ -366,7 +371,8 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
-            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+            ComputeNode node = entry.getValue();
+            if (node != null && node.isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
                 builder.put(entry);
             }
         }

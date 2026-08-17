@@ -214,6 +214,25 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
+    public void testCaptureAvailableWorkersSkipsMissingNodeIds() {
+        List<Long> nodeIds = Lists.newArrayList(id2AllNodes.keySet());
+        nodeIds.add(99999L);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return nodeIds;
+            }
+        };
+
+        WorkerProvider workerProvider = newWorkerProvider();
+        Assertions.assertNull(workerProvider.getWorkerById(99999L));
+        Assertions.assertFalse(workerProvider.getAllAvailableNodes().contains(99999L));
+        Assertions.assertEquals(id2AllNodes.size(), workerProvider.getAllAvailableNodes().size());
+        Assertions.assertEquals(1L, workerProvider.getWorkerById(1L).getId());
+    }
+
+    @Test
     public void testSelectWorker() throws StarRocksException {
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
