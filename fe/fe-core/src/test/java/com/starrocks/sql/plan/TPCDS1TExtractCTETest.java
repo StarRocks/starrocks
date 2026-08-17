@@ -346,7 +346,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "  |  <slot 75> : clone(56: c_birth_day)");
 
         assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum(73: sum), sum_if(76: sum), any_value_if(77: row_hit, TRUE)\n" +
+                "  |  output: sum(73: sum), sum_if(76: sum), any_value_if(77: row_hit)\n" +
                 "  |  group by: 59: c_current_addr_sk");
 
         assertContains(plan, "11:SELECT\n" +
@@ -410,7 +410,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "  |  <slot 90> : 90: count\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count_if(88: count, 1), count_if(90: count, 1)\n" +
+                "  |  output: count_if(88: count), count_if(90: count)\n" +
                 "  |  group by: 82: ss_sold_date_sk\n" +
                 "  |  having: (90: count > 0) OR (88: count > 0)");
         assertContains(plan, "13:SELECT\n" +
@@ -439,8 +439,8 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "  |  <slot 92> : 92: row_hit\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count_if(88: count, 1), any_value_if(89: row_hit, TRUE), count_if(91: count, 1), " +
-                "any_value_if(92: row_hit, TRUE)\n" +
+                "  |  output: count_if(88: count), any_value_if(89: row_hit), count_if(91: count), " +
+                "any_value_if(92: row_hit)\n" +
                 "  |  group by: 82: ss_sold_date_sk\n" +
                 "  |  having: (92: row_hit IS NOT NULL) OR (89: row_hit IS NOT NULL)");
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
