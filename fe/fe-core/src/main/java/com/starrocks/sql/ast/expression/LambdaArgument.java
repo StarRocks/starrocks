@@ -17,21 +17,10 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 public class LambdaArgument extends Expr {
     private String name;
     private boolean nullable;
-
-    ColumnRefOperator transformedOp = null;
-
-    public ColumnRefOperator getTransformed() {
-        return transformedOp;
-    }
-
-    public void setTransformed(ColumnRefOperator op) {
-        transformedOp = op;
-    }
 
     public LambdaArgument(String name) {
         this.name = name;

@@ -14,7 +14,7 @@
 
 #include "storage/lake/async_file_deleter.h"
 
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 
 namespace starrocks::lake {

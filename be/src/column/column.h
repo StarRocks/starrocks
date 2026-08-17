@@ -68,7 +68,7 @@ public:
     static const int EQUALS_NULL = -1;
     static const int EQUALS_TRUE = 1;
 
-    virtual ~Column() = default;
+    ~Column() override = default;
 
     // If true means this is a null literal column
     virtual bool only_null() const { return false; }
@@ -112,12 +112,6 @@ public:
     virtual bool is_map() const { return false; }
 
     virtual bool is_struct() const { return false; }
-
-    virtual const uint8_t* raw_data() const = 0;
-
-    virtual uint8_t* mutable_raw_data() = 0;
-
-    virtual const uint8_t* continuous_data() const { return raw_data(); }
 
     // Return number of values in column.
     virtual size_t size() const = 0;

@@ -1,6 +1,8 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
+description: "From v2.3 onwards, StarRocks supports managing external data sources and analyzing data in data lakes via external catalogs."
 ---
 
 # Feature Support: Data Lake Analytics
@@ -120,9 +122,9 @@ The following FE configuration item controls the asynchronous metadata update po
 
 | Configuration item                                           | Default                              | Description                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic metadata cache refresh. After it is enabled, StarRocks polls the metastore, and refreshes the cached metadata of the frequently accessed external catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a metadata cache refresh task. For the external catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the external catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic metadata cache refresh. After it is enabled, StarRocks polls the metastore, and refreshes the cached metadata of the frequently accessed external catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a metadata cache refresh task. For the external catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the external catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
 
 ### Metadata cache behavior
 
@@ -197,7 +199,9 @@ Reading Hive transactional tables is not supported.
 
 StarRocks supports querying Hive views from v3.1.0 onwards.
 
-:::note While StarRocks executes queries against a Hive view, it will try to parse the definition of the view using the syntax of StarRocks and Trino. An error will be returned if StarRocks cannot parse the definition of the view. There is a possibility that StarRocks failed to parse the Hive views created with functions exclusive to Hive or Spark.
+:::note
+
+While StarRocks executes queries against a Hive view, it will try to parse the definition of the view using the syntax of StarRocks and Trino. An error will be returned if StarRocks cannot parse the definition of the view. There is a possibility that StarRocks failed to parse the Hive views created with functions exclusive to Hive or Spark.
 
 :::
 
@@ -260,9 +264,9 @@ The following FE configuration item controls the asynchronous metadata update po
 
 | Configuration item                                           | Default                              | Description                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic metadata cache refresh. After it is enabled, StarRocks polls the metastore, and refreshes the cached metadata of the frequently accessed external catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a metadata cache refresh task. For the external catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the external catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic metadata cache refresh. After it is enabled, StarRocks polls the metastore, and refreshes the cached metadata of the frequently accessed external catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a metadata cache refresh task. For the external catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the external catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
 
 ### Metadata cache behavior
 
@@ -302,7 +306,7 @@ From v3.3.0 onwards, StarRocks supports the metadata reading and caching policie
   - **Advantages**: Best query performance.
   - **Disadvantage**: data inconsistency caused by delays.
 - **New data files generated by import and partition additions or deletions are immediately visible, and no manual refresh is required**
-  - **Setting**: Set the Catalog property `iceberg_table_cache_ttl_sec` to `0` to allow StarRocks to fetch a new snapshot for each query.
+  - **Setting**: Set the Catalog property `iceberg_meta_cache_ttl_sec` to `0` to allow StarRocks to fetch a new snapshot for each query.
   - **Advantages**: File and partition changes are visible without delay.
   - **Disadvantage**: Lower performance due to the snapshot fetching behavior for each query.
 
@@ -319,7 +323,7 @@ From v3.3.0 onwards, StarRocks supports the metadata reading and caching policie
 
 ### Iceberg views
 
-StarRocks supports querying Iceberg views from v3.3.2 onwards and creating Iceberg views since v3.5.
+StarRocks supports Iceberg views on REST from v3.3.2 and on Hive from v3.4.1.
 
 Currently, only Iceberg views created through StarRocks are supported. Starting with v3.5, adding StarRocks syntax style definitions to existing Iceberg views is supported.
 

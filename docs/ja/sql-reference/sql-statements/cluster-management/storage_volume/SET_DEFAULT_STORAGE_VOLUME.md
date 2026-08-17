@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET DEFAULT STORAGE VOLUME は、ストレージボリュームをデフォルトのストレージボリュームとして設定します。"
 ---
 
 # SET DEFAULT STORAGE VOLUME
@@ -10,7 +11,7 @@ displayed_sidebar: docs
 
 > **注意**
 >
-> - 特定のストレージボリュームに対する USAGE 権限を持つユーザーのみがこの操作を実行できます。
+> - 特定のストレージボリュームに対する ALTER 権限を持つユーザーのみがこの操作を実行できます。
 > - デフォルトのストレージボリュームは削除または無効化できません。
 > - StarRocks はシステム統計情報をデフォルトストレージボリュームに保存するため、共有データ StarRocks クラスターにはデフォルトストレージボリュームを設定する必要があります。
 

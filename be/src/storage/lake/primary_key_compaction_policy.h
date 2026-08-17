@@ -58,7 +58,7 @@ public:
     void calculate_score() { score = (io_count() * 1024 * 1024) / read_bytes(); }
     // Rowset has multi segments and these segments are overlapped
     bool multi_segment_with_overlapped() const {
-        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segments_size() > 1;
+        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segment_metas_size() > 1;
     }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 
@@ -128,6 +128,16 @@ public:
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
                                                   std::vector<bool>* has_dels);
+
+    // Base compaction: a full merge of the tablet's rowsets (like non-primary-key base compaction),
+    // ordered by absolute delete-row count (num_dels) descending so that, when the result-bytes
+    // budget forces a subset, the rowsets holding the most delete marks are rewritten first. This
+    // drops deleted rows and shrinks the delete vectors. Used when a manual ALTER TABLE ... COMPACT
+    // forces a base compaction, or when the tablet has accumulated enough deletes to warrant
+    // reclamation (by delete ratio or absolute delete-row count). When has_dels is non-null it is
+    // filled, in returned-rowset order, with whether each picked rowset carries deletes.
+    StatusOr<std::vector<RowsetPtr>> pick_base_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                                       std::vector<bool>* has_dels = nullptr);
 
     // Common function to return the picked rowset indexes.
     // For compaction score, only picked rowset indexes are needed.

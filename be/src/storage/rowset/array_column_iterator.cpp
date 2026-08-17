@@ -29,7 +29,7 @@ ArrayColumnIterator::ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<C
           _null_iterator(std::move(null_iterator)),
           _array_size_iterator(std::move(array_size_iterator)),
           _element_iterator(std::move(element_iterator)),
-          _path(std::move(path)) {}
+          _path(path) {}
 
 Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iterator != nullptr) {
@@ -236,9 +236,6 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
 
         size_t size_to_read = 0;
         for (size_t i = 0; i < size; ++i) {
-            RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(rowids[i]));
-            size_t element_ordinal = _array_size_iterator->element_ordinal();
-            RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
             size_to_read += array_size.get_data()[i];
         }
 

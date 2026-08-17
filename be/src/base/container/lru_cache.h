@@ -115,6 +115,8 @@ enum class CachePriority { NORMAL = 0, DURABLE = 1 };
 class Cache {
 public:
     Cache() = default;
+    Cache(const Cache&) = delete;
+    const Cache& operator=(const Cache&) = delete;
 
     // Destroys all existing entries by calling the "deleter"
     // function that was passed to the constructor.
@@ -147,6 +149,11 @@ public:
     // REQUIRES: handle must not have been released yet.
     // REQUIRES: handle must have been returned by a method on *this.
     virtual void release(Handle* handle) = 0;
+
+    // Refresh the recency of an existing cache entry without taking or
+    // releasing a handle, so callers can update LRU order without triggering
+    // deleter side effects.
+    virtual void touch(const CacheKey& key) = 0;
 
     // Return the value encapsulated in a handle returned by a
     // successful lookup().
@@ -189,10 +196,6 @@ public:
 
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
-
-private:
-    Cache(const Cache&) = delete;
-    const Cache& operator=(const Cache&) = delete;
 };
 
 // An entry is a variable length heap-allocated structure.  Entries
@@ -276,6 +279,7 @@ public:
                           CachePriority priority = CachePriority::NORMAL);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
     void release(Cache::Handle* handle);
+    void touch(const CacheKey& key, uint32_t hash);
     void erase(const CacheKey& key, uint32_t hash);
     int prune();
 
@@ -328,6 +332,7 @@ public:
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
+    void touch(const CacheKey& key) override;
     void erase(const CacheKey& key) override;
     void* value(Handle* handle) override;
     Slice value_slice(Handle* handle) override;
@@ -352,7 +357,7 @@ private:
 
     LRUCache _shards[kNumShards];
     mutable std::mutex _mutex;
-    uint64_t _last_id;
+    uint64_t _last_id{0};
     size_t _capacity;
 };
 

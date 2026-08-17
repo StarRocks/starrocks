@@ -72,6 +72,10 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
     private Map<String, String> customKafkaProperties = Maps.newHashMap();
     @SerializedName(value = "kafkaBrokerList")
     private String kafkaBrokerList;
+    // analyzed from property.kafka_partition_discovery; null means not specified in this
+    // statement. Leader-side analysis state only: the replay path re-derives the flag from
+    // the serialized customKafkaProperties, so this field is intentionally not persisted.
+    private Boolean kafkaPartitionDiscovery;
 
     @SerializedName(value = "pulsarPartitionInitialPositions")
     private List<Pair<String, Long>> pulsarPartitionInitialPositions = Lists.newArrayList();
@@ -125,6 +129,10 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
 
     public Map<String, String> getCustomKafkaProperties() {
         return customKafkaProperties;
+    }
+
+    public Boolean getKafkaPartitionDiscovery() {
+        return kafkaPartitionDiscovery;
     }
 
     public String getKafkaBrokerList() {
@@ -189,6 +197,12 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
 
         // check custom properties
         CreateRoutineLoadStmt.analyzeKafkaCustomProperties(properties, customKafkaProperties);
+
+        String discoveryValue = customKafkaProperties.get(CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY);
+        if (discoveryValue != null) {
+            // value format already validated in analyzeKafkaCustomProperties
+            kafkaPartitionDiscovery = Boolean.parseBoolean(discoveryValue);
+        }
 
         if (properties.containsKey(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL)) {
             confluentSchemaRegistryUrl = properties.get(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL);

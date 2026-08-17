@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "引数の積を計算します。"
 ---
 
 # multiply

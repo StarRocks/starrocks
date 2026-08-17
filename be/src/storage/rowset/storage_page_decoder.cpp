@@ -137,6 +137,7 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     }
     case FOR_ENCODING:
     case PLAIN_ENCODING:
+    case PLAIN_ENCODING_DELTA_OFFSET:
     case PREFIX_ENCODING:
     case RLE: {
         return &g_base_decoder;
@@ -161,7 +162,8 @@ Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_siz
     DCHECK(footer->has_type()) << "type must be set";
     switch (footer->type()) {
     case INDEX_PAGE:
-    case SHORT_KEY_PAGE: {
+    case SHORT_KEY_PAGE:
+    case SORT_KEY_PAGE: {
         return Status::OK();
     }
     case DICTIONARY_PAGE:

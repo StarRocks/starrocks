@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a DATETIME value into a date."
 ---
 
 # to_date

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列がNULLまたは空の場合にtrueを返します。"
 ---
 
 # null_or_empty

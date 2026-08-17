@@ -66,6 +66,10 @@ public class PartitionsMetaSystemTable {
                         .column("STORAGE_SIZE", IntegerType.BIGINT)
                         .column("TABLET_BALANCED", BooleanType.BOOLEAN)
                         .column("METADATA_SWITCH_VERSION", IntegerType.BIGINT)
+                        .column("MIN_VI_BUILT_VERSION", IntegerType.BIGINT)
+                        .column("MAX_VI_BUILT_VERSION", IntegerType.BIGINT)
+                        .column("LAST_UPDATE_TIME", DateType.DATETIME)
+                        .column("LAST_ACCESS_TIME", DateType.DATETIME)
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }

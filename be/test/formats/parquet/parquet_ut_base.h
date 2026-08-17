@@ -18,12 +18,13 @@
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::parquet {
 
@@ -58,7 +59,7 @@ public:
 
     static void setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, const RuntimeFilterProbeCollector* rf,
                                         TupleDescriptor* tuple_desc, RuntimeState* runtime_state,
-                                        HdfsScannerContext* params);
+                                        HdfsScannerContext* ctx);
 
     static void create_dictmapping_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                                    std::vector<TExpr>* tExprs);

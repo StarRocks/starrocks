@@ -14,20 +14,22 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 
+#include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/FrontendService.h"
-#include "gen_cpp/InternalService_types.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+class RuntimeProfile;
+
+namespace pipeline {
 class ExecStateReporterMetrics;
+
 class ExecStateReporter {
 public:
     explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics);
@@ -37,8 +39,9 @@ public:
             QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
             RuntimeProfile* load_channel_profile, const Status& status, bool done);
 
-    static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
-                                     const TNetworkAddress& fe_addr);
+    static Status report_exec_status(const TReportExecStatusParams& params, const TNetworkAddress& fe_addr);
+
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done);
 
     void submit(std::function<void()>&& report_task, bool priority = false);
 
@@ -46,12 +49,6 @@ public:
 
     Status update_max_threads(int max_threads);
     Status update_priority_max_threads(int max_threads);
-
-    // STREAM MV
-    static TMVMaintenanceTasks create_report_epoch_params(const QueryContext* query_ctx,
-                                                          const std::vector<FragmentContext*>& fragment_ctxs);
-
-    static Status report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env, const TNetworkAddress& fe_addr);
 
 public:
     // Accessors exposed only for unit tests (via the friend declaration above).
@@ -64,4 +61,5 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     std::unique_ptr<ThreadPool> _priority_thread_pool;
 };
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

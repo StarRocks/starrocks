@@ -33,11 +33,11 @@ using ColumnReaderUniquePtr = std::unique_ptr<ColumnReader>;
 
 class ColumnReader {
 public:
-    explicit ColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
+    explicit ColumnReader(const std::string_view col_name, const TypeDescriptor& type_desc)
             : _col_name(col_name), _type_desc(type_desc) {}
     virtual ~ColumnReader() = default;
 
-    static ColumnReaderUniquePtr get_nullable_column_reader(const std::string& col_name,
+    static ColumnReaderUniquePtr get_nullable_column_reader(const std::string_view col_name,
                                                             const TypeDescriptor& type_desc,
                                                             const cctz::time_zone& timezone, bool invalid_as_null);
 
@@ -45,7 +45,7 @@ public:
     virtual Status read_datum(const avro::GenericDatum& datum, Column* column) = 0;
 
 protected:
-    const std::string& _col_name;
+    const std::string_view _col_name;
     const TypeDescriptor& _type_desc;
 };
 

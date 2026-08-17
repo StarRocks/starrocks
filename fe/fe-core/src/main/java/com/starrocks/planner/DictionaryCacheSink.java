@@ -93,7 +93,7 @@ public class DictionaryCacheSink extends DataSink {
 
     private TOlapTableSchemaParam createSchema(long dbId, Table table, TupleDescriptor tupleDescriptor) {
         if (table instanceof OlapTable) {
-            return OlapTableSink.createSchema(dbId, (OlapTable) table, tupleDescriptor);
+            return OlapTableSink.createSchema(dbId, (OlapTable) table, tupleDescriptor, null);
         }
 
         // For the non-olaptable queryable object, construct the fake TOlapTableSchemaParam manually

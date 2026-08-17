@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Concatenates strings using a specified separator between each argument."
 ---
 
 # concat_ws

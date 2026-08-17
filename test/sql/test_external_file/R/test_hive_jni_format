@@ -1,9 +1,5 @@
 -- name: testHiveAvroFormat
 [UC]shell: avro_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/avro_format/"
--- result:
-0
-oss://starrocks-env-s3-unit-test/test_hive_format/f81c141277504324a587846c0c566663/avro_format/
--- !result
 shell: ossutil64 mkdir ${avro_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -50,11 +46,11 @@ PROPERTIES
 -- !result
 select * from test_hive_avro_format where col_string = 'world';
 -- result:
-7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key1":1,"key2":2}	{"name":"John","age":30}
+7	13	74	13000000000	6.15	4.376	57.30	world	Char	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key1":1,"key2":2}	{"name":"John","age":30}
 -- !result
 select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
-1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k1":3,"k2":5}	{"name":"chandler","age":54}
+1	2	3	10000000000	1.23	3.14	100.50	you	are	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k1":3,"k2":5}	{"name":"chandler","age":54}
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_avro_format order by 1;
 -- result:
@@ -87,10 +83,6 @@ shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/nul
 -- !result
 -- name: testHiveRcbinayFormat
 [UC]shell: rcbinary_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rcbinary_format/"
--- result:
-0
-oss://starrocks-env-s3-unit-test/test_hive_format/744f2c100abf4fa0af69da7b4824ad02/rcbinary_format/
--- !result
 shell: ossutil64 mkdir ${rcbinary_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -137,11 +129,11 @@ PROPERTIES
 -- !result
 select * from test_hive_rcbinary_format where col_string = 'world';
 -- result:
-7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
+7	13	74	13000000000	6.15	4.376	57.30	world	Char	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
 -- !result
 select * from test_hive_rcbinary_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
-1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
+1	2	3	10000000000	1.23	3.14	100.50	you	are	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format order by 1;
 -- result:
@@ -174,10 +166,6 @@ shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 -- !result
 -- name: testHiveRctextFormat
 [UC]shell: rctext_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rctext_format/"
--- result:
-0
-oss://starrocks-env-s3-unit-test/test_hive_format/aead1b6eaffd4516999a69b52092962a/rctext_format/
--- !result
 shell: ossutil64 mkdir ${rctext_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -224,16 +212,16 @@ PROPERTIES
 -- !result
 select * from test_hive_rctext_format where col_string = 'world';
 -- result:
-7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
+7	13	74	13000000000	6.15	4.376	57.30	world	Char	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
 -- !result
 select * from test_hive_rctext_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
-1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
+1	2	3	10000000000	1.23	3.14	100.50	you	are	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
 -- result:
-1	100.50	["D","E","F"]
 7	57.30	["A","B","C"]
+1	100.50	["D","E","F"]
 -- !result
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
 -- result:
@@ -256,10 +244,6 @@ shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/n
 -- !result
 -- name: testHiveSequenceFormat
 [UC]shell: sequence_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/sequence_format/"
--- result:
-0
-oss://starrocks-env-s3-unit-test/test_hive_format/c42ab996c96f4035a7e2b04d1edb39ea/sequence_format/
--- !result
 shell: ossutil64 mkdir ${sequence_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -306,11 +290,11 @@ PROPERTIES
 -- !result
 select * from test_hive_sequence_format where col_string = 'world';
 -- result:
-7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
+7	13	74	13000000000	6.15	4.376	57.30	world	Char	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
 -- !result
 select * from test_hive_sequence_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
-1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
+1	2	3	10000000000	1.23	3.14	100.50	you	are	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_sequence_format;
 -- result:
@@ -338,10 +322,6 @@ shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 -- !result
 -- name: testHiveStructCharAndVarchar
 [UC]shell: struct_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/strcut/"
--- result:
-0
-oss://starrocks-env-s3-unit-test/test_hive_format/e15c6685c54140d497cb5453dd4e4765/strcut/
--- !result
 shell: ossutil64 mkdir ${struct_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -368,7 +348,7 @@ PROPERTIES
 -- !result
 select col_int,col_struct from hive_hdfs_sequencefile_struct_mix_deflate order by 1 limit 1;
 -- result:
--2144975700	{"c_int":1102434235,"c_float":-9972.251,"c_double":18.68127,"c_char":"(115)699-5565x12614           ","c_varchar":"Mozilla/5.0 (compatible; MSIE 5.0; Windows 95; Trident/4.1)","c_date":"2000-01-29","c_timestamp":"2000-11-10 11:01:59","c_boolean":1}
+-2144975700	{"c_int":1102434235,"c_float":-9972.251,"c_double":18.68127,"c_char":"(115)699-5565x12614","c_varchar":"Mozilla/5.0 (compatible; MSIE 5.0; Windows 95; Trident/4.1)","c_date":"2000-01-29","c_timestamp":"2000-11-10 11:01:59","c_boolean":1}
 -- !result
 shell: ossutil64 rm -rf ${struct_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:

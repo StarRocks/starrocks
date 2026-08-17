@@ -36,13 +36,12 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/uid_util.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
 UniqueRowsetIdGenerator::UniqueRowsetIdGenerator(const UniqueId& backend_uid) : _backend_uid(backend_uid), _inc_id(0) {
-    REGISTER_GAUGE_STARROCKS_METRIC(rowset_count_generated_and_in_use, [this]() {
+    StorageMetrics::instance()->register_rowset_count_generated_and_in_use_hook([this]() {
         std::lock_guard<SpinLock> l(_lock);
         return _valid_rowset_id_hi.size();
     });

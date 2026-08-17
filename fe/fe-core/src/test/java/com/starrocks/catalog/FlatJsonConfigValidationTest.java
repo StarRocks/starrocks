@@ -65,10 +65,10 @@ public class FlatJsonConfigValidationTest {
         FlatJsonConfig config2 = tableProperty2.getFlatJsonConfig();
         Assertions.assertNotNull(config2);
         Assertions.assertFalse(config2.getFlatJsonEnable());
-        // Should use default values, ignoring the residual properties
-        Assertions.assertEquals(0.1, config2.getFlatJsonNullFactor(), 0.001);
-        Assertions.assertEquals(0.8, config2.getFlatJsonSparsityFactor(), 0.001);
-        Assertions.assertEquals(50, config2.getFlatJsonColumnMax());
+        // Should use default values, ignoring the residual properties (flat_json is disabled)
+        Assertions.assertEquals(Config.flat_json_null_factor, config2.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(Config.flat_json_sparsity_factory, config2.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(Config.flat_json_column_max, config2.getFlatJsonColumnMax());
 
         // Test 3: flat_json.enable = true with other properties (should work)
         Map<String, String> properties3 = new HashMap<>();
@@ -100,6 +100,73 @@ public class FlatJsonConfigValidationTest {
         Assertions.assertEquals(Config.flat_json_null_factor, config4.getFlatJsonNullFactor(), 0.001);
         Assertions.assertEquals(Config.flat_json_sparsity_factory, config4.getFlatJsonSparsityFactor(), 0.001);
         Assertions.assertEquals(Config.flat_json_column_max, config4.getFlatJsonColumnMax());
+    }
+
+    @Test
+    public void testBuildFlatJsonConfigPreservesPropertiesAcrossReload() {
+        // Regression test for the durability bug: buildFlatJsonConfig() runs on every FE image load
+        // (gsonPostProcess). The previous implementation read the factors via
+        // analyzerDoubleProp/analyzeIntProp, which call properties.remove(), so each reload stripped the
+        // factor keys from the serialized properties map. The config looked correct on the first load,
+        // but after the next checkpoint only flat_json.enable survived and the factors reverted to
+        // defaults. The fix reads the factors non-destructively (get()), so the keys must remain in the
+        // map and the values must survive repeated buildFlatJsonConfig() calls.
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.13");
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.71");
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "29");
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION, "7");
+
+        TableProperty tableProperty = new TableProperty(properties);
+
+        // First load (e.g. the image that recorded the ALTER).
+        tableProperty.buildFlatJsonConfig();
+
+        // The factor keys MUST still be present in the underlying map; this is exactly what the
+        // remove-on-read implementation broke and what is lost on the next checkpoint.
+        Map<String, String> afterFirstLoad = tableProperty.getProperties();
+        Assertions.assertEquals("0.13", afterFirstLoad.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.71", afterFirstLoad.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("29", afterFirstLoad.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+        Assertions.assertEquals("7", afterFirstLoad.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION));
+
+        // Second load simulates the next FE restart reloading the checkpointed image. The factors must
+        // still resolve to the configured values, not the Config defaults.
+        tableProperty.buildFlatJsonConfig();
+        FlatJsonConfig config = tableProperty.getFlatJsonConfig();
+        Assertions.assertNotNull(config);
+        Assertions.assertTrue(config.getFlatJsonEnable());
+        Assertions.assertEquals(0.13, config.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.71, config.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(29, config.getFlatJsonColumnMax());
+        Assertions.assertEquals(7, config.getVersion());
+
+        // toProperties() (what gets written into the next image) must still carry the factors.
+        Map<String, String> serialized = config.toProperties();
+        Assertions.assertEquals("0.13", serialized.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.71", serialized.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("29", serialized.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+    }
+
+    @Test
+    public void testBuildFlatJsonConfigToleratesMalformedValueOnImageLoad() {
+        // buildFlatJsonConfig() runs in gsonPostProcess on every image load. A malformed value must not
+        // throw (which would fail image load / FE startup); it should warn and fall back to defaults,
+        // matching buildLakeCompactionMaxParallel().
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "not-a-number");
+
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.buildFlatJsonConfig();
+
+        FlatJsonConfig config = tableProperty.getFlatJsonConfig();
+        Assertions.assertNotNull(config);
+        Assertions.assertTrue(config.getFlatJsonEnable());
+        Assertions.assertEquals(Config.flat_json_null_factor, config.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(Config.flat_json_sparsity_factory, config.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(Config.flat_json_column_max, config.getFlatJsonColumnMax());
     }
 
     @Test

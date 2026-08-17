@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "文件外部表支持直接查询 HDFS、S3、OSS 和 COS 上的 Parquet 和 ORC 文件。"
 ---
 
 # 文件外部表
@@ -14,13 +16,13 @@ displayed_sidebar: docs
 
 ## 使用限制
 
-- 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 来查询集群下的 catalog。
+- 当前仅支持在 [default_catalog](./catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 来查询集群下的 catalog。
 - 仅支持查询 Parquet、ORC、Avro、RCFile、或 SequenceFile 格式的数据文件。
 - 目前**仅支持读取**目标数据文件中的数据，不支持例如 INSERT、DELETE、DROP 等**写入**操作。
 
 ## 前提条件
 
-创建文件外部表前，您需要在 StarRocks 中进行相应配置，以便集群能够访问数据文件所在的外部存储系统。具体配置步骤和 Hive catalog 相同 （区别在于无需配置 Metastore）。详细信息参见 [Hive catalog - 准备工作](../data_source/catalog/hive_catalog.md#准备工作)。
+创建文件外部表前，您需要在 StarRocks 中进行相应配置，以便集群能够访问数据文件所在的外部存储系统。具体配置步骤和 Hive catalog 相同 （区别在于无需配置 Metastore）。详细信息参见 [Hive catalog - 准备工作](./catalog/hive_catalog.md#准备工作)。
 
 ## 创建数据库 （可选）
 
@@ -125,7 +127,7 @@ PROPERTIES
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。<br />采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。<br />采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 ##### 阿里云 OSS
 
@@ -139,9 +141,9 @@ PROPERTIES
 
 | 参数                            | 是否必须 | 说明                                                         |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
+| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。    |
+| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。                                     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。                                     |
 
 ##### 兼容 S3 协议的对象存储
 

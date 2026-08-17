@@ -25,8 +25,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -727,16 +726,13 @@ public class SPMPlan2SQLBuilder {
                     return HintNode.HINT_JOIN_BUCKET;
                 }
             } else {
+                if (optExpression.getRequiredProperties().stream()
+                        .allMatch(p -> DistributionSpecHelper.supportColocate(p.getDistributionProperty().getSpec()))) {
+                    return HintNode.HINT_JOIN_COLOCATE;
+                }
                 Preconditions.checkState(optExpression.getRequiredProperties().stream()
                         .allMatch(p -> p.getDistributionProperty().isShuffle()));
-                if (optExpression.getRequiredProperties().stream().allMatch(p -> {
-                    HashDistributionSpec spec = p.getDistributionProperty().getSpec().cast();
-                    return HashDistributionDesc.SourceType.LOCAL.equals(spec.getHashDistributionDesc().getSourceType());
-                })) {
-                    return HintNode.HINT_JOIN_COLOCATE;
-                } else {
-                    return HintNode.HINT_JOIN_SHUFFLE;
-                }
+                return HintNode.HINT_JOIN_SHUFFLE;
             }
         }
     }

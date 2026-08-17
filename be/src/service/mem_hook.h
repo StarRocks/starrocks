@@ -16,6 +16,15 @@
 
 #include <cstdint>
 
+// Sanitizers need to own malloc/free, and Darwin executable-level allocator
+// interposition is unsafe with allocations made inside system/third-party
+// dylibs during dyld/global initialization.
+#if defined(__APPLE__) || defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
+#define STARROCKS_ENABLE_JEMALLOC_MEM_HOOK 0
+#else
+#define STARROCKS_ENABLE_JEMALLOC_MEM_HOOK 1
+#endif
+
 namespace starrocks {
 
 int64_t set_large_memory_alloc_failure_threshold(int64_t);

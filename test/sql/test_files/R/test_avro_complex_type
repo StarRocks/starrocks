@@ -19,7 +19,7 @@ desc files(
     "aws.s3.secret_key" = "${oss_sk}",
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
-record_field	struct<id int(11), name varchar(1048576)>	YES
+record_field	struct<`id` int(11), `name` varchar(1048576)>	YES
 enum_field	varchar(1048576)	YES
 array_field	array<varchar(1048576)>	YES
 map_field	map<varchar(1048576),int>	YES

@@ -43,7 +43,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 // The value must be in type simdjson::ondemand::json_type::number;
 template <typename T>
 static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const TypeDescriptor& type_desc,
-                                            const std::string& name, simdjson::ondemand::value* value) {
+                                            std::string_view name, simdjson::ondemand::value* value) {
     simdjson::ondemand::number_type tp = value->get_number_type();
 
     switch (tp) {
@@ -131,7 +131,7 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
 // The value must be in type simdjson::ondemand::json_type::string;
 template <typename T>
 static Status add_column_with_string_value(FixedLengthColumn<T>* column, const TypeDescriptor& type_desc,
-                                           const std::string& name, simdjson::ondemand::value* value) {
+                                           std::string_view name, simdjson::ondemand::value* value) {
     faststring buffer;
     std::string_view sv = value_get_string_safe(value, &buffer);
 
@@ -167,7 +167,7 @@ static Status add_column_with_string_value(FixedLengthColumn<T>* column, const T
 }
 
 template <typename T>
-Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                           simdjson::ondemand::value* value) {
     auto numeric_column = down_cast<FixedLengthColumn<T>*>(column);
 
@@ -194,19 +194,19 @@ Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const
     }
 }
 
-template Status add_numeric_column<int128_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int128_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                              simdjson::ondemand::value* value);
-template Status add_numeric_column<int64_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int64_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             simdjson::ondemand::value* value);
-template Status add_numeric_column<int32_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int32_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             simdjson::ondemand::value* value);
-template Status add_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             simdjson::ondemand::value* value);
-template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                            simdjson::ondemand::value* value);
-template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                            simdjson::ondemand::value* value);
-template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                           simdjson::ondemand::value* value);
 
 } // namespace starrocks

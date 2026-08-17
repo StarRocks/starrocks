@@ -15,12 +15,13 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "column/schema.h"
-#include "storage/edit_version.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/persistent_index.h"
 #include "storage/rowset/segment.h"
+#include "storage_primitive/edit_version.h"
 
 namespace starrocks {
 
@@ -34,15 +35,14 @@ class LakePrimaryIndex;
 
 class LakeLocalPersistentIndexTabletLoader : public TabletLoader {
 public:
-    LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                         int64_t base_version, const MetaFileBuilder* builder,
-                                         LakeLocalPersistentIndex* index)
+    LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, TabletMetadataPtr metadata, int64_t base_version,
+                                         const MetaFileBuilder* builder, LakeLocalPersistentIndex* index)
             : _tablet_mgr(tablet_mgr),
-              _metadata(metadata),
+              _metadata(std::move(metadata)),
               _base_version(base_version),
               _builder(builder),
               _index(index) {}
-    ~LakeLocalPersistentIndexTabletLoader() = default;
+    ~LakeLocalPersistentIndexTabletLoader() override = default;
     starrocks::Schema generate_pkey_schema() override;
     DataDir* data_dir() override;
     TTabletId tablet_id() override;

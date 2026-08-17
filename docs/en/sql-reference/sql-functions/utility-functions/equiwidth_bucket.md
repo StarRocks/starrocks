@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculate the equi-width histogram bucket."
 ---
 
 # equiwidth_bucket
@@ -22,9 +23,11 @@ equiwidth_bucket(value, min, max, buckets)
 
 ## Example
 
-```SQL
-MYSQL > select r, equiwidth_bucket(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s(r);
+```sql
+select r, equiwidth_bucket(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s(r);
+```
 
+```plaintext
 0	0
 1	1
 2	2

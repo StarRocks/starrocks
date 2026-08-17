@@ -83,10 +83,9 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -113,6 +112,7 @@ import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -268,6 +268,11 @@ public class OlapTable extends Table {
     // with a new one that has the same 'indexName', the unique 'indexId' allows us to distinguish between them.
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
+
+    // Persisted primary key encoding type. null means the table was created before this field was introduced,
+    // in which case we fall back to the legacy computed logic in getPrimaryKeyEncodingType().
+    @SerializedName(value = "primaryKeyEncodingType")
+    private TPrimaryKeyEncodingType primaryKeyEncodingType = null;
 
     // the id of the session that created this table, only used in temporary table
     @SerializedName(value = "sessionId")
@@ -431,6 +436,7 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+        olapTable.primaryKeyEncodingType = this.primaryKeyEncodingType;
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
@@ -727,6 +733,11 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // The column set just changed and the cache is keyed by column NAME, so DROP COLUMN c +
+        // ADD COLUMN c would otherwise hand the new column the old one's min/max. Called on every
+        // schema-change job and on their replay; the calls from metadata load are a no-op because
+        // nothing is cached yet.
+        invalidateMinMaxStats();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -1014,12 +1025,20 @@ public class OlapTable extends Table {
         }
 
         boolean ok = true;
+        boolean allQueued = true;
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
                 latch.addMark(task.getBackendId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
-                AgentTaskQueue.addTask(task);
+                if (!AgentTaskQueue.addTask(task)) {
+                    // Not enqueued (duplicate signature, or this node is demoting / not the leader):
+                    // no BE response will ever arrive, so do not wait for it. This runs inside the
+                    // DROP TABLE WAL applier during a demotion drain - waiting out the full latch
+                    // timeout there would burn the drain budget for nothing.
+                    allQueued = false;
+                    latch.markedCountDown(task.getBackendId(), -1L);
+                }
             }
             AgentTaskExecutor.submit(batchTask);
 
@@ -1028,9 +1047,10 @@ public class OlapTable extends Table {
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
-                ok = latch.await(timeout, TimeUnit.MILLISECONDS);
+                ok = latch.await(timeout, TimeUnit.MILLISECONDS) && allQueued;
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
+                ok = false;
             }
 
             if (!ok) {
@@ -1202,7 +1222,7 @@ public class OlapTable extends Table {
             if (numBucket > 0) {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
-                numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                numBucket = CatalogUtils.calPhysicalPartitionBucketNum(isLightWeightTabletCreation());
                 info.setBucketNum((int) numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
@@ -1251,12 +1271,41 @@ public class OlapTable extends Table {
         }
     }
 
+    /**
+     * Drop this table's cached column min/max values.
+     *
+     * <p>{@code ColumnMinMaxMgr} keeps them keyed by (table id, column name) and validates an entry
+     * by comparing the table-level {@code max(visibleVersionTime)} it was loaded at against the
+     * current one, accepting the entry when it is not older. Loading data is the only operation that
+     * reliably advances that stamp. DDL does not:
+     *
+     * <ul>
+     *   <li>REPLACE PARTITION and INSERT OVERWRITE move the temporary {@link Partition} object into
+     *       the formal list as it stands, so the table-level maximum goes BACKWARDS whenever that
+     *       partition was loaded before the one it replaces;</li>
+     *   <li>dropping the most recently loaded partition moves it backwards the same way;</li>
+     *   <li>RECOVER PARTITION brings data back without necessarily raising it;</li>
+     *   <li>a fast schema change does not touch partitions at all, yet DROP COLUMN c + ADD COLUMN c
+     *       gives a brand new column the previous one's cache entry, since the key is the name.</li>
+     * </ul>
+     *
+     * <p>In every one of those cases a stale entry keeps passing the version check for as long as it
+     * lives -- the cache has no TTL -- so min()/max() constant-folds to values that no longer exist.
+     * Hence the explicit invalidation, hooked into the low-level mutators below rather than into the
+     * DDL entry points: these run identically on the leader and on edit-log replay, so followers
+     * (which fold min/max from their own cache) drop the entry too.
+     */
+    private void invalidateMinMaxStats() {
+        IMinMaxStatsMgr.invalidateTable(this);
+    }
+
     public void addPartition(Partition partition) {
         idToPartition.put(partition.getId(), partition);
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
         }
+        invalidateMinMaxStats();
     }
 
     public void removePhysicalPartition(PhysicalPartition physicalPartition) {
@@ -1289,6 +1338,7 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
+        invalidateMinMaxStats();
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
@@ -1604,6 +1654,7 @@ public class OlapTable extends Table {
             this.indexes = new TableIndexes(null);
         }
         this.indexes.setIndexes(indexes);
+        tryToAssignIndexId();
     }
 
     public String getColocateGroup() {
@@ -1612,6 +1663,21 @@ public class OlapTable extends Table {
 
     public void setColocateGroup(String colocateGroup) {
         this.colocateGroup = colocateGroup;
+    }
+
+    // Whether this table declares a colocate group. For a real catalog OlapTable this matches
+    // ColocateTableIndex.isColocateTable(getId()): the group name and the index's table2Group membership
+    // are set together on create/ALTER-set and cleared together on ALTER-unset. It is NOT a drop-in
+    // replacement for the index everywhere -- two boundaries make them diverge:
+    //   - a query-time copy is not valid input: OlapTable.copyOnlyForQuery() does not carry colocateGroup;
+    //   - a crash between the OP_CREATE_TABLE and OP_COLOCATE_ADD_TABLE_V2 journal records can replay a
+    //     table with the property set but no index membership (the index is the durable source of truth).
+    // So this is used only by fail-closed ALTER-time guards that hold the table write lock on the real
+    // catalog object, where the declared property is authoritative (and in the crash-orphan corner makes
+    // the guard strictly more conservative). Named hasColocateGroup, not isColocateTable, since it is a
+    // pure property read with no GroupId/stability/range semantics -- use ColocateTableIndex when needed.
+    public boolean hasColocateGroup() {
+        return !Strings.isNullOrEmpty(colocateGroup);
     }
 
     public boolean isEnableColocateMVIndex() {
@@ -1733,6 +1799,26 @@ public class OlapTable extends Table {
         }
 
         lastSchemaUpdateTime = new AtomicLong(-1);
+
+        // Keep the FE metadata of shared-data primary-key tables on the cloud-native persistent
+        // index after an image load (mirrors the BE normalization). See the method for details.
+        normalizeCloudNativePersistentIndex();
+    }
+
+    // Shared-data primary-key tables only support the cloud-native persistent index; the local-disk
+    // and in-memory indexes are deprecated (enforced on CREATE/ALTER by OlapTableFactory and
+    // SchemaChangeHandler, and on the BE by normalize_tablet_metadata_after_load). Upgrade any table
+    // created before that restriction so the FE metadata matches what the BE actually runs, keeping
+    // SHOW CREATE TABLE and FE-driven tablet tasks consistent. Idempotent; touches shared-data
+    // primary-key tables only. Invoked both on image load (gsonPostProcess) and on lake alter-meta
+    // replay (LakeTableAlterMetaJob.updateCatalog), so a legacy alter log cannot leave the table on
+    // a deprecated index type after startup.
+    public void normalizeCloudNativePersistentIndex() {
+        if (tableProperty != null && isCloudNativeTable() && getKeysType() == KeysType.PRIMARY_KEYS
+                && (!enablePersistentIndex() || getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE)) {
+            setEnablePersistentIndex(true);
+            setPersistentIndexType(TPersistentIndexType.CLOUD_NATIVE);
+        }
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -1850,6 +1936,10 @@ public class OlapTable extends Table {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, dataCacheInfo);
         }
+
+        // This swaps the partition maps directly instead of going through addPartition() /
+        // removePartitionFromInnerState(), so it needs its own call.
+        invalidateMinMaxStats();
 
         return oldPartition;
     }
@@ -2061,6 +2151,16 @@ public class OlapTable extends Table {
         return tableProperty.enablePersistentIndex();
     }
 
+    public boolean isLightWeightTabletCreation() {
+        return tableProperty.lightWeightTabletCreation();
+    }
+
+    public void setLightWeightTabletCreation(boolean lightWeightTabletCreation) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                Boolean.valueOf(lightWeightTabletCreation).toString());
+        tableProperty.buildLightWeightTabletCreation();
+    }
+
     public int primaryIndexCacheExpireSec() {
         return tableProperty.primaryIndexCacheExpireSec();
     }
@@ -2199,10 +2299,15 @@ public class OlapTable extends Table {
         return tableProperty.enableStatisticCollectOnFirstLoad();
     }
 
+    public boolean isSetEnableStatisticCollectOnFirstLoad() {
+        return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
+        tableProperty.setEnableStatisticCollectOnFirstLoad(enable);
     }
 
     public int getTableQueryTimeout() {
@@ -2264,6 +2369,16 @@ public class OlapTable extends Table {
 
     public Boolean enableLoadProfile() {
         return tableProperty.enableLoadProfile();
+    }
+
+    public int getLoadInitialOpenPartitionNumber() {
+        return tableProperty == null ? TableProperty.INVALID : tableProperty.getLoadInitialOpenPartitionNumber();
+    }
+
+    public void setLoadInitialOpenPartitionNumber(int n) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(n));
+        tableProperty.buildLoadInitialOpenPartitionNumber();
     }
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
@@ -2738,6 +2853,18 @@ public class OlapTable extends Table {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateTableIndex.isColocateTable(getId())) {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            // For range colocate groups, journal the range mgr state ahead of OP_COLOCATE_ADD_TABLE_V2
+            // so the record lands after OP_CREATE_TABLE is durably written. A crash between this
+            // record and the add-table record leaves only an orphan range entry on a fresh grpId,
+            // which is harmless because the next create on the same colocate_with name allocates a
+            // new grpId via getNextId().
+            if (colocateTableIndex.isRangeColocateGroup(groupId)) {
+                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
+                if (!ranges.isEmpty()) {
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
+                            ColocateRangePersistInfo.create(groupId.grpId, ranges));
+                }
+            }
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
                     backendsPerBucketSeq);
@@ -2772,20 +2899,19 @@ public class OlapTable extends Table {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, automatic partition only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
-        // for Partition slot ref, the SlotDescriptor is not serialized, so should
-        // recover it here.
-        // the SlotDescriptor is used by toThrift, which influences the execution
-        // process.
+        // for Partition slot ref, type/nullable are not serialized, so should recover them here.
+        // The type and nullable information will be used by toThrift, which influences the execution process.
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
-        // schema change should update slot id
-        for (int i = 0; i < fullSchema.size(); i++) {
-            Column column = fullSchema.get(i);
-            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
-                        column.getType(), column.isAllowNull());
-                slotRefs.get(0).setDesc(slotDescriptor);
+        SlotRef slotRef = slotRefs.get(0);
+        // Recover type/nullable (not serialized in metadata).
+        // Schema change should update these.
+        for (Column column : fullSchema) {
+            if (column.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                slotRef.setType(column.getType());
+                slotRef.setNullable(column.isAllowNull());
+                break;
             }
         }
     }
@@ -2965,9 +3091,9 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
         }
 
-        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
-        if (!enableStatisticCollectOnFirstLoad) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+        if (isSetEnableStatisticCollectOnFirstLoad()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                    Boolean.toString(enableStatisticCollectOnFirstLoad()));
         }
 
         // base compaction forbidden time ranges
@@ -3004,6 +3130,11 @@ public class OlapTable extends Table {
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
+        if (isCloudNativeTable()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                    Boolean.toString(isLightWeightTabletCreation()));
+        }
+
         // lake_compaction_max_parallel (only for cloud native table, only show when not default)
         if (isCloudNativeTable()) {
             int lakeCompactionMaxParallel = getLakeCompactionMaxParallel();
@@ -3032,6 +3163,13 @@ public class OlapTable extends Table {
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // load initial open partition number
+        String loadInitialOpenPartitionNumber =
+                tableProperties.get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+        if (loadInitialOpenPartitionNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, loadInitialOpenPartitionNumber);
         }
 
         // partition ttl
@@ -3126,35 +3264,40 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
         }
 
-        // flat json enable
-        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
-        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
-
-            // Only include other flat JSON properties if flat_json.enable is true
-            if (Boolean.parseBoolean(flatJsonEnable)) {
-                // flat json null factor
-                String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
-                if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
-                }
-
-                // flat json sparsity factor
-                String flatJsonSparsityFactor =
-                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
-                if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
-                }
-
-                // flat json column max
-                String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
-                if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
-                }
-            }
-        }
+        // flat json
+        appendFlatJsonProperties(properties, tableProperties);
 
         return properties;
+    }
+
+    // Render flat_json.* for SHOW CREATE TABLE; shared with LakeTable.getUniqueProperties()
+    // so both modes stay in sync.
+    protected static void appendFlatJsonProperties(Map<String, String> properties,
+                                                   Map<String, String> tableProperties) {
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (Strings.isNullOrEmpty(flatJsonEnable)) {
+            return;
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+
+        // Only include other flat JSON properties if flat_json.enable is true
+        if (Boolean.parseBoolean(flatJsonEnable)) {
+            String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+            if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+            }
+
+            String flatJsonSparsityFactor =
+                    tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+            if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+            }
+
+            String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+            if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+            }
+        }
     }
 
     @Override
@@ -3392,11 +3535,21 @@ public class OlapTable extends Table {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
     }
 
+    public void setPrimaryKeyEncodingType(TPrimaryKeyEncodingType type) {
+        this.primaryKeyEncodingType = type;
+    }
+
     public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
         if (getKeysType() != KeysType.PRIMARY_KEYS) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
         }
 
+        // Use persisted value if available (new tables created after this field was introduced)
+        if (primaryKeyEncodingType != null) {
+            return primaryKeyEncodingType;
+        }
+
+        // Legacy fallback for tables created before primaryKeyEncodingType was persisted
         if (!isCloudNativeTableOrMaterializedView()) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
         }

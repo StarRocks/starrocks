@@ -2049,8 +2049,8 @@ public class AggregateTest extends PlanTestBase {
         sql = "select count(distinct v1, v2) from t0;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                        "  |  STREAMING\n" +
-                        "  |  group by: 1: v1, 2: v2");
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1, 2: v2");
         connectContext.getSessionVariable().setCountDistinctImplementation("default");
     }
 
@@ -2851,6 +2851,17 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         }
         {
+            // A constant aggregated value must not be re-appended to the merge phase args: BE reads
+            // the const args positionally, so approx_top_k(<intermediate>, 1, 3, 10) would make it
+            // read the TINYINT literal 1 as k and abort on the type mismatch.
+            String sql = "select /*+SET_VAR(new_planner_agg_stage=2)*/ L_RETURNFLAG, "
+                    + "approx_top_k(cast(1 as tinyint), 3, 10) from lineitem group by L_RETURNFLAG";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "(merge finalize)");
+            assertContains(plan, ": approx_top_k, 3, 10)");
+            assertNotContains(plan, ": approx_top_k, 1, 3, 10)");
+        }
+        {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
                 String sql = "select approx_top_k(L_LINENUMBER, '111') from lineitem";
                 getFragmentPlan(sql);
@@ -3349,8 +3360,10 @@ public class AggregateTest extends PlanTestBase {
             // distinct group_concat cannot merge two phase agg to one phase agg.
             sql = "select group_concat(distinct 1,2 order by 1,2) from t0 group by v1 order by 1;";
             plan = getFragmentPlan(sql);
+            // '1' is the aggregated value, so it is not re-appended to the merge phase args --
+            // only the remaining constant args ('2' and the separator) are carried over.
             assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
-                    "  |  output: group_concat(4: group_concat, '1', '2', ',')\n" +
+                    "  |  output: group_concat(4: group_concat, '2', ',')\n" +
                     "  |  group by: 1: v1\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update serialize)\n" +
@@ -3362,7 +3375,7 @@ public class AggregateTest extends PlanTestBase {
 
             // distinct avg cannot merge two phase agg to one phase agg.
             sql = "select avg(distinct v2) from t0 group by v1";
-            plan  = getFragmentPlan(sql);
+            plan = getFragmentPlan(sql);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: avg(2: v2)\n" +
                     "  |  group by: 1: v1\n" +
@@ -3487,5 +3500,142 @@ public class AggregateTest extends PlanTestBase {
                 "  6:AGGREGATE (update serialize)\n" +
                 "  |  output: count(*)\n" +
                 "  |  group by: ");
+    }
+
+    @Test
+    public void testGroupByAllBasic() throws Exception {
+        // basic: v1, v2 are non-agg, should become group by keys; sum(v3) is agg
+        String sql = "select v1, v2, sum(v3) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1, 2: v2");
+        assertContains(plan, "output: sum(3: v3)");
+    }
+
+    @Test
+    public void testGroupByAllSingleNonAgg() throws Exception {
+        // single non-agg column with one agg function
+        String sql = "select v1, sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2)");
+    }
+
+    @Test
+    public void testGroupByAllOnlyAgg() throws Exception {
+        // all columns are aggregate — group by all yields scalar aggregation (empty group by)
+        String sql = "select sum(v1), count(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(1: v1), count(2: v2)");
+        assertContains(plan, "group by: \n");
+    }
+
+    @Test
+    public void testGroupByAllNoAgg() throws Exception {
+        // no aggregate functions — group by all collects all columns, equivalent to GROUP BY v1, v2, v3
+        String sql = "select v1, v2, v3 from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1, 2: v2, 3: v3");
+    }
+
+    @Test
+    public void testGroupByAllAggExpression() throws Exception {
+        // sum(v1)+1 contains aggregate — should NOT be a group by key
+        String sql = "select v1, sum(v1) + 1 from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(1: v1)");
+    }
+
+    @Test
+    public void testGroupByAllMultipleAgg() throws Exception {
+        // multiple agg functions: only v1 is non-agg
+        String sql = "select v1, sum(v2), avg(v3), count(*) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2), avg(3: v3), count(*)");
+    }
+
+    @Test
+    public void testGroupByAllWithHaving() throws Exception {
+        // having clause should work normally with group by all
+        String sql = "select v1, sum(v2) from t0 group by all having sum(v2) > 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "having: 4: sum > 10");
+    }
+
+    @Test
+    public void testGroupByAllWithWhere() throws Exception {
+        // where clause should be pushed down, group by all still works
+        String sql = "select v1, sum(v2) from t0 where v3 > 0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 3: v3 > 0");
+        assertContains(plan, "group by: 1: v1");
+    }
+
+    @Test
+    public void testGroupByAllWithJoin() throws Exception {
+        // join: non-agg columns from both sides become group by keys
+        String sql = "select t0.v1, t1.v4, sum(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(2: v2)");
+        assertContains(plan, "group by: 1: v1, 4: v4");
+    }
+
+    @Test
+    public void testGroupByAllWithSubquery() throws Exception {
+        // subquery in from clause
+        String sql = "select a, sum(b) from (select v1 as a, v2 as b from t0) t group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2)");
+    }
+
+    @Test
+    public void testGroupByAllWithLimit() throws Exception {
+        // limit should not affect group by all behavior
+        String sql = "select v1, sum(v2) from t0 group by all limit 5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "limit: 5");
+    }
+
+    @Test
+    public void testGroupByAllDeduplicateKeys() throws Exception {
+        String sql = "select v1, v1, sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1\n");
+    }
+
+    @Test
+    public void testGroupByAllWithGroupingFunction() throws Exception {
+        String sql = "select v1, sum(v2) + grouping(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2)");
+    }
+
+    @Test
+    public void testGroupByAllWithStandaloneGroupingFunction() throws Exception {
+        String sql = "select grouping(v1), sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(2: v2)");
+        assertContains(plan, "group by: 1: v1");
+    }
+
+    @Test
+    public void testGroupByAllWithOnlyGroupingFunction() throws Exception {
+        String sql = "select grouping(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "0");
+    }
+
+    @Test
+    public void testGroupByAllWithStarProjection() throws Exception {
+        String sql = "select *, sum(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1, 2: v2, 3: v3");
+        assertContains(plan, "output: sum(1: v1)");
     }
 }

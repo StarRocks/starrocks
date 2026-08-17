@@ -20,6 +20,7 @@
 #include <typeindex>
 
 #include "base/hash/hash_util.hpp"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
@@ -236,17 +237,21 @@ public:
         const auto& offsets = column.get_offset();
         const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();
-        _selector.for_each([&](uint32_t idx) {
-            // Skip out-of-bounds indices (preserve hash seed)
-            if (idx >= column_size) {
-                return;
-            }
-            uint32_t* slot_ptr = slot(idx);
-            auto len = offsets[idx + 1] - offsets[idx];
-            // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)
-            if (len > 0) {
-                *slot_ptr = HashFunction::hash(bytes.data() + offsets[idx], static_cast<int32_t>(len), *slot_ptr);
-            }
+        offsets.visit_storage([&](const auto& offsets_buf) {
+            const auto* __restrict offset_data = offsets_buf.data();
+            _selector.for_each([&](uint32_t idx) {
+                // Skip out-of-bounds indices (preserve hash seed)
+                if (idx >= column_size) {
+                    return;
+                }
+                uint32_t* slot_ptr = slot(idx);
+                auto len = offset_data[idx + 1] - offset_data[idx];
+                // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)
+                if (len > 0) {
+                    *slot_ptr =
+                            HashFunction::hash(bytes.data() + offset_data[idx], static_cast<int32_t>(len), *slot_ptr);
+                }
+            });
         });
         return Status::OK();
     }
@@ -384,6 +389,11 @@ public:
     }
 
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
+    }
 
     template <typename ObjectType>
     Status do_visit(const ObjectColumn<ObjectType>& column) {

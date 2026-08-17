@@ -20,10 +20,12 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
@@ -71,6 +73,12 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
 
     private static final ColumnMinMaxMgr INSTANCE = new ColumnMinMaxMgr();
 
+    // Dump-seeded min/max for query-dump replay. Empty outside ReplayFromDump, so the isEmpty() guards below make
+    // this a no-op in production. Seeded entries are authoritative and deliberately ignore the version gate (the
+    // recreated replay table has a fresh, larger version that would otherwise be rejected).
+    @VisibleForTesting
+    private static final Map<ColumnIdentifier, ColumnMinMax> REPLAY_MINMAX = Maps.newConcurrentMap();
+
     private final AsyncLoadingCache<ColumnIdentifier, Optional<CacheValue>> cache = Caffeine.newBuilder()
             .maximumSize(Config.statistic_dict_columns)
             .executor(ThreadPoolManager.getStatsCacheThread())
@@ -80,8 +88,24 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         return INSTANCE;
     }
 
+    @VisibleForTesting
+    public static void replayPut(long tableId, ColumnId columnName, ColumnMinMax minMax) {
+        REPLAY_MINMAX.put(new ColumnIdentifier(tableId, columnName), minMax);
+    }
+
+    @VisibleForTesting
+    public static void clearReplayMinMax() {
+        REPLAY_MINMAX.clear();
+    }
+
     @Override
     public Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
+        if (!REPLAY_MINMAX.isEmpty()) {
+            ColumnMinMax replay = REPLAY_MINMAX.get(identifier);
+            if (replay != null) {
+                return Optional.of(replay);
+            }
+        }
         CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
         if (future.isDone()) {
             try {
@@ -101,7 +125,31 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     }
 
     @Override
-    public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
+    public Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
+        if (!REPLAY_MINMAX.isEmpty()) {
+            ColumnMinMax replay = REPLAY_MINMAX.get(identifier);
+            if (replay != null) {
+                return Optional.of(replay);
+            }
+        }
+        try {
+            CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
+            Optional<CacheValue> cacheValue = future.get();
+            if (cacheValue.isPresent()) {
+                CacheValue value = cacheValue.get();
+                if (value.version().getVersion() >= version.getVersion()) {
+                    return Optional.of(value.minMax());
+                }
+                cache.synchronous().invalidate(identifier);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public void removeStats(ColumnIdentifier identifier) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -110,10 +158,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             // If the identifier is already in the cache, we do not need to update it.
             return;
         }
-        Optional<ColumnMinMax> minMax = getStats(identifier, version);
-        if (minMax.isPresent()) {
-            cache.synchronous().invalidate(identifier);
-        }
+        cache.synchronous().invalidate(identifier);
     }
 
     @Override
@@ -168,6 +213,10 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     if (column == null || (!column.getType().isNumericType() && !column.getType().isDate())) {
                         return Optional.empty();
                     }
+                    if (!column.isSupportMetaScan()) {
+                        return Optional.empty();
+                    }
+
                     // We need the aggregated result, so this constraint is not satisfied.
                     if (column.isAggregated()) {
                         return Optional.empty();

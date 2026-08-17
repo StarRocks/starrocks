@@ -1,0 +1,55 @@
+-- name: test_expr_key_partition_hash_join @sequential
+-- Test that merge_ht correctly skips dummy row for expression-based join keys (fix for #70349).
+-- Regression test: adaptive partition hash join with COALESCE expression join key.
+
+CREATE TABLE `expr_join_ta` (
+  `key1` int(11) NULL COMMENT "",
+  `key2` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`key1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`key1`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `expr_join_tb` (
+  `key1` int(11) NULL COMMENT "",
+  `key2` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`key1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`key1`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into expr_join_ta SELECT generate_series, cast(generate_series as varchar) FROM TABLE(generate_series(1, 40960));
+-- result:
+-- !result
+insert into expr_join_tb SELECT generate_series, cast(generate_series as varchar) FROM TABLE(generate_series(1, 40960));
+-- result:
+-- !result
+insert into expr_join_ta values (40961, null), (40962, null);
+-- result:
+-- !result
+insert into expr_join_tb values (40961, null);
+-- result:
+-- !result
+admin enable failpoint 'always_use_partition_join';
+-- result:
+-- !result
+select count(*) from expr_join_ta l join expr_join_tb r on l.key1 = r.key1 and coalesce(l.key2, 'default') = coalesce(r.key2, 'default');
+-- result:
+40961
+-- !result
+admin disable failpoint 'always_use_partition_join';
+-- result:
+-- !result
+CLEANUP {
+  admin disable failpoint 'always_use_partition_join';
+} END CLEANUP

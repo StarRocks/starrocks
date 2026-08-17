@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Create a new table in StarRocks."
 ---
 
 # CREATE TABLE
@@ -159,11 +160,11 @@ When creating a temporary table, you must set `ENGINE` to `olap`.
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
-### col_name
+### `col_name`
 
-Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) to `TRUE`.
 
-### col_type
+### `col_type`
 
 Specific column information, such as types and ranges:
 
@@ -190,7 +191,7 @@ Specific column information, such as types and ranges:
 - HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/scalar-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
-### agg_type
+### `agg_type`
 
 Aggregation type. If not specified, this column is a key column.
 If specified, it is a value column. The aggregation types supported are as follows:
@@ -207,12 +208,16 @@ If specified, it is a value column. The aggregation types supported are as follo
 
 This aggregation type applies ONLY to the Aggregate table whose key_desc type is AGGREGATE KEY. Since v3.1.9, `REPLACE_IF_NOT_NULL` newly supports the columns of the BITMAP type.
 
-**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate, or Unique Key table. In a table that uses the Primary Key table, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
+### `NULL` | `NOT NULL`
 
-**DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
+Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate, or Unique Key table. In a table that uses the Primary Key table, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
+
+### `DEFAULT`
+
+The default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT (\<expr\>)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
+- **DEFAULT (`<expr>`)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
   - [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): Generate unique identifiers.
   - ARRAY literal expressions (e.g., `[1, 2, 3]`): For ARRAY type columns.
   - MAP expressions (e.g., `map{key: value}`): For MAP type columns.
@@ -289,9 +294,13 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
   - TIME and VARIANT types do not support default values yet.
   - Default values for complex types (ARRAY/MAP/STRUCT) are only supported for OLAP tables and require the `fast_schema_evolution` property to be enabled.
 
-**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
+### `AUTO_INCREMENT`
 
-**AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
+Specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
+
+### `AS`
+
+Specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 ## Index definition
 
@@ -319,17 +328,27 @@ Data is sequenced in specified key columns and has different attributes for diff
 
 - AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis.
 - UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns.
-- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. 
+- DUPLICATE KEY: Identical content in key columns co-exists in StarRocks. It can be used to store detailed data or data with no aggregation attributes.
 
   :::note
   DUPLICATE KEY is the default type. Data will be sequenced according to key columns.
   :::
 
 :::note
-Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+Value columns do not need to specify aggregation types when other key type is used to create tables with the exception of AGGREGATE KEY.
 :::
 
-## COMMENT
+### Range-based Distribution
+
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data mode it is enabled by default; set the configuration to `false` to disable it. It has no effect in shared-nothing mode. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+
+The range-based distribution semantic is different from the default semantic in the following aspects:
+- If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
+- If none of the key type, a DISTRIBUTED BY clause, or an ORDER BY is specified, a Duplicate Key table with the random bucketing strategy will be created.
+- If the key type and a DISTRIBUTED BY clause are not specified, but an ORDER BY clause is specified, a Duplicate Key table with the range-based distribution strategy will be created. In this case, DUPLICATE KEY is equivalent to an ORDER BY clause, and vice versa.
+- If both DUPLICATE KEY and an ORDER BY clause are specified, only the ORDER BY clause will take effect, and DUPLICATE KEY will be ignored.
+
+## `COMMENT`
 
 You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
 
@@ -442,7 +461,7 @@ For more information, see [Data distribution](../../../table_design/data_distrib
 
 ## Distribution
 
-StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default.
+StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default. In shared-data mode, a table that specifies a key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause uses range-based distribution by default instead; see [Range-based Distribution](#range-based-distribution).
 
 - Random bucketing (since v3.1)
 
@@ -488,6 +507,10 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - Bucketing columns cannot be modified after they are specified.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
+- Range-based distribution
+
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data mode it is enabled by default. For detailed information, see [Range-based distribution](#range-based-distribution).
+
 ## Rollup index
 
 You can create rollups in bulk when you create a table.
@@ -500,14 +523,14 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)],...)
 ```
 
-## ORDER BY
+## `ORDER BY`
 
 Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
 For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
 
 
-## PROPERTIES
+## `PROPERTIES`
 
 ### Storage and replicas
 
@@ -789,14 +812,37 @@ PROPERTIES (
       You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
 
-### Fast schema evolution
+### Fast Schema Evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+- `fast_schema_evolution`: Whether to enable Fast Schema Evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using ALTER TABLE after table creation.
 
   :::note
-  - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
-  - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+  - Fast Schema Evolution is supported for shared-nothing clusters since v3.2.0.
+  - Fast Schema Evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
   :::
+
+- `cloud_native_fast_schema_evolution_v2`: Whether to enable Fast Schema Evolution v2 for the **cloud-native table**. Supported from v4.1 onwards. Valid values are `TRUE` (default) or `FALSE`. When Fast Schema Evolution v2 is enabled, schema changes become a synchronous process. When the ALTER TABLE statement returns successfully, the new schema is effective immediately. The system will only modify FE metadata rather than tablet metadata located on S3, so it can always achieve second-level latency no matter how many partitions or tablets in the table. While in the legacy behavior, schema changes are run as an asynchronous job that updates tablet metadata over time.
+
+  :::note
+  - Fast Schema Evolution v2 is supported from v4.1 onwards and only for **cloud-native tables** in shared-data clusters.
+  - Default behaviors:
+    - For new tables created in a v4.1 cluster, Fast Schema Evolution v2 is enabled by default.
+    - For existing tables from a cluster upgraded to v4.1, Fast Schema Evolution v2 is disabled by default. You can enable it by explicitly setting this property to `true` via [ALTER TABLE](ALTER_TABLE.md).
+  - Downgrade requirements:
+    - To downgrade a shared-data cluster from v4.1 to v4.0.5 or later, you can directly downgrade it following the standard downgrade procedures.
+    - Before downgrading a shared-data cluster from v4.1 to v3.x or patch versions earlier than v4.0.5, you must manually set `cloud_native_fast_schema_evolution_v2` to `false` for any tables that have enabled Fast Schema Evolution v2 via ALTER TABLE. You must wait until the asynchronous jobs become FINISHED. You can track the job status via SHOW ALTER.
+  :::
+
+You can inspect the schema change jobs via [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md).
+
+Example:
+
+```SQL
+-- List recent column/schema change jobs in the table
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+For cloud-native tables with Fast Schema Evolution v2 enabled, schema change jobs will typically appear as FINISHED, because the change is applied by updating FE metadata only.
 
 ### Forbid Base Compaction
 

@@ -14,6 +14,7 @@
 
 set(TYPES_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    agg_state_desc_test.cpp
     bitmap_value_test.cpp
     copied_datum_test.cpp
     date_value_test.cpp
@@ -21,8 +22,10 @@ set(TYPES_TEST_FILES
     decimalv3_test.cpp
     datetime_value_test.cpp
     hll_test.cpp
+    int128_arithmetic_ops_test.cpp
     json_value_test.cpp
     logical_type_test.cpp
+    simple_json_path_test.cpp
     type_descriptor_test.cpp
     tdigest_test.cpp
     timestamp_value_test.cpp
@@ -31,14 +34,14 @@ set(TYPES_TEST_FILES
 )
 
 set(TYPES_TEST_LINK_LIBS
-    TypesCore
+    Types
     Common
     Base
     Gutil
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest

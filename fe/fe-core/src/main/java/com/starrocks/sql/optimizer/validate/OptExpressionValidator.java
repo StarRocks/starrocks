@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -159,6 +160,14 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
 
     @Override
     public OptExpression visitLogicalValues(OptExpression optExpression, Void context) {
+        if (needValidate) {
+            LogicalValuesOperator valuesOperator = (LogicalValuesOperator) optExpression.getOp();
+            for (List<ScalarOperator> row : valuesOperator.getRows()) {
+                for (ScalarOperator scalarOperator : row) {
+                    validateScalarOperator(scalarOperator);
+                }
+            }
+        }
         return commonValidate(optExpression);
     }
 

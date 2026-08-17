@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/conjunctive_predicates.h"
+#include "storage_primitive/conjunctive_predicates.h"
 
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
@@ -21,8 +21,12 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
-#include "exec/olap_scan_prepare.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
+#include "exec/exec_env.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_executor.h"
@@ -30,14 +34,14 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_parser.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -88,11 +92,11 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     schema->append(c3_field);
     schema->append(c4_field);
 
-    auto c0 = ChunkHelper::column_from_field(*c0_field);
-    auto c1 = ChunkHelper::column_from_field(*c1_field);
-    auto c2 = ChunkHelper::column_from_field(*c2_field);
-    auto c3 = ChunkHelper::column_from_field(*c3_field);
-    auto c4 = ChunkHelper::column_from_field(*c4_field);
+    auto c0 = ChunkFactory::column_from_field(*c0_field);
+    auto c1 = ChunkFactory::column_from_field(*c1_field);
+    auto c2 = ChunkFactory::column_from_field(*c2_field);
+    auto c3 = ChunkFactory::column_from_field(*c3_field);
+    auto c4 = ChunkFactory::column_from_field(*c4_field);
 
     // +------+-------+------------+----------------------+----------+
     // | c0   | c1    | c2         | c3                   | c4       |
@@ -178,7 +182,7 @@ TEST(ConjunctivePredicatesTest, test_empty_predicates) {
     SchemaPtr schema(new Schema());
     auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
     schema->append(c0_field);
-    auto c0 = ChunkHelper::column_from_field(*c0_field);
+    auto c0 = ChunkFactory::column_from_field(*c0_field);
 
     // +------+
     // | c0   |
@@ -215,7 +219,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -254,7 +258,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     SchemaPtr schema(new Schema());
     schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c0 = ChunkFactory::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -349,8 +353,7 @@ public:
         CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                       .ok());
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+        auto* tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
 
         return tuple_desc;
     }

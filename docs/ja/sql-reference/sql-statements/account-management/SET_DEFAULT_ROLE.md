@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET DEFAULT ROLE sets roles that activate by default when a user connects."
 ---
 
 # SET DEFAULT ROLE

@@ -27,6 +27,7 @@
 #include <streambuf>
 #include <thread>
 
+#include "common/config_update_registry.h"
 #include "common/status.h"
 #include "gutil/strings/join.h"
 
@@ -421,6 +422,82 @@ TEST_F(ConfigTest, test_set_config) {
     s = config::set_config("cfg_std_string", "test");
     ASSERT_TRUE(s.is_not_supported()) << s;
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
+}
+
+TEST_F(ConfigTest, test_config_update_registry_not_ready) {
+    CONF_mInt32(config_update_registry_not_ready, "10");
+    ASSERT_TRUE(config::init(nullptr));
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    ASSERT_TRUE(registry->update_config("config_update_registry_not_ready", "20").ok());
+    ASSERT_EQ(10, config_update_registry_not_ready);
+}
+
+TEST_F(ConfigTest, test_config_update_registry_set_config) {
+    CONF_mInt32(config_update_registry_set_config, "10");
+    ASSERT_TRUE(config::init(nullptr));
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    registry->set_ready();
+    ASSERT_TRUE(registry->update_config("config_update_registry_set_config", "20").ok());
+    ASSERT_EQ(20, config_update_registry_set_config);
+}
+
+TEST_F(ConfigTest, test_config_update_registry_callback) {
+    CONF_mInt32(config_update_registry_callback, "10");
+    ASSERT_TRUE(config::init(nullptr));
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    bool called = false;
+    registry->register_callback("config_update_registry_callback", [&]() {
+        called = true;
+        return Status::OK();
+    });
+    registry->set_ready();
+
+    ASSERT_TRUE(registry->update_config("config_update_registry_callback", "20").ok());
+    ASSERT_TRUE(called);
+    ASSERT_EQ(20, config_update_registry_callback);
+}
+
+TEST_F(ConfigTest, test_config_update_registry_callback_failure_rolls_back) {
+    CONF_mInt32(config_update_registry_rollback, "10");
+    ASSERT_TRUE(config::init(nullptr));
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    registry->register_callback("config_update_registry_rollback",
+                                [&]() { return Status::InternalError("callback failed"); });
+    registry->set_ready();
+
+    auto st = registry->update_config("config_update_registry_rollback", "20");
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    ASSERT_EQ(10, config_update_registry_rollback);
+}
+
+TEST_F(ConfigTest, test_config_update_registry_duplicate_callback_first_wins) {
+    CONF_mInt32(config_update_registry_duplicate, "10");
+    ASSERT_TRUE(config::init(nullptr));
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    int called = 0;
+    registry->register_callback("config_update_registry_duplicate", [&]() {
+        called = 1;
+        return Status::OK();
+    });
+    registry->register_callback("config_update_registry_duplicate", [&]() {
+        called = 2;
+        return Status::OK();
+    });
+    registry->set_ready();
+
+    ASSERT_TRUE(registry->update_config("config_update_registry_duplicate", "20").ok());
+    ASSERT_EQ(1, called);
+    ASSERT_EQ(20, config_update_registry_duplicate);
 }
 
 TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {

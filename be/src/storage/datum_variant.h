@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/copied_datum.h"
 #include "column/datum_convert.h"
 #include "fmt/format.h"
-#include "storage/type_info_allocator_adapter.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/type_descriptor.h"
 
@@ -27,7 +29,7 @@ class DatumVariant {
 public:
     DatumVariant() = default;
 
-    DatumVariant(const TypeInfoPtr& type, const Datum& value) : _type(type), _value(value) {}
+    DatumVariant(TypeInfoPtr type, const Datum& value) : _type(std::move(type)), _value(value) {}
 
     const TypeInfoPtr& type() const { return _type; }
 

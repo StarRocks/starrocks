@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "load_tracking_logsはロードジョブのエラーログを提供します。"
 ---
 
 # load_tracking_logs

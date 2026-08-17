@@ -27,8 +27,9 @@
 #include "column/nullable_column.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks {
@@ -158,7 +159,7 @@ TEST_F(SegmentMetaCollecterTest, test_init_with_dcg_options) {
     EXPECT_OK(collecter2.init(&params, non_pk_options));
 }
 
-TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
+TEST_F(SegmentMetaCollecterTest, test_collect_flat_json_meta_fields) {
     // Create a proper JSON segment with actual data
     TabletSchemaPB json_schema_pb;
     auto json_col = json_schema_pb.add_column();
@@ -207,14 +208,25 @@ TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
     // Open the JSON segment
     FileInfo json_file_info{.path = json_segment_name, .encryption_meta = encryption_pair.encryption_meta};
     ASSIGN_OR_ABORT(auto json_segment, Segment::open(fs, json_file_info, 0, json_tablet_schema));
+    const auto* root_reader = json_segment->column(0);
+    ASSERT_NE(nullptr, root_reader);
+    ASSERT_TRUE(root_reader->is_flat_json());
+    ASSERT_NE(nullptr, root_reader->sub_readers());
 
-    // Test dictionary collection from JSON column
+    uint64_t child_mem_footprint = 0;
+    for (const auto& child : *root_reader->sub_readers()) {
+        child_mem_footprint += child->total_mem_footprint();
+    }
+    ASSERT_GT(child_mem_footprint, 0);
+    ASSERT_EQ(child_mem_footprint, root_reader->total_mem_footprint());
+
+    // Test metadata collection from a Flat JSON column.
     SegmentMetaCollecter json_collecter(json_segment);
     SegmentMetaCollecterParams params;
-    params.fields.emplace_back("dict_merge");
-    params.field_type.emplace_back(LogicalType::TYPE_ARRAY);
-    params.cids.emplace_back(0);
-    params.read_page.emplace_back(true); // Need to read page for JSON
+    params.fields = {META_DICT_MERGE, META_COLUMN_SIZE};
+    params.field_type = {LogicalType::TYPE_ARRAY, LogicalType::TYPE_BIGINT};
+    params.cids = {0, 0};
+    params.read_page = {true, false};
     params.tablet_schema = json_tablet_schema;
     params.low_cardinality_threshold = 1000;
     SegmentMetaCollectOptions options;
@@ -222,13 +234,13 @@ TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
     EXPECT_OK(json_collecter.open());
 
     auto array_col = create_array_column();
-
-    // Test successful dictionary collection for JSON column
-    Status status = json_collecter._collect_dict(0, array_col.get(), LogicalType::TYPE_ARRAY);
-
-    ASSERT_OK(status);
+    auto column_size_col = Int64Column::create();
+    std::vector<Column*> columns{array_col.get(), column_size_col.get()};
+    ASSERT_OK(json_collecter.collect(&columns));
     EXPECT_GT(array_col->size(), 0);
     EXPECT_EQ("[['Beijing','Shanghai'], ['Alice','Bob']]", array_col->debug_string());
+    ASSERT_EQ(1, column_size_col->size());
+    EXPECT_EQ(static_cast<int64_t>(root_reader->total_mem_footprint()), column_size_col->get(0).get_int64());
 }
 
 TEST_F(SegmentMetaCollecterTest, test_collect_multiple_meta_fields) {
@@ -448,5 +460,194 @@ TEST_F(SegmentMetaCollecterTest, test_collect_with_dcg_loader_non_pk) {
 //
 // For now, the mock loader tests above verify that the DCG code path is correctly integrated
 // into SegmentMetaCollecter's initialization and collection logic.
+
+TEST_F(SegmentMetaCollecterTest, test_collect_drop_rename_reorder_column_by_uid) {
+    TabletSchemaPB schema_pb;
+    auto col0 = schema_pb.add_column();
+    col0->set_name("c0");
+    col0->set_type("INT");
+    col0->set_is_key(true);
+    col0->set_is_nullable(false);
+    col0->set_unique_id(10);
+
+    auto col1 = schema_pb.add_column();
+    col1->set_name("c1");
+    col1->set_type("INT");
+    col1->set_is_key(false);
+    col1->set_is_nullable(false);
+    col1->set_unique_id(11);
+
+    auto col2 = schema_pb.add_column();
+    col2->set_name("c2");
+    col2->set_type("INT");
+    col2->set_is_key(false);
+    col2->set_is_nullable(false);
+    col2->set_unique_id(12);
+
+    auto segment_schema = TabletSchema::create(schema_pb);
+
+    std::string segment_name = "test_schema_change_uid_meta.dat";
+    DeferOp defer_op([&] { delete_file(segment_name); });
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(segment_name));
+    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+    WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                     .encryption_info = encryption_pair.info};
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(file_options, segment_name));
+
+    SegmentWriter writer(std::move(wf), 0, segment_schema, SegmentWriterOptions());
+    EXPECT_OK(writer.init());
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int32Column::create();
+    for (int v : {1, 2, 3}) {
+        c0->append(v);
+    }
+    for (int v : {100, 200, 300}) {
+        c1->append(v);
+    }
+    for (int v : {7, 9, 11}) {
+        c2->append(v);
+    }
+    auto chunk = std::make_shared<Chunk>(Columns{c0, c1, c2}, std::make_shared<Schema>(segment_schema->schema()));
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t file_size, index_size, footer_pos;
+    EXPECT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
+
+    FileInfo file_info{.path = segment_name, .encryption_meta = encryption_pair.encryption_meta};
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, segment_schema));
+
+    TabletSchemaPB current_schema_pb;
+    auto renamed_c2 = current_schema_pb.add_column();
+    renamed_c2->set_name("renamed_c2");
+    renamed_c2->set_type("INT");
+    renamed_c2->set_is_key(false);
+    renamed_c2->set_is_nullable(false);
+    renamed_c2->set_unique_id(12);
+
+    auto current_c0 = current_schema_pb.add_column();
+    current_c0->set_name("c0");
+    current_c0->set_type("INT");
+    current_c0->set_is_key(true);
+    current_c0->set_is_nullable(false);
+    current_c0->set_unique_id(10);
+
+    auto current_schema = TabletSchema::create(current_schema_pb);
+
+    SegmentMetaCollecter collecter(segment);
+    SegmentMetaCollecterParams params;
+    params.fields = {META_MIN, META_MAX, META_COUNT_COL, META_COLUMN_SIZE};
+    params.field_type = {TYPE_INT, TYPE_INT, TYPE_BIGINT, TYPE_BIGINT};
+    params.cids = {0, 0, 0, 0};
+    params.read_page = {false, false, true, false};
+    params.tablet_schema = current_schema;
+
+    SegmentMetaCollectOptions options;
+    EXPECT_OK(collecter.init(&params, options));
+    EXPECT_OK(collecter.open());
+
+    auto min_col = Int32Column::create();
+    auto max_col = Int32Column::create();
+    auto count_col = Int64Column::create();
+    auto size_col = Int64Column::create();
+    std::vector<Column*> columns = {min_col.get(), max_col.get(), count_col.get(), size_col.get()};
+
+    EXPECT_OK(collecter.collect(&columns));
+    EXPECT_EQ(7, min_col->get(0).get_int32());
+    EXPECT_EQ(11, max_col->get(0).get_int32());
+    EXPECT_EQ(3, count_col->get(0).get_int64());
+    EXPECT_GT(size_col->get(0).get_int64(), 0);
+}
+
+TEST_F(SegmentMetaCollecterTest, test_collect_added_column_default_values) {
+    TabletSchemaPB schema_pb;
+    auto col0 = schema_pb.add_column();
+    col0->set_name("c0");
+    col0->set_type("INT");
+    col0->set_is_key(true);
+    col0->set_is_nullable(false);
+    col0->set_unique_id(20);
+
+    auto segment_schema = TabletSchema::create(schema_pb);
+
+    std::string segment_name = "test_add_column_default_meta.dat";
+    DeferOp defer_op([&] { delete_file(segment_name); });
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(segment_name));
+    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+    WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                     .encryption_info = encryption_pair.info};
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(file_options, segment_name));
+
+    SegmentWriter writer(std::move(wf), 0, segment_schema, SegmentWriterOptions());
+    EXPECT_OK(writer.init());
+
+    auto c0 = Int32Column::create();
+    for (int v : {1, 2, 3}) {
+        c0->append(v);
+    }
+    auto chunk = std::make_shared<Chunk>(Columns{c0}, std::make_shared<Schema>(segment_schema->schema()));
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t file_size, index_size, footer_pos;
+    EXPECT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
+
+    FileInfo file_info{.path = segment_name, .encryption_meta = encryption_pair.encryption_meta};
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, segment_schema));
+
+    TabletSchemaPB current_schema_pb;
+    auto current_c0 = current_schema_pb.add_column();
+    current_c0->set_name("c0");
+    current_c0->set_type("INT");
+    current_c0->set_is_key(true);
+    current_c0->set_is_nullable(false);
+    current_c0->set_unique_id(20);
+
+    auto added_null = current_schema_pb.add_column();
+    added_null->set_name("added_null");
+    added_null->set_type("INT");
+    added_null->set_is_key(false);
+    added_null->set_is_nullable(true);
+    added_null->set_unique_id(21);
+
+    auto added_default = current_schema_pb.add_column();
+    added_default->set_name("added_default");
+    added_default->set_type("INT");
+    added_default->set_is_key(false);
+    added_default->set_is_nullable(false);
+    added_default->set_default_value("7");
+    added_default->set_unique_id(22);
+
+    auto current_schema = TabletSchema::create(current_schema_pb);
+
+    SegmentMetaCollecter collecter(segment);
+    SegmentMetaCollecterParams params;
+    params.fields = {META_MIN, META_COUNT_COL, META_COLUMN_SIZE, META_MIN, META_COUNT_COL, META_COLUMN_SIZE};
+    params.field_type = {TYPE_INT, TYPE_BIGINT, TYPE_BIGINT, TYPE_INT, TYPE_BIGINT, TYPE_BIGINT};
+    params.cids = {1, 1, 1, 2, 2, 2};
+    params.read_page = {false, true, false, false, true, false};
+    params.tablet_schema = current_schema;
+
+    SegmentMetaCollectOptions options;
+    EXPECT_OK(collecter.init(&params, options));
+    EXPECT_OK(collecter.open());
+
+    auto nullable_min = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto nullable_count = Int64Column::create();
+    auto nullable_size = Int64Column::create();
+    auto default_min = Int32Column::create();
+    auto default_count = Int64Column::create();
+    auto default_size = Int64Column::create();
+    std::vector<Column*> columns = {nullable_min.get(), nullable_count.get(), nullable_size.get(),
+                                    default_min.get(),  default_count.get(),  default_size.get()};
+
+    EXPECT_OK(collecter.collect(&columns));
+    EXPECT_TRUE(nullable_min->is_null(0));
+    EXPECT_EQ(0, nullable_count->get(0).get_int64());
+    EXPECT_EQ(0, nullable_size->get(0).get_int64());
+    EXPECT_EQ(7, default_min->get(0).get_int32());
+    EXPECT_EQ(3, default_count->get(0).get_int64());
+    EXPECT_EQ(0, default_size->get(0).get_int64());
+}
 
 } // namespace starrocks

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从指定日期时间或日期减去指定年数。"
 ---
 
 # years_sub

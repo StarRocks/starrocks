@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "同期マテリアライズドビュー (Rollup) は StarRocks で単一テーブル集計クエリをリアルタイムで透過的に加速させます。"
 sidebar_position: 20
 ---
 
@@ -403,4 +404,4 @@ FROM tableA
 | count                                                  | count                                           |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
-```
+

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the logical plan of a materialized view as a string, optionally reading from the plan cache."
 ---
 
 # inspect_mv_plan

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたデータアンロードジョブをキャンセルします。"
 ---
 
 # CANCEL EXPORT

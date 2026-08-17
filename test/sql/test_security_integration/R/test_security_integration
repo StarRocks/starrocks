@@ -1,22 +1,16 @@
--- name: test_security_integration
-create security integration oidc properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
+-- name: test_ldap_security_integration_with_bind_dn_pattern
+create security integration ldap_pattern properties("type"="authentication_ldap_simple", "authentication_ldap_simple_server_host"="localhost", "authentication_ldap_simple_server_port"="389", "authentication_ldap_simple_bind_dn_pattern"="uid=${USER},ou=People,dc=example,dc=com");
 -- result:
 -- !result
-show create security integration oidc;
--- result:
-oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
-"type" = "authentication_jwt", "principal_field" = "sub", "jwks_url" = "jwks.json"
-)
--- !result
-alter security integration oidc set ("principal_field"="preferred_name");
+[UC]show create security integration ldap_pattern;
 -- result:
 -- !result
-show create security integration oidc;
+alter security integration ldap_pattern set ("authentication_ldap_simple_bind_dn_pattern"="cn=${USER},ou=Staff,dc=example,dc=com");
 -- result:
-oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
-"type" = "authentication_jwt", "principal_field" = "preferred_name", "jwks_url" = "jwks.json"
-)
 -- !result
-drop security integration oidc;
+[UC]show create security integration ldap_pattern;
+-- result:
+-- !result
+drop security integration ldap_pattern;
 -- result:
 -- !result

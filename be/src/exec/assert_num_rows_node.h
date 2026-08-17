@@ -22,36 +22,34 @@
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
-#include "exec/olap_common.h"
+#include "column/runtime_type_traits.h"
+#include "common/statusor.h"
+#include "exec/pipeline_node.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 
 // Node for assert row count
-class AssertNumRowsNode final : public ExecNode {
+class AssertNumRowsNode final : public PipelineNode {
 public:
     AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~AssertNumRowsNode() override = default;
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     int64_t _desired_num_rows;
     const std::string _subquery_string;
     TAssertion::type _assertion;
     std::deque<ChunkPtr> _input_chunks;
-    bool _has_assert;
+    [[maybe_unused]] bool _has_assert{false};
 };
 
 } // namespace starrocks

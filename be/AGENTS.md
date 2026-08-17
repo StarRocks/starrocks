@@ -1,574 +1,349 @@
-# AGENTS.md - StarRocks Backend (BE)
+# AGENTS.md - StarRocks Backend
 
-> Backend-specific guidelines for AI coding agents.
-> The BE is written in C++ and handles query execution, storage management, and data processing.
+Backend operating contract for agentic work in `be/`.
 
-## Architecture Overview
+## Read This First
 
-The Backend is responsible for:
-- **Query Execution**: Pipeline-based vectorized execution engine
-- **Storage Engine**: Column-oriented storage with LSM-tree structure
-- **Data Processing**: SIMD-optimized operations on columnar data
+- Repo-wide topology and active engineering plans live in [`handbook/index.md`](../handbook/index.md).
+- The backend domain map lives in [`handbook/domains/backend.md`](../handbook/domains/backend.md).
+- The BE harness overview lives in [`handbook/architecture/be-boundary-harness.md`](../handbook/architecture/be-boundary-harness.md).
+- The BE module boundary source of truth is [`be/module_boundary_manifest.json`](./module_boundary_manifest.json).
+- The harness is enforced by [`build-support/check_be_module_boundaries.py`](../build-support/check_be_module_boundaries.py).
+- The generated module section in this file is enforced by [`build-support/render_be_agents.py`](../build-support/render_be_agents.py).
+- Expression extensions live under [`be/src/exprs_ext/AGENTS.md`](./src/exprs_ext/AGENTS.md); read the nearest nested guide there for dict, table-function, or utility expression extension work.
+- Reviewed legacy violations are frozen in [`build-support/be_module_boundary_baseline.json`](../build-support/be_module_boundary_baseline.json). Only the deferred allocator-related entries should remain, and the baseline must only shrink.
 
-### Key Components
-
-```
-be/src/
-├── base/             # Base primitives (Status, StatusOr, logging, macros)
-├── storage/          # Storage engine (tablets, segments, compaction)
-├── exec/             # Query execution (operators, pipeline, scan)
-├── column/           # Column types and operations
-├── exprs/            # Expression evaluation
-├── runtime/          # Runtime state, memory management
-├── formats/          # File formats (Parquet, ORC, etc.)
-├── connector/        # External data source connectors
-├── util/             # Utilities and helpers
-├── common/           # Common config, tracing, process utilities
-├── http/             # HTTP service endpoints
-├── service/          # Thrift services
-└── simd/             # SIMD utilities
-```
-
-## Build Commands
+## Harness Commands
 
 ```bash
-# Standard release build
+# Full BE architecture check
+python3 build-support/check_be_module_boundaries.py --mode full
+
+# PR-style changed-files check
+python3 build-support/check_be_module_boundaries.py --mode changed --base origin/main
+
+# PR-style check plus baseline shrink-only guard
+python3 build-support/check_be_module_boundaries.py --mode changed --base origin/main --enforce-baseline-shrink
+
+# Verify this file matches the manifest
+python3 build-support/render_be_agents.py --check
+
+# Rewrite the generated module section after manifest edits
+python3 build-support/render_be_agents.py --write
+```
+
+## Fast Loops
+
+```bash
+# Standard BE build
 ./build.sh --be
 
-# Debug build
+# Debug or ASAN build
 BUILD_TYPE=Debug ./build.sh --be
-
-# ASAN (Address Sanitizer) build for debugging
 BUILD_TYPE=ASAN ./build.sh --be
 
-# Clean and rebuild
-./build.sh --be --clean
-
-# Build with specific options
-./build.sh --be --enable-shared-data  # For shared-data mode
+# Fast single-binary UT loop
+./run-be-ut.sh --build-target <test_binary> --module <test_binary> --without-java-ext
 ```
 
-### Fast UT Build Tip
+Useful core binaries for fast iterations:
 
-Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+- `base_test`
+- `io_test`
+- `fs_test`
+- `types_test`
+- `column_test`
+- `runtime_test`
+- `expr_test`
+
+## Core C++ Rules
+
+- Format with the repo `.clang-format`.
+- Prefer `#pragma once`.
+- Keep include order: corresponding header, C system, C++ stdlib, third-party, StarRocks.
+- Use `Status` and `StatusOr` for recoverable errors.
+- Treat hot-path allocations and row-by-row virtual dispatch as performance smells.
+
+## Architecture Workflow
+
+- If you change BE layering rules, edit `be/module_boundary_manifest.json` first.
+- After manifest changes, run `python3 build-support/render_be_agents.py --write`.
+- Before finishing BE work, run `python3 build-support/check_be_module_boundaries.py --mode full`.
+- If the check fails on a pre-existing edge, confirm it is already listed in `build-support/be_module_boundary_baseline.json`.
+- If the check fails on a new edge, fix the code or update the manifest. Do not add to the baseline unless the debt is deliberate and reviewed.
+- If you touch the baseline file, run the changed-files check with `--enforce-baseline-shrink`; fixed entries should be deleted, never rewritten into new debt.
+
+<!-- BEGIN GENERATED: BE MODULE HARNESSES -->
+## Module Harness
+
+This section is generated from `be/module_boundary_manifest.json`.
+Run `python3 build-support/render_be_agents.py --write` after changing the manifest.
+Run `python3 build-support/check_be_module_boundaries.py --mode full` to validate the same rules mechanically.
+
+### Base (`base`)
+Lowest-level BE primitives. Keep it free of higher-level StarRocks module dependencies.
+- Targets: `Base`
+- Allowed internal include prefixes: `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Gutil`
+- Core tests: `base_test`
+- Remediation: Move shared helpers into Base/Gutil or introduce a lower-level interface instead of pulling in higher-level BE modules.
+
+### Gutil (`gutil`)
+Standalone utility substrate. Do not couple it to BE modules.
+- Targets: `Gutil`
+- Allowed internal include prefixes: `gutil/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
+- Remediation: Keep Gutil independent; move BE-specific logic out instead of importing BE modules.
+
+### Common (`common`)
+Core shared infrastructure above Base/Gutil and generated code only. Higher-level BE modules must not leak back into it.
+- Targets: `Common`
+- Allowed internal include prefixes: `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `common_test`
+- Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated code.
+
+### Cache (`cache`)
+Cache implementation module for DataCache facade, cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, StarCache integration, and peer-cache RPC reads without service/bootstrap or ExecEnv singleton coupling.
+- Targets: `Cache`
+- Allowed internal include prefixes: `cache/`, `common/brpc/`, `runtime/current_thread.h`, `runtime/mem_tracker.h`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Runtime`, `FileSystem`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `cache_test`
+- Remediation: Keep Cache self-contained within cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache.
+
+### HttpService (`httpservice`)
+BE HTTP pages, admin actions, load actions, download helpers, and web handlers.
+- Targets: `HttpService`
+- Allowed internal include prefixes: `http/`, `cache/`, `compute_env/`, `data_workflows/`, `exec/`, `exec_primitive/`, `exprs/`, `fs/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `storage_primitive/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Storage`, `DataWorkflows`, `Orchestration`, `Runtime`, `ComputeEnv`, `Exec`, `ExecRuntime`, `Expr`, `ExprDict`, `ExprTableFunction`, `ExprUtility`, `FileSystem`, `IO`, `Platform`, `StoragePrimitive`, `Cache`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep BE HTTP pages, actions, download helpers, and web handlers in HttpService; keep reusable lower-level helpers in their owning modules such as Platform and Runtime.
+
+### IO (`io`)
+Minimal IO foundation used by FS and upper layers.
+- Targets: `IO`
+- Allowed internal include prefixes: `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
+- Core tests: `io_test`
+- Remediation: Keep IO free of higher FS/runtime/storage/exec/service code; move the dependency upward or add a lower-level interface.
+
+### FileSystem (`filesystem`)
+Filesystem module on top of IO, including core abstractions and non-JNI filesystem providers.
+- Targets: `FileSystem`
+- Allowed internal include prefixes: `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `IO`, `Common`, `Base`, `Gutil`
+- Core tests: `fs_test`
+- Remediation: Keep FileSystem limited to IO plus filesystem code that does not require runtime/JNI integration; move runtime-backed filesystem providers to fs_ext.
+
+### HdfsFileSystem (`hdfsfilesystem`)
+HDFS filesystem extension above FileSystem for libhdfs/JNI runtime integration.
+- Targets: `HdfsFileSystem`
+- Allowed internal include prefixes: `fs_ext/hdfs/`, `fs/`, `io/`, `runtime/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FileSystem`, `Runtime`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `hdfs_filesystem_test`
+- Remediation: Keep HDFS-specific libhdfs/JNI integration in fs_ext; shared filesystem contracts belong in FileSystem.
+
+### Platform (`platform`)
+Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service, including reusable HTTP client/server primitives.
+- Targets: `Platform`
+- Allowed internal include prefixes: `platform/`, `fs/`, `io/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FileSystem`, `IO`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `platform_test`
+- Remediation: Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, HTTP primitive, and platform-level helpers; move runtime, exec, storage, and service integration upward.
+
+### Types (`typecore`)
+Core type system without runtime/storage/exec coupling.
+- Targets: `Types`
+- Allowed internal include prefixes: `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
+- Core tests: `types_test`
+- Remediation: Keep Types independent of runtime/util/storage/exec layers; move integration code into higher layers.
+
+### ColumnCore (`columncore`)
+Core column representations that must stay independent of ChunkCore and higher layers.
+- Targets: `ColumnCore`
+- Allowed internal include prefixes: `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `column_test`
+- Remediation: Keep ColumnCore free of ChunkCore/Runtime/Exec/Storage coupling; move integration code upward or introduce an interface.
+
+### ChunkCore (`chunkcore`)
+Core chunk, schema, field, and chunk-adjacent helpers on top of ColumnCore.
+- Targets: `ChunkCore`
+- Allowed internal include prefixes: `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `chunk_test`
+- Remediation: Keep ChunkCore limited to chunk/schema helpers and free of Runtime/Exec/Storage-specific serialization coupling.
+
+### ColumnSortCore (`columnsortcore`)
+Reusable column and chunk sorting primitives above ChunkCore without runtime, exec, storage, or expression coupling.
+- Targets: `ColumnSortCore`
+- Allowed internal include prefixes: `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `column_sort_core_test`
+- Remediation: Keep ColumnSortCore limited to reusable sorting and permutation primitives; move runtime merge/cursor orchestration to ComputeEnv or higher layers.
+
+### Runtime (`runtime`)
+Core runtime building blocks and process-scoped runtime environment resources without Exec/Storage/Service coupling.
+- Targets: `Runtime`
+- Allowed internal include prefixes: `runtime/`, `platform/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Platform`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `runtime_test`
+- Remediation: Keep Runtime restricted to core runtime infrastructure and process-scoped runtime environment resources; move execution, service, storage, stream-load, and connector integration into higher modules.
+
+### Format (`format`)
+Format module for core format primitives and concrete CSV, JSON, Avro, ORC, and Parquet implementations.
+- Targets: `Formats`, `FormatParquet`, `FormatOrc`, `FormatAvro`, `FormatJson`, `FormatCsv`, `FormatCore`
+- Allowed internal include prefixes: `formats/`, `cache/`, `compute_env/`, `exec_primitive/runtime_filter/`, `exprs/`, `runtime/`, `fs/`, `io/`, `storage_primitive/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `FileSystem`, `IO`, `Cache`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `orc`
+- Core tests: `format_test`
+- Remediation: Keep format code inside the Format module; move connector orchestration and higher execution policy upward.
+
+### StoragePrimitive (`storageprimitive`)
+Shared storage-access primitives, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+- Targets: `StoragePrimitive`
+- Allowed internal include prefixes: `storage_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `storage_primitive_test`
+- Remediation: Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward.
+
+### StorageBase (`storagebase`)
+Base storage algorithms above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+- Targets: `StorageBase`
+- Allowed internal include prefixes: `storage/base/`, `storage_primitive/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `StoragePrimitive`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `storage_base_test`
+- Remediation: Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward.
+
+### Storage (`storage`)
+Concrete storage engine: tablet/rowset/segment management, compaction, persistent index, lake (cloud-native) tablets, binlog, inverted/vector indexes, and sstable, depending only on ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and Platform HTTP helpers for replication transport, without Exec/Service/Connector/Agent reach-up or ExecEnv singleton coupling.
+- Targets: `Storage`
+- Allowed internal include prefixes: `storage/`, `compute_env/`, `cache/`, `exec_primitive/`, `storage_primitive/`, `exprs/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `StorageBase`, `StoragePrimitive`, `ExecPrimitive`, `ComputeEnv`, `Cache`, `Expr`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep Storage limited to the concrete storage engine over ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and Platform HTTP helpers; move Exec, Service, Connector, Agent, and DataWorkflows orchestration upward and route ExecEnv access through injected dependencies.
+
+### ComputeEnv (`computeenv`)
+Shared compute-side BE environment boundary for process-scoped compute resources, StarOS/Starlet worker runtime, load-path management, query-scoped scan coordination helpers, query-cache primitives, WorkGroup scheduling/executor resources, StarCache coordination, and pipeline controls below full Exec/Storage and above Runtime.
+- Targets: `ComputeEnv`
+- Allowed internal include prefixes: `compute_env/`, `cache/`, `exec_primitive/`, `storage_primitive/`, `exprs/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Cache`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `compute_env_test`, `compute_env_sorting_test`
+- Remediation: Keep ComputeEnv limited to process-scoped compute resources, StarOS/Starlet worker runtime, load-path management without ExecEnv or concrete storage engine coupling, query-scoped scan coordination helpers without concrete scan/storage policy, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, StarCache coordination, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward.
+
+### AgentServer (`agentserver`)
+FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker helpers below Service.
+- Targets: `AgentServer`
+- Allowed internal include prefixes: `agent/`, `data_workflows/`, `cache/`, `compute_env/workgroup/`, `exec/pipeline/query_context.h`, `exec/runtime/query_context_manager.h`, `fs/`, `io/`, `runtime/`, `storage/`, `storage_primitive/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Runtime`, `DataWorkflows`, `Storage`, `Cache`, `ComputeEnv`, `Exec`, `ExecRuntime`, `StoragePrimitive`, `Platform`, `FileSystem`, `IO`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep AgentServer as FE-agent task and heartbeat orchestration below Service; move service/bootstrap integration upward.
+
+### DataWorkflows (`dataworkflows`)
+Data-plane workflow orchestration above concrete Storage and Exec for load, delete, schema-change, and tablet-write workflows without service/bootstrap ownership.
+- Targets: `DataWorkflows`
+- Allowed internal include prefixes: `data_workflows/`, `cache/`, `connector/file/`, `storage/`, `storage_primitive/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Storage`, `Exec`, `Cache`, `ConnectorFile`, `Runtime`, `StorageBase`, `StoragePrimitive`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `Runtime`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `data_workflows_test`
+- Remediation: Keep DataWorkflows limited to data-plane orchestration over concrete Storage and Exec; move service/bootstrap, agent scheduling, connector registration, and lower reusable primitives to their owning layers.
+
+### Expr (`expr`)
+Core expression infrastructure, UDF runtime helpers, builtin aggregate registry, and aggregate-state combinator helpers that depend only on Platform, Geo, Runtime, and lower layers.
+- Targets: `Expr`
+- Allowed internal include prefixes: `exprs/`, `platform/`, `geo/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Platform`, `Geo`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `expr_test`, `expr_java_test`
+- Remediation: Keep Expr limited to core expression infrastructure, UDF runtime helpers, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers.
+
+### ExecPrimitive (`execprimitive`)
+Primitive execution contracts, synchronous and asynchronous DataSink lifecycle contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
+- Targets: `ExecPrimitive`
+- Allowed internal include prefixes: `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `exec_primitive_test`
+- Remediation: Keep ExecPrimitive limited to execution contracts, synchronous and asynchronous DataSink lifecycle contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward.
+
+### ExecRuntime (`execruntime`)
+Operator-tree execution framework for query and fragment contexts, driver lifecycle, execution groups, and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.
+- Targets: `ExecRuntime`
+- Allowed internal include prefixes: `compute_env/`, `exec/runtime/`, `exec_primitive/`, `exec/pipeline/operator_with_dependency.h`, `storage_primitive/`, `exprs/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ExecPrimitive`, `StoragePrimitive`, `Expr`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `exec_runtime_test`
+- Remediation: Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward.
+
+### ConnectorPrimitive (`connectorprimitive`)
+Connector contracts, DataSource, DataSourceProvider default mechanics, and generic connector sink memory management interfaces without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
+- Targets: `ConnectorPrimitive`
+- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_primitive_test`
+- Remediation: Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and generic sink memory policies expressed through lower-level interfaces; move concrete connectors, reusable sink/file-writer helpers, registry wiring, storage, service, and full Exec integration upward.
+
+### ConnectorCommon (`connectorcommon`)
+Reusable connector sink/file-writer helpers above connector contracts, including sink commit/profile types and shared writer-side utilities, without concrete connector registry composition, service, HTTP, or full Exec coupling.
+- Targets: `ConnectorCommon`
+- Allowed internal include prefixes: `connector/common/`, `connector_primitive/`, `compute_env/`, `cache/`, `storage_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `platform/`, `formats/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ConnectorPrimitive`, `Cache`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `Platform`, `FormatCore`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_common_test`
+- Remediation: Keep ConnectorCommon limited to reusable connector sink/file-writer helpers expressed through connector contracts and compute/runtime lower layers; move concrete connectors, registry wiring, service, HTTP, storage-engine-specific behavior, and full Exec integration upward.
+
+### ModuleBootstrap (`modulebootstrap`)
+Default BE module bootstrap composition for built-in module registration, including filesystem provider registry installation and connector registration.
+- Targets: `ModuleBootstrap`
+- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/file/`, `connector/hive/`, `connector/iceberg/`, `connector/lake/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector_primitive/`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FileSystem`, `HdfsFileSystem`, `ComputeEnv`, `Connector`, `ConnectorFile`, `ConnectorHive`, `ConnectorIceberg`, `ConnectorLake`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorJDBC`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `module_bootstrap_test`
+- Remediation: Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly.
+
+### ExecSchemaScannerCore (`execschemascannercore`)
+Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.
+- Targets: `ExecSchemaScannerCore`
+- Allowed internal include prefixes: `exec/schema_scanner.h`, `exec/schema_scanner_factory.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Remediation: Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules.
+
+### ExecJoinCore (`execjoincore`)
+Reusable exec join hash table algorithms without join nodes, pipeline, storage, service, or util coupling.
+- Targets: `ExecJoinCore`
+- Allowed internal include prefixes: `exec/join/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `Expr`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `exec_join_core_test`
+- Remediation: Keep ExecJoinCore limited to reusable join hash table algorithms; leave join nodes, pipeline operators, storage/service integration, and util diagnostics in higher modules.
+
+### Orchestration (`orchestration`)
+Orchestration layer below Service for query, fragment, and ingestion lifecycle entrypoints over concrete runtime and execution modules.
+- Targets: `Orchestration`
+- Allowed internal include prefixes: `orchestration/`, `data_workflows/`, `data_sink/result/`, `data_sink/exchange/`, `data_sink/tablet/`, `connector_primitive/`, `column/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
+- Allowed target deps: `DataWorkflows`, `DataSinkResult`, `DataSinkExchange`, `DataSinkTablet`, `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `Platform`, `ColumnCore`, `Runtime`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
+- Core tests: `orchestration_test`
+- Remediation: Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules.
+
+### Script (`script`)
+Diagnostic script execution and command dispatch layer below Service, HttpService, Tools, and AgentServer, and above the remaining reusable BE modules.
+- Targets: `Script`
+- Allowed internal include prefixes: `script/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `data_workflows/`, `exec/`, `exec_primitive/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `geo/`, `gutil/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `storage_primitive/`, `types/`
+- Allowed target deps: `Base`, `Gutil`, `Common`, `Cache`, `IO`, `FileSystem`, `Platform`, `Types`, `ColumnCore`, `ChunkCore`, `ColumnSortCore`, `Runtime`, `Runtime`, `Runtime`, `Formats`, `StoragePrimitive`, `StorageBase`, `Storage`, `ComputeEnv`, `DataWorkflows`, `Expr`, `ExprDict`, `ExprTableFunction`, `ExprUtility`, `ExecPrimitive`, `ExecRuntime`, `ExecSchemaScannerCore`, `SchemaScanners`, `ExecJoinCore`, `Exec`, `ConnectorPrimitive`, `Connector`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorElasticsearch`, `ConnectorMySQL`, `Orchestration`, `Geo`, `StarRocksGen`
+- Core tests: `script_test`
+- Remediation: Keep Script below Service, HttpService, Tools, and AgentServer; lower reusable behavior can live in lower BE modules that Script is allowed to depend on.
+
+### Service (`service`)
+Shared service-layer target above DataWorkflows, Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
+- Targets: `Service`
+- Allowed internal include prefixes: `service/`, `script/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `data_workflows/`, `exec/`, `exec_primitive/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `storage/`, `storage_primitive/`, `types/`
+- Allowed target deps: `Script`, `Runtime`, `DataWorkflows`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorFile`, `ConnectorPrimitive`, `Exec`, `Formats`, `ChunkCore`, `ColumnCore`, `Types`
+- Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
+<!-- END GENERATED: BE MODULE HARNESSES -->
+
+## BE-Specific Sync Rules
+
+- BE configs are declared in `be/src/common/config.h`; update `docs/en/administration/management/BE_configuration.md` and `docs/zh/` peer docs when config behavior changes.
+- BE metrics must update the matching monitoring docs when names, meanings, or labels change.
+- `be/src/common` has extra config-header rules in [`be/src/common/AGENTS.md`](./src/common/AGENTS.md).
+
+## Verification Before Handoff
+
+Run the smallest relevant UT binary plus the architecture harness:
 
 ```bash
-CMAKE_BUILD_PREFIX=/path/to/build \
-STARROCKS_THIRDPARTY=/path/to/thirdparty \
-./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+python3 build-support/check_be_module_boundaries.py --mode full
+python3 build-support/render_be_agents.py --check
 ```
 
-### Fast UT Build Tip
-
-Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
-
-```bash
-CMAKE_BUILD_PREFIX=/path/to/build \
-STARROCKS_THIRDPARTY=/path/to/thirdparty \
-./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
-```
-
-### CMake Options
-
-Key CMake options (see `be/CMakeLists.txt`):
-- `CMAKE_BUILD_TYPE`: Release, Debug, ASAN
-- `USE_AVX2`, `USE_AVX512`: SIMD instruction sets
-- `USE_STAROS`: Enable shared-data mode
-- `WITH_GCOV`: Enable code coverage
-- `MAKE_TEST`: Build unit tests
-
-### Unit Test Linking Note
-
-- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
-  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
-- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
-  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
-- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
-  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
-
-### Unit Test Linking Note
-
-- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
-  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
-
-## Code Style
-
-### Formatting
-- **Style base**: Google C++ Style Guide
-- **Config file**: `.clang-format` at project root
-- **Indent**: 4 spaces
-- **Line limit**: 120 characters
-- **Pointer alignment**: Left (`int* ptr`, not `int *ptr`)
-
-```bash
-# Format a file
-clang-format -i src/storage/tablet.cpp
-
-# Check formatting
-clang-format --dry-run -Werror src/storage/tablet.cpp
-```
-
-### Naming Conventions
-
-```cpp
-// Classes: PascalCase
-class TabletManager { };
-
-// Functions: snake_case
-Status create_tablet(const TCreateTabletReq& req);
-
-// Member variables: underscore prefix
-class Tablet {
-private:
-    int64_t _tablet_id;
-    std::string _path;
-};
-
-// Constants: ALL_CAPS with underscores
-constexpr int64_t MAX_SEGMENT_SIZE = 1024 * 1024 * 1024;
-
-// Namespaces: lowercase
-namespace starrocks { }
-```
-
-### Header Guards
-
-Use `#pragma once` instead of traditional include guards:
-
-```cpp
-// Good
-#pragma once
-
-// Avoid
-#ifndef STARROCKS_BE_STORAGE_TABLET_H
-#define STARROCKS_BE_STORAGE_TABLET_H
-...
-#endif
-```
-
-### Include Order
-
-1. Corresponding header file (for .cpp files)
-2. C system headers
-3. C++ standard library headers
-4. Third-party library headers
-5. StarRocks headers
-
-```cpp
-#include "storage/tablet.h"  // Corresponding header
-
-#include <sys/types.h>       // C system
-
-#include <memory>            // C++ standard
-#include <vector>
-
-#include <glog/logging.h>    // Third-party
-
-#include "base/status.h"     // StarRocks
-#include "storage/rowset.h"
-```
-
-## Module Boundaries
-
-### base
-- **Minimal deps only**: `be/src/base` may only depend on `gen_cpp/*`, `gutil/*`, system headers, and third-party libraries.
-- **No other BE modules**: do not include headers from `common/*`, `util/*`, `storage/*`, etc.
-
-### gutil
-- **No StarRocks module deps**: `be/src/gutil` must not include headers from other BE modules (e.g. `common/*`, `util/*`, `storage/*`).
-- **Allowed deps**: `gutil/*`, system headers, and third-party base/butil headers.
-- **Logging**: use `gutil/logging.h` (glog wrapper) instead of `common/logging.h`.
-- **Compiler macros**: use `gutil/compiler_util.h` (do not include `common/compiler_util.h` from gutil).
-
-### common
-- **Allowed deps only**: `be/src/common` may depend on `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
-- **No other BE modules**: do not include headers from `util/*`, `runtime/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, etc.
-
-### iocore (`IOCore` target)
-- **Allowed deps only**: code compiled into `IOCore` (currently `be/src/io/core/*`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, `io/core/*`, system headers, and third-party libraries.
-- **No higher-level BE deps**: do not include headers from non-core `io/*` components (for example `s3_input_stream.h`, `cache_input_stream.h`), or from `fs/*`, `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`.
-- **Goal**: keep `IOCore` minimal and independently buildable as a shared foundation for upper IO/FS layers.
-- **UT constraint**: keep IOCore-focused tests in `io_test`; avoid changes that force `io_test` to link full `FileSystem`, `Runtime`, or `Storage`.
-
-### fscore (`FSCore` target)
-- **Allowed deps only**: code compiled into `FSCore` (currently `be/src/fs/{fs.cpp,encrypt_file.cpp,bundle_file.cpp,fs_options.cpp,fs_options_helper.cpp}`) may only depend on `IOCore`, `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, `fs/*` core headers, system headers, and third-party libraries.
-- **Boundary with `FileSystem`**: keep factory/backend implementations in `FileSystem` (for example `fs_factory.cpp`, `fs_posix.cpp`, `fs_broker.cpp`, `fs_memory.cpp`, `fs_s3.cpp`, `hdfs/*`, `azure/*`, `s3/*`, `credential/*`, `fs_starlet.cpp`).
-- **Runtime dependency rule**: avoid adding `runtime/*` dependencies to `FSCore`. Existing dependency from `fs_options_helper.cpp` to `runtime/file_result_writer.h` is allowed; do not add more runtime coupling without updating this boundary.
-- **UT constraint**: keep core-only FS tests in `fs_core_test` and keep it linked to `FSCore` plus core dependencies only.
-
-### typecore (`TypesCore` target)
-- **Allowed deps only**: code compiled into `TypesCore` (for example, selected files under `be/src/types`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
-- **No higher-level BE deps**: do not include headers from `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, etc.
-- **UT constraint**: keep `TypesCore` unit tests in `types_test` and avoid introducing `Util`/`Runtime` link requirements unless a dedicated integration test is used.
-
-### columncore (`ColumnCore` target)
-- **Allowed deps only**: code compiled into `ColumnCore` (the `be/src/column` module) may only depend on `TypesCore`, `Common`, `Base`, `Gutils`, `gen_cpp/*`, system headers, and third-party libraries.
-- **No circular deps**: do **not** introduce dependencies from `ColumnCore` to `Util`, `Runtime`, `Storage`, `Exec`, or any other higher-level module. Circular dependencies between modules are strictly forbidden.
-- **Goal**: `ColumnCore` should be buildable with minimal dependencies so that `column_test` can be compiled and run without building the entire codebase. This enables fast AI-agent iteration loops.
-- **UT constraint**: keep `ColumnCore` unit tests in `column_test`. To verify changes quickly, run:
-  ```bash
-  STARROCKS_LINKER=lld STARROCKS_THIRDPARTY=/var/local/thirdparty \
-  ./run-be-ut.sh --clean --with-dynamic --build-target column_test
-  ```
-  This builds only `column_test` and its minimal dependencies, making it extremely fast for iterative development.
-
-### runtimecore (`RuntimeCore` target)
-- **Allowed deps only**: code compiled into `RuntimeCore` (currently selected files under `be/src/runtime`, starting with `mem_tracker.cpp`) may only depend on `chunkcore` (`ChunkCore`), `columncore` (`ColumnCore`), `typecore` (`TypesCore`), `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
-- **No higher-level BE deps**: do not include headers from `runtime/*` components that require full `Runtime`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`, etc.
-- **UT constraint**: keep `RuntimeCore` unit tests in `runtime_core_test`, and ensure that `runtime_core_test` links only `RuntimeCore` plus its allowed core dependencies (similar to `column_test`/`types_test` style minimal linkage).
-
-### exprcore (`ExprCore` target)
-- **Allowed deps only**: code compiled into `ExprCore` (currently selected files under `be/src/exprs`, starting with `function_context.cpp`) may only depend on `runtimecore` (`RuntimeCore`) and its transitive core dependencies (`ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `gen_cpp/*`), plus system headers and third-party libraries.
-- **No higher-level BE deps**: do not include headers from `exprs/*` components that require full `Exprs`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, or other non-core modules.
-- **Goal**: `ExprCore` should remain minimal and independently buildable, so core expression infrastructure can be tested quickly without linking the full `Exprs` stack.
-- **UT constraint**: keep `ExprCore` unit tests in `expr_core_test`, and ensure `expr_core_test` links only `ExprCore` plus its allowed core dependencies. To verify changes quickly, run:
-  ```bash
-  CMAKE_BUILD_PREFIX=/home/az/sr-build STARROCKS_LINKER=lld STARROCKS_THIRDPARTY=/var/local/thirdparty \
-  ./run-be-ut.sh --clean --with-dynamic --build-target expr_core_test --module expr_core_test --without-java-ext
-  ```
-
-## Common Patterns
-
-### Status and StatusOr
-
-Always use `Status` for error handling:
-
-```cpp
-Status do_something() {
-    RETURN_IF_ERROR(validate_input());
-
-    if (condition_failed) {
-        return Status::InvalidArgument("reason");
-    }
-
-    return Status::OK();
-}
-
-// Use StatusOr for returning values with potential errors
-StatusOr<TabletSharedPtr> get_tablet(int64_t tablet_id) {
-    auto tablet = _find_tablet(tablet_id);
-    if (tablet == nullptr) {
-        return Status::NotFound("tablet not found");
-    }
-    return tablet;
-}
-
-// Usage
-auto result = get_tablet(id);
-if (!result.ok()) {
-    return result.status();
-}
-auto tablet = std::move(result).value();
-```
-
-### Column and Chunk
-
-Data is processed in columnar batches:
-
-```cpp
-// Column: A single column of data
-ColumnPtr column = Int32Column::create();
-column->append(1);
-column->append(2);
-
-// Chunk: A collection of columns (like a row batch)
-ChunkPtr chunk = std::make_unique<Chunk>();
-chunk->append_column(column, slot_id);
-
-// Processing
-for (size_t i = 0; i < chunk->num_rows(); i++) {
-    // Process row i
-}
-```
-
-### Memory Management
-
-Use smart pointers and RAII:
-
-```cpp
-// Prefer unique_ptr for ownership
-std::unique_ptr<Segment> segment = std::make_unique<Segment>();
-
-// Use shared_ptr when shared ownership is needed
-using TabletSharedPtr = std::shared_ptr<Tablet>;
-
-// Use raw pointers only for non-owning references
-void process(const Tablet* tablet);  // Does not take ownership
-```
-
-### Logging
-
-Use Google Logging (glog):
-
-```cpp
-LOG(INFO) << "Starting tablet " << tablet_id;
-LOG(WARNING) << "Slow query detected: " << query_id;
-LOG(ERROR) << "Failed to open file: " << path;
-
-// Conditional logging
-VLOG(1) << "Debug info";  // Verbose logging, level 1
-
-// Check and log
-CHECK(ptr != nullptr) << "Pointer must not be null";
-DCHECK(condition) << "Debug-only check";
-```
-
-## Testing
-
-### Test Framework
-
-Uses Google Test (gtest). Tests are in `be/test/`, mirroring source structure.
-
-```bash
-# Run all BE tests
-./run-be-ut.sh
-
-# Run specific test suite
-./run-be-ut.sh --test CompactionUtilsTest
-
-# Run with gtest filter
-./run-be-ut.sh --gtest_filter "TabletUpdatesTest*:CompactionTest*"
-
-# Run with ASAN
-BUILD_TYPE=ASAN ./run-be-ut.sh
-```
-
-### Writing Tests
-
-```cpp
-// File: be/test/storage/tablet_test.cpp
-#include "storage/tablet.h"
-
-#include <gtest/gtest.h>
-
-namespace starrocks {
-
-class TabletTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        // Setup code
-    }
-
-    void TearDown() override {
-        // Cleanup code
-    }
-};
-
-TEST_F(TabletTest, CreateTablet) {
-    auto tablet = create_test_tablet();
-    ASSERT_NE(tablet, nullptr);
-    EXPECT_EQ(tablet->tablet_id(), 12345);
-}
-
-TEST_F(TabletTest, InsertData) {
-    auto tablet = create_test_tablet();
-    auto status = tablet->insert(test_data);
-    ASSERT_TRUE(status.ok()) << status.message();
-}
-
-}  // namespace starrocks
-```
-
-### Test Utilities
-
-Common test helpers in `be/src/testutil/`:
-- `column_test_helper.h`: Create test columns
-- `assert.h`: Custom assertions
-- `init_test_env.h`: Test environment setup
-
-## Performance Guidelines
-
-### SIMD Usage
-
-Leverage SIMD for performance-critical code:
-
-```cpp
-#include "simd/simd.h"
-
-// Check SIMD support at runtime
-if (SIMD::support_avx2()) {
-    // Use AVX2 implementation
-}
-
-// Use SIMD utilities for common operations
-SIMD::filter(column, filter_data);
-```
-
-### Vectorization Tips
-
-1. Process data in batches, not row-by-row
-2. Avoid branches in inner loops
-3. Use `Column` operations instead of element-wise access
-4. Preallocate memory when possible
-
-```cpp
-// Good: Batch processing
-void process_batch(const Column* input, Column* output) {
-    auto* in_data = down_cast<const Int32Column*>(input)->get_data().data();
-    auto* out_data = down_cast<Int32Column*>(output)->get_data().data();
-
-    for (size_t i = 0; i < input->size(); i++) {
-        out_data[i] = in_data[i] * 2;
-    }
-}
-
-// Avoid: Row-by-row with virtual calls
-void process_slow(const Column* input, Column* output) {
-    for (size_t i = 0; i < input->size(); i++) {
-        output->append_datum(input->get(i).get_int32() * 2);
-    }
-}
-```
-
-### Memory Allocation
-
-1. Avoid allocations in hot paths
-2. Use memory pools for frequent allocations
-3. Reserve capacity for vectors when size is known
-
-```cpp
-// Good: Reserve capacity
-std::vector<int> data;
-data.reserve(expected_size);
-
-// Use ColumnAllocator for column data
-auto* allocator = ColumnAllocatorFactory::instance();
-```
-
-## Key Files to Know
-
-| File | Purpose |
-|------|---------|
-| `src/common/status.h` | Error handling with Status |
-| `src/column/column.h` | Base Column class |
-| `src/column/chunk.h` | Chunk (batch of columns) |
-| `src/exec/pipeline/pipeline_driver.h` | Pipeline execution driver |
-| `src/storage/tablet.h` | Tablet abstraction |
-| `src/storage/rowset/segment.h` | Storage segment |
-| `src/exprs/expr.h` | Expression base class |
-
-## Debugging Tips
-
-### ASAN Build
-
-For memory error detection:
-```bash
-BUILD_TYPE=ASAN ./run-be-ut.sh
-```
-
-### Core Dumps
-
-Enable core dumps for crash analysis:
-```bash
-ulimit -c unlimited
-# Cores will be in the working directory
-```
-
-### Logging
-
-Increase verbosity for debugging:
-```cpp
-// In code
-VLOG(1) << "Detailed debug info";
-
-// At runtime
-export GLOG_v=1  # Enable VLOG level 1
-```
-
-## Configuration and Metrics Guidelines
-
-### Adding/Modifying BE Configuration
-
-BE configuration is defined in `be/src/common/config.h`.
-
-```cpp
-// Example: Adding a new config parameter
-CONF_mInt64(my_new_config, "100");  // mutable, default 100
-CONF_Int64(my_static_config, "50"); // immutable, default 50
-CONF_Bool(enable_feature, "false"); // boolean config
-```
-
-**When adding/modifying BE config, you MUST:**
-
-1. Add the config in `be/src/common/config.h`
-2. **Update documentation**: `docs/en/administration/management/BE_configuration.md`
-3. Document in the markdown:
-   - Parameter name
-   - Default value
-   - Type and valid range
-   - Description
-   - Whether it's mutable (can be changed at runtime)
-   - Whether restart is required
-
-### Adding/Modifying BE Metrics
-
-BE metrics are defined in `be/src/util/starrocks_metrics.h`.
-
-```cpp
-// Example: Adding a new metric
-METRIC_DEFINE_INT_COUNTER(my_counter, MetricUnit::REQUESTS);
-METRIC_DEFINE_INT_GAUGE(my_gauge, MetricUnit::BYTES);
-```
-
-**When adding/modifying BE metrics, you MUST:**
-
-1. Define metric in appropriate file (usually `starrocks_metrics.h`)
-2. **Update documentation**: `docs/en/administration/management/monitoring/metrics.md`
-3. Document in the markdown:
-   - Metric name
-   - Type (Counter/Gauge/Histogram)
-   - Unit
-   - Description of what it measures
-   - Labels (if any)
-
-## PR Guidelines for BE Changes
-
-### PR Title
-```
-[Type] Brief description of BE change
-```
-Example: `[BugFix] Fix memory leak in hash join operator`
-
-### PR Checklist for BE Changes
-
-- [ ] Code follows `.clang-format` style
-- [ ] Added/updated unit tests in `be/test/`
-- [ ] No memory leaks (test with ASAN build)
-- [ ] Performance impact considered for hot paths
-- [ ] **If config changed**: Updated `docs/en/administration/management/BE_configuration.md`
-- [ ] **If metrics changed**: Updated `docs/en/administration/management/monitoring/metrics.md`
-
-### Before Submitting
-
-```bash
-# Format code
-clang-format -i src/path/to/file.cpp
-
-# Run relevant tests
-./run-be-ut.sh --test YourTest
-
-# Build with ASAN to check for memory issues
-BUILD_TYPE=ASAN ./run-be-ut.sh --test YourTest
-```
-
-For full PR guidelines, see the root [AGENTS.md](../AGENTS.md#commit--pr-guidelines).
-
-## License Header
-
-All C++ files must have the Apache 2.0 license header:
-
-```cpp
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-```
+If you changed a core module, prefer its focused test binary before broader `run-be-ut.sh`.

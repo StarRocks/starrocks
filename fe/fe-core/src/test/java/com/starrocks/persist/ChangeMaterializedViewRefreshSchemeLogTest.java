@@ -144,4 +144,54 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         alterJobMgr.replayChangeMaterializedViewRefreshScheme(new ChangeMaterializedViewRefreshSchemeLog());
     }
 
+    @Test
+    public void testLastFreshnessConfirmedAtSurvivesReplay(@Mocked GlobalStateMgr globalStateMgr,
+                                                           @Injectable Database db) throws IOException {
+        long freshnessTime = 1700000000000L;
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
+
+        List<Column> columns = new LinkedList<>();
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(freshnessTime);
+        MaterializedView materializedView = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
+                partitionInfo, distributionInfo, refreshScheme);
+        ChangeMaterializedViewRefreshSchemeLog changeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(materializedView);
+        Text.writeString(out, GsonUtils.GSON.toJson(changeLog, ChangeMaterializedViewRefreshSchemeLog.class));
+        out.flush();
+        out.close();
+
+        DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
+        ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
+        in.close();
+        // Not recomputable from the version map, so it must round-trip through the log itself.
+        Assertions.assertEquals(freshnessTime, readChangeLog.getLastFreshnessConfirmedAt());
+
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getLocalMetastore().getDb(anyLong);
+                result = db;
+
+                globalStateMgr.getCurrentState().getLocalMetastore().getTable(anyLong, anyLong);
+                result = materializedView;
+
+                db.getId();
+                result = anyLong;
+
+                materializedView.getId();
+                result = anyLong;
+            }
+        };
+        new AlterJobMgr(null, null, null)
+                .replayChangeMaterializedViewRefreshScheme(changeLog);
+        Assertions.assertEquals(freshnessTime, materializedView.getRefreshScheme().getLastFreshnessConfirmedAt());
+    }
+
 }

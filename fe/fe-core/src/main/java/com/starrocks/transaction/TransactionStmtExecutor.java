@@ -101,19 +101,28 @@ public class TransactionStmtExecutor {
         if (context.getTxnId() != 0) {
             // Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-            String existingLabel = explicitTxnState.getTransactionState().getLabel();
-            long transactionId = explicitTxnState.getTransactionState().getTransactionId();
+            if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+                // Transaction state was lost (e.g., FE leader switch), reset and start fresh
+                if (explicitTxnState != null) {
+                    // Clear stale explicit transaction state to avoid leaving an orphaned entry
+                    globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+                }
+                context.setTxnId(0);
+            } else {
+                String existingLabel = explicitTxnState.getTransactionState().getLabel();
+                long transactionId = explicitTxnState.getTransactionState().getTransactionId();
 
-            // If user explicitly specifies a different label, throw an error
-            String requestedLabel = stmt.getLabel();
-            if (requestedLabel != null && !requestedLabel.isEmpty() && !requestedLabel.equals(existingLabel)) {
-                throw new SemanticException("Transaction already exists with label '" + existingLabel +
-                        "', cannot begin with different label '" + requestedLabel + "'");
+                // If user explicitly specifies a different label, throw an error
+                String requestedLabel = stmt.getLabel();
+                if (requestedLabel != null && !requestedLabel.isEmpty() && !requestedLabel.equals(existingLabel)) {
+                    throw new SemanticException("Transaction already exists with label '" + existingLabel +
+                            "', cannot begin with different label '" + requestedLabel + "'");
+                }
+
+                context.getState().setOk(0, 0,
+                        buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
+                return;
             }
-
-            context.getState().setOk(0, 0,
-                    buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
-            return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
@@ -121,14 +130,12 @@ public class TransactionStmtExecutor {
         // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
         String stmtLabel = stmt.getLabel();
         String label;
+        // A user-specified label must be unique in the cluster, align with INSERT statement behavior. The check
+        // is deferred to the registration below so that checking and publishing happen atomically.
+        boolean checkLabelConflict = false;
         if (stmtLabel != null && !stmtLabel.isEmpty()) {
             FeNameFormat.checkLabel(stmtLabel);
-            // Check if label is already used in any database, align with INSERT statement behavior
-            try {
-                globalTransactionMgr.checkLabelUsedInAnyDatabase(stmtLabel);
-            } catch (LabelAlreadyUsedException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            checkLabelConflict = true;
             label = stmtLabel;
         } else if (labelOverride != null && !labelOverride.isEmpty()) {
             label = labelOverride;
@@ -151,7 +158,15 @@ public class TransactionStmtExecutor {
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
         explicitTxnState.setTransactionState(transactionState);
-        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        if (checkLabelConflict) {
+            try {
+                globalTransactionMgr.addTransactionStateWithLabelCheck(transactionId, explicitTxnState);
+            } catch (LabelAlreadyUsedException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else {
+            globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        }
 
         context.setTxnId(transactionId);
         context.getState().setOk(0, 0,
@@ -185,6 +200,9 @@ public class TransactionStmtExecutor {
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
+                // Cloud Native tables (Lake tables) support multiple DMLs on the same table within a
+                // single transaction because their storage layer handles concurrent writes natively.
+                // Non-Cloud-Native (OLAP) tables do not support this due to tablet version conflicts.
                 if (transactionState.getTableIdList().contains(table.getId()) && !table.isCloudNativeTableOrMaterializedView()) {
                     throw ErrorReportException.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
                 }
@@ -247,7 +265,15 @@ public class TransactionStmtExecutor {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
-            //commit statement not in after begin, do nothing
+            if (context.getTxnId() != 0) {
+                // Transaction state was lost (e.g., FE leader switch). Report error instead of silent success.
+                LOG.warn("explicit transaction state not found for txn {}, possibly lost due to FE leader switch",
+                        context.getTxnId());
+                context.setTxnId(0);
+                context.getState().setError("Transaction state not found, possibly lost due to FE leader switch");
+                return;
+            }
+            // commit statement not after begin, do nothing
             return;
         }
 
@@ -292,7 +318,14 @@ public class TransactionStmtExecutor {
                     commitInfos,
                     failInfos,
                     txnCommitAttachment,
-                    timeout);
+                    timeout * 1000L);
+
+            // Re-fetch transactionState after commit because the COW pattern in DatabaseTransactionMgr
+            // replaces the in-memory state with a deep copy, making the original reference stale.
+            TransactionState freshTxnState = transactionMgr.getTransactionState(databaseId, transactionId);
+            if (freshTxnState != null) {
+                transactionState = freshTxnState;
+            }
 
             long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
                     context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
@@ -339,7 +372,7 @@ public class TransactionStmtExecutor {
             context.getState().setOk(0, 0,
                     buildMessage(transactionState.getLabel(), txnStatus, transactionId, database.getId()));
         } catch (StarRocksException | LockTimeoutException e) {
-            LOG.warn("errors when abort txn", e);
+            LOG.warn("errors when commit txn {}", transactionId, e);
             context.getState().setError(e.getMessage());
         } finally {
             //clean global explicit transaction state
@@ -352,7 +385,15 @@ public class TransactionStmtExecutor {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
-            //rollback statement not in after begin, do nothing
+            if (context.getTxnId() != 0) {
+                // Transaction state was lost (e.g., FE leader switch). Report error instead of silent success.
+                LOG.warn("explicit transaction state not found for txn {}, possibly lost due to FE leader switch",
+                        context.getTxnId());
+                context.setTxnId(0);
+                context.getState().setError("Transaction state not found, possibly lost due to FE leader switch");
+                return;
+            }
+            // rollback statement not after begin, do nothing
             return;
         }
 

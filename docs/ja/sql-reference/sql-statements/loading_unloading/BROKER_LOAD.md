@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Spark を使用したデータ前処理により大規模データのインポート性能を向上させます。"
 toc_max_heading_level: 5
 ---
 
@@ -10,7 +11,7 @@ import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 ## 説明
 
-StarRocks は、MySQL ベースのロード方法である Broker Load を提供します。ロードジョブを送信すると、StarRocks は非同期でジョブを実行します。`SELECT * FROM information_schema.loads` を使用してジョブの結果をクエリすることができます。この機能は v3.1 以降でサポートされています。背景情報、原則、サポートされているデータファイル形式、単一テーブルロードと複数テーブルロードの実行方法、ジョブ結果の表示方法については、[loading overview](../../../loading/Loading_intro.md) を参照してください。
+StarRocks は、MySQL ベースのロード方法である Broker Load を提供します。ロードジョブを送信すると、StarRocks は非同期でジョブを実行します。`SELECT * FROM information_schema.loads` を使用してジョブの結果をクエリすることができます。この機能は v3.1 以降でサポートされています。背景情報、原則、サポートされているデータファイル形式、単一テーブルロードと複数テーブルロードの実行方法、ジョブ結果の表示方法については、[loading overview](../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 <InsertPrivNote />
 
@@ -161,14 +162,58 @@ INTO TABLE <table_name>
   >
   > `format_type_options` は v3.0 以降でサポートされています。
 
-  次の表は、オプションを説明しています。
+  次のパラメーターはオプションの説明です。
 
-| **Parameter** | **Description**                                              |
-| ------------- | ------------------------------------------------------------ |
-| skip_header   | CSV 形式のデータファイルの最初の行をスキップするかどうかを指定します。タイプ: INTEGER。デフォルト値: `0`。<br />一部の CSV 形式のデータファイルでは、最初の行は列名や列データ型などのメタデータを定義するために使用されます。`skip_header` パラメータを設定することで、StarRocks がデータロード中にデータファイルの最初の行をスキップするようにできます。たとえば、このパラメータを `1` に設定すると、StarRocks はデータロード中にデータファイルの最初の行をスキップします。<br />データファイルの最初の行は、ロードステートメントで指定した行区切り文字を使用して区切られている必要があります。 |
-| trim_space    | CSV 形式のデータファイルから列区切り文字の前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。<br />一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際に列区切り文字にスペースが追加されます。これらのスペースは、先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメータを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除するようにできます。<br />ただし、StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース（先行スペースおよび後続スペースを含む）を削除しません。たとえば、次のフィールド値は、パイプ (\|) を列区切り文字として使用し、二重引用符 (`"`) を `enclose` で指定された文字として使用しています：<br />`trim_space` を `true` に設定すると、StarRocks は次のようにフィールド値を処理します：<br /> |
-| enclose       | CSV 形式のデータファイルでフィールド値を [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) に従って囲むために使用される文字を指定します。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字は単一引用符 (`'`) および二重引用符 (`"`) です。<br />`enclose` で指定された文字で囲まれたすべての特殊文字（行区切り文字や列区切り文字を含む）は通常の記号と見なされます。StarRocks は、`enclose` で指定された文字として任意の単一バイト文字を指定できるため、RFC4180 よりも多くのことができます。<br />フィールド値に `enclose` で指定された文字が含まれている場合、同じ文字を使用してその `enclose` で指定された文字をエスケープできます。たとえば、`enclose` を `"` に設定し、フィールド値が `a "quoted" c` の場合、このフィールド値をデータファイルに `"a ""quoted"" c"` として入力できます。 |
-| escape        | 行区切り文字、列区切り文字、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。これらの文字は、StarRocks によって通常の文字と見なされ、それらが存在するフィールド値の一部として解析されます。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ (`\`) で、SQL ステートメントでは二重スラッシュ (`\\`) として記述する必要があります。<br />**注意**<br />`escape` で指定された文字は、`enclose` で指定された文字のペアの内側と外側の両方に適用されます。<br />次の 2 つの例があります：<ul><li>`enclose` を `"` に設定し、`escape` を `\` に設定すると、StarRocks は `"say \"Hello world\""` を `say "Hello world"` に解析します。</li><li>列区切り文字がカンマ (`,`) の場合、`escape` を `\` に設定すると、StarRocks は `a, b\, c` を 2 つの別々のフィールド値 `a` と `b, c` に解析します。</li></ul> |
+#### skip_header
+
+CSV 形式のデータファイルの最初の行をスキップするかどうかを指定します。タイプ: INTEGER。デフォルト値: `0`。
+
+一部の CSV 形式のデータファイルでは、最初の行は列名や列データ型などのメタデータを定義するために使用されます。`skip_header` パラメータを設定することで、StarRocks がデータロード中にデータファイルの最初の行をスキップするようにできます。たとえば、このパラメータを `1` に設定すると、StarRocks はデータロード中にデータファイルの最初の行をスキップします。
+
+データファイルの最初の行は、ロードステートメントで指定した行区切り文字を使用して区切られている必要があります。
+
+#### trim_space
+
+CSV 形式のデータファイルから列区切り文字の前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。
+
+一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際に列区切り文字にスペースが追加されます。これらのスペースは、先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメータを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除するようにできます。
+
+ただし、StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース（先行スペースおよび後続スペースを含む）を削除しません。たとえば、次のフィールド値は、パイプ (`|`) を列区切り文字として使用し、二重引用符 (`"`) を `enclose` で指定された文字として使用しています：
+
+```plain
+|"Love StarRocks"|
+|" Love StarRocks "|
+| "Love StarRocks" |
+```
+
+`trim_space` を `true` に設定すると、StarRocks は次のようにフィールド値を処理します：
+
+```plain
+|"Love StarRocks"|
+|" Love StarRocks "|
+|"Love StarRocks"|
+```
+
+#### enclose
+
+CSV 形式のデータファイルでフィールド値を [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) に従って囲むために使用される文字を指定します。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字は単一引用符 (`'`) および二重引用符 (`"`) です。
+
+`enclose` で指定された文字で囲まれたすべての特殊文字（行区切り文字や列区切り文字を含む）は通常の記号と見なされます。StarRocks は、`enclose` で指定された文字として任意の単一バイト文字を指定できるため、RFC4180 よりも多くのことができます。
+
+フィールド値に `enclose` で指定された文字が含まれている場合、同じ文字を使用してその `enclose` で指定された文字をエスケープできます。たとえば、`enclose` を `"` に設定し、フィールド値が `a "quoted" c` の場合、このフィールド値をデータファイルに `"a ""quoted"" c"` として入力できます。
+
+#### escape
+
+行区切り文字、列区切り文字、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。これらの文字は、StarRocks によって通常の文字と見なされ、それらが存在するフィールド値の一部として解析されます。タイプ: 単一バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ (`\`) で、SQL ステートメントでは二重スラッシュ (`\\`) として記述する必要があります。
+
+> **注意**
+>
+> `escape` で指定された文字は、`enclose` で指定された文字のペアの内側と外側の両方に適用されます。
+
+次の 2 つの例があります：
+
+- `enclose` を `"` に設定し、`escape` を `\` に設定すると、StarRocks は `"say \"Hello world\""` を `say "Hello world"` に解析します。
+- 列区切り文字がカンマ (`,`) の場合、`escape` を `\` に設定すると、StarRocks は `a, b\, c` を 2 つの別々のフィールド値 `a` と `b, c` に解析します。
 
 - `column_list`
 
@@ -178,7 +223,7 @@ INTO TABLE <table_name>
   >
   > データファイルの列が StarRocks テーブルの列に順番にマッピングされる場合、`column_list` を指定する必要はありません。
 
-  データファイルの特定の列をスキップしたい場合、その列を一時的に StarRocks テーブルの列とは異なる名前にするだけで済みます。詳細については、[loading overview](../../../loading/Loading_intro.md) を参照してください。
+  データファイルの特定の列をスキップしたい場合、その列を一時的に StarRocks テーブルの列とは異なる名前にするだけで済みます。詳細については、[loading overview](../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 - `COLUMNS FROM PATH AS`
 
@@ -326,7 +371,7 @@ StarRocks がストレージシステムにアクセスするために使用す�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキー。AWS S3 にアクセスするための資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキー。AWS S3 にアクセスするための資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 
-AWS S3 へのアクセスのための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 へのアクセスのための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[Authentication parameters for accessing AWS S3](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 #### Google GCS
 
@@ -502,6 +547,22 @@ MinIO などの他の S3 互換ストレージシステムを選択する場合�
   | azure.adls2.oauth2_client_secret   | Yes          | 作成された新しいクライアント（アプリケーション）シークレットの値。 |
   | azure.adls2.oauth2_client_endpoint | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント（v1）。 |
 
+- ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  次の表は、`StorageCredentialParams` で構成する必要があるパラメータを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
+  | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
+
 ##### Azure Data Lake Storage Gen1
 
 ストレージシステムとして Data Lake Storage Gen1 を選択する場合、次のいずれかのアクションを実行します：
@@ -598,7 +659,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `strict_mode`
 
-  [strict mode](../../../loading/load_concept/strict_mode.md) を有効にするかどうかを指定します。有効な値：`true` および `false`。デフォルト値：`false`。`true` は strict mode を有効にし、`false` は strict mode を無効にします。
+  [strict mode](../../../loading/strict_mode.md) を有効にするかどうかを指定します。有効な値：`true` および `false`。デフォルト値：`false`。`true` は strict mode を有効にし、`false` は strict mode を無効にします。
 
 - `timezone`
 
@@ -643,6 +704,10 @@ StarRocks は v3.2.3 以降、JSON データのロードをサポートしてい
 - json_root
 
   JSON データファイルからロードしたい JSON データのルート要素。マッチドモードを使用して JSON データをロードする場合にのみ、このパラメータを指定する必要があります。このパラメータの値は有効な JsonPath 文字列です。デフォルトでは、このパラメータの値は空であり、JSON データファイルのすべてのデータがロードされることを示します。詳細については、このトピックの「[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)」セクションを参照してください。
+
+- envelope
+
+  JSON データの CDC エンベロープ形式を指定します。有効な値: `debezium`。デフォルト: 未設定（エンベロープなし）。`debezium` に設定すると、StarRocks は各 JSON メッセージを Debezium CDC イベントとして解析します。メッセージには `op` フィールド（`c`=insert、`u`=update、`d`=delete、`r`=スナップショット読み取り）と、`after` フィールド（c/u/r）または `before` フィールド（d）が含まれている必要があります。`payload` が `null` の tombstone メッセージはスキップされます。`format` が `json` の場合にのみ指定でき、`json_root` または `strip_outer_array` と同時に使用することはできません。
 
 JSON データをロードする際、各 JSON オブジェクトのサイズが 4 GB を超えないように注意してください。JSON データファイル内の個々の JSON オブジェクトが 4 GB を超える場合、「This parser can't support a document that big.」というエラーが報告されます。
 

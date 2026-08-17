@@ -14,25 +14,64 @@
 
 #include "exec/pipeline/scan/glm_manager.h"
 
-#include "common/object_pool.h"
+#include "storage/rowset/rowset.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
 
-void GlobalLateMaterilizationContextMgr::add_ctx(int row_source_slot_id, GlobalLateMaterilizationContext* ctx) {
-    _ctx_map.try_emplace(row_source_slot_id, ctx);
+RowsetSharedPtr OlapScanLazyMaterializationContext::get_rowset(int32_t tablet_id, int32_t drssid,
+                                                               int32_t* segment_idx) const {
+    std::shared_lock lock(_mutex);
+    if (!_rowsets.contains(tablet_id)) {
+        return nullptr;
+    }
+
+    const auto& tablet_rowsets = _rowsets.at(tablet_id);
+
+    RowsetSharedPtr target;
+    int32_t segment_id = 0;
+
+    for (const auto& [rowset, drssid_base] : tablet_rowsets) {
+        const int32_t num_segment = rowset->num_segments();
+        if (drssid_base <= drssid && drssid < drssid_base + num_segment) {
+            segment_id = drssid - drssid_base;
+            target = rowset;
+            break;
+        }
+    }
+
+    *segment_idx = segment_id;
+    return target;
 }
 
-GlobalLateMaterilizationContext* GlobalLateMaterilizationContextMgr::get_ctx(int row_source_slot_id) const {
-    DCHECK(_ctx_map.contains(row_source_slot_id));
-    return _ctx_map.at(row_source_slot_id);
+auto OlapScanLazyMaterializationContext::get_rowset_id_to_drssid(int32_t tablet_id) const -> RowsetIdToDRSSId {
+    RowsetIdToDRSSId map;
+    std::shared_lock lock(_mutex);
+    if (!_rowsets.contains(tablet_id)) {
+        return map;
+    }
+    for (const auto& [rowset, drssid_base] : _rowsets.at(tablet_id)) {
+        map[rowset->rowset_id()] = drssid_base;
+    }
+    return map;
 }
 
-GlobalLateMaterilizationContext* GlobalLateMaterilizationContextMgr::get_or_create_ctx(
-        int32_t row_source_slot_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func) {
-    auto iter = _ctx_map.lazy_emplace(row_source_slot_id, [&](const auto& ctor) {
-        auto ctx = ctor_func();
-        ctor(row_source_slot_id, ctx);
-    });
-    return iter->second;
+void OlapScanLazyMaterializationContext::capture_rowsets(int32_t tablet_id, int64_t version,
+                                                         const std::vector<RowsetSharedPtr>& rowsets) {
+    std::unique_lock lock(_mutex);
+    auto& tablet_rowsets = this->_rowsets[tablet_id];
+    for (const auto& rowset : rowsets) {
+        tablet_rowsets.emplace_back(std::make_tuple(rowset, _dynamic_rss_id_allocator));
+        // + 1 for empty rowset id, which will be used for segment with no rows, and the drssid of this empty rowset is always -1.
+        _dynamic_rss_id_allocator += rowset->num_segments() + 1;
+    }
+    _versions[tablet_id] = version;
 }
-} // namespace starrocks::pipeline
+
+void OlapScanLazyMaterializationContext::set_scan_node(const TOlapScanNode& node) {
+    std::unique_lock lock(_mutex);
+    if (!_thrift_olap_scan_node.has_value()) {
+        _thrift_olap_scan_node = node;
+    }
+}
+
+} // namespace starrocks

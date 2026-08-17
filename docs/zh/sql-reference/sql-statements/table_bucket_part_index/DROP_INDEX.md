@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP INDEX removes a specified bitmap index from a table."
 keywords: ['suoyin']
 ---
 

@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TAggregateFunction;
@@ -47,6 +48,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.util.Strings;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -92,6 +94,9 @@ public class AggregateFunction extends Function {
     @SerializedName(value = "returnsNonNullOnEmpty")
     private boolean returnsNonNullOnEmpty;
 
+    @SerializedName(value = "isolated")
+    private boolean isolationType = true;
+
     public List<Boolean> getIsAscOrder() {
         return isAscOrder;
     }
@@ -117,6 +122,14 @@ public class AggregateFunction extends Function {
 
     public void setIsDistinct(boolean isDistinct) {
         this.isDistinct = isDistinct;
+    }
+
+    public void setIsolationType(boolean isolationType) {
+        this.isolationType = isolationType;
+    }
+
+    public boolean getIsolationType() {
+        return this.isolationType;
     }
 
     // only used for serialization
@@ -206,6 +219,7 @@ public class AggregateFunction extends Function {
         isAscOrder = other.isAscOrder;
         nullsFirst = other.nullsFirst;
         isDistinct = other.isDistinct;
+        isolationType = other.isolationType;
     }
 
     /**
@@ -223,6 +237,7 @@ public class AggregateFunction extends Function {
         newFn.setUserVisible(this.isUserVisible());
         newFn.setAggStateDesc(this.getAggStateDesc());
         newFn.setisAnalyticFn(this.isAnalyticFn());
+        newFn.setIsolationType(this.getIsolationType());
         return newFn;
     }
 
@@ -240,6 +255,9 @@ public class AggregateFunction extends Function {
         Type intermediateType;
         String objectFile;
         String symbolName;
+        CloudConfiguration cloudConfiguration;
+        private boolean isolationType = true;
+        private String inputType;
 
         private AggregateFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -289,6 +307,21 @@ public class AggregateFunction extends Function {
             return this;
         }
 
+        public AggregateFunctionBuilder cloudConfiguration(CloudConfiguration cloudConfiguration) {
+            this.cloudConfiguration = cloudConfiguration;
+            return this;
+        }
+
+        public AggregateFunctionBuilder setIsolationType(boolean isolationType) {
+            this.isolationType = isolationType;
+            return this;
+        }
+
+        public AggregateFunctionBuilder inputType(String inputType) {
+            this.inputType = inputType;
+            return this;
+        }
+
         public void setIntermediateType(Type intermediateType) {
             this.intermediateType = intermediateType;
         }
@@ -300,6 +333,9 @@ public class AggregateFunction extends Function {
             fn.setBinaryType(binaryType);
             fn.symbolName = symbolName;
             fn.setLocation(new HdfsURI(objectFile));
+            fn.setCloudConfiguration(cloudConfiguration);
+            fn.setIsolationType(isolationType);
+            fn.setInputType(inputType);
             return fn;
         }
     }
@@ -338,19 +374,42 @@ public class AggregateFunction extends Function {
 
     @Override
     public String toSql(boolean ifNotExists) {
-        StringBuilder sb = new StringBuilder("CREATE AGGREGATE FUNCTION ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append(dbName() + "." + signatureString() + "\n")
-                .append(" RETURNS " + getReturnType() + "\n")
-                .append(" LOCATION '" + getLocation() + "'\n")
-                .append(" SYMBOL='" + getSymbolName() + "'\n");
+        StringBuilder sb = new StringBuilder();
+        appendCreateHeader(sb, "AGGREGATE", ifNotExists);
+        sb.append(signatureString()).append("\n")
+                .append("RETURNS ").append(getReturnType()).append("\n");
 
-        if (getIntermediateType() != null) {
-            sb.append(" INTERMEDIATE " + getIntermediateType() + "\n");
-        }
+        Map<String, String> props = synthesizePropertiesFromFields();
+        appendPropertiesBlock(sb, props);
         return sb.toString();
+    }
+
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (!Strings.isEmpty(getSymbolName())) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
+        }
+        if (intermediateType != null) {
+            props.put(CreateFunctionStmt.INTERMEDIATE_KEY, intermediateType.toSql());
+        }
+        // Default isolation is isolated (true); only emit when explicitly shared.
+        if (!isolationType) {
+            props.put(CreateFunctionStmt.ISOLATION_KEY, CreateFunctionStmt.ISOLATION_SHARED);
+        }
+        if (isAnalyticFn) {
+            props.put(CreateFunctionStmt.IS_ANALYTIC_NAME, "true");
+        }
+        if (!Strings.isEmpty(getInputType())) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
+        }
+        return props;
     }
 
     @Override
@@ -364,7 +423,8 @@ public class AggregateFunction extends Function {
                 isAnalyticFn == agg.isAnalyticFn && isAggregateFn == agg.isAggregateFn &&
                 returnsNonNullOnEmpty == agg.returnsNonNullOnEmpty && Objects.equals(symbolName, agg.symbolName)
                 && isDistinct == agg.isDistinct && Objects.equals(nullsFirst, agg.getNullsFirst()) &&
-                Objects.equals(isAscOrder, agg.getIsAscOrder()) && super.equals(obj);
+                Objects.equals(isAscOrder, agg.getIsAscOrder()) && isolationType == agg.isolationType
+                && super.equals(obj);
     }
 
     @Override
@@ -384,6 +444,7 @@ public class AggregateFunction extends Function {
             aggFn.setNulls_first(nullsFirst);
         }
         aggFn.setIs_distinct(isDistinct);
+        fn.setIsolated(isolationType);
 
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
@@ -401,6 +462,10 @@ public class AggregateFunction extends Function {
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
+        // isolationType defaults to true (isolated); surface it so users can tell whether the
+        // function was created with isolation = "shared".
+        properties.put(CreateFunctionStmt.ISOLATION_KEY,
+                isolationType ? CreateFunctionStmt.ISOLATION_ISOLATED : CreateFunctionStmt.ISOLATION_SHARED);
         return new Gson().toJson(properties);
     }
 

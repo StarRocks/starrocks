@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the byte length of a string."
 ---
 
 # length

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "referential_constraintsはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # referential_constraints

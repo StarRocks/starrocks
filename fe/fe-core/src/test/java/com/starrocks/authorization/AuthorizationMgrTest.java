@@ -761,7 +761,6 @@ public class AuthorizationMgrTest {
                 ctx, null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
-        AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
 
@@ -1380,9 +1379,73 @@ public class AuthorizationMgrTest {
         GlobalVariable.setActivateAllRolesOnLogin(true);
     }
 
+    // The `public` role is implicitly held by every user, so a privilege change on it
+    // must invalidate every cached merged-privilege collection. A user whose cache entry
+    // was populated *before* the change would otherwise keep authorizing against a stale
+    // snapshot. These two tests pin that behavior for GRANT and REVOKE respectively.
+    @Test
+    public void testGrantToPublicRoleInvalidatesMergedPrivilegeCache() throws Exception {
+        boolean oldCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
+        try {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create user user_grant_public", ctx), ctx);
+            UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_grant_public", "%");
+
+            // Populate the merged-privilege cache for the user before the grant: the user
+            // has no privilege on db.tbl0 yet, so the check is denied and that snapshot is cached.
+            setCurrentUserAndRoles(ctx, user);
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+
+            // Grant the privilege to the implicit `public` role.
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT select on db.tbl0 TO ROLE public", ctx), ctx);
+
+            // The user must now see the privilege; a stale cache entry would still deny it.
+            setCurrentUserAndRoles(ctx, user);
+            Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+        } finally {
+            Config.authorization_enable_priv_collection_cache = oldCacheEnabled;
+        }
+    }
+
+    @Test
+    public void testRevokeFromPublicRoleInvalidatesMergedPrivilegeCache() throws Exception {
+        boolean oldCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
+        try {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create user user_revoke_public", ctx), ctx);
+            UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_revoke_public", "%");
+
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT select on db.tbl0 TO ROLE public", ctx), ctx);
+
+            // Populate the merged-privilege cache for the user while public still grants the
+            // privilege, so the cached snapshot includes it.
+            setCurrentUserAndRoles(ctx, user);
+            Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+
+            // Revoke the privilege from the implicit `public` role.
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "REVOKE select on db.tbl0 FROM ROLE public", ctx), ctx);
+
+            // The user must no longer see the privilege; a stale cache entry would still allow it.
+            setCurrentUserAndRoles(ctx, user);
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+        } finally {
+            Config.authorization_enable_priv_collection_cache = oldCacheEnabled;
+        }
+    }
+
     @Test
     public void testBuiltinRoles() throws Exception {
-        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         // create user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1731,13 +1794,10 @@ public class AuthorizationMgrTest {
             Assertions.assertTrue(e.getMessage().contains("There is no such grant defined on TABLE db.tbl1"));
         }
 
-        StatementBase statementBase =
-                UtFrameUtils.parseStmtWithNewParser("revoke select on table db.* from test_user", ctx);
+        UtFrameUtils.parseStmtWithNewParser("revoke select on table db.* from test_user", ctx);
 
-        statementBase =
-                UtFrameUtils.parseStmtWithNewParser("revoke insert on table db.* from test_user", ctx);
-        statementBase =
-                UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
+        UtFrameUtils.parseStmtWithNewParser("revoke insert on table db.* from test_user", ctx);
+        UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
     }
 
     @Test
@@ -1820,7 +1880,7 @@ public class AuthorizationMgrTest {
 
         sql = "show grants for user_for_system";
         ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, ctx);
+        ShowExecutor.execute(showStreamLoadStmt, ctx);
     }
 
     @Test

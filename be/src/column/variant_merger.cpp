@@ -21,6 +21,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/variant_column.h"
+#include "column/variant_converter.h"
 #include "column/variant_encoder.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -65,12 +66,8 @@ static bool is_supported_numeric_for_variant_merge(LogicalType type) {
     return is_integer_type(type) || is_float_type(type);
 }
 
-static bool is_supported_decimalv3_for_variant_merge(const TypeDescriptor& type_desc) {
-    return type_desc.type == TYPE_DECIMAL32 || type_desc.type == TYPE_DECIMAL64 || type_desc.type == TYPE_DECIMAL128;
-}
-
 static StatusOr<TypeDescriptor> choose_common_decimalv3_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
-    if (!is_supported_decimalv3_for_variant_merge(lhs) || !is_supported_decimalv3_for_variant_merge(rhs)) {
+    if (!lhs.is_decimalv3_type() || !rhs.is_decimalv3_type()) {
         return TypeDescriptor(TYPE_VARIANT);
     }
     if (lhs.scale != rhs.scale) {
@@ -91,7 +88,7 @@ static StatusOr<TypeDescriptor> choose_common_decimalv3_type(const TypeDescripto
     return TypeDescriptor(TYPE_VARIANT);
 }
 
-static StatusOr<LogicalType> choose_common_type(LogicalType lhs, LogicalType rhs) {
+static StatusOr<LogicalType> choose_common_logical_type(LogicalType lhs, LogicalType rhs) {
     if (lhs == rhs) {
         return lhs;
     }
@@ -105,27 +102,6 @@ static StatusOr<LogicalType> choose_common_type(LogicalType lhs, LogicalType rhs
         return TYPE_DOUBLE;
     }
     return wider_integer_type(lhs, rhs);
-}
-
-static StatusOr<TypeDescriptor> choose_common_type_desc(const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
-    if (lhs == rhs) {
-        return lhs;
-    }
-    if (lhs.type == TYPE_VARIANT || rhs.type == TYPE_VARIANT) {
-        return TypeDescriptor(TYPE_VARIANT);
-    }
-    if (lhs.type == TYPE_ARRAY || rhs.type == TYPE_ARRAY) {
-        // Any array-involved conflict falls back to plain variant.
-        return TypeDescriptor(TYPE_VARIANT);
-    }
-    if (lhs.is_decimal_type() || rhs.is_decimal_type()) {
-        if (lhs.is_decimalv3_type() && rhs.is_decimalv3_type()) {
-            return choose_common_decimalv3_type(lhs, rhs);
-        }
-        return TypeDescriptor(TYPE_VARIANT);
-    }
-    ASSIGN_OR_RETURN(LogicalType common_type, choose_common_type(lhs.type, rhs.type));
-    return TypeDescriptor(common_type);
 }
 
 static StatusOr<MutableColumnPtr> cast_column_to_variant(const Column& src_col, const TypeDescriptor& src_type_desc) {
@@ -206,6 +182,38 @@ static StatusOr<MutableColumnPtr> cast_numeric_column(const Column& src_col, Log
     return dst_col;
 }
 
+template <LogicalType ResultType>
+static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& src_col, const cctz::time_zone& zone) {
+    const auto* variant_col = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(&src_col));
+    if (variant_col == nullptr) {
+        return Status::InvalidArgument("input variant column is invalid");
+    }
+    ColumnBuilder<ResultType> builder(src_col.size());
+    const bool is_const = src_col.is_constant();
+    VariantRowRef row_ref;
+    VariantRowValue row_buffer;
+    for (size_t i = 0; i < src_col.size(); ++i) {
+        if (src_col.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+        size_t variant_row = is_const ? 0 : i;
+        if (variant_col->try_get_row_ref(variant_row, &row_ref)) {
+            Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row_ref, zone, builder);
+            RETURN_IF_ERROR(cast_status);
+            continue;
+        }
+        const VariantRowValue* row = variant_col->get_row_value(variant_row, &row_buffer);
+        if (row == nullptr) {
+            builder.append_null();
+            continue;
+        }
+        Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row->as_ref(), zone, builder);
+        RETURN_IF_ERROR(cast_status);
+    }
+    return builder.build(false);
+}
+
 static StatusOr<int128_t> datum_to_decimalv3_int128(const Datum& datum, LogicalType src_type) {
     switch (src_type) {
     case TYPE_DECIMAL32:
@@ -225,8 +233,7 @@ static StatusOr<MutableColumnPtr> cast_decimalv3_column(const Column& src_col, c
     if (src_type_desc == dst_type_desc) {
         return src_col.clone();
     }
-    if (!is_supported_decimalv3_for_variant_merge(src_type_desc) ||
-        !is_supported_decimalv3_for_variant_merge(dst_type_desc)) {
+    if (!src_type_desc.is_decimalv3_type() || !dst_type_desc.is_decimalv3_type()) {
         return Status::NotSupported("unsupported decimalv3 cast type for variant merge");
     }
     if (src_type_desc.scale != dst_type_desc.scale) {
@@ -261,6 +268,101 @@ static StatusOr<MutableColumnPtr> cast_decimalv3_column(const Column& src_col, c
     return dst_col;
 }
 
+static bool is_string_like_type(LogicalType t) {
+    return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+}
+
+StatusOr<TypeDescriptor> VariantColumnMerger::choose_common_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
+    if (lhs == rhs) {
+        return lhs;
+    }
+    if (lhs.type == TYPE_VARIANT || rhs.type == TYPE_VARIANT) {
+        return TypeDescriptor(TYPE_VARIANT);
+    }
+    if (lhs.type == TYPE_ARRAY || rhs.type == TYPE_ARRAY) {
+        return TypeDescriptor(TYPE_VARIANT);
+    }
+    // VARCHAR / CHAR / VARBINARY / BINARY all share the same physical BinaryColumn
+    // representation (raw bytes).  Treat them as compatible and keep the lhs type.
+    if (is_string_like_type(lhs.type) && is_string_like_type(rhs.type)) {
+        return lhs;
+    }
+    if (lhs.is_decimal_type() || rhs.is_decimal_type()) {
+        if (lhs.is_decimalv3_type() && rhs.is_decimalv3_type()) {
+            return choose_common_decimalv3_type(lhs, rhs);
+        }
+        return TypeDescriptor(TYPE_VARIANT);
+    }
+    ASSIGN_OR_RETURN(LogicalType common_type, choose_common_logical_type(lhs.type, rhs.type));
+    return TypeDescriptor(common_type);
+}
+
+StatusOr<MutableColumnPtr> VariantColumnMerger::cast_typed_column(const Column& src_col,
+                                                                  const TypeDescriptor& src_type_desc,
+                                                                  const TypeDescriptor& dst_type_desc) {
+    if (src_type_desc.type == TYPE_VARIANT &&
+        (dst_type_desc.type == TYPE_DATE || dst_type_desc.type == TYPE_DATETIME || dst_type_desc.type == TYPE_TIME)) {
+        return Status::NotSupported("variant merge cast to temporal type requires explicit timezone context");
+    }
+    return cast_typed_column(src_col, src_type_desc, dst_type_desc, cctz::local_time_zone());
+}
+
+StatusOr<MutableColumnPtr> VariantColumnMerger::cast_typed_column(const Column& src_col,
+                                                                  const TypeDescriptor& src_type_desc,
+                                                                  const TypeDescriptor& dst_type_desc,
+                                                                  const cctz::time_zone& timezone) {
+    if (src_type_desc == dst_type_desc) {
+        return src_col.clone();
+    }
+    // String-like types (VARCHAR/CHAR/VARBINARY/BINARY) share the same physical storage;
+    // no byte-level conversion is needed.
+    if (is_string_like_type(src_type_desc.type) && is_string_like_type(dst_type_desc.type)) {
+        return src_col.clone();
+    }
+    if (dst_type_desc.type == TYPE_VARIANT) {
+        return cast_column_to_variant(src_col, src_type_desc);
+    }
+    if (src_type_desc.type == TYPE_VARIANT) {
+        switch (dst_type_desc.type) {
+        case TYPE_BOOLEAN:
+            return cast_variant_column_to_scalar<TYPE_BOOLEAN>(src_col, timezone);
+        case TYPE_TINYINT:
+            return cast_variant_column_to_scalar<TYPE_TINYINT>(src_col, timezone);
+        case TYPE_SMALLINT:
+            return cast_variant_column_to_scalar<TYPE_SMALLINT>(src_col, timezone);
+        case TYPE_INT:
+            return cast_variant_column_to_scalar<TYPE_INT>(src_col, timezone);
+        case TYPE_BIGINT:
+            return cast_variant_column_to_scalar<TYPE_BIGINT>(src_col, timezone);
+        case TYPE_LARGEINT:
+            return cast_variant_column_to_scalar<TYPE_LARGEINT>(src_col, timezone);
+        case TYPE_FLOAT:
+            return cast_variant_column_to_scalar<TYPE_FLOAT>(src_col, timezone);
+        case TYPE_DOUBLE:
+            return cast_variant_column_to_scalar<TYPE_DOUBLE>(src_col, timezone);
+        case TYPE_VARCHAR:
+            return cast_variant_column_to_scalar<TYPE_VARCHAR>(src_col, timezone);
+        case TYPE_DATE:
+            return cast_variant_column_to_scalar<TYPE_DATE>(src_col, timezone);
+        case TYPE_DATETIME:
+            return cast_variant_column_to_scalar<TYPE_DATETIME>(src_col, timezone);
+        case TYPE_TIME:
+            return cast_variant_column_to_scalar<TYPE_TIME>(src_col, timezone);
+        default:
+            break;
+        }
+    }
+    if (src_type_desc.is_decimalv3_type() && dst_type_desc.is_decimalv3_type()) {
+        return cast_decimalv3_column(src_col, src_type_desc, dst_type_desc);
+    }
+    if (is_supported_numeric_for_variant_merge(src_type_desc.type) &&
+        is_supported_numeric_for_variant_merge(dst_type_desc.type)) {
+        return cast_numeric_column(src_col, src_type_desc.type, dst_type_desc.type);
+    }
+    return Status::NotSupported(strings::Substitute("unsupported typed column cast for variant merge: $0 -> $1",
+                                                    src_type_desc.debug_string(), dst_type_desc.debug_string()));
+}
+
 static Status build_path_index(const VariantColumn& column, std::unordered_map<std::string_view, size_t>* out) {
     out->clear();
     out->reserve(column.shredded_paths().size());
@@ -273,7 +375,7 @@ static Status build_path_index(const VariantColumn& column, std::unordered_map<s
     return Status::OK();
 }
 
-static Status validate_no_duplicate_shredded_paths(const VariantColumn& column) {
+static Status check_duplicate_shredded_paths(const VariantColumn& column) {
     std::unordered_set<std::string_view> path_set;
     path_set.reserve(column.shredded_paths().size());
     for (const auto& path : column.shredded_paths()) {
@@ -284,7 +386,7 @@ static Status validate_no_duplicate_shredded_paths(const VariantColumn& column) 
     return Status::OK();
 }
 
-Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn* src) {
+Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn* src) {
     DCHECK(dst != nullptr);
     DCHECK(src != nullptr);
     if (dst == nullptr || src == nullptr) {
@@ -314,87 +416,115 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
         }
 
         ASSIGN_OR_RETURN(TypeDescriptor common_type_desc,
-                         choose_common_type_desc(dst_types[dst_index], src_types[src_index]));
+                         VariantColumnMerger::choose_common_type(dst_types[dst_index], src_types[src_index]));
         LogicalType common_type = common_type_desc.type;
 
         if (common_type == TYPE_VARIANT) {
+            // Cast both sides before mutating either, to avoid leaving dst in an inconsistent
+            // state if the src cast fails after dst has already been replaced.
+            MutableColumnPtr new_dst_col;
+            MutableColumnPtr new_src_col;
             if (dst_type != TYPE_VARIANT) {
-                auto casted_dst_st = cast_column_to_variant(*dst_typed_columns[dst_index], dst_types[dst_index]);
+                auto casted_dst_st = VariantColumnMerger::cast_typed_column(
+                        *dst_typed_columns[dst_index], dst_types[dst_index], TypeDescriptor(TYPE_VARIANT));
                 if (!casted_dst_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
                             "failed to hoist dst typed column to VARIANT on path=$0, src_type=$1, dst_type=$2, err=$3",
                             path, logical_type_to_string(src_type), logical_type_to_string(dst_type),
                             casted_dst_st.status().to_string()));
                 }
-                auto casted_dst = std::move(casted_dst_st).value();
-                dst_typed_columns[dst_index] = std::move(casted_dst);
-                dst_types[dst_index] = TypeDescriptor(TYPE_VARIANT);
+                new_dst_col = std::move(casted_dst_st).value();
             }
             if (src_type != TYPE_VARIANT) {
-                auto casted_src_st = cast_column_to_variant(*src_typed_columns[src_index], src_types[src_index]);
+                auto casted_src_st = VariantColumnMerger::cast_typed_column(
+                        *src_typed_columns[src_index], src_types[src_index], TypeDescriptor(TYPE_VARIANT));
                 if (!casted_src_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
                             "failed to hoist src typed column to VARIANT on path=$0, src_type=$1, dst_type=$2, err=$3",
                             path, logical_type_to_string(src_type), logical_type_to_string(dst_type),
                             casted_src_st.status().to_string()));
                 }
-                auto casted_src = std::move(casted_src_st).value();
-                src_typed_columns[src_index] = std::move(casted_src);
+                new_src_col = std::move(casted_src_st).value();
+            }
+            if (new_dst_col) {
+                dst_typed_columns[dst_index] = std::move(new_dst_col);
+                dst_types[dst_index] = TypeDescriptor(TYPE_VARIANT);
+            }
+            if (new_src_col) {
+                src_typed_columns[src_index] = std::move(new_src_col);
                 src_types[src_index] = TypeDescriptor(TYPE_VARIANT);
             }
             continue;
         }
 
         if (common_type_desc.is_decimalv3_type()) {
+            // Cast both sides before mutating either.
+            MutableColumnPtr new_dst_col;
+            MutableColumnPtr new_src_col;
             if (dst_types[dst_index] != common_type_desc) {
-                auto casted_dst_st =
-                        cast_decimalv3_column(*dst_typed_columns[dst_index], dst_types[dst_index], common_type_desc);
+                auto casted_dst_st = VariantColumnMerger::cast_typed_column(*dst_typed_columns[dst_index],
+                                                                            dst_types[dst_index], common_type_desc);
                 if (!casted_dst_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
                             "failed to widen dst decimal typed column on path=$0 from $1 to $2, err=$3", path,
                             dst_types[dst_index].debug_string(), common_type_desc.debug_string(),
                             casted_dst_st.status().to_string()));
                 }
-                dst_typed_columns[dst_index] = std::move(casted_dst_st).value();
-                dst_types[dst_index] = common_type_desc;
+                new_dst_col = std::move(casted_dst_st).value();
             }
             if (src_types[src_index] != common_type_desc) {
-                auto casted_src_st =
-                        cast_decimalv3_column(*src_typed_columns[src_index], src_types[src_index], common_type_desc);
+                auto casted_src_st = VariantColumnMerger::cast_typed_column(*src_typed_columns[src_index],
+                                                                            src_types[src_index], common_type_desc);
                 if (!casted_src_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
                             "failed to widen src decimal typed column on path=$0 from $1 to $2, err=$3", path,
                             src_types[src_index].debug_string(), common_type_desc.debug_string(),
                             casted_src_st.status().to_string()));
                 }
-                src_typed_columns[src_index] = std::move(casted_src_st).value();
+                new_src_col = std::move(casted_src_st).value();
+            }
+            if (new_dst_col) {
+                dst_typed_columns[dst_index] = std::move(new_dst_col);
+                dst_types[dst_index] = common_type_desc;
+            }
+            if (new_src_col) {
+                src_typed_columns[src_index] = std::move(new_src_col);
                 src_types[src_index] = common_type_desc;
             }
             continue;
         }
 
+        // Cast both sides before mutating either.
+        MutableColumnPtr new_dst_col;
+        MutableColumnPtr new_src_col;
         if (dst_type != common_type) {
-            auto casted_dst_st = cast_numeric_column(*dst_typed_columns[dst_index], dst_type, common_type);
+            auto casted_dst_st = VariantColumnMerger::cast_typed_column(
+                    *dst_typed_columns[dst_index], dst_types[dst_index], TypeDescriptor(common_type));
             if (!casted_dst_st.ok()) {
                 return Status::NotSupported(
                         strings::Substitute("failed to widen dst typed column on path=$0 from $1 to $2, err=$3", path,
                                             logical_type_to_string(dst_type), logical_type_to_string(common_type),
                                             casted_dst_st.status().to_string()));
             }
-            auto casted_dst = std::move(casted_dst_st).value();
-            dst_typed_columns[dst_index] = std::move(casted_dst);
-            dst_types[dst_index] = TypeDescriptor(common_type);
+            new_dst_col = std::move(casted_dst_st).value();
         }
         if (src_type != common_type) {
-            auto casted_src_st = cast_numeric_column(*src_typed_columns[src_index], src_type, common_type);
+            auto casted_src_st = VariantColumnMerger::cast_typed_column(
+                    *src_typed_columns[src_index], src_types[src_index], TypeDescriptor(common_type));
             if (!casted_src_st.ok()) {
                 return Status::NotSupported(
                         strings::Substitute("failed to widen src typed column on path=$0 from $1 to $2, err=$3", path,
                                             logical_type_to_string(src_type), logical_type_to_string(common_type),
                                             casted_src_st.status().to_string()));
             }
-            auto casted_src = std::move(casted_src_st).value();
-            src_typed_columns[src_index] = std::move(casted_src);
+            new_src_col = std::move(casted_src_st).value();
+        }
+        if (new_dst_col) {
+            dst_typed_columns[dst_index] = std::move(new_dst_col);
+            dst_types[dst_index] = TypeDescriptor(common_type);
+        }
+        if (new_src_col) {
+            src_typed_columns[src_index] = std::move(new_src_col);
             src_types[src_index] = TypeDescriptor(common_type);
         }
     }
@@ -431,25 +561,25 @@ static Status append_with_schema_arbitration(VariantColumn* dst, const VariantCo
 
     auto src_mutable = VariantColumn::deep_copy_shredded(src);
     auto* src_variant = down_cast<VariantColumn*>(src_mutable.get());
-    RETURN_IF_ERROR(VariantMerger::arbitrate_type_conflicts(dst, src_variant));
+    RETURN_IF_ERROR(VariantColumnMerger::arbitrate_type_conflicts(dst, src_variant));
     dst->append(*src_variant, 0, src_variant->size());
     return Status::OK();
 }
 
-Status VariantMerger::merge_into(VariantColumn* dst, const VariantColumn& src) {
+Status VariantColumnMerger::merge_into(VariantColumn* dst, const VariantColumn& src) {
     if (dst == nullptr) {
         return Status::InvalidArgument("dst variant column is null");
     }
-    RETURN_IF_ERROR(validate_no_duplicate_shredded_paths(*dst));
-    RETURN_IF_ERROR(validate_no_duplicate_shredded_paths(src));
+    RETURN_IF_ERROR(check_duplicate_shredded_paths(*dst));
+    RETURN_IF_ERROR(check_duplicate_shredded_paths(src));
     RETURN_IF_ERROR(dst->ensure_base_variant_column());
 
     return append_with_schema_arbitration(dst, src);
 }
 
-StatusOr<MutableColumnPtr> VariantMerger::merge(const Columns& inputs) {
+StatusOr<MutableColumnPtr> VariantColumnMerger::merge(const Columns& inputs) {
     if (inputs.empty()) {
-        return Status::InvalidArgument("variant merger requires non-empty input");
+        return Status::InvalidArgument("variant column merger requires non-empty input");
     }
 
     auto merged = VariantColumn::create();

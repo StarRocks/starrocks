@@ -7,6 +7,8 @@
 
 Java Extensions provide connectors to external data sources that are accessed through JNI from the C++ Backend. These connectors enable StarRocks to read data from various external systems.
 
+Read [`handbook/index.md`](../handbook/index.md) first and use [`handbook/domains/generated-and-extensions.md`](../handbook/domains/generated-and-extensions.md) for the shared generated-source and extension workflow map.
+
 ## Module Structure
 
 ```

@@ -14,10 +14,12 @@
 
 #include "storage/lake/compaction_task.h"
 
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 
@@ -30,7 +32,7 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())),
+                                                    RuntimeEnv::GetInstance()->compaction_mem_tracker())),
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 
@@ -79,15 +81,8 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     } else {
         op_compaction->set_new_segment_offset(0);
         for (const auto& file : writer->segments()) {
-            uint32_t segment_idx = op_compaction->output_rowset().segments_size();
-            op_compaction->mutable_output_rowset()->add_segments(file.path);
-            op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-            op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
-            auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
-            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-            segment_meta->set_num_rows(file.num_rows);
-            segment_meta->set_segment_idx(segment_idx);
+            uint32_t segment_idx = op_compaction->output_rowset().segment_metas_size();
+            file.to_proto(segment_idx, op_compaction->mutable_output_rowset()->add_segment_metas());
         }
         op_compaction->set_new_segment_count(writer->segments().size());
         op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
@@ -95,10 +90,7 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->set_overlapped(false);
         op_compaction->mutable_output_rowset()->set_next_compaction_offset(0);
         for (auto& sst : writer->ssts()) {
-            auto* file_meta = op_compaction->add_ssts();
-            file_meta->set_name(sst.path);
-            file_meta->set_size(sst.size.value());
-            file_meta->set_encryption_meta(sst.encryption_meta);
+            to_file_meta_pb(sst, op_compaction->add_ssts());
         }
         for (auto& sst_range : writer->sst_ranges()) {
             op_compaction->add_sst_ranges()->CopyFrom(sst_range);
@@ -111,15 +103,51 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         // 3. Lifecycle management - metadata tracked for proper GC cleanup
         // CONSTRAINT: Only applies to remote storage files (.lcrm), not local files (.crm)
         if (is_lcrm(writer->lcrm_file().path)) {
-            auto* file_meta = op_compaction->mutable_lcrm_file();
-            const auto& lcrm_file = writer->lcrm_file();
-            file_meta->set_name(lcrm_file.path);
-            if (lcrm_file.size.has_value()) {
-                file_meta->set_size(lcrm_file.size.value());
-            }
+            to_file_meta_pb(writer->lcrm_file(), op_compaction->mutable_lcrm_file());
         }
     }
+    // Fresh uid: a compaction output is a new logical rowset and must not dedup
+    // with the input rowsets it supersedes (it leaves their split family). Use
+    // set_ (always re-mint), not ensure_ (mint-if-absent): the output is derived
+    // from inputs, so it must never alias an input's uid even if one is ever
+    // copied in. Matches tablet_parallel_compaction_manager's merged output.
+    tablet_reshard_helper::set_rowset_uid(op_compaction->mutable_output_rowset());
     return Status::OK();
+}
+
+CompactionTask::SstStats CompactionTask::compute_sst_stats(const std::vector<FileInfo>& writer_ssts,
+                                                           const TxnLogPB* txn_log) {
+    SstStats stats;
+    // SST output from eager PK index build
+    stats.output_files = static_cast<int32_t>(writer_ssts.size());
+    for (const auto& sst : writer_ssts) {
+        stats.output_bytes += sst.size.value_or(0);
+    }
+    // SST input/output from PK index major compaction
+    if (txn_log != nullptr && txn_log->has_op_compaction()) {
+        const auto& op = txn_log->op_compaction();
+        stats.input_files = op.input_sstables_size();
+        for (const auto& sst : op.input_sstables()) {
+            stats.input_bytes += sst.filesize();
+        }
+        for (const auto& sst : op.output_sstables()) {
+            stats.output_files += 1;
+            stats.output_bytes += sst.filesize();
+        }
+        if (op.has_output_sstable()) {
+            stats.output_files += 1;
+            stats.output_bytes += op.output_sstable().filesize();
+        }
+    }
+    return stats;
+}
+
+void CompactionTask::collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log) {
+    auto stats = compute_sst_stats(writer->ssts(), txn_log);
+    _sst_input_files = stats.input_files;
+    _sst_input_bytes = stats.input_bytes;
+    _sst_output_files = stats.output_files;
+    _sst_output_bytes = stats.output_bytes;
 }
 
 bool CompactionTask::should_enable_pk_index_eager_build(int64_t input_bytes) {

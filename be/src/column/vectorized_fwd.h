@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
@@ -56,6 +57,7 @@ class MapColumn;
 class StructColumn;
 class NullableColumn;
 class ConstColumn;
+class AdaptiveNullableColumn;
 
 template <typename T>
 class FixedLengthColumn;

@@ -180,7 +180,6 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // replica
-        long replicaId = 0;
         Replica replica1 = new Replica(testReplicaId1, testBackendId1, version, 0, 0L, 0L,
                 ReplicaState.NORMAL, -1, 0);
         Replica replica2 = new Replica(testReplicaId2, testBackendId2, version, 0, 0L, 0L,

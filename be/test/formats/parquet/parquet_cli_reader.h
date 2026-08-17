@@ -18,6 +18,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "connector/hive/scanner/hdfs_scanner_context.h"
 #include "formats/parquet/file_reader.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
@@ -30,10 +31,11 @@ public:
             : _filepath(filepath),
               _file(_create_file(filepath)),
               _scanner_ctx(std::make_shared<HdfsScannerContext>()),
-              _scan_stats(std::make_shared<HdfsScanStats>()) {
-        _scanner_ctx->timezone = "Asia/Shanghai";
-        _scanner_ctx->stats = _scan_stats.get();
-        _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+              _scan_stats(std::make_shared<FormatScannerStats>()) {
+        _scanner_ctx->format_scan_context.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        _scanner_ctx->format_scan_context.timezone = "Asia/Shanghai";
+        _scanner_ctx->format_scan_context.stats = _scan_stats.get();
+        _scanner_ctx->format_scan_context.predicate_tree = &_scanner_ctx->predicates.predicate_tree;
     }
     ~ParquetCLIReader() {
         _file_reader = nullptr;
@@ -53,13 +55,16 @@ public:
         // create temporary reader to load schema.
         const FileMetaData* file_metadata = nullptr;
         HdfsScannerContext ctx;
-        HdfsScanStats stats;
-        ctx.stats = &stats;
+        FormatScannerStats stats;
+        ctx.format_scan_context.stats = &stats;
         ctx.scan_range = scan_range;
-        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx.format_scan_context.scan_range_offset = scan_range->offset;
+        ctx.format_scan_context.scan_range_length = scan_range->length;
+        ctx.format_scan_context.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx.format_scan_context.predicate_tree = &ctx.predicates.predicate_tree;
         std::shared_ptr<FileReader> reader =
                 std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
-        RETURN_IF_ERROR(reader->init(&ctx));
+        RETURN_IF_ERROR(reader->init(&ctx.format_scan_context));
         file_metadata = reader->get_file_metadata();
 
         std::vector<SlotDesc> slot_descs;
@@ -79,11 +84,13 @@ public:
 
         TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
         _scanner_ctx->slot_descs = tuple_desc->slots();
-        _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
+        _make_column_info_vector(tuple_desc, &_scanner_ctx->format_scan_context.materialized_columns);
         _scanner_ctx->scan_range = scan_range;
+        _scanner_ctx->format_scan_context.scan_range_offset = scan_range->offset;
+        _scanner_ctx->format_scan_context.scan_range_length = scan_range->length;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
-        RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
+        RETURN_IF_ERROR(_file_reader->init(&_scanner_ctx->format_scan_context));
 
         return Status::OK();
     }
@@ -222,16 +229,14 @@ private:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
-        return row_desc->tuple_descriptors()[0];
+        return tbl->get_tuple_descriptor(row_tuples[0]);
     }
 
-    static void _make_column_info_vector(const TupleDescriptor* tuple_desc,
-                                         std::vector<HdfsScannerContext::ColumnInfo>* columns) {
+    static void _make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<FormatColumnInfo>* columns) {
         columns->clear();
         for (int i = 0; i < tuple_desc->slots().size(); i++) {
             SlotDescriptor* slot = tuple_desc->slots()[i];
-            HdfsScannerContext::ColumnInfo c;
+            FormatColumnInfo c;
             c.idx_in_chunk = i;
             c.slot_desc = slot;
             columns->emplace_back(c);
@@ -253,7 +258,7 @@ private:
     std::shared_ptr<FileReader> _file_reader;
     std::unique_ptr<RandomAccessFile> _file;
     std::shared_ptr<HdfsScannerContext> _scanner_ctx;
-    std::shared_ptr<HdfsScanStats> _scan_stats;
+    std::shared_ptr<FormatScannerStats> _scan_stats;
     ChunkPtr _chunk;
     ObjectPool _pool;
 };

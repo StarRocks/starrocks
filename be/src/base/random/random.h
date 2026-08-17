@@ -189,4 +189,13 @@ void RandomShuffle(RandomIt first, RandomIt last) {
     RandomShuffle(first, last, std::random_device{}());
 }
 
+// Returns a value uniformly distributed in [0, range), using a thread-local
+// std::mt19937 seeded once per thread from std::random_device. Use this in
+// place of POSIX rand(), which shares a single non-thread-safe global state.
+// Returning the value directly (rather than a pointer to the generator)
+// prevents callers from accidentally sharing the per-thread state across
+// threads.
+// REQUIRES: range > 0
+int32_t ThreadLocalRandomUniform(int32_t range);
+
 } // namespace starrocks

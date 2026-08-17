@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AWS IAM ポリシーが宣言するある AWS リソースに対する一連の権限について説明。"
 ---
 
 # AWS IAM ポリシー
@@ -8,7 +9,7 @@ AWS IAM のポリシーは、特定の AWS リソースに対する一連の権�
 
 StarRocks のさまざまな操作には、異なる AWS リソースへのアクセス権限が必要であるため、異なるポリシーを設定する必要があります。
 
-このトピックでは、[インスタンスプロファイル、想定ロール、または IAM ユーザーに基づく認証方法](../integrations/authenticate_to_aws_resources.md#preparations)を選択した場合に、StarRocks がさまざまなビジネスシナリオで異なる AWS リソースと統合するために設定する必要がある IAM ポリシーを提供します。
+このトピックでは、[インスタンスプロファイル、想定ロール、または IAM ユーザーに基づく認証方法](../integrations/csp_auth/authenticate_to_aws_resources.md#preparations)を選択した場合に、StarRocks がさまざまなビジネスシナリオで異なる AWS リソースと統合するために設定する必要がある IAM ポリシーを提供します。
 
 ## AWS S3 からのバッチデータロード
 

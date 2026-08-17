@@ -1,0 +1,49 @@
+// FrontmatterDescription.tengo
+//
+// Require a non-empty `description:` field in the YAML frontmatter of every
+// documentation page.  Files with `unlisted: true` in their frontmatter are
+// exempt (they are hidden from navigation and search).
+//
+// NOTE: text.re_find returns `undefined` (not []) on no match, so `len()` on
+// its result is unsafe.  All result consumption uses `for` loops, which
+// Tengo iterates zero times over undefined.  A sentinel variable (fm_end=-1)
+// distinguishes "no frontmatter found" from "frontmatter found".
+
+text := import("text")
+
+matches := []
+
+// Locate the frontmatter block boundary.  (?s) lets .* cross newlines.
+fm_end := -1
+for m in text.re_find("(?s)^---\r?\n.*?\n---", scope, -1) {
+    fm_end = m[0].end
+    break   // there is only one frontmatter block
+}
+
+if fm_end < 0 {
+    // No valid frontmatter block — flag the very start of the file.
+    matches = append(matches, {begin: 0, end: 3})
+} else {
+    // Pages with `unlisted: true` are not surfaced in search, so description
+    // is not required for them.
+    has_unlisted := false
+    for m in text.re_find("(?m)^unlisted:\\s*true\\s*$", scope, -1) {
+        if m[0].begin < fm_end {
+            has_unlisted = true
+            break
+        }
+    }
+
+    // description: must be present and have at least one non-whitespace char.
+    has_description := false
+    for m in text.re_find("(?m)^description:\\s*\\S", scope, -1) {
+        if m[0].begin < fm_end {
+            has_description = true
+            break
+        }
+    }
+
+    if !has_unlisted && !has_description {
+        matches = append(matches, {begin: 0, end: 3})
+    }
+}

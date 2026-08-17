@@ -19,22 +19,21 @@
 #include <utility>
 #include <vector>
 
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "column/flat_json/json_flat_path.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
-#include "primary_key_encoder.h"
-#include "storage/aggregate_iterator.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
-#include "storage/conjunctive_predicates.h"
 #include "storage/delete_predicates.h"
-#include "storage/empty_iterator.h"
-#include "storage/merge_iterator.h"
+#include "storage/json_path_deriver.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
 #include "storage/rowset/column_reader.h"
@@ -42,11 +41,16 @@
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
-#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
+#include "storage_primitive/aggregate_iterator.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 #include "types/logical_type.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -208,11 +212,12 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     // get pk eq predicates, and convert these predicates to encoded pk column
     const auto& tablet_schema = _tablet_schema;
     vector<ColumnId> pk_column_ids;
+    pk_column_ids.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
-    auto keys = ChunkHelper::new_chunk(pk_schema, 1);
+    auto keys = ChunkFactory::new_chunk(pk_schema, 1);
     size_t num_pk_eq_predicates = 0;
 
     PredicateAndNode pushdown_pred_root;
@@ -373,6 +378,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
+    rs_opts.has_predicate_above_iterator = params.has_predicate_above_iterator;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -397,6 +403,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
+        }
+
+        auto rowset_id = rowset->rowset_meta()->rowset_id();
+        if (params.rowset_id_to_drssid != nullptr && params.rowset_id_to_drssid->contains(rowset_id)) {
+            rs_opts.dynamic_rss_id_base = params.rowset_id_to_drssid->at(rowset_id);
         }
 
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
@@ -652,7 +663,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
     }
     for (size_t i = 0; i < input.size(); i++) {
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
+        auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(idx, tablet_schema->column(idx)));
         schema.append(f);
         values.emplace_back();
         if (input.is_null(i)) {

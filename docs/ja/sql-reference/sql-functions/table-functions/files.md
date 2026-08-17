@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "リモートストレージ内のデータファイルを定義し、データロードとアンロードに使用します。"
 toc_max_heading_level: 5
 ---
 
@@ -29,7 +30,7 @@ v3.2 以降、`FILES()` は基本データ型に加えて、`ARRAY`、`JSON`、`
 
 ## `FILES()` for loading
 
-v3.1.0 以降、StarRocks はテーブル関数 `FILES()` を使用してリモートストレージ内の読み取り専用ファイルを定義することをサポートしています。ファイルのパス関連プロパティを使用してリモートストレージにアクセスし、ファイル内のデータのテーブルスキーマを推測し、データ行を返します。データ行を直接クエリするには [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT.md) を使用し、既存のテーブルにデータ行をロードするには [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) を使用し、新しいテーブルを作成してデータ行をロードするには [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) を使用します。v3.3.4 以降、`FILES()` を使用してデータファイルのスキーマを [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) で表示することもできます。
+v3.1.0 以降、StarRocks はテーブル関数 `FILES()` を使用してリモートストレージ内の読み取り専用ファイルを定義することをサポートしています。ファイルのパス関連プロパティを使用してリモートストレージにアクセスし、ファイル内のデータのテーブルスキーマを推測し、データ行を返します。データ行を直接クエリするには [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用し、既存のテーブルにデータ行をロードするには [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) を使用し、新しいテーブルを作成してデータ行をロードするには [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) を使用します。v3.3.4 以降、`FILES()` を使用してデータファイルのスキーマを [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) で表示することもできます。
 
 ### 構文
 
@@ -47,7 +48,7 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 パスまたはファイルを指定できます。たとえば、HDFS サーバー上のパス `/user/data/tablename` からデータファイル `20210411` をロードするには、このパラメータを `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` と指定します。
 
-ワイルドカード `?`, `*`, `[]`, `{}`, または `^` を使用して複数のデータファイルの保存パスを指定することもできます。たとえば、HDFS サーバー上のパス `/user/data/tablename` 内のすべてのパーティションまたは `202104` パーティションのみからデータファイルをロードするには、このパラメータを `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` または `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` と指定します。
+ワイルドカード `?`, `*`, `[]`, または `^` を使用して複数のデータファイルの保存パスを指定することもできます。たとえば、HDFS サーバー上のパス `/user/data/tablename` 内のすべてのパーティションまたは `202104` パーティションのみからデータファイルをロードするには、このパラメータを `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` または `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` と指定します。
 
 :::note
 
@@ -110,7 +111,10 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
   :::note
 
-  `file://` プロトコルを介して NFS 内のファイルにアクセスするには、各 BE または CN ノードの同じディレクトリに NAS デバイスを NFS としてマウントする必要があります。
+  `file://` プロトコルを介して NFS(NAS) にアクセスするには、同じ NAS デバイスを NFS として、パスにアクセスする必要があるノード上の同じディレクトリにマウントしてください。
+
+  - 読み取り/書き込み操作の場合、各 FE ノードおよび各 BE または CN ノードにマウントする必要があります。FE ノードはファイルを一覧表示し、ファイルスキーマを推論します。BE/CN ノードはデータを読み取ります。
+  - 書き込みのみの操作の場合、各 BE または CN ノードにマウントする必要があります。
 
   :::
 
@@ -136,19 +140,33 @@ Parquet 形式の例:
 "parquet.version" = "2.6"                 -- アンロードのみ
 ```
 
+Parquet ファイルを読み取る際（たとえば `FILES()` または Broker Load を使用）、StarRocks は Parquet TIMESTAMP 論理型をその `isAdjustedToUTC` 属性に従って DATETIME にマッピングします:
+
+- **インスタントセマンティクス**: `isAdjustedToUTC` が `true` の場合、その値は UTC に正規化されたタイムライン上の瞬間を特定します。StarRocks は現在のセッションタイムゾーンにおける壁時計時刻に変換します。
+- **ローカルセマンティクス**: `isAdjustedToUTC` が `false` の場合、その値はタイムゾーンを持たない壁時計時刻です。StarRocks はセッションタイムゾーンに関係なく、書き込まれたままの値を返します。
+- レガシーな INT96 物理型は `isAdjustedToUTC` 属性を持ちません。StarRocks は、INT96 タイムスタンプがトップレベルの列であるか STRUCT、ARRAY、または MAP 内にネストされているかにかかわらず、INT96 列を UTC に正規化された瞬間として扱い、セッションタイムゾーンに変換します。
+
+:::note
+
+**動作変更**: 以前のバージョンでは、StarRocks はローカルセマンティクス（`isAdjustedToUTC` が `false`）のタイムスタンプを読み取る際、セッションタイムゾーンのオフセット分だけ値をシフトしていました。現在は書き込まれたままの値が返されます。セッションタイムゾーンが UTC でない場合、同じファイルから返される値は以前のバージョンと異なります（現在の動作は Parquet 仕様に準拠しています）。
+
+:::
+
 ###### `parquet.use_legacy_encoding`
 
 DATETIME および DECIMAL データ型に使用されるエンコーディング技術を制御します。 有効な値: `true` および `false` (デフォルト)。このプロパティはデータアンロードにのみサポートされています。
 
 この項目が `true` に設定されている場合:
 
-- DATETIME 型の場合、システムは `INT96` エンコーディングを使用します。
 - DECIMAL 型の場合、システムは `fixed_len_byte_array` エンコーディングを使用します。
+- DATETIME 型の場合、システムは `INT96` エンコーディングを使用します。
 
 この項目が `false` に設定されている場合:
 
-- DATETIME 型の場合、システムは `INT64` エンコーディングを使用します。
 - DECIMAL 型の場合、システムは `INT32` または `INT64` エンコーディングを使用します。
+- DATETIME 型の場合、システムは `INT64` エンコーディングを使用します。
+  - **インスタントセマンティクス**：Parquet の TIMESTAMP型に対して `isAdjustedToUTC` が `true` に設定されている場合、システムは UTC に正規化されたタイムスタンプを出力します。各値はタイムライン上の単一の瞬間を明確に特定し、特定のタイムゾーンに変換することができます。
+  - **ローカルセマンティクス**：Parquet の TIMESTAMP 型に対して `isAdjustedToUTC` が `false` に設定されている場合、システムは、どのタイムゾーンがローカルとみなされるかに関係なく、ローカルタイムゾーンにおける年、月、日、時、分、秒、およびサブ秒を表すタイムスタンプを出力します。このような値は、適用されているローカルタイムゾーンに関係なく常に同じ形式で表示され、タイムライン上の特定の瞬間を特定するものではありません。
 
 :::note
 
@@ -168,7 +186,7 @@ CSV 形式の例:
 "format"="csv",
 "csv.column_separator"="\\t",
 "csv.enclose"='"',
-"csv.skip_header"="1",
+"csv.skip_header"="1",   -- ロードのみ
 "csv.escape"="\\"
 ```
 
@@ -193,7 +211,7 @@ Files() を使用するタスクは MySQL プロトコルに従って送信さ�
 
 ###### `csv.skip_header`
 
-CSV 形式のデータでスキップするヘッダ行の数を指定します。タイプ: `INTEGER`。デフォルト値: `0`。
+CSV 形式のデータでスキップするヘッダ行の数を指定します。タイプ: `INTEGER`。デフォルト値: `0`。このプロパティはデータロードにのみサポートされています。
 
 一部の CSV 形式のデータファイルでは、メタデータ (列名や列データ型など) を定義するためにヘッダ行が使用されます。`skip_header` パラメータを設定することで、StarRocks にこれらのヘッダ行をスキップさせることができます。たとえば、このパラメータを `1` に設定すると、StarRocks はデータロード中にデータファイルの最初の行をスキップします。
 
@@ -238,13 +256,26 @@ StarRocks がすべての列を統合できない場合、エラー情報とす�
 単一バッチ内のすべてのデータファイルは同じファイル形式でなければなりません。
 :::
 
-##### ターゲットテーブルスキーマチェックのプッシュダウン
+##### ターゲットテーブル列型/スキーマのプッシュダウン
 
-v3.4.0 以降、システムは `FILES()` のスキャンステージにターゲットテーブルスキーマチェックをプッシュダウンすることをサポートしています。
+v3.4.0 以降、システムはターゲットテーブルの列型を `FILES()` のスキャンステージにプッシュダウンし、型推論の精度を向上させることをサポートしています。
 
-`FILES()` のスキーマ検出は完全に厳密ではありません。たとえば、CSV ファイル内の任意の整数列は、関数がファイルを読み取るときに BIGINT 型として推測され、チェックされます。この場合、ターゲットテーブルの対応する列が `TINYINT` 型である場合、BIGINT 型を超える CSV データレコードはフィルタリングされず、代わりに暗黙的に `NULL` で埋められます。
+`FILES()` のスキーマ検出は完全に厳密ではありません。たとえば、CSV ファイル内の任意の整数列は、関数がファイルを読み取るときに BIGINT 型として推測されます。この場合、ターゲットテーブルの対応する列が `TINYINT` 型である場合、TINYINT の範囲を超える CSV データレコードはフィルタリングされず、代わりに暗黙的に `NULL` で埋められます。
 
-この問題に対処するために、システムは動的 FE 設定項目 `files_enable_insert_push_down_schema` を導入し、ターゲットテーブルスキーマチェックを `FILES()` のスキャンステージにプッシュダウンするかどうかを制御します。`files_enable_insert_push_down_schema` を `true` に設定すると、ターゲットテーブルスキーマチェックに失敗したデータレコードはファイル読み取り時にフィルタリングされます。
+この問題に対処するために、システムは動的 FE 設定項目 `files_enable_insert_push_down_column_type`（エイリアス：`files_enable_insert_push_down_schema`）を導入し、ターゲットテーブルの列型を `FILES()` のスキャンステージにプッシュダウンするかどうかを制御します。`files_enable_insert_push_down_column_type` を `true` に設定すると、ファイル読み取り段階で、推論済みのファイルスキーマに存在する一致列の型がターゲットテーブルの列型で上書きされます。列の追加や削除は行われません。
+
+列名と列型の両方を含む完全なスキーマのプッシュダウンには、INSERT ステートメントにプロパティ `enable_push_down_schema` を `true` に設定します。このプロパティは `FILES()` のプロパティではなく、INSERT のプロパティです：
+
+```sql
+INSERT INTO target_table
+PROPERTIES ("enable_push_down_schema" = "true")
+SELECT * FROM FILES(
+    "path" = "s3://...",
+    "format" = "parquet"
+);
+```
+
+`enable_push_down_schema` を `true` に設定すると、StarRocks は `FILES()` のスキーマをターゲットテーブルの列に合わせて再構成します。推論スキーマに存在しない列を補完し、SELECT リストが実際に読み取る列のみにスキーマを絞り込みます。なお、`BY NAME` モードで `SELECT *` を使用した場合、`*` はファイルの元の列名ではなくターゲットテーブルの列名に展開されるため、`SELECT *` であってもファイル側の余分な列は除外されます。
 
 ##### 異なるスキーマを持つファイルの統合
 
@@ -358,7 +389,7 @@ AWS S3 をストレージシステムとして選択する場合、次のいず�
 | `aws.s3.access_key`           | いいえ       | IAM ユーザーのアクセスキー。AWS S3 へのアクセスの資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 | `aws.s3.secret_key`           | いいえ       | IAM ユーザーのシークレットキー。AWS S3 へのアクセスの資格情報メソッドとして IAM ユーザーを選択する場合、このパラメータを指定する必要があります。 |
 
-AWS S3 へのアクセスのための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 へのアクセスのための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 ###### AWS STS リージョナルエンドポイント
 
@@ -547,6 +578,22 @@ Data Lake Storage Gen2 をストレージシステムとして選択する場合
   | `azure.adls2.oauth2_client_secret`   | はい          | 作成された新しいクライアント (アプリケーション) シークレットの値。    |
   | `azure.adls2.oauth2_client_endpoint` | はい          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント (v1)。 |
 
+- ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  次の表は、`StorageCredentialParams` で構成する必要があるパラメータを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
+  | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
+
 ##### Azure Data Lake Storage Gen1
 
 Data Lake Storage Gen1 をストレージシステムとして選択する場合、次のいずれかのアクションを実行します。
@@ -610,6 +657,105 @@ v3.2 以降、StarRocks はファイルパスからキー/値ペアの値を抽�
 ```
 
 データファイル **file1** が `/geo/country=US/city=LA/` 形式のパスに保存されているとします。このパラメータを `"columns_from_path" = "country, city"` と指定することで、ファイルパス内の地理情報を返される列の値として抽出できます。詳細な指示については、例 4 を参照してください。
+
+#### `schema`
+
+v4.1.2 以降、`FILES()` は明示的な `schema` パラメータをサポートするようになりました。これにより、BE 側のスキーマ推論をバイパスして、読み込む列とその StarRocks タイプを正確に指定できるようになります。
+
+```SQL
+"schema" = "col_name TYPE[, col_name TYPE ...]"
+```
+
+`schema` が設定されている場合、`FILES()` は宣言されたタイプを備えた宣言された列のみを読み取ります。自動スキーマ検出（サンプリングベースの推論）はスキップされるため、バッチごとに基となるファイルの状態が異なっていても、クエリの挙動を予測できるようになります。
+
+##### サポートされているタイプ
+
+`schema` 内では、StarRocks のすべてのスカラー型および複合型（`ARRAY`、`MAP`、`STRUCT`）がサポートされます。ただし、StarRocks 固有の集計型（`HLL`、`BITMAP`、`PERCENTILE`）はサポート対象外です。これらの型は Parquet / ORC / Avro / CSV のいずれにも対応表現がないため、トップレベルか、`ARRAY` 要素・`MAP` の value・`STRUCT` のサブフィールドなど任意のネスト位置にあっても拒否されます。`STRUCT` については、サブフィールドの一部のみを宣言することができます。宣言されていないサブフィールドは、プロジェクション時に無視されます。
+
+部分的なネスト宣言の例：
+
+```SQL
+"schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+```
+
+##### スキーマ文字列内の使用禁止トークン
+
+以下のトークンは拒否され、検証エラーが発生します：
+
+- `NULL` / `NOT NULL`
+- `DEFAULT`
+- `COMMENT`
+- `KEY`（および関連するキー型の記述子）
+- `AUTO_INCREMENT`
+- Charset 指定子（例: `CHARACTER SET`）
+- 集計記述子（例: `SUM`、`REPLACE`）
+- 生成列句（`AS (...)`）
+
+例（無効）：
+
+```SQL
+"schema" = "id BIGINT NOT NULL, dt DATE DEFAULT '2026-01-01'"
+```
+
+##### フォーマットごとのカラムマッチングのセマンティクス
+
+- **Parquet / ORC / Avro**: スキーマのカラムは、ファイルのカラムと**名前**で照合され、照合には**大文字と小文字が区別されます**。たとえば、`schema` 内の `UserId` は、ファイル内の `userid` とは一致しません。
+- **CSV**: スキーマのカラムは**位置**によって照合されます。`schema` 内の名前は、CSV ファイル内の順序付きカラムの別名としてのみ機能します。スキーマの最初の項目は CSV の最初のカラムに、2 番目の項目は 2 番目のカラムに、というように対応付けられます。
+
+##### 互いに排他的な設定
+
+`schema` は、自動検出パラメータのいずれとも併用できません。以下のいずれかを `schema` と併用すると、検証エラーとなります：
+
+- `auto_detect_sample_files`
+- `auto_detect_sample_rows`
+- `auto_detect_types`
+
+##### 他のプロパティやステートメントとの相互作用
+
+- **`fill_mismatch_column_with`**: 一部のファイルに存在しない宣言済みカラムについては、既存の `fill_mismatch_column_with` の動作に従います。つまり、`none` を指定するとクエリは失敗し、`null` を指定すると、存在しないカラムには `NULL` が設定されます。
+- **`columns_from_path`**: パスから抽出された列は、`schema` の列の**後に**追加されます。`columns_from_path` の名前が `schema` 内の名前と衝突する場合、クエリは検証エラーで失敗します。
+- **`list_files_only = true`**: `list_files_only`が`true`の場合、`schema`は暗黙的に無視されます（ファイルのメタデータのみが返されます）。
+- **`DESC FILES(..., "schema" = ...)`**: 明示的に拒否されます。推論されたファイルスキーマを確認するには、`schema` を指定せずに `DESC FILES(...)` を使用してください。
+- **`INSERT INTO FILES(..., "schema" = ...)` (unload)**: 明示的に拒否されます。`schema` は読み取りパス専用のパラメータです。
+- **INSERT プッシュダウンとの相互作用**:
+  - `schema` が設定されている場合、FE 設定 `files_enable_insert_push_down_column_type`（別名 `files_enable_insert_push_down_schema`）は、ユーザー定義型によって列型が既に決定されているため、**暗黙的にスキップ**されます。
+  - `schema` と INSERT プロパティ `enable_push_down_schema = true` を組み合わせると、検証エラーとなります。
+
+##### 例
+
+名前で Parquet をマッチング：
+
+```sql
+SELECT user_id, event_time
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "user_id BIGINT, event_time DATETIME"
+);
+```
+
+位置ごとに CSV をマッチングする（`a` および `b` という名前は、CSV の 1 列目と 2 列目の別名です）：
+
+```sql
+SELECT *
+FROM FILES(
+  "path" = "s3://bucket/path/*.csv",
+  "format" = "csv",
+  "csv.column_separator" = ",",
+  "schema" = "a BIGINT, b VARCHAR(64)"
+);
+```
+
+部分的なネスト宣言（`request_data` のサブフィールドのうち 2 つだけが投影されます）：
+
+```sql
+SELECT request_data.device_data.platform, request_data.now
+FROM FILES(
+  "path" = "s3://bucket/path/*.parquet",
+  "format" = "parquet",
+  "schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
+);
+```
 
 #### `list_files_only`
 
@@ -913,7 +1059,12 @@ unload_data_param ::=
     "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
+    "target_max_file_size" = "<int>",
+    "csv.column_separator" = "<column_separator>",
+    "csv.row_delimiter" = "<row_delimiter>",
+    "csv.include_header" = { "true" | "false" },
+    "csv.enclose" = "<enclose_character>",
+    "csv.escape" = "<escape_character>"
 ```
 
 | **キー**          | **必須** | **説明**                                              |
@@ -922,6 +1073,11 @@ unload_data_param ::=
 | `partition_by`     | いいえ           | データファイルを異なるストレージパスにパーティション分割するために使用される列のリスト。複数の列はカンマ (,) で区切られます。`FILES()` は指定された列のキー/値情報を抽出し、抽出されたキー/値ペアを特徴とするストレージパスの下にデータファイルを保存します。詳細な指示については、例 7 を参照してください。 |
 | `single`           | いいえ           | データを単一のファイルにアンロードするかどうか。 有効な値:<ul><li>`true`: データは単一のデータファイルに保存されます。</li><li>`false` (デフォルト): アンロードされたデータ量が 512 MB を超える場合、データは複数のファイルに保存されます。</li></ul>                  |
 | `target_max_file_size` | いいえ           | バッチでアンロードされる各ファイルの最大サイズのベストエフォート。単位: バイト。デフォルト値: 1073741824 (1 GB)。アンロードするデータのサイズがこの値を超える場合、データは複数のファイルに分割され、各ファイルのサイズはこの値を大幅に超えません。v3.2.7 で導入されました。 |
+| `csv.column_separator` | いいえ       | CSV 形式の出力ファイルで使用される列区切り文字。デフォルト値: `\t`。`format` が `csv` の場合にのみ適用されます。                         |
+| `csv.row_delimiter` | いいえ          | CSV 形式の出力ファイルで使用される行区切り文字。デフォルト値: `\n`。`format` が `csv` の場合にのみ適用されます。                          |
+| `csv.include_header` | いいえ         | CSV 形式の出力ファイルの最初の行に列名を含めるかどうか。有効な値: `true`, `false` (デフォルト)。`format` が `csv` の場合にのみ適用されます。 |
+| `csv.enclose`      | いいえ           | CSV 形式の出力ファイルで各フィールド値を囲む文字。指定されると、すべての非 NULL フィールドがこの文字で囲まれ、フィールド値内に現れる enclose/escape 文字は `csv.escape` 文字でエスケープされます。NULL 値は囲まずに `\N` として出力されます。型: 単一バイト ASCII 文字。複数文字またはマルチバイト (非 ASCII) の値はセマンティックエラーで拒否されます。デフォルト: `NONE` (無効)。`format` が `csv` の場合にのみ適用されます。 |
+| `csv.escape`       | いいえ           | フィールド値内の enclose 文字および escape 文字自身をエスケープするために使用される文字。型: 単一バイト ASCII 文字。複数文字またはマルチバイト (非 ASCII) の値はセマンティックエラーで拒否されます。デフォルト: `NONE`。一般的な組み合わせ:<ul><li>`"csv.enclose"="\""`, `"csv.escape"="\""`: RFC 4180 スタイル (二重引用符)。</li><li>`"csv.enclose"="\""`, `"csv.escape"="\\"`: バックスラッシュエスケープスタイル。</li></ul>**注意**<br />RFC 4180 の二重引用符形式の出力 (`escape` と `enclose` が同じ) を StarRocks に再インポートする場合、読み取り側では `csv.enclose` のみを設定し、`csv.escape` は設定しないでください。StarRocks の CSV reader は ENCLOSE 状態を通じて二重引用符をネイティブに処理します。 |
 
 ## 例
 

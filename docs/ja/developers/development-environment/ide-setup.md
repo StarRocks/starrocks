@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のコントリビューター向け開発環境セットアップガイド。"
 ---
 
 # StarRocks の開発環境をセットアップする
@@ -68,7 +69,7 @@ export JAVA_HOME=xxxxx
 export PYTHON=/usr/bin/python3
 ```
 
-### Ubuntu22 サーバーのセットアップ
+### Ubuntu サーバーのセットアップ
 
 #### StarRocks コードのクローン
 
@@ -123,9 +124,9 @@ Ubuntu サーバーで `./start_fe.sh --debug` を実行し、IDEA のリモー�
 
 ### BE
 
-最初に `fe` フォルダで `mvn install -DskipTests` を実行して、gensrc ディレクトリ内の thrift と protobuf が正しくコンパイルされていることを確認することをお勧めします。
+最初に `fe` フォルダで `mvn install -DskipTests` を実行して、FE 側の Java thrift/proto ソースを生成しておくことをお勧めします。
 
-その後、`gensrc` フォルダに入り、それぞれ `make clean` と `make` コマンドを実行する必要があります。そうしないと Clion が thrift の出力ファイルを検出できません。
+BE については、CMake の configure/build を一度実行してください。BE の thrift/protobuf ヘッダーは configure/build 中にアクティブな build ディレクトリ配下 (例: `be/build_Release/gensrc/gen_cpp`) に CMake が生成するため、これらのファイルのために `cd gensrc && make` を実行する必要はありません。共有の script 生成物が必要な場合だけ `make -C gensrc script` を実行してください。
 
 Clion を使用して `be` フォルダを開きます。
 

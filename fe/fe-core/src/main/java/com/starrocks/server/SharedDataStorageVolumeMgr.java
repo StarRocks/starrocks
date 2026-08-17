@@ -405,14 +405,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
                 .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Locker locker = new Locker();
             dbBindings.add(dbId);
             try {
+                locker.lockDatabase(db.getId(), LockType.READ);
                 List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
                 for (Table table : tables) {
                     Long tableId = table.getId();
@@ -642,7 +642,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
                         Config.azure_adls2_oauth2_client_secret);
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
-                        Config.azure_adls2_oauth2_oauth2_client_endpoint);
+                        Config.azure_adls2_oauth2_client_endpoint);
                 break;
             case "gs":
                 params.put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, Config.gcp_gcs_endpoint);

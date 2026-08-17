@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "非同期マテリアライズドビューまたはそのパーティションを手動でリフレッシュします。"
 ---
 
 # REFRESH MATERIALIZED VIEW

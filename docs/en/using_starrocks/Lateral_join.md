@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 keywords: ['explode']
+description: "How to use Lateral Join with unnest() in StarRocks to convert array columns to rows (explode), commonly used in ETL pipelines for column-to-row transformation."
 ---
 
 # Use Lateral Join for column-to-row conversion

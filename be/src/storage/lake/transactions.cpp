@@ -15,21 +15,26 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
-#include "common/config.h"
+#include "base/debug/trace.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
-#include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "storage/storage_env.h"
 
 namespace {
 
@@ -43,18 +48,18 @@ ParallelSet<int64_t> tablet_txns;
 // the situation happens in create rollup.
 const int64_t EMPTY_TXNLOG_TXNID = -1;
 
-bool add_tablet(int64_t tablet_id) {
+} // namespace
+
+namespace starrocks::lake {
+
+bool acquire_publish_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
 }
 
-void remove_tablet(int64_t tablet_id) {
+void release_publish_tablet(int64_t tablet_id) {
     tablet_txns.erase(tablet_id);
 }
-
-} // namespace
-
-namespace starrocks::lake {
 
 static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                         std::vector<std::string>* files_to_delete) {
@@ -73,7 +78,7 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
     }
 
     run_clear_task_async([txn_slog = std::move(txn_slog_or.value())]() {
-        (void)ExecEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
+        (void)StorageEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
     });
 
     tablet_mgr->metacache()->erase(slog_path);
@@ -92,8 +97,16 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true,
-                                                   txns[index_version - base_version - 1].gtid());
+        // skip_meta_cache forces this to read DURABLE storage only: with file bundling a version can sit in
+        // the metacache (its metadata cached during publish) without a durable bundle written yet -- e.g. a
+        // batch publish advanced the primary index and cached the metadata but had not written the bundle,
+        // and is now being retried. A plain cache-hitting read would treat such a version as "exists in
+        // remote", adopt it as the base, and record it as prev_garbage_version, leaving a dangling reference
+        // (NotFound while vacuum walks the chain) once the cache is evicted.
+        auto gtid = txns.size() == 1 ? txns[0].gtid() : txns[index_version - base_version - 1].gtid();
+        auto res = tablet_mgr->get_tablet_metadata(
+                tablet_id, index_version,
+                CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true}, gtid);
         if (res.ok()) {
             version = index_version;
         } else {
@@ -172,9 +185,88 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
     return txn_logs_vector;
 }
 
+// Build the op_schema_change@W log that anchors a TXN_SHADOW_REWRITE flip publish. The shadow tablet's
+// source op_write is transformed in place into op_schema_change@alter_version (W); the post-watershed
+// double-write vlogs W+1..commitVersion then replay as plain op_write (convert_txn_log is a passthrough
+// for the now-PUBLISH_NORMAL shadow tablet). The returned log is handed to publish_version()'s shared
+// apply path as a single (tablet, log) pair.
+//
+// An empty partition at the watershed produced no source op_write, so an empty op_schema_change@W is
+// synthesized and returned WITHOUT any object-storage access (a source load would 404). Emptiness is known
+// from alter_version == 1 (lake invariant: PARTITION_INIT_VERSION == 1, the first load publishes version 2)
+// or from txn.shadow_rewrite_source_empty() (FE saw the rewrite load zero rows), the latter covering an empty
+// partition at W > 1 (a repeat online rewrite of an empty range partition). Otherwise the source op_write
+// MUST exist (a non-empty partition's rewrite INSERT opens and finishes a delta writer for every shadow
+// tablet, even 0-row ones), so it is loaded and its status propagates as-is -- a not-found is NOT turned
+// into an empty log (that would silently drop the partition's data by advancing the version). The caller
+// routes any error through new_version_metadata_or_error, which hands back an idempotent retry whose source
+// was already consumed by a prior successful publish (new_version already published) and otherwise fails the
+// publish (which then retries).
+static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletManager* tablet_mgr,
+                                                                        const PublishTabletInfo& tablet_info,
+                                                                        const TxnInfoPB& txn, size_t txns_size,
+                                                                        int64_t base_version, int64_t new_version) {
+    const int64_t alter_version = txn.shadow_rewrite_alter_version();
+    // Release-mode validation: a malformed request must fail loudly, not corrupt the flip. A missing
+    // shadow_rewrite_alter_version reads back as 0 (proto2 implicit zero for an unset optional), which would
+    // anchor the op_schema_change at version 0. The watershed W is always < the reserved commitVersion
+    // (new_version), since commitVersion is reserved AFTER the watershed drain.
+    if (alter_version < 1 || alter_version >= new_version) {
+        return Status::InvalidArgument(
+                fmt::format("shadow rewrite: invalid alter_version {} (new_version {})", alter_version, new_version));
+    }
+    if (base_version != 1) {
+        return Status::InvalidArgument(fmt::format("shadow rewrite: base_version must be 1, got {}", base_version));
+    }
+    if (txns_size != 1) {
+        return Status::InvalidArgument(fmt::format("shadow rewrite: expected exactly one txn, got {}", txns_size));
+    }
+    if (tablet_info.get_tablet_ids_in_txn_logs().size() != 1) {
+        return Status::InvalidArgument("shadow rewrite: expected exactly one source tablet");
+    }
+    // Empty at the watershed: no source op_write was produced, so synthesize an empty
+    // op_schema_change@W and return WITHOUT any object-storage access -- no source load (would 404) and no
+    // already-published probe (which also 404s on the common first publish). Two ways to know the partition
+    // was empty at W:
+    //   - alter_version == 1: the lake invariant (PARTITION_INIT_VERSION == 1, the first load publishes
+    //     version 2) makes W == 1 imply empty.
+    //   - shadow_rewrite_source_empty: FE observed the rewrite txn loaded zero rows, i.e.
+    //     the partition was empty at W > 1 (a repeat online rewrite of an empty range partition). Without
+    //     this the W > 1 branch below would load the (absent) source and 404, wedging the flip.
+    // Idempotent retries of an empty publish are handled upstream in publish_version (the metacache
+    // short-circuit and the base-version read); a cold-cache retry that reaches here re-applies, which is
+    // idempotent (vacuum reclaims oldest-first, so base_version 1 being present implies the post-watershed
+    // vlogs are too).
+    if (alter_version == 1 || txn.shadow_rewrite_source_empty()) {
+        auto schema_change_log = std::make_shared<TxnLog>();
+        schema_change_log->set_tablet_id(tablet_info.get_tablet_id_in_metadata());
+        schema_change_log->set_txn_id(txn.txn_id());
+        convert_op_write_to_op_schema_change(schema_change_log.get(), alter_version); // no op_write => empty
+        return schema_change_log;
+    }
+
+    // Non-empty at the watershed (alter_version > 1 and not shadow_rewrite_source_empty): the rewrite INSERT
+    // opens and finishes a delta writer for EVERY shadow tablet (LakeTabletsChannel::_create_delta_writers +
+    // finish-all-on-EOS), so even a 0-row shadow tablet gets an (empty) op_write -- the source MUST exist.
+    // A not-found (lost source) is NOT turned into an empty log here (that would silently drop the
+    // partition's pre-watershed data by advancing the version); it propagates so the caller's
+    // new_version_metadata_or_error hands back an idempotent retry whose source was already consumed
+    // (new_version already published) or otherwise fails the publish (which retries).
+    ASSIGN_OR_RETURN(auto source_log, load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txn));
+
+    // Source present: anchor it as op_schema_change@W.
+    DCHECK(!source_log.empty() && !source_log[0].empty());
+    auto schema_change_log = std::make_shared<TxnLog>();
+    schema_change_log->set_tablet_id(tablet_info.get_tablet_id_in_metadata());
+    schema_change_log->set_txn_id(txn.txn_id());
+    *schema_change_log->mutable_op_write() = source_log[0][0]->op_write();
+    convert_op_write_to_op_schema_change(schema_change_log.get(), alter_version);
+    return schema_change_log;
+}
+
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata) {
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -187,6 +279,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
         new_metadata->set_gtid(txns[0].gtid());
+        // Apply max(prev_bv, fe_bv) for async vector index build
+        if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+            int64_t prev_bv =
+                    new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+            new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+        }
         if (!skip_write_tablet_metadata) {
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
@@ -197,13 +295,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         return new_metadata;
     }
 
-    if (!add_tablet(tablet_info.get_tablet_id_in_metadata())) {
+    if (!acquire_publish_tablet(tablet_info.get_tablet_id_in_metadata())) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
                             "error and the task will retry later.",
                             tablet_info.get_tablet_id_in_metadata()));
     }
-    DeferOp remove_tablet_txn([&] { remove_tablet(tablet_info.get_tablet_id_in_metadata()); });
+    DeferOp remove_tablet_txn([&] { release_publish_tablet(tablet_info.get_tablet_id_in_metadata()); });
 
     if (txns.size() > 1) {
         CHECK_EQ(new_version, base_version + txns.size());
@@ -212,9 +310,27 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     VLOG(2) << "publish version tablet_info: " << tablet_info << ", txns: " << txns
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
+    // If any txn in this batch is marked as no-op publish (admin escape hatch),
+    // a stale "V meta with txn data" left from a previous publish attempt could
+    // leak through the metacache. Actively erase the new_version entry for this
+    // tablet so that:
+    //   (a) the lookup below returns null and we fall into the normal publish
+    //       path which recomputes the metadata from base_version and writes the
+    //       no-op result;
+    //   (b) any concurrent reader (defensive: FE should not direct reads at a
+    //       not-yet-visible version, but mutex-free callers can race) gets a
+    //       clean cache miss rather than the stale entry;
+    //   (c) if this no-op publish itself fails, the cache is left in a clean
+    //       "no V entry" state instead of carrying poisoned data into the next
+    //       retry.
+    bool has_no_op_publish_in_batch =
+            std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.no_op_publish(); });
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_info.get_tablet_id_in_metadata(), new_version);
+    if (has_no_op_publish_in_batch) {
+        tablet_mgr->metacache()->erase(new_metadata_path);
+    }
     auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
-    if (cached_new_metadata != nullptr) {
+    if (cached_new_metadata != nullptr && !has_no_op_publish_in_batch) {
         // The retries may be caused by some tablets failing to publish in a partition
         // set the following log as debug log to prevent excessive logging
         VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_info=" << tablet_info
@@ -250,9 +366,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                                                txns.back().gtid());
     }
 
-    // Read base version metadata
-    auto base_metadata_or =
-            tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    // Read base version metadata. This is an object-storage/metacache read that
+    // happens before the PublishTablet apply counters start, so time it here to
+    // keep it from hiding inside the overall publish cost.
+    auto base_metadata_or = [&] {
+        TRACE_COUNTER_SCOPE_LATENCY_US("get_base_metadata_latency_us");
+        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    }();
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
     }
@@ -286,63 +406,96 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     int txn_offset = base_version - ori_base_version;
     for (size_t i = txn_offset, sz = txns.size(); i < sz; i++) {
         VLOG(2) << "[publish_version] applying txn i=" << i << " txn_id=" << txns[i].txn_id()
-                << " force_publish=" << txns[i].force_publish() << " load_ids_size=" << txns[i].load_ids_size();
+                << " force_publish=" << txns[i].force_publish() << " no_op_publish=" << txns[i].no_op_publish()
+                << " load_ids_size=" << txns[i].load_ids_size();
         bool ignore_txn_log = false;
-        auto txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+        StatusOr<std::vector<TxnLogVector>> txn_log_st = Status::NotFound("not loaded");
 
-        if (txn_log_st.status().is_not_found()) {
-            if (i == 0) {
-                // this may happen in two situations, in every situation,
-                // needs take compaction(force_publish=true) into consideration
-                // 1. duplicate publish in mode single
-                if (txns.size() == 1) {
-                    auto res = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), new_version,
-                                                               true, txns.back().gtid());
-                    if (!res.ok() && res.status().is_not_found()) {
-                        if (!txns[i].force_publish()) {
-                            return txn_log_st.status();
-                        } else {
-                            ignore_txn_log = true;
-                        }
-                    } else if (res.ok()) {
-                        return res;
-                    } else {
-                        return txn_log_st.status();
-                    }
-                }
-
-                // 2. when converting from single publish to batch for txn log has been deleted,
-                // for example:
-                // the current mode of publish is single,
-                // txn2 has been published successfully and visible version in FE is updated to 2,
-                // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
-                // turn the mode of publish to batch,
-                // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped just apply txn_log of txn4 and txn5.
-                auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(),
-                                                                           base_version + 1, true, txns[0].gtid());
-                if (missig_txn_log_meta.status().is_not_found()) {
-                    if (txns[i].force_publish()) {
-                        // can not change `base_metadata` below, just use old one
-                        ignore_txn_log = true;
-                    } else {
-                        LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id()
-                                     << " not found, and can not find the tablet_meta";
-                        return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
-                    }
-                } else if (!missig_txn_log_meta.status().ok()) {
-                    LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id() << " not found, find the tablet_meta error: "
-                                 << missig_txn_log_meta.status().to_string();
-                    return new_version_metadata_or_error(missig_txn_log_meta.status());
-                } else {
-                    base_metadata = std::move(missig_txn_log_meta).value();
-                    continue;
-                }
-            } else if (txns[i].force_publish()) {
-                ignore_txn_log = true;
-            } else {
-                return new_version_metadata_or_error(txn_log_st.status());
+        if (txns[i].no_op_publish()) {
+            // Admin-issued no-op publish: bypass loading and applying this txn's log
+            // entirely. Falls through to log_applier init and the ignore_txn_log
+            // handling below, which records the txn as an empty contribution and
+            // advances the partition version without producing any data changes.
+            ignore_txn_log = true;
+            LOG(INFO) << "txn " << txns[i].txn_id() << " marked as no-op publish on tablet " << tablet_info;
+        } else if (txns[i].txn_type() == TXN_SHADOW_REWRITE) {
+            // Anchor the historical rewrite at the watershed version W during the flip publish: build the
+            // op_schema_change@W (from the shadow tablet's source op_write, or empty for an empty partition)
+            // and hand it to the apply path below as one tablet / one log. On any error -- a lost source at
+            // W > 1, or a malformed/load failure -- new_version_metadata_or_error still returns the metadata
+            // of an idempotent retry whose target version is already published; otherwise it surfaces the error.
+            auto schema_change_log_or = make_shadow_rewrite_schema_change_log(tablet_mgr, tablet_info, txns[i],
+                                                                              txns.size(), base_version, new_version);
+            if (!schema_change_log_or.ok()) {
+                return new_version_metadata_or_error(schema_change_log_or.status());
             }
-        }
+            txn_log_st = std::vector<TxnLogVector>{{std::move(schema_change_log_or).value()}};
+        } else {
+            // Loading the txn log reads one or more log files from object storage
+            // and is otherwise untraced; a slow/throttled read here would hide in
+            // the total publish cost.
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("load_txn_log_latency_us");
+                txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            }
+
+            if (txn_log_st.status().is_not_found()) {
+                if (i == 0) {
+                    // this may happen in two situations, in every situation,
+                    // needs take compaction(force_publish=true) into consideration
+                    // 1. duplicate publish in mode single
+                    if (txns.size() == 1) {
+                        auto res = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), new_version,
+                                                                   true, txns.back().gtid());
+                        if (!res.ok() && res.status().is_not_found()) {
+                            if (!txns[i].force_publish()) {
+                                return txn_log_st.status();
+                            } else {
+                                ignore_txn_log = true;
+                            }
+                        } else if (res.ok()) {
+                            return res;
+                        } else {
+                            return txn_log_st.status();
+                        }
+                    }
+
+                    // 2. when converting from single publish to batch for txn log has been deleted,
+                    // for example:
+                    // the current mode of publish is single,
+                    // txn2 has been published successfully and visible version in FE is updated to 2,
+                    // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
+                    // turn the mode of publish to batch,
+                    // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped just apply txn_log of txn4 and txn5.
+                    auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(),
+                                                                               base_version + 1, true, txns[0].gtid());
+                    if (missig_txn_log_meta.status().is_not_found()) {
+                        if (txns[i].force_publish()) {
+                            // can not change `base_metadata` below, just use old one
+                            ignore_txn_log = true;
+                        } else {
+                            LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id()
+                                         << " not found, and can not find the tablet_meta";
+                            return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
+                        }
+                    } else if (!missig_txn_log_meta.status().ok()) {
+                        LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id()
+                                     << " not found, find the tablet_meta error: "
+                                     << missig_txn_log_meta.status().to_string();
+                        return new_version_metadata_or_error(missig_txn_log_meta.status());
+                    } else {
+                        base_metadata = std::move(missig_txn_log_meta).value();
+                        // Keep base_version in sync with base_metadata.
+                        base_version = base_metadata->version();
+                        continue;
+                    }
+                } else if (txns[i].force_publish()) {
+                    ignore_txn_log = true;
+                } else {
+                    return new_version_metadata_or_error(txn_log_st.status());
+                }
+            } // close: if (txn_log_st.status().is_not_found())
+        }     // close: else (admin force-skip vs normal path)
 
         if (!txn_log_st.ok() && !ignore_txn_log) {
             LOG(WARNING) << "Fail to get txn log: " << txn_log_st.status() << " tablet_info=" << tablet_info
@@ -352,6 +505,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
         if (log_applier == nullptr) {
             // init log_applier
+            DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
                                               new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata);
@@ -385,11 +539,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             }
         }
 
-        // txn log not found and can be ignored, only compaction will reach here, do nothing
+        // txn log ignored: either (a) txnlog not found + compaction force_publish,
+        // (b) admin-issued no-op publish (no_op_publish=true). Either way, advance
+        // version without applying any changes from this txn.
         if (ignore_txn_log) {
             LOG(INFO) << "txn_log of txn: " << txns[i].txn_id() << " for tablet: " << tablet_info
-                      << " not found, force publish is on, ignore txn log";
-            log_applier->observe_empty_compaction(); // record empty compaction
+                      << " ignored (force_publish=" << txns[i].force_publish()
+                      << " no_op_publish=" << txns[i].no_op_publish() << ")";
+            log_applier->observe_no_op_apply(); // record no rowset changes for this txn
             continue;
         }
 
@@ -399,6 +556,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             auto tablet_id_in_txn_log = tablet_ids_in_txn_logs[j];
             auto& txn_logs = txn_logs_vector[j];
             for (auto& txn_log : txn_logs) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("convert_txn_log_us");
                 ASSIGN_OR_RETURN(auto converted_txn_log, convert_txn_log(txn_log, base_metadata, tablet_info));
                 txn_log = std::move(converted_txn_log);
             }
@@ -495,8 +653,20 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         }
     }
 
-    // Save new metadata
-    RETURN_IF_ERROR(log_applier->finish());
+    // Apply max(prev_bv, fe_bv) for async vector index build
+    if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+        int64_t prev_bv =
+                new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+        new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+    }
+
+    // Save new metadata. finish() commits the primary index and writes the new
+    // tablet metadata (and delvecs) to object storage; that metadata write is not
+    // covered by the apply counters, so time the whole step here.
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("apply_finish_latency_us");
+        RETURN_IF_ERROR(log_applier->finish());
+    }
 
     delete_files_async(std::move(files_to_delete));
 
@@ -507,7 +677,110 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                            const int64_t* log_versions) {
     auto files_to_delete = std::vector<std::string>{};
     for (int i = 0; i < txn_infos.size(); i++) {
-        if (!txn_infos[i].combined_txn_log()) {
+        if (txn_infos[i].load_ids_size() > 0) {
+            // Multi-statement transaction: each statement writes its own .log file at the
+            // 4-segment path that encodes load_id. Read every per-load_id .log via
+            // load_txn_log (which already understands this layout) and merge them into a
+            // single TxnLog before persisting as the version-keyed .vlog.
+            //
+            // Without this branch, publish_log_version would fall back to the 2-segment
+            // path and fail with NotFound during schema change, leaving the txn stuck in
+            // COMMITTED and blocking the alter at FINISHED_REWRITING (see RCA: schema
+            // change deadlock on publish_log_version load_ids).
+            auto txn_id = txn_infos[i].txn_id();
+            auto log_version = log_versions[i];
+            auto expected_count = txn_infos[i].load_ids_size();
+            ASSIGN_OR_RETURN(auto txn_logs_vector, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
+            auto& txn_logs = txn_logs_vector[0];
+
+            if (static_cast<int>(txn_logs.size()) < expected_count) {
+                // load_txn_log silently skips per-load_id files that are NotFound, so any
+                // shortfall here means either (a) an idempotent retry where the target
+                // .vlog has already been written and (some of) the source .log files have
+                // been vacuumed, or (b) shared-storage corruption / silent data loss.
+                // Distinguish by checking the .vlog: if it already exists, accept this as
+                // the idempotent path and clean up any leftover .log files; otherwise
+                // surface NotFound so FE retries / fails the publish instead of advancing
+                // visibility with incomplete statement data.
+                auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
+                auto check_st = fs->path_exists(txn_vlog_path);
+                if (check_st.ok()) {
+                    for (const auto& load_id : txn_infos[i].load_ids()) {
+                        auto stale_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                        files_to_delete.emplace_back(stale_path);
+                        tablet_mgr->metacache()->erase(stale_path);
+                    }
+                    continue;
+                }
+                LOG_IF(WARNING, !check_st.is_not_found())
+                        << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+                return Status::NotFound(
+                        fmt::format("incomplete per-load_id txn logs for tablet {} txn {}: loaded {} of {} expected",
+                                    tablet_id, txn_id, txn_logs.size(), expected_count));
+            }
+
+            auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);
+            // The materialized .vlog spans every per-load_id source log, so the
+            // single load_id field carried over from the first source no longer applies.
+            merged->clear_load_id();
+            if (txn_logs.size() > 1) {
+                // MergeFrom appends repeated fields (segment_metas, dels_meta, ...)
+                // and recursively merges optional message fields, which is what we want
+                // for the per-segment lists. But it overwrites scalar accumulators with
+                // the last source's value, so sum num_rows / data_size / num_dels back
+                // up afterwards to reflect the full transaction.
+                for (size_t k = 1; k < txn_logs.size(); ++k) {
+                    merged->MergeFrom(*txn_logs[k]);
+                }
+                merged->clear_load_id();
+                // MergeFrom concatenated each source log's del_op_offsets, but those offsets are in
+                // per-statement-local segment space and this path (unlike batch_apply_opwrite) does not
+                // re-index the merged segment_metas into a global order -- so a later statement's delete
+                // would map onto an earlier statement's segment. Drop them so the merged log uniformly
+                // falls back to the legacy "delete after all segments" ordering (safe; the read path
+                // treats an absent array as "not recorded", see del_op_offset_or_unset()).
+                // TODO: to also preserve intra-transaction upsert/delete order for multi-statement /
+                // merge-commit txns snapshotted through publish_log_version, re-index the merged
+                // segment_metas to a global order here and rebase del_op_offsets to match (as
+                // MetaFileBuilder::add_rowset does via assigned_segment_idx) instead of dropping them.
+                if (merged->has_op_write()) {
+                    merged->mutable_op_write()->clear_del_op_offsets();
+                }
+                if (merged->has_op_write() && merged->op_write().has_rowset()) {
+                    auto* rowset = merged->mutable_op_write()->mutable_rowset();
+                    int64_t num_rows = 0;
+                    int64_t data_size = 0;
+                    int64_t num_dels = 0;
+                    for (const auto& log : txn_logs) {
+                        if (log->has_op_write() && log->op_write().has_rowset()) {
+                            const auto& src = log->op_write().rowset();
+                            num_rows += src.num_rows();
+                            data_size += src.data_size();
+                            num_dels += src.num_dels();
+                        }
+                    }
+                    rowset->set_num_rows(num_rows);
+                    rowset->set_data_size(data_size);
+                    rowset->set_num_dels(num_dels);
+                    rowset->set_overlapped(rowset->segment_metas_size() > 1);
+                    // MergeFrom above overwrote the combined rowset's uid with the last source's;
+                    // restore the first log's identity by re-reading txn_logs.front() (MergeFrom
+                    // never mutates the sources) so it stays stable across cross-published children.
+                    tablet_reshard_helper::inherit_or_set_uid(rowset, txn_logs.front()->op_write().rowset());
+                }
+            }
+
+            RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(merged, log_version));
+
+            // Stage every per-load_id source .log for async deletion, mirroring what
+            // publish_version does for the non-shadow path on the same txn shape.
+            for (const auto& load_id : txn_infos[i].load_ids()) {
+                auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                files_to_delete.emplace_back(txn_log_path);
+                tablet_mgr->metacache()->erase(txn_log_path);
+            }
+        } else if (!txn_infos[i].combined_txn_log()) {
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
@@ -542,42 +815,81 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
 
 void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std::vector<std::string>* files_to_delete) {
     auto tablet_id = txn_log.tablet_id();
+
+    // Helper to collect .vi files tracked in a rowset's segment_metas
+    auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
+            }
+        }
+    };
+
     if (txn_log.has_op_write()) {
-        for (const auto& segment : txn_log.op_write().rowset().segments()) {
-            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+        for (const auto& segment_meta : txn_log.op_write().rowset().segment_metas()) {
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
         }
-        for (const auto& del_file : txn_log.op_write().dels()) {
-            files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+        for (const auto& del_meta : txn_log.op_write().dels_meta()) {
+            files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built tombstone sstables (empty name = del file had no sstable)
+        for (const auto& del_sst : txn_log.op_write().del_ssts()) {
+            if (!del_sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+            }
+        }
+        collect_vi_files(txn_log.op_write().rowset());
     }
     if (txn_log.has_op_compaction()) {
         // only delete actual new segments
         size_t new_segment_offset = txn_log.op_compaction().new_segment_offset();
         size_t new_segment_count = txn_log.op_compaction().new_segment_count();
-        const auto& segments = txn_log.op_compaction().output_rowset().segments();
-        for (size_t idx = new_segment_offset, cnt = 0; idx < segments.size() && cnt < new_segment_count; ++idx, ++cnt) {
-            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segments[idx]));
+        const auto& output_rowset = txn_log.op_compaction().output_rowset();
+        const auto& segment_metas = output_rowset.segment_metas();
+        for (size_t idx = new_segment_offset, cnt = 0; idx < segment_metas.size() && cnt < new_segment_count;
+             ++idx, ++cnt) {
+            const auto& segment_name = segment_metas[idx].filename();
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_name));
+            // Delete .vi files for this new segment, named by its recorded owner tablet id.
+            for (int64_t vi_id : segment_metas[idx].vector_index_ids()) {
+                auto vi_name = gen_vector_index_filename_for_segment(segment_metas[idx], vi_id);
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
+            }
         }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
         for (const auto& rowset : txn_log.op_schema_change().rowsets()) {
-            for (const auto& segment : rowset.segments()) {
-                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
             }
+            collect_vi_files(rowset);
         }
     }
     if (txn_log.has_op_replication()) {
         for (const auto& op_write : txn_log.op_replication().op_writes()) {
-            for (const auto& segment : op_write.rowset().segments()) {
-                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+            for (const auto& segment_meta : op_write.rowset().segment_metas()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
             }
-            for (const auto& del_file : op_write.dels()) {
-                files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+            for (const auto& del_meta : op_write.dels_meta()) {
+                files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
             }
+            for (const auto& del_sst : op_write.del_ssts()) {
+                if (!del_sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+                }
+            }
+            collect_vi_files(op_write.rowset());
         }
     }
 
-    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
+    // Multi-statement transactions cache the .log under the 4-segment key; use the
+    // same path here so the cache entry actually drops.
+    if (txn_log.has_load_id()) {
+        tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id(), txn_log.load_id()));
+    } else {
+        tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
+    }
     tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
 }
 
@@ -593,7 +905,24 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const Txn
             clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
         }
 
-        if (!txns[i].combined_txn_log()) {
+        if (txns[i].load_ids_size() > 0) {
+            // Multi-statement transaction: each statement's .log lives at the
+            // 4-segment load_id path. Walking only the 2-segment path here would
+            // silently leak per-statement .log files plus every segment / del they
+            // reference, mirroring the shape of the publish_log_version bug.
+            for (const auto& load_id : txns[i].load_ids()) {
+                auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
+                auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
+                if (!txn_log_or.ok()) {
+                    LOG_IF(WARNING, !txn_log_or.status().is_not_found())
+                            << "Fail to get txn log " << log_path << ": " << txn_log_or.status();
+                    continue;
+                }
+                TxnLogPtr txn_log = std::move(txn_log_or).value();
+                collect_files_in_log(tablet_mgr, *txn_log, &files_to_delete);
+                files_to_delete.emplace_back(log_path);
+            }
+        } else if (!txns[i].combined_txn_log()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
             if (!txn_log_or.ok()) {

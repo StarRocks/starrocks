@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -452,6 +453,80 @@ class BaseScalarOperatorShuttleTest {
         argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2, cast(a as int(11))) " +
                 "OR 1: id IN (1, 2, cast(a as int(11))) IS NULL"));
         return argumentsList.stream();
+    }
+
+
+    @Test
+    void testDictionaryGetOperator() {
+        ColumnRefOperator col1 = new ColumnRefOperator(1, INT, "col1", true);
+        DictionaryGetOperator operator = new DictionaryGetOperator(
+                Lists.newArrayList(col1, ConstantOperator.createInt(0)),
+                INT, 100L, 200L, 1, true);
+        {
+            ScalarOperator newOperator = shuttle.visitDictionaryGetOperator(operator, null);
+            assertEquals(operator, newOperator);
+        }
+        {
+            ScalarOperator newOperator = shuttle2.visitDictionaryGetOperator(operator, null);
+            assertEquals(operator, newOperator);
+        }
+    }
+
+    @Test
+    void testDictionaryGetOperatorChildUpdate() {
+        ColumnRefOperator col1 = new ColumnRefOperator(1, INT, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(2, INT, "col2", true);
+        DictionaryGetOperator dictGet = new DictionaryGetOperator(
+                Lists.newArrayList(col1, ConstantOperator.createInt(0)),
+                INT, 100L, 200L, 1, true);
+        SubfieldOperator subfield = new SubfieldOperator(dictGet, INT, Lists.newArrayList("mapping_id"));
+
+        BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                if (variable.getId() == 1) {
+                    return col2;
+                }
+                return variable;
+            }
+        };
+
+        ScalarOperator result = replaceShuttle.visitSubfield(subfield, null);
+        assertNotEquals(subfield, result);
+        assert result instanceof SubfieldOperator;
+        SubfieldOperator newSubfield = (SubfieldOperator) result;
+        assert newSubfield.getChild(0) instanceof DictionaryGetOperator;
+        DictionaryGetOperator newDictGet = (DictionaryGetOperator) newSubfield.getChild(0);
+        assertEquals(col2, newDictGet.getChild(0));
+        assertEquals(100L, newDictGet.getDictionaryId());
+    }
+
+
+    @Test
+    void testDictionaryGetOperatorRewriteNullIfNotExist() {
+        ColumnRefOperator key = new ColumnRefOperator(1, INT, "key", true);
+        DictionaryGetOperator dictGet = new DictionaryGetOperator(
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar("test_db.user_mapping_dict"),
+                        key,
+                        ConstantOperator.createBoolean(true)),
+                INT, 100L, 200L, 1, true);
+
+        BaseScalarOperatorShuttle toggleBool = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
+                if (literal.getType().isBoolean() && !literal.isNull()) {
+                    return ConstantOperator.createBoolean(!literal.getBoolean());
+                }
+                return literal;
+            }
+        };
+
+        ScalarOperator result = toggleBool.visitDictionaryGetOperator(dictGet, null);
+        assert result instanceof DictionaryGetOperator;
+        DictionaryGetOperator rewritten = (DictionaryGetOperator) result;
+        assertEquals(ConstantOperator.FALSE, rewritten.getChild(2));
+        assertEquals(false, rewritten.getNullIfNotExist());
     }
 
 }

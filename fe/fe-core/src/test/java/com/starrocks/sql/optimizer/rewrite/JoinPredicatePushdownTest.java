@@ -248,4 +248,38 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: v4 > 2");
     }
+    @Test
+    public void testJoinORToUnionWithCTEAndMultiDistinct() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        try {
+            String sql = "with shared as (\n" +
+                    "    select v1, v2, v3 from t0\n" +
+                    ")\n" +
+                    "select count(distinct a.v2), count(distinct b.v3)\n" +
+                    "from shared a\n" +
+                    "join shared b on a.v1 = b.v2 or a.v1 = b.v3;";
+
+            getFragmentPlan(sql);
+        } finally {
+            connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(false);
+        }
+    }
+
+    @Test
+    public void testSplitJoinORToUnionRuleRejectsNullSafeEqual() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        try {
+            // Null-safe '<=>' disjuncts must NOT be rewritten into a UNION ALL of joins: the dedup
+            // predicate added to the second branch is the negation of plain '=', which is wrong for
+            // '<=>' and would emit duplicate rows for NULL-matching tuples. The rule must keep the
+            // original OR condition on a single join instead of splitting it.
+            String sql = "select * from t0 join t1 on t0.v1 <=> t1.v4 or t0.v2 <=> t1.v5";
+            String plan = getFragmentPlan(sql);
+            PlanTestBase.assertContains(plan, "<=>");
+            // the '!=' dedup predicate only appears when the rule splits the OR; it must be absent.
+            PlanTestBase.assertNotContains(plan, "!=");
+        } finally {
+            connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(false);
+        }
+    }
 }

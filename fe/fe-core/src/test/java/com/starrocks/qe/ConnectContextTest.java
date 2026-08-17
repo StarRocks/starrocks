@@ -244,6 +244,48 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void testQueryTimeoutErrorMessageUsesMetadataCollectQueryTimeoutForMetadataContext() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+        // A metadata collection job runs its inner query under a metadata context (see
+        // MetadataCollectJob.buildConnectContext), so the timeout hint must point at metadata_collect_query_timeout.
+        ctx.setMetadataContext(true);
+
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // checkTimeout() builds the hint and passes it to executor.cancel(); capture it into the query state
+        // so we can assert on the message (mirrors testQueryTimeoutErrorMessageUsesTableQueryTimeoutHint).
+        new Expectations(executor) {
+            {
+                executor.cancel(anyString);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void cancel(String cancelledMessage) {
+                        ctx.getState().setError(cancelledMessage);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000L + 1;
+        boolean killed = ctx.checkTimeout(now);
+
+        // For query timeouts killConnection is false, so isKilled() stays false; assert the return value instead.
+        Assertions.assertTrue(killed);
+        String errorMsg = ctx.getState().getErrorMessage();
+        Assertions.assertNotNull(errorMsg);
+        Assertions.assertTrue(errorMsg.contains(SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT));
+        // Note: METADATA_COLLECT_QUERY_TIMEOUT itself contains the substring "query_timeout", so quote the
+        // bare query_timeout hint to make sure the message is not the generic query_timeout one.
+        Assertions.assertFalse(errorMsg.contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+
+        ctx.cleanup();
+    }
+
+    @Test
     public void testQueryTimeoutErrorMessageUsesTableQueryTimeoutHint() {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_QUERY);
@@ -592,6 +634,50 @@ public class ConnectContextTest {
         ComputeResource resource = WarehouseComputeResource.of(1L);
         ctx.setCurrentComputeResource(resource);
         Assertions.assertEquals(resource, ctx.getCurrentComputeResourceNoAcquire());
+    }
+
+    @Test
+    public void getCurrentComputeResource_reacquiresWhenWarehouseIdMismatch(
+            @Mocked WarehouseManager warehouseManager) {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        // computeResource belongs to warehouse 999, but session warehouse is default (id=0)
+        ComputeResource staleResource = WarehouseComputeResource.of(999L);
+        ComputeResource freshResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.warehouseExists(anyString);
+                minTimes = 0;
+                result = true;
+
+                warehouseManager.acquireComputeResource(anyLong, (ComputeResource) any);
+                minTimes = 0;
+                result = freshResource;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(staleResource);
+
+        // getCurrentComputeResource should detect the mismatch and re-acquire
+        ComputeResource result = ctx.getCurrentComputeResource();
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, result.getWarehouseId());
+        ComputeResource currentWithoutAcquire = ctx.getCurrentComputeResourceNoAcquire();
+        Assertions.assertNotNull(currentWithoutAcquire);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, currentWithoutAcquire.getWarehouseId());
+        Assertions.assertNotEquals(staleResource, currentWithoutAcquire);
     }
 
     @Test

@@ -20,6 +20,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -46,6 +47,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_SPLIT_WINDOW_SKEW;
 
 /*
  * Rule Objective:
@@ -120,14 +123,20 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         if (input.getOp() instanceof LogicalWindowOperator lwo) {
+            if (lwo.isOpRuleBitSet(OP_SPLIT_WINDOW_SKEW)) {
+                return false;
+            }
+
             List<ScalarOperator> partitionExprs = lwo.getPartitionExpressions();
 
             // Rule only applies if there is exactly one partition expression,
             // and that expression is a direct ColumnReference (not a function or expression).
+            // An explicit [merge_sort] hint picks the merge-sort strategy instead, so leave it alone.
             return partitionExprs != null
                     && partitionExprs.size() == 1
                     && lwo.getOrderByElements() != null
-                    && !lwo.getOrderByElements().isEmpty();
+                    && !lwo.getOrderByElements().isEmpty()
+                    && !lwo.isForceMergeSort();
         }
         return false;
     }
@@ -206,8 +215,14 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // 4. Build Union
         LogicalUnionOperator unionOp = buildUnionOperator(context, child, window, unskewedBranch);
+        OptExpression unionExpr = OptExpression.create(unionOp, skewedBranch.root, unskewedBranch.root);
+        // The split builds a fresh UNION subtree and the duplicated branch starts without logical properties or
+        // statistics. Derive logical properties first so statistics estimators can inspect output columns, then
+        // calculate fresh statistics for the duplicated branch.
+        deriveLogicalProperty(unionExpr);
+        Utils.calculateStatistics(unionExpr, context);
 
-        return Lists.newArrayList(OptExpression.create(unionOp, skewedBranch.root, unskewedBranch.root));
+        return Lists.newArrayList(unionExpr);
     }
 
     private LogicalUnionOperator buildUnionOperator(OptimizerContext context,
@@ -280,7 +295,20 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             windowBuilder.setPartitionExpressions(partitionExprs);
         }
 
-        return new BranchResult(OptExpression.create(windowBuilder.build(), filterExpr), mapping);
+        LogicalWindowOperator branchWindow = windowBuilder.build();
+        branchWindow.setOpRuleBit(OP_SPLIT_WINDOW_SKEW);
+        return new BranchResult(OptExpression.create(branchWindow, filterExpr), mapping);
+    }
+
+    private void deriveLogicalProperty(OptExpression root) {
+        if (root.getLogicalProperty() != null) {
+            return;
+        }
+
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+        root.deriveLogicalPropertyItself();
     }
 
     private List<ScalarOperator> rewriteExpressions(List<ScalarOperator> exprs, OptExpressionDuplicator duplicator) {
@@ -374,8 +402,12 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                     return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
                 }
 
-                return skewInfo.maybeMcvs().stream().flatMap(Collection::stream).map(p -> (new SkewedInfo(col,
-                        ConstantOperator.createVarchar(p.first)))).toList();
+                return skewInfo.maybeMcvs().stream() //
+                        .flatMap(Collection::stream) //
+                        .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType())) //
+                        .filter(Optional::isPresent) //
+                        .map(value -> new SkewedInfo(col, value.get())) //
+                        .toList();
             }
         }
         return Collections.emptyList();

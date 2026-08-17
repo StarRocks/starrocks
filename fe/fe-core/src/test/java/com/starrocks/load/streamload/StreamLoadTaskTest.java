@@ -37,6 +37,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
@@ -95,8 +96,7 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
-        streamLoadTask.afterCommitted(txnState, txnOperated);
+        streamLoadTask.afterCommitted(txnState);
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
     }
 
@@ -110,7 +110,6 @@ public class StreamLoadTaskTest {
             }
         };
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
 
         TUniqueId labelId = new TUniqueId(2, 3);
         streamLoadTask.setTUniqueId(labelId);
@@ -118,7 +117,7 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         long ts = System.currentTimeMillis();
-        streamLoadTask.afterAborted(txnState, txnOperated, "");
+        streamLoadTask.afterAborted(txnState, "");
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
         Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
@@ -126,9 +125,8 @@ public class StreamLoadTaskTest {
     @Test
     public void testAfterVisible() {
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
         long ts = System.currentTimeMillis();
-        streamLoadTask.afterVisible(txnState, txnOperated);
+        streamLoadTask.afterVisible(txnState);
         Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
 
@@ -145,12 +143,35 @@ public class StreamLoadTaskTest {
             {
                 coord.join(anyInt);
                 result = true;
+                // The coordinator itself is healthy here, the load simply produced no rows.
+                coord.getExecStatus();
+                result = Status.OK;
                 coord.getLoadCounters();
                 returns(null, loadCounters);
             }
         };
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
+                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+    }
+
+    @Test
+    public void testCancelledLoadReportsCancelReason() {
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.join(anyInt);
+                result = true;
+                coord.getExecStatus();
+                result = new Status(TStatusCode.CANCELLED, "cancelled by test");
+                coord.getLoadCounters();
+                result = null;
+            }
+        };
+
+        // A cancelled load never reports its counters. The user must see why it was cancelled instead of
+        // "no rows imported", which reads like a data problem.
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "cancelled by test",
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -179,6 +200,32 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+    public void testReplayVisibleWithManualLoadTxnCommitAttachment() {
+        ManualLoadTxnCommitAttachment attachment = mock(ManualLoadTxnCommitAttachment.class);
+        when(attachment.getLoadedRows()).thenReturn(100L);
+        when(attachment.getFilteredRows()).thenReturn(10L);
+        when(attachment.getUnselectedRows()).thenReturn(5L);
+        when(attachment.getLoadedBytes()).thenReturn(1000L);
+        when(attachment.getErrorLogUrl()).thenReturn("http://error.log");
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(attachment);
+        txnState.setReason("Replay visible");
+        txnState.setFinishTime(System.currentTimeMillis());
+
+        streamLoadTask.replayOnVisible(txnState);
+
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals("100%", loadInfo.getProgress());
+        Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
+        Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
+        Assertions.assertEquals(1000L, loadInfo.getNum_scan_bytes());
+        Assertions.assertEquals("http://error.log", loadInfo.getUrl());
+        Assertions.assertEquals("Replay visible", loadInfo.getError_msg());
+    }
+
+    @Test
     public void testSetLoadStateWithRLTaskTxnCommitAttachment() {
         RLTaskTxnCommitAttachment attachment = mock(RLTaskTxnCommitAttachment.class);
         when(attachment.getLoadedRows()).thenReturn(200L);
@@ -199,6 +246,42 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+    public void testToThrift_timestampMsFields() {
+        // Regression coverage for the BE materialization path: if a future
+        // change drops one of the *_ms setters, BE silently falls back to the
+        // legacy UTC+8 string and stream-load rows go missing in
+        // non-Asia/Shanghai sessions.
+        long createMs = 1_700_000_000_000L;
+        long startMs = createMs + 1_000;
+        long commitMs = createMs + 2_000;
+        long endMs = createMs + 3_000;
+
+        Deencapsulation.setField(streamLoadTask, "createTimeMs", createMs);
+        Deencapsulation.setField(streamLoadTask, "startLoadingTimeMs", startMs);
+        Deencapsulation.setField(streamLoadTask, "commitTimeMs", commitMs);
+        Deencapsulation.setField(streamLoadTask, "endTimeMs", endMs);
+
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(createMs, info.getCreate_time_ms());
+        Assertions.assertEquals(startMs, info.getLoad_start_time_ms());
+        Assertions.assertEquals(commitMs, info.getLoad_commit_time_ms());
+        Assertions.assertEquals(endMs, info.getLoad_finish_time_ms());
+
+        // Sentinel path: zero/unset timestamps must leave the ms field unset so
+        // BE's !__isset branch can fall back to NULL instead of materializing
+        // epoch values.
+        Deencapsulation.setField(streamLoadTask, "createTimeMs", 0L);
+        Deencapsulation.setField(streamLoadTask, "startLoadingTimeMs", 0L);
+        Deencapsulation.setField(streamLoadTask, "commitTimeMs", 0L);
+        Deencapsulation.setField(streamLoadTask, "endTimeMs", 0L);
+        TLoadInfo unsetInfo = streamLoadTask.toThrift().get(0);
+        Assertions.assertFalse(unsetInfo.isSetCreate_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
     public void testBuildProfile() throws StarRocksException {
         streamLoadTask.setCoordinator(coord);
         streamLoadTask.setIsSyncStreamLoad(true);
@@ -216,8 +299,7 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
-        streamLoadTask.afterCommitted(txnState, txnOperated);
+        streamLoadTask.afterCommitted(txnState);
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
     }
 

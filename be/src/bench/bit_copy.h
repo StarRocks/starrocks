@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <cstdint>
 
 //// TODO, up to now, Bit Copy is only used in test and bench for preparing the

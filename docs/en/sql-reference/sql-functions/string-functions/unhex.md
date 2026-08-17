@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a hexadecimal string to its original binary string; inverse of hex."
 ---
 
 # unhex

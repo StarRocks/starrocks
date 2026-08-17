@@ -22,11 +22,12 @@
 
 #include "column/chunk.h"
 #include "column/column_access_path.h"
-#include "exec/olap_common.h"
-#include "exec/olap_scan_prepare.h"
+#include "common/statusor.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
-#include "runtime/global_dict/parser.h"
+#include "exprs/expr_context.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -67,7 +68,7 @@ public:
     void close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;
@@ -79,8 +80,7 @@ public:
 
     Status set_scan_range(const TInternalScanRange& range);
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
@@ -211,6 +211,8 @@ private:
 
     std::vector<ExprContext*> _bucket_exprs;
 
+    std::vector<ExprContext*> _partition_exprs;
+
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 
@@ -258,7 +260,16 @@ private:
     RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
 
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
     RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;

@@ -52,14 +52,8 @@ protected:
     std::vector<TBucketProperty> _bucket_properties;
 };
 
-class WithLayoutMixin {
-public:
-    void init(const TRuntimeFilterDescription& desc);
-    const RuntimeFilterLayout& layout() const { return _layout; }
+void init_runtime_filter_layout(const TRuntimeFilterDescription& desc, RuntimeFilterLayout* layout);
 
-protected:
-    RuntimeFilterLayout _layout;
-};
 static constexpr uint32_t BUCKET_ABSENT = 2147483647;
 VALUE_GUARD(TRuntimeFilterLayoutMode::type, LayoutSingletonGuard, layout_is_singleton,
             TRuntimeFilterLayoutMode::SINGLETON);

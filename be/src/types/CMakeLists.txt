@@ -14,7 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/types")
 
-ADD_BE_LIB(TypesCore
+ADD_BE_LIB(Types
     bitmap_value.cpp
     datum.cpp
     decimalv2_value.cpp
@@ -22,12 +22,14 @@ ADD_BE_LIB(TypesCore
     hll.cpp
     json_value.cpp
     json_value_converter.cpp
+    simple_json_path.cpp
     logical_type.cpp
     array_type_info.cpp
     decimal_type_info.cpp
     map_type_info.cpp
     struct_type_info.cpp
     type_info.cpp
+    agg_state_desc.cpp
     type_descriptor.cpp
     date_value.cpp
     datetime_value.cpp
@@ -38,10 +40,8 @@ ADD_BE_LIB(TypesCore
     variant_value.cpp
 )
 
-ADD_BE_LIB(Types
-    hll_sketch.cpp
-    logical_type_size.cpp
-    checker/type_checker.cpp
-    checker/type_checker_xml_loader.cpp
-    type_checker_manager.cpp
+target_link_libraries(Types PRIVATE
+    re2
+    simdjson
+    velocypack
 )

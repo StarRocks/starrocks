@@ -17,20 +17,19 @@
 #include <string>
 #include <unordered_map>
 
+#include "column/column.h"
 #include "common/status.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
-namespace starrocks {
-
-namespace lake {
+namespace starrocks::lake {
 class Rowset;
 class UpdateManager;
 
 class CompactionState {
 public:
-    CompactionState() {}
+    CompactionState() = default;
     ~CompactionState();
 
     CompactionState(const CompactionState&) = delete;
@@ -63,6 +62,4 @@ inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {
     return os;
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

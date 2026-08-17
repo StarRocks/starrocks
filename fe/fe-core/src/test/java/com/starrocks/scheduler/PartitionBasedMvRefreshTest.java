@@ -20,7 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.common.DmlException;
@@ -156,7 +156,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                             logSysInfo("start to execute task run:" + i);
                             Assertions.assertTrue(taskRun != null);
                             initAndExecuteTaskRun(taskRun);
-                            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                             MvTaskRunContext mvContext = processor.getMvContext();
                             ExecPlan execPlan = mvContext.getExecPlan();
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -231,7 +231,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                             logSysInfo("start to execute task run:" + i);
                             Assertions.assertTrue(taskRun != null);
                             initAndExecuteTaskRun(taskRun);
-                            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                             MvTaskRunContext mvContext = processor.getMvContext();
                             ExecPlan execPlan = mvContext.getExecPlan();
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -283,7 +283,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                                 String partitionEnd = executeOption.getTaskRunProperties().get(TaskRun.PARTITION_END);
                                 initAndExecuteTaskRun(taskRun, partitionStart, partitionEnd);
                             }
-                            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                             MvTaskRunContext mvContext = processor.getMvContext();
                             ExecPlan execPlan = mvContext.getExecPlan();
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);

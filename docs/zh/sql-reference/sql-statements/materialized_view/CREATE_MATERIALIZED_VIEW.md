@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建物化视图，支持同步和异步刷新方式。"
 ---
 
 # CREATE MATERIALIZED VIEW
@@ -164,7 +165,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -197,7 +198,7 @@ AS
 
 **distribution_desc**（选填）
 
-异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
+异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下启用 `enable_range_distribution` 时，省略该参数会选择 Range 分布。否则，`refresh_mode` 非 `INCREMENTAL` 的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。`refresh_mode` 为 `INCREMENTAL` 的物化视图使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
 
 :::info
 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
@@ -248,7 +249,7 @@ AS
 物化视图的刷新方式。该参数支持如下值：
 
 - `ASYNC`: 自动刷新模式。每当基表数据发生变化时，物化视图会自动刷新。
-- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定时刷新模式。物化视图将按照定义的间隔定时刷新。您可以使用 `DAY`（天）、`HOUR`（小时）、`MINUTE`（分钟）和 `SECOND`（秒）作为单位指定间隔，格式为 `EVERY (interval n day/hour/minute/second)`。默认值为 `10 MINUTE`（10 分钟）。您还可以进一步指定刷新起始时间，格式为 `START('yyyy-MM-dd hh:mm:ss')`。如未指定起始时间，默认使用当前时间。示例：`ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。
+- `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定时刷新模式。物化视图将按照定义的间隔定时刷新。您可以使用 `DAY`（天）、`HOUR`（小时）、`MINUTE`（分钟）和 `SECOND`（秒）作为单位指定间隔，格式为 `EVERY (interval n day/hour/minute/second)`。默认值为 `10 MINUTE`（10 分钟）。您还可以进一步指定刷新起始时间，格式为 `START('yyyy-MM-dd hh:mm:ss')`。如未指定起始时间，默认使用当前时间。示例：`SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。为兼容旧版本，`ASYNC [START (...)] EVERY (...)` 仍然被接受，但 `SHOW CREATE MATERIALIZED VIEW` 输出的定时刷新部分始终使用 `SCHEDULE`。
 - `MANUAL`: 手动刷新模式。除非手动触发刷新任务，否则物化视图不会刷新。
 
 如果不指定该参数，则默认使用 MANUAL 方式。
@@ -326,7 +327,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 ```
 
-**PROPERTIES**（选填）
+#### PROPERTIES（选填）
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 
@@ -350,7 +351,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   :::
 
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
-- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
+- `mv_rewrite_staleness_second`：只要**基表最新修改时间**与该物化视图最近一次被确认的**完整**刷新之间的差值不超过此属性指定的时间间隔，则此物化视图可直接用于查询改写，无论基表数据是否更新。由于比较的对象是基表最新修改时间（而非当前时钟时间），因此自上次完整刷新以来基表未发生变更的物化视图会一直可用于查询改写，无论经过多长时间。否则，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。请注意，仅覆盖部分分区的刷新操作（例如手动执行的 `REFRESH ... PARTITION START ... END`，或受 `auto_refresh_partitions_limit` 限制的刷新）不会更新该新鲜度基线。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
 
@@ -363,7 +364,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `disable`：禁用基于该异步物化视图进行自动查询改写。
   - `checked`（默认值）：仅在物化视图满足时效性要求时启用自动查询改写，即：
     - 如果未指定 `mv_rewrite_staleness_second`，则只有当物化视图的数据与所有基表中的数据一致时，才可以将其用于查询改写。
-    - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最后刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
+    - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最近一次被确认的完整刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
   - `loose`：直接启用自动查询改写，无需进行一致性检查。
   - `force_mv`：从 v3.5.0 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。`force_mv` 语义即专门为该场景设计。当启用该语义时：
     - 如果物化视图未定义 `partition_retention_condition` 属性，则无论基表是否有更新，都强制使用进行改写。
@@ -377,7 +378,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
     有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
-- `storage_volume`：[如果您使用存算分离集群](../../../deployment/shared_data/shared_data.mdx)，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
+- `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
   - `true`（自 v3.3 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
   - `false`：禁用基于 External Catalog 的物化视图的查询改写。
@@ -400,12 +401,10 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
-- `refresh_mode`：控制物化视图的刷新方式。StarRocks v4.1 中引入。有效值：
+- `refresh_mode`：控制物化视图的刷新方式。StarRocks v4.1 中引入。仅支持 Iceberg Append-only 表。有效值：
 
   - `PCT`：（默认）对于分区物化视图，当基表数据发生变化时，仅刷新受影响的分区，保证该分区的数据一致性。对于非分区物化视图，基表任何数据变化都会触发全量刷新。
-  - `AUTO`：如果可能，会尝试使用增量刷新。如果物化视图的查询定义不支持增量刷新，则会自动回退到 `PCT` 模式进行本次操作。在进行了一次 PCT 刷新后，如果条件允许，后续刷新有可能再次回到增量刷新模式。
   - `INCREMENTAL`：仅允许进行增量刷新。如果根据定义物化视图不支持增量刷新，或遇到无法增量处理的数据，则创建或刷新的操作会失败。
-  - `FULL`：每次都强制进行全量刷新，无论物化视图是否支持增量刷新或分区级刷新。
 
 <MVWarehouse />
 
@@ -454,6 +453,53 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
     - **字符串类型**：STRING、UUID、FIXED(L)、BINARY
     - **半结构化类型**：LIST
 
+### 增量物化视图
+
+StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`，有效值为 `pct`、`incremental`）决定的默认刷新模式。请注意以下使用说明：
+
+- 调整 `refresh_mode` 时存在以下限制：
+  - 不能将传统物化视图（即类型为 `PCT` 的视图）更改为 `INCREMENTAL` 刷新模式。如需更改，必须重建该物化视图。
+  - 当将物化视图从 `INCREMENTAL` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
+- `refresh_mode` 为 `INCREMENTAL` 的物化视图不支持指定分区刷新。`INCREMENTAL` 类型的物化视图，如果尝试指定分区刷新，会抛出异常。
+
+#### 分布方式
+
+`refresh_mode` 为 `INCREMENTAL` 的物化视图遵循以下分布规则：
+
+- 如果省略 `distribution_desc`，仅当处于存算分离模式且 `enable_range_distribution` 已启用时，StarRocks 才使用 Range 分布。其他情况下，StarRocks 回退到基于目标表全部 Key 列的哈希分布。
+- Range 分布没有用户可指定的 `DISTRIBUTED BY RANGE` 语法，无法显式指定。
+- 如果显式指定哈希分布或随机分布，StarRocks 会将其归一化为基于目标表全部 Key 列的哈希分布，并保留显式指定的分桶数量。
+
+#### 排序键
+
+`refresh_mode` 为 `INCREMENTAL` 的物化视图是以内部 Row ID 列为主键的主键表，因此 `ORDER BY` 定义的是独立的排序键，不会成为主键的一部分。
+
+- 对于哈希分布或随机分布的物化视图，排序键即 `ORDER BY` 指定的列。
+- 对于 Range 分布的物化视图，**不支持 `ORDER BY`**：排序键决定 Tablet 的区间边界，必须与主键相同，而该主键列无法由用户指定。如需排序键，请显式指定 `DISTRIBUTED BY HASH(...)`。
+- 如果省略 `ORDER BY`，物化视图按其主键排序。
+
+#### 支持的增量算子
+
+增量刷新仅支持基表的追加（append-only）操作。如果在基表上执行了不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`），当 `refresh_mode` 设置为 `INCREMENTAL` 时，物化视图刷新将失败。
+
+当前支持以下增量刷新操作符：
+
+| 操作符                          | 是否支持增量刷新                                                                                                   |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| Select                          | 支持                                                                                                              |
+| From `<Table>`                  | 仅支持 Iceberg 表，不支持其他类型表                                                                              |
+| Filter                          | 支持                                                                                                              |
+| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li></ul>     |
+| Inner Join                      | 支持                                                                                                              |
+| Union All                       | 支持                                                                                                              |
+| Left/Right/Full Outer Join      | 暂不支持                                                                                                          |
+
+:::note
+- 虽然上述大部分操作符支持增量刷新，但某些操作符组合当前存在以下限制：  
+  - 支持 join 后聚合和 union 后聚合的增量计算。
+  - 但不支持聚合后做 join 或聚合后做 union all 的增量计算。
+:::
+
 ## 注意事项
 
 - 当前版本暂时不支持同时创建多个物化视图。仅当当前创建任务完成时，方可执行下一个创建任务。
@@ -478,88 +524,6 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - 物化视图中的数据不保证与外部数据目录的数据强一致。
   - 目前暂不支持基于资源（Resource）构建物化视图。
   - StarRocks 目前无法感知外部数据目录基表数据是否发生变动，所以每次刷新会默认刷新所有分区。您可以通过手动刷新方式指定刷新部分分区。
-
-## 增量物化视图
-
-StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`）决定的默认刷新模式。请注意以下使用说明：
-
-- 调整 `refresh_mode` 时存在以下限制：
-  - 不能将传统物化视图（即类型为 `PCT` 的视图）更改为 `AUTO` 或 `INCREMENTAL` 刷新模式。如需更改，必须重建该物化视图。
-  - 当将物化视图从 `AUTO` 或 `INCREMENTAL` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
-- 增量物化视图不支持指定分区刷新：
-  - 对于 `INCREMENTAL` 类型的物化视图，如果尝试指定分区刷新，会抛出异常。
-  - 对于 `AUTO` 类型的物化视图，StarRocks 会自动切换到 `PCT` 模式执行刷新操作。
-
-### 支持的增量算子
-
-增量刷新仅支持基表的追加（append-only）操作。如果在基表上执行了不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`）：
-- 当 `refresh_mode` 设置为 `INCREMENTAL` 时，物化视图刷新将失败。
-- 当 `refresh_mode` 设置为 `AUTO` 时，系统会自动回退到 `PCT` 模式进行刷新。
-
-当前支持以下增量刷新操作符：
-
-| 操作符                          | 是否支持增量刷新                                                                                                   |
-|---------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| Select                          | 支持                                                                                                              |
-| From `<Table>`                  | 仅支持 Iceberg/Paimon 表，不支持其他类型表                                                                              |
-| Filter                          | 支持                                                                                                              |
-| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li></ul>     |
-| Inner Join                      | 支持                                                                                                              |
-| Union All                       | 支持                                                                                                              |
-| Left/Right/Full Outer Join      | 暂不支持                                                                                                          |
-
-:::note
-- 虽然上述大部分操作符支持增量刷新，但某些操作符组合当前存在以下限制：  
-  - 支持 join 后聚合和 union 后聚合的增量计算。
-  - 但不支持聚合后做 join 或聚合后做 union all 的增量计算。
-:::
-
-### 示例
-
-```
-CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
-REFRESH DEFERRED MANUAL 
-properties
-(
-    "refresh_mode" = "INCREMENTAL"
-)
-AS SELECT 
-  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
-  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
-  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
-  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
-  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
-  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
-  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
-FROM 
-  iceberg_catalog.iceberg_test_dbt1 
-  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
-  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
-  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
-  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
- GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
- 
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-```
-`information_schema.task_runs` 表中的 `EXTRA_MESSAGE` 列已新增 `refreshMode` 字段，用于标识该 `TaskRun` 的刷新模式。更多细节请参考 [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md)。
-```
-mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
-     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
-    TASK_NAME: mv-78190
-  CREATE_TIME: 2025-10-17 10:44:41
-  FINISH_TIME: 2025-10-17 10:44:44
-        STATE: SUCCESS
-      CATALOG: NULL
-     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
-   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
-  EXPIRE_TIME: 2025-10-24 10:44:41
-   ERROR_CODE: 0
-ERROR_MESSAGE: NULL
-     PROGRESS: 100%
-EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
-   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
-       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
-```
 
 ## 示例
 
@@ -900,7 +864,7 @@ PROPERTIES (
 -- 创建一个按 lo_custkey 排序的非分区物化视图
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC
 AS
 select
@@ -920,7 +884,7 @@ group by lo_orderkey, lo_custkey;
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1110,7 +1074,7 @@ AS SELECT * from t1;
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1124,7 +1088,51 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
+示例八：创建增量物化视图。
 
-## 更多操作
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "INCREMENTAL"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
+  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
+  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
+  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
+  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
+  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
+  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
+FROM 
+  iceberg_catalog.iceberg_test_dbt1 
+  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
+  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
+  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
+  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
+ GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
+ 
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+```
 
-如要创建逻辑视图，请参见 [CREATE VIEW](../View/CREATE_VIEW.md)。
+`information_schema.task_runs` 表中的 `EXTRA_MESSAGE` 列已新增 `refreshMode` 字段，用于标识该 `TaskRun` 的刷新模式。更多细节请参考 [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md)。
+
+```SQL
+mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
+     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
+    TASK_NAME: mv-78190
+  CREATE_TIME: 2025-10-17 10:44:41
+  FINISH_TIME: 2025-10-17 10:44:44
+        STATE: SUCCESS
+      CATALOG: NULL
+     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
+   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
+  EXPIRE_TIME: 2025-10-24 10:44:41
+   ERROR_CODE: 0
+ERROR_MESSAGE: NULL
+     PROGRESS: 100%
+EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
+   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
+       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
+```

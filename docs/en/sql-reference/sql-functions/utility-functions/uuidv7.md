@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a time-ordered UUID v7 of the VARCHAR type."
 ---
 
 # uuid_v7

@@ -22,16 +22,18 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/expr_executor.h"
@@ -40,11 +42,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/java/java_env.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 namespace starrocks {
 
@@ -157,11 +160,12 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
 
 int64_t Aggregator::get_two_level_threahold() {
     if (config::two_level_memory_threshold < 0) {
-        return agg::two_level_memory_threshold;
+        return agg::two_level_memory_threshold();
     }
     return config::two_level_memory_threshold;
 }
@@ -210,7 +214,8 @@ void AggregatorParams::init() {
         const TFunction& fn = desc.nodes[0].fn;
 
         if (AggStateUtils::is_count_function(fn.name.function_name)) {
-            // count function is always not nullable
+            // count family serializes a non-nullable BIGINT. count_combine's NULL-skipping is
+            // re-derived from the real input nullability in _is_agg_result_nullable, not here.
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child
@@ -219,6 +224,7 @@ void AggregatorParams::init() {
             bool is_nullable = desc.nodes[0].is_nullable;
             // collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
@@ -292,14 +298,31 @@ Status Aggregator::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 #ifndef __APPLE__
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, [this]() {
+        auto& opts = state->query_options();
+        bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, [this, enable_cache]() {
             std::vector<int> attached_udaf_idx;
             attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                _agg_fn_ctxs[i]);
+                    // use_cache only when isolation is explicitly shared and enable_cache_udaf is set
+                    bool use_cache = enable_cache && fn.__isset.isolated && !fn.isolated;
+                    bool cache_hit = false;
+                    Status st;
+                    {
+                        SCOPED_TIMER(_agg_stat->udaf_load_timer);
+                        st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
+                    }
+                    if (use_cache) {
+                        if (cache_hit) {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_hit_count, 1);
+                        } else {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
+                        }
+                    }
                     if (!st.ok()) {
                         for (int idx : attached_udaf_idx) {
                             destroy_java_udaf_context(_agg_fn_ctxs[idx]);
@@ -386,7 +409,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(call_agg_create());
 #else
         if (_has_udaf) {
-            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
@@ -464,6 +487,13 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _agg_states_offsets.resize(agg_size);
     _is_merge_funcs.resize(agg_size);
     _agg_fn_types = _params->agg_fn_types;
+
+    // Save the TFunction objects up front: close() walks _agg_functions/_agg_fn_ctxs and indexes _fns with
+    // the same index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
+    }
 
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
@@ -554,12 +584,6 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
     }
 
-    // save TFunction object
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
-    }
-
     // prepare for spiller
     if (spiller()) {
         RETURN_IF_ERROR(spiller()->prepare(state));
@@ -570,8 +594,10 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
 
 bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type) {
     const TFunction& fn = desc.nodes[0].fn;
-    // NOTE: For count, we cannot use agg_func_type since it's only mocked values.
-    if (fn.name.function_name == FUNCTION_COUNT) {
+    // NOTE: count and count_combine carry mocked agg_func_type values (non-nullable fast-path), so
+    // their NULL-skipping choice must come from the real input nullability on the plan node.
+    if (fn.name.function_name == FUNCTION_COUNT ||
+        fn.name.function_name == FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
         if (fn.arg_types.empty()) {
             return false;
         }
@@ -584,6 +610,7 @@ bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTyp
 Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn,
                                               bool is_result_nullable, const AggregateFunction** ret) {
     std::vector<TypeDescriptor> arg_types;
+    arg_types.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_types.push_back(TypeDescriptor::from_thrift(type));
     }
@@ -613,8 +640,9 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
             const TypeDescriptor& arg_type = arg_types[0];
+            bool is_arrow_input = fn.__isset.input_type && fn.input_type == "arrow";
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
-                                                state->func_version());
+                                                state->func_version(), is_arrow_input);
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
                         "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
@@ -785,7 +813,7 @@ void Aggregator::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
@@ -863,8 +891,12 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
                     ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
         } else {
             // if function has at least two argument, unpack const column selectively
-            // for function like corr, FE forbid second args to be const, we will always unpack const column for it
             // for function like percentile_disc, the second args is const, do not unpack it
+            // NOTE: an argument that the analyzer saw as non-constant can still be constant here,
+            // because the optimizer folds constants after analysis. Every aggregate function that
+            // reads an argument other than the first one must therefore cope with a const column
+            // (see `GetContainer` / `ColumnHelper::get_data_column`), it cannot assume the column
+            // has the concrete type of its argument.
             if (agg_expr_ctxs[j]->root()->is_constant()) {
                 _agg_input_columns[i][j] = std::move(col);
             } else {
@@ -1516,6 +1548,22 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
     typename HashVariantType::Type type = input_type;
     if (_group_by_types.empty()) {
         return type;
+    }
+    // Don't shadow direct-array variants with the slice_cx1 rewrite.
+    // TINYINT / BOOL / SMALLINT route to SmallFixedSizeHashMap-backed
+    // direct arrays; the slice_cx1 path sits on the same direct array
+    // under int8 but adds a per-row bitcompress_serialize step, so any
+    // query that supplies range stats via `group_by_min_max` would
+    // otherwise silently regress to the slower slice path.
+    if (_group_by_types.size() == 1) {
+        switch (_group_by_types[0].result_type.type) {
+        case TYPE_TINYINT:
+        case TYPE_BOOLEAN:
+        case TYPE_SMALLINT:
+            return type;
+        default:
+            break;
+        }
     }
     for (size_t i = 0; i < _ranges.size(); ++i) {
         if (!_ranges[i].has_value()) {

@@ -1,0 +1,30 @@
+-- name: test_colocate_range_intra_partition_split @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_intra_${uuid0}:k1');
+-- result:
+-- !result
+insert into t (k1, k2, v)
+select 100, x, x from table(generate_series(1, 1000)) as g(x);
+-- result:
+-- !result
+[UC]alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+select count(*) from t a join t b on a.k1 = b.k1;
+-- result:
+1000000
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

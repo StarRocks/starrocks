@@ -34,6 +34,7 @@
 
 #include "exec/select_node.h"
 
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/select_operator.h"
@@ -45,7 +46,7 @@
 namespace starrocks {
 
 SelectNode::SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {}
+        : PipelineNode(pool, tnode, descs) {}
 
 SelectNode::~SelectNode() {
     if (runtime_state() != nullptr) {
@@ -65,51 +66,6 @@ Status SelectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status SelectNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
-    return Status::OK();
-}
-
-Status SelectNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(child(0)->open(state));
-    return Status::OK();
-}
-
-Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    RETURN_IF_CANCELLED(state);
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    if (reached_limit()) {
-        *eos = true;
-        return Status::OK();
-    }
-
-    *eos = false;
-    RETURN_IF_ERROR(_children[0]->get_next(state, chunk, eos));
-    if (*eos) {
-        return Status::OK();
-    }
-    {
-        SCOPED_TIMER(_conjunct_evaluate_timer);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    }
-    _num_rows_returned += (*chunk)->num_rows();
-
-    if (reached_limit()) {
-        int64_t num_rows_over = _num_rows_returned - _limit;
-        (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
-        return Status::OK();
-    }
-
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    return Status::OK();
-}
-
 void SelectNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
@@ -117,10 +73,10 @@ void SelectNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> SelectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
 
     operators.emplace_back(std::make_shared<SelectOperatorFactory>(
             context->next_operator_id(), id(), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs)));
@@ -128,7 +84,7 @@ pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilde
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

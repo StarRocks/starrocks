@@ -1,7 +1,8 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Query Profile发出的所有原始指标的参考，按操作符类型组织。"
 sidebar_position: 80
-keywords: ['profile', 'query']
+keywords: ['profile', 'query', '指标']
 ---
 
 # 查询概要指标
@@ -95,6 +96,33 @@ keywords: ['profile', 'query']
 | QueryCumulativeScanTime | Scan 节点的总 IO 时间 | |
 | QueryPeakScheduleTime | 最大 Pipeline 调度时间 | 简单查询 < 1s 正常 |
 | QuerySpillBytes | 溢出到磁盘的数据 | < 1GB 正常 |
+
+### 各表在各 BE 上的扫描统计
+
+合并后的查询 Profile 中会附加一个 `PerTableScanStats` 子树，按"表 × BE 节点"两个维度汇总 Scan 算子的输出。它在各
+Instance Profile 还未被同构合并时遍历 Profile 树，把每个 Scan 算子 `UniqueMetrics` 上发布的 `RowsRead`、`BytesRead`、
+`RawRowsRead` 计数器以及 `Database`、`Table` InfoString 与所在 Instance 的 `Address` 组合后聚合得到。聚合键包含库名，
+因此不同数据库下的同名表（如 `db1.orders` 与 `db2.orders`）不会被合并到同一桶；若 BE 未上报库名则回退使用裸表名。该汇总可用于
+快速识别表在不同 BE 上的扫描倾斜，以及哪些表是某次查询扫描成本的主要来源。
+
+结构如下：
+
+```
+PerTableScanStats
+  TableNum / ScanRows / ScanBytes / RawScanRows   -- 全查询合计
+  Table: <库名>.<表名>                            -- 缺少库名时退化为 <表名>
+    HostNum / ScanRows / ScanBytes / RawScanRows  -- 表级合计
+    Host: <host:port>
+      ScanRows / ScanBytes / RawScanRows          -- 单 (表, BE) 维度
+```
+
+| 指标 | 描述 |
+|--------|-------------|
+| TableNum | 本次查询涉及的表数量（仅顶层）|
+| HostNum | 扫描该表的 BE 节点数（表级别）|
+| ScanRows | 过滤后读取行数，按对应维度汇总 |
+| ScanBytes | 过滤后读取字节数，按对应维度汇总（部分 connector 未上报）|
+| RawScanRows | 谓词过滤前的原始读取行数，按对应维度汇总 |
 
 ### Fragment 指标
 
@@ -220,6 +248,9 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | SubmitTaskTime | 任务提交所花费的时间。 |
 | PeakIOTasks | I/O 任务的峰值数量。 |
 | PeakScanTaskQueueSize | I/O 任务队列的峰值大小。 |
+| RuntimeFilterEvalTime | 在 Parquet Reader 内部对已解码数据行求值 Join Runtime Filter 所花费的时间。 |
+| RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
+| RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
 
 ### Exchange Operator
 
@@ -249,7 +280,8 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | BytesPassThrough | 如果目标节点是当前节点，数据将不会通过网络传输，这称为 passthrough 数据。此指标指示此类 passthrough 数据的大小。Passthrough 由 `enable_exchange_pass_through` 控制。 |
 | PassThroughBufferPeakMemoryUsage | PassThrough Buffer 的内存使用峰值。 |
 | CompressTime | 压缩时间。 |
-| CompressedBytes | 压缩数据的大小。 |
+| CompressedInputBytes | 实际送入压缩器的序列化数据（压缩前）的大小。被自适应压缩策略跳过的 chunk 不计入其中。`CompressedInputBytes / CompressedBytes` 即为压缩率，`SerializedBytes - CompressedInputBytes` 即为未被压缩的数据大小。 |
+| CompressedBytes | 压缩数据的大小。仅统计实际被压缩的 chunk。 |
 | OverallThroughput | 吞吐率。 |
 | NetworkTime | 数据包传输所花费的时间（不包括接收后的处理时间）。 |
 | NetworkBandwidth | 估计的网络带宽。 |

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks への貢献方法（コード・ドキュメント・テスト等）。"
 ---
 
 # Contribute to StarRocks
@@ -22,7 +23,7 @@ StarRocks への貢献は、誰からでも心より歓迎します。StarRocks 
 
 ## コミュニティリソース
 
-StarRocks に関する幅広いサポートを得るための最良の場所は、StarRocks の [Slack チャンネル](https://try.starrocks.com/join-starrocks-on-slack) です。貢献に関する議論については、**#contributing-to-starrocks** チャンネルに参加してください。
+StarRocks に関する幅広いサポートを得るための最良の場所は、StarRocks の [Slack チャンネル](https://docs.starrocks.io/join/) です。貢献に関する議論については、**#contributing-to-starrocks** チャンネルに参加してください。
 
 また、[GitHub](https://github.com/StarRocks/starrocks/) で問題や課題を報告したり、新機能を提案したりすることもできます。
 
@@ -203,7 +204,7 @@ PMC はコミッターから昇格されます。彼らはマスターブラン�
 
 1. [Contributor License Agreement (CLA)](https://cla-assistant.io/StarRocks/starrocks) に署名します。
 
-2. GitHub で [issue](https://github.com/StarRocks/starrocks/issues) を作成するか、[Slack チャンネル](https://try.starrocks.com/join-starrocks-on-slack) で質問して、ディスカッションを開始します（変更が些細でない限り）。
+2. GitHub で [issue](https://github.com/StarRocks/starrocks/issues) を作成するか、[Slack チャンネル](https://docs.starrocks.io/join/) で質問して、ディスカッションを開始します（変更が些細でない限り）。
 
    コードに手を付ける前に、issue 本文にコメントし、解決したい issue をメンテナーに割り当てるように通知してください。また、この問題を解決する方法についての計画を issue 本文で共有することをお勧めします。
 

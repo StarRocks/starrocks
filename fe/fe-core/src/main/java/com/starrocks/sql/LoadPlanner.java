@@ -146,6 +146,8 @@ public class LoadPlanner {
 
     // Only valid for stream load
     private boolean enableBatchWrite = false;
+    private boolean syncStreamLoad = false;
+    private long syncStreamLoadBackendId = -1;
     private int batchWriteIntervalMs;
     private ImmutableMap<String, String> batchWriteParameters;
     private Set<Long> batchWriteBackendIds;
@@ -268,6 +270,17 @@ public class LoadPlanner {
         this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
     }
 
+    // Mark this plan as the classic BE-local synchronous stream load (see
+    // FrontendServiceImpl.streamLoadPutImpl): keep the real load id and skip channel_id so the
+    // receiving BE reads the HTTP action's LoadStreamMgr pipe.
+    public void setSyncStreamLoad(boolean syncStreamLoad) {
+        this.syncStreamLoad = syncStreamLoad;
+    }
+
+    public void setSyncStreamLoadBackendId(long syncStreamLoadBackendId) {
+        this.syncStreamLoadBackendId = syncStreamLoadBackendId;
+    }
+
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
     }
@@ -331,7 +344,7 @@ public class LoadPlanner {
         boolean needShufflePlan = false;
         boolean forceReplicatedStorage = false;
         if (Config.enable_shuffle_load && needShufflePlan()) {
-            if (!Config.eliminate_shuffle_load_by_replicated_storage) {
+            if (!Config.eliminate_shuffle_load_by_replicated_storage && !syncStreamLoad) {
                 // scan fragment
                 PlanFragment scanFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
                 scanFragment.setParallelExecNum(parallelInstanceNum);
@@ -447,6 +460,8 @@ public class LoadPlanner {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, computeResource);
             streamScanNode.setNeedAssignBE(true);
+            streamScanNode.setSyncStreamLoad(syncStreamLoad);
+            streamScanNode.setSyncStreamLoadBackendId(syncStreamLoadBackendId);
             if (enableBatchWrite) {
                 streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
             }
@@ -498,6 +513,12 @@ public class LoadPlanner {
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition, computeResource);
+            // Stream/routine loads planned through LoadPlanner (transaction stream load via
+            // StreamLoadTask, batch write via MergeCommitTask) must be flagged as streaming so
+            // OlapTableSink applies the conservative initial-open-partition default, matching the
+            // StreamLoadPlanner path. Broker load (EtlJobType.BROKER) is intentionally excluded.
+            ((OlapTableSink) dataSink).setIsStreamingLoad(
+                    this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

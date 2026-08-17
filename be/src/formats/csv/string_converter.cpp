@@ -16,13 +16,13 @@
 
 #include "base/string/utf8.h"
 #include "column/binary_column.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 
-Status StringConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
     auto bytes = binary->get_immutable_bytes();
@@ -33,7 +33,7 @@ Status StringConverter::write_string(io::FormattedOutputStream* os, const Column
     return os->write(s);
 }
 
-Status StringConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                             const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
     auto bytes = binary->get_immutable_bytes();

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SHOW REPLICA STATUS shows replica status information for a table or partition."
 ---
 
 # ADMIN SHOW REPLICA STATUS

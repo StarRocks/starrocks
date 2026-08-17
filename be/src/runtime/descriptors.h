@@ -14,24 +14,29 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
 
+#include <cstdint>
+#include <memory_resource>
 #include <optional>
-#include <ostream>
+#include <ranges>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 #include "common/global_types.h"
-#include "common/status.h"
-#include "gen_cpp/Descriptors_types.h"     // for TTupleId
-#include "gen_cpp/FrontendService_types.h" // for TTupleId
+#include "common/logging.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class ObjectPool;
+class Status;
 class TDescriptorTable;
 class TSlotDescriptor;
 class TTupleDescriptor;
@@ -39,7 +44,6 @@ class Expr;
 class ExprContext;
 class RuntimeState;
 class SchemaScanner;
-class IcebergDeleteFileMeta;
 class OlapTableSchemaParam;
 class PTupleDescriptor;
 class PSlotDescriptor;
@@ -47,7 +51,8 @@ class RowPositionDescriptor;
 
 class SlotDescriptor {
 public:
-    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type);
+    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type,
+                   std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
@@ -60,30 +65,29 @@ public:
 
     int slot_size() const { return _slot_size; }
 
-    const std::string& col_name() const { return _col_name; }
+    std::string_view col_name() const { return _col_name; }
 
     void to_protobuf(PSlotDescriptor* pslot) const;
 
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
-    const std::string& col_physical_name() const { return _col_physical_name; }
+    std::string_view col_physical_name() const { return _col_physical_name; }
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
+    SlotDescriptor(const TSlotDescriptor& tdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
     friend class SchemaScanner;
     friend class OlapTableSchemaParam;
-    friend class IcebergDeleteFileMeta;
 
     const SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
-    const std::string _col_name;
+    const std::pmr::string _col_name;
     const int32_t _col_unique_id;
-    const std::string _col_physical_name;
+    const std::pmr::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -99,24 +103,45 @@ private:
 
     const bool _is_virtual;
 
-    SlotDescriptor(const PSlotDescriptor& pdesc);
+    SlotDescriptor(const PSlotDescriptor& pdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
 };
 
 // Base class for table descriptors.
 class TableDescriptor {
 public:
-    TableDescriptor(const TTableDescriptor& tdesc);
+    TableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr = std::pmr::get_default_resource());
     virtual ~TableDescriptor() = default;
     TableId table_id() const { return _id; }
     virtual std::string debug_string() const;
 
-    const std::string& name() const { return _name; }
-    const std::string& database() const { return _database; }
+    std::string_view name() const { return _name; }
+    std::string_view database() const { return _database; }
 
 private:
-    std::string _name;
-    std::string _database;
+    std::pmr::string _name;
+    std::pmr::string _database;
     TableId _id;
+};
+
+class MySQLTableDescriptor : public TableDescriptor {
+public:
+    MySQLTableDescriptor(const TTableDescriptor& tdesc,
+                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
+    std::string debug_string() const override;
+    std::string_view mysql_db() const { return _mysql_db; }
+    std::string_view mysql_table() const { return _mysql_table; }
+    std::string_view host() const { return _host; }
+    std::string_view port() const { return _port; }
+    std::string_view user() const { return _user; }
+    std::string_view passwd() const { return _passwd; }
+
+private:
+    std::pmr::string _mysql_db;
+    std::pmr::string _mysql_table;
+    std::pmr::string _host;
+    std::pmr::string _port;
+    std::pmr::string _user;
+    std::pmr::string _passwd;
 };
 
 class TupleDescriptor {
@@ -147,6 +172,7 @@ public:
 private:
     friend class DescriptorTbl;
     friend class OlapTableSchemaParam;
+    friend class ObjectPool;
 
     const TupleId _id;
     TableDescriptor* _table_desc;
@@ -171,7 +197,6 @@ public:
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
     SlotDescriptor* get_slot_descriptor(SlotId id) const;
-    SlotDescriptor* get_slot_descriptor_with_column(SlotId id) const;
 
     // return all registered tuple descriptors
     void get_tuple_descs(std::vector<TupleDescriptor*>* descs) const;
@@ -179,78 +204,60 @@ public:
     std::string debug_string() const;
 
 private:
-    typedef std::unordered_map<TableId, TableDescriptor*> TableDescriptorMap;
-    typedef std::unordered_map<TupleId, TupleDescriptor*> TupleDescriptorMap;
-    typedef std::unordered_map<SlotId, SlotDescriptor*> SlotDescriptorMap;
+    using TableDescriptorMap = std::pmr::unordered_map<TableId, TableDescriptor*>;
+    using TupleDescriptorMap = std::pmr::unordered_map<TupleId, TupleDescriptor*>;
+    using SlotDescriptorMap = std::pmr::unordered_map<SlotId, SlotDescriptor*>;
+
+    std::pmr::memory_resource* _mr;
 
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
-    SlotDescriptorMap _slot_with_column_name_map;
 
-    DescriptorTbl() = default;
+    DescriptorTbl()
+            : _mr(std::pmr::get_default_resource()), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    explicit DescriptorTbl(std::pmr::memory_resource* mr)
+            : _mr(mr), _tbl_desc_map(_mr), _tuple_desc_map(_mr), _slot_desc_map(_mr) {}
+
+    friend class ObjectPool;
 };
 
-// Records positions of tuples within row produced by ExecNode.
-// TODO: this needs to differentiate between tuples contained in row
-// and tuples produced by ExecNode (parallel to PlanNode.rowTupleIds and
-// PlanNode.tupleIds); right now, we conflate the two (and distinguish based on
-// context; for instance, HdfsScanNode uses these tids to create row batches, ie, the
-// first case, whereas TopNNode uses these tids to copy output rows, ie, the second
-// case)
-class RowDescriptor {
+// Describes the record produced by an ExecNode.
+//
+// It does not expose how the record is split into tuples: consumers only care about the
+// slots the record carries, so they are presented as a single flat sequence and the tuple
+// boundaries are invisible.
+class RecordDescriptor {
 public:
-    RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples);
+    RecordDescriptor() = default;
+    RecordDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& tuple_ids);
+    explicit RecordDescriptor(TupleDescriptor* tuple_desc) : _tuple_descs(1, tuple_desc) {}
 
-    // standard copy c'tor, made explicit here
-    RowDescriptor(const RowDescriptor& desc) = default;
+    // All the slots of the record, in order of appearance.
+    auto slots() const {
+        return _tuple_descs | std::ranges::views::transform([](const TupleDescriptor* tuple) -> const auto& {
+                   return tuple->slots();
+               }) |
+               std::ranges::views::join;
+    }
 
-    RowDescriptor(TupleDescriptor* tuple_desc);
-
-    // dummy descriptor, needed for the JNI EvalPredicate() function
-    RowDescriptor() = default;
-
-    static const int INVALID_IDX;
-
-    // Returns INVALID_IDX if id not part of this row.
-    int get_tuple_idx(TupleId id) const;
-
-    // Return descriptors for all tuples in this row, in order of appearance.
-    const std::vector<TupleDescriptor*>& tuple_descriptors() const { return _tuple_desc_map; }
-
-    // Populate row_tuple_ids with our ids.
-    void to_thrift(std::vector<TTupleId>* row_tuple_ids);
-    void to_protobuf(google::protobuf::RepeatedField<google::protobuf::int32>* row_tuple_ids);
-
-    // Return true if the tuple ids of this descriptor are a prefix
-    // of the tuple ids of other_desc.
-    bool is_prefix_of(const RowDescriptor& other_desc) const;
-
-    // Return true if the tuple ids of this descriptor match tuple ids of other desc.
-    bool equals(const RowDescriptor& other_desc) const;
+    size_t num_slots() const;
 
     std::string debug_string() const;
 
 private:
-    // Initializes tupleIdxMap during c'tor using the _tuple_desc_map.
-    void init_tuple_idx_map();
-
-    // map from position of tuple w/in row to its descriptor
-    std::vector<TupleDescriptor*> _tuple_desc_map;
-
-    // map from TupleId to position of tuple w/in row
-    std::vector<int> _tuple_idx_map;
+    std::vector<TupleDescriptor*> _tuple_descs;
 };
 
 // used to describe row position, only used in global late materialization
 class RowPositionDescriptor {
 public:
-    enum Type : uint8_t {
-        ICEBERG_V3 = 0,
-    };
-    RowPositionDescriptor(Type type, SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
-                          std::vector<SlotId> lookup_ref_slot_ids)
+    enum Type : uint8_t { ICEBERG_V3 = 0, OLAP_SCAN = 1, LAKE_SCAN = 2 };
+    RowPositionDescriptor(Type type, int64_t scan_node_id, SlotId row_source_slot_id,
+                          std::vector<SlotId> fetch_ref_slot_ids, std::vector<SlotId> lookup_ref_slot_ids)
             : _type(type),
+              _scan_node_id(scan_node_id),
               _row_source_slot_id(row_source_slot_id),
               _fetch_ref_slot_ids(std::move(fetch_ref_slot_ids)),
               _lookup_ref_slot_ids(std::move(lookup_ref_slot_ids)) {}
@@ -261,6 +268,8 @@ public:
 
     SlotId get_row_source_slot_id() const { return _row_source_slot_id; }
 
+    int64_t get_scan_node_id() const { return _scan_node_id; }
+
     const std::vector<SlotId>& get_fetch_ref_slot_ids() const { return _fetch_ref_slot_ids; }
     const std::vector<SlotId>& get_lookup_ref_slot_ids() const { return _lookup_ref_slot_ids; }
     std::string debug_string() const;
@@ -269,18 +278,16 @@ public:
 
 protected:
     Type _type;
+    int64_t _scan_node_id;
     SlotId _row_source_slot_id;
     std::vector<SlotId> _fetch_ref_slot_ids;
     std::vector<SlotId> _lookup_ref_slot_ids;
 };
 
-class IcebergV3RowPositionDescriptor : public RowPositionDescriptor {
-public:
-    IcebergV3RowPositionDescriptor(SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
-                                   std::vector<SlotId> lookup_ref_slot_ids)
-            : RowPositionDescriptor(ICEBERG_V3, row_source_slot_id, std::move(fetch_ref_slot_ids),
-                                    std::move(lookup_ref_slot_ids)) {}
-    ~IcebergV3RowPositionDescriptor() override = default;
-};
-
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::RowPositionDescriptor::Type>
+        : formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>> {
+    auto format(starrocks::RowPositionDescriptor::Type value, format_context& ctx) const -> format_context::iterator;
+};

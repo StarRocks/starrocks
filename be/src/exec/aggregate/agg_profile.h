@@ -37,6 +37,10 @@ struct AggStatistics {
 
         chunk_buffer_peak_memory = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakMem", TUnit::BYTES);
         chunk_buffer_peak_size = ADD_PEAK_COUNTER(runtime_profile, "ChunkBufferPeakSize", TUnit::UNIT);
+
+        udaf_load_timer = ADD_TIMER(runtime_profile, "UdafLoadTime");
+        udaf_cache_hit_count = ADD_COUNTER(runtime_profile, "UdafCacheHitCount", TUnit::UNIT);
+        udaf_cache_populate_count = ADD_COUNTER(runtime_profile, "UdafCachePopulateCount", TUnit::UNIT);
     }
 
     // timer for build hash table and compute aggregate function
@@ -70,5 +74,9 @@ struct AggStatistics {
 
     RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_memory{};
     RuntimeProfile::HighWaterMarkCounter* chunk_buffer_peak_size{};
+
+    RuntimeProfile::Counter* udaf_load_timer{};
+    RuntimeProfile::Counter* udaf_cache_hit_count{};
+    RuntimeProfile::Counter* udaf_cache_populate_count{};
 };
 } // namespace starrocks

@@ -44,7 +44,7 @@ private:
 
 class ConcurrentLimiterGuard {
 public:
-    explicit ConcurrentLimiterGuard() {}
+    explicit ConcurrentLimiterGuard() = default;
 
     bool set_limiter(ConcurrentLimiter* limiter) {
         if (limiter->inc()) {

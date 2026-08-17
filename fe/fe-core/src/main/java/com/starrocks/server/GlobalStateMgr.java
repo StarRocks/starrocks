@@ -68,6 +68,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
+import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
@@ -98,6 +100,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.mv.MaterializedViewDependencyGraph;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
@@ -144,6 +147,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -199,6 +203,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -210,7 +215,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.history.TableKeeper;
-import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -277,9 +281,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -333,12 +338,12 @@ public class GlobalStateMgr {
     private final DatabaseQuotaRefresher updateDbUsedDataQuotaDaemon;
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
-    private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
+    private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
-    private Daemon timePrinter;
+    private LeaderDaemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
@@ -353,6 +358,18 @@ public class GlobalStateMgr {
 
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
+    private final AtomicLong leaderGeneration = new AtomicLong(0L);
+    private final AtomicBoolean leaderWorkAdmissionOpen = new AtomicBoolean(false);
+    private volatile LeaderLease activeLeaderLease = LeaderLease.INVALID;
+    private volatile LeaderRoleState leaderRoleState = LeaderRoleState.INACTIVE;
+    private volatile FrontendNodeType pendingDemotionTargetType;
+    private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
+    private volatile boolean leaderBootstrapActionsDone = false;
+    // Leader-role lifecycle fields (leaderRoleState / leaderWorkAdmissionOpen / activeLeaderLease /
+    // leaderGeneration / pendingDemotionTargetType) are each volatile/atomic and are transitioned only by the
+    // begin/publish/rollback/complete methods below, which run exclusively on the single-threaded
+    // StateChangeExecutor (one FE-type transition at a time). Transitions are therefore never concurrent and
+    // need no dedicated lock; the WAL-apply fence itself lives in EditLog (editLogFenceLock).
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -377,6 +394,7 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+    private boolean deployerListenerRegistered = false;
 
     private HAProtocol haProtocol = null;
 
@@ -395,6 +413,9 @@ public class GlobalStateMgr {
     private final GlobalTransactionMgr globalTransactionMgr;
 
     private final TabletStatMgr tabletStatMgr;
+
+    private final PartitionAccessTimeMgr partitionAccessTimeMgr;
+    private final PartitionAccessTimePersister partitionAccessTimePersister;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -423,7 +444,6 @@ public class GlobalStateMgr {
     private final RoutineLoadScheduler routineLoadScheduler;
     private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
-    private final MVJobExecutor mvMVJobExecutor;
 
     private final SmallFileMgr smallFileMgr;
 
@@ -475,6 +495,9 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private final CompactionMgr compactionMgr;
+
+    // For async vector index build
+    private VectorIndexBuildScheduler vectorIndexBuildScheduler;
 
     // For compaction forbidden policy
     private final CompactionControlScheduler compactionControlScheduler;
@@ -532,6 +555,8 @@ public class GlobalStateMgr {
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
     private final ExecutorService queryDeployExecutor;
+    private final ThreadPoolExecutor refreshOtherFeDispatchExecutor;
+    private final ThreadPoolExecutor refreshOtherFeRpcExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
@@ -547,6 +572,20 @@ public class GlobalStateMgr {
     private JwkMgr jwkMgr;
 
     private final TabletReshardJobMgr tabletReshardJobMgr;
+
+    enum LeaderRoleState {
+        // This FE is not serving leader-only work. It may be a follower/observer,
+        // or a previous leader activation attempt may have been rolled back.
+        INACTIVE,
+        // Leader activation is in progress. Journal/open/fencing related steps are
+        // still being initialized, so leader-only work must not be admitted yet.
+        ACTIVATING,
+        // Leader activation has completed and this FE can admit new leader-only work.
+        ACTIVE,
+        // Leader demotion has started. New leader-only work must be rejected and
+        // in-flight work should treat the current lease as expired.
+        DEMOTING
+    }
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -623,6 +662,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public VectorIndexBuildScheduler getVectorIndexBuildScheduler() {
+        return vectorIndexBuildScheduler;
     }
 
     public CompactionControlScheduler getCompactionControlScheduler() {
@@ -720,6 +763,8 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
+        this.partitionAccessTimeMgr = new PartitionAccessTimeMgr();
+        this.partitionAccessTimePersister = new PartitionAccessTimePersister();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -755,8 +800,6 @@ public class GlobalStateMgr {
         this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
-        this.mvMVJobExecutor = new MVJobExecutor();
-
         this.smallFileMgr = new SmallFileMgr();
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
@@ -793,6 +836,7 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
             this.fullVacuumDaemon = new FullVacuumDaemon();
+            this.vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -865,6 +909,17 @@ public class GlobalStateMgr {
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
                         "query-deploy", true);
+        this.refreshOtherFeDispatchExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.refresh_other_fe_dispatch_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_dispatch_executor_thread_num * 4),
+                "refresh-other-fe-dispatch",
+                true);
+        this.refreshOtherFeRpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.refresh_other_fe_rpc_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_rpc_executor_thread_num * 4),
+                "refresh-other-fe-rpc",
+                true);
+        getConfigRefreshDaemon().registerListener(this::refreshOtherFeExecutorConfig);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
 
@@ -874,6 +929,28 @@ public class GlobalStateMgr {
         this.jwkMgr = new JwkMgr();
 
         this.tabletReshardJobMgr = new TabletReshardJobMgr();
+    }
+
+    private void refreshOtherFeExecutorConfig() {
+        try {
+            if (Config.refresh_other_fe_dispatch_executor_thread_num > 0) {
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        refreshOtherFeDispatchExecutor, Config.refresh_other_fe_dispatch_executor_thread_num);
+            } else {
+                LOG.warn("ignore invalid config refresh_other_fe_dispatch_executor_thread_num={}",
+                        Config.refresh_other_fe_dispatch_executor_thread_num);
+            }
+
+            if (Config.refresh_other_fe_rpc_executor_thread_num > 0) {
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        refreshOtherFeRpcExecutor, Config.refresh_other_fe_rpc_executor_thread_num);
+            } else {
+                LOG.warn("ignore invalid config refresh_other_fe_rpc_executor_thread_num={}",
+                        Config.refresh_other_fe_rpc_executor_thread_num);
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to refresh refresh-other-FE executor config", e);
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -988,6 +1065,10 @@ public class GlobalStateMgr {
 
     public TabletStatMgr getTabletStatMgr() {
         return tabletStatMgr;
+    }
+
+    public PartitionAccessTimeMgr getPartitionAccessTimeMgr() {
+        return partitionAccessTimeMgr;
     }
 
     // Only used in UT
@@ -1243,7 +1324,7 @@ public class GlobalStateMgr {
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
-        editLog = new EditLog(journalQueue);
+        editLog = new EditLog(journalQueue, false);
     }
 
     // wait until FE is ready.
@@ -1288,14 +1369,23 @@ public class GlobalStateMgr {
     }
 
     private void transferToLeader() {
-        FrontendNodeType oldType = feType;
-        // stop replayer
+        // stop replayer. Bound the join so a stuck replay applier (e.g. one pinned on a lock it cannot
+        // acquire) cannot hang leader activation on the single state-change thread forever; if it does
+        // not stop in time, terminate for a clean restart rather than wedge with a bdbje master that
+        // never activates.
         if (replayer != null) {
             replayer.setStop();
+            long replayerJoinTimeoutMs = Math.max(1000L, Config.leader_activation_drain_timeout_sec * 1000L);
             try {
-                replayer.join();
+                replayer.join(replayerJoinTimeoutMs);
             } catch (InterruptedException e) {
-                LOG.warn("got exception when stopping the replayer thread", e);
+                Thread.currentThread().interrupt();
+                LOG.warn("interrupted while stopping the replayer thread", e);
+            }
+            if (replayer.isAlive()) {
+                LOG.error("replayer did not stop within {}ms during transfer to leader; terminating the process "
+                        + "for a clean restart", replayerJoinTimeoutMs);
+                System.exit(-1);
             }
             replayer = null;
         }
@@ -1304,6 +1394,8 @@ public class GlobalStateMgr {
             // A brand-new cluster was up for the first time, the leader node initializes its default warehouse here.
             initDefaultWarehouse();
         }
+
+        beginLeaderActivation();
 
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
@@ -1319,12 +1411,20 @@ public class GlobalStateMgr {
             nodeMgr.checkCurrentNodeExist();
             journalWriter.init(maxJournalId);
         } catch (Exception e) {
-            // TODO: gracefully exit
+            // A failed activation is not rolled back: a half-done activation (lease published, WAL gate
+            // open, daemons started, journal writer initialized) cannot be un-done reliably, so fail fast
+            // to a clean process restart; the node rejoins as a follower and rediscovers the leader.
             LOG.error("failed to init journal after transfer to leader! will exit", e);
             System.exit(-1);
         }
 
         journalWriter.startDaemon();
+
+        // Verify the previous leader session (if any) has fully quiesced before starting a new one.
+        // Demotion stops the leader-only daemons fire-and-forget; if a straggler is still alive, restart
+        // for a clean slate rather than run two workers against the same singleton state. Done before
+        // feType flips to LEADER so no new leader work (or a stale straggler's admission) can slip in.
+        assertLeaderSessionQuiescedOrExit();
 
         // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
@@ -1332,13 +1432,9 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
-            if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
-                nodeMgr.resetFrontends();
-            }
+            publishLeaderLease(getEpoch());
 
-            if (nodeMgr.isFirstTimeStartUp()) {
-                initCaseInsensitive();
-            }
+            runLeaderBootstrapActions();
 
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
@@ -1361,24 +1457,14 @@ public class GlobalStateMgr {
             // for leader, there are some new thread pools need to register metric
             ThreadPoolManager.registerAllThreadPoolMetric();
 
-            if (nodeMgr.isFirstTimeStartUp()) {
-                // When the cluster is initially deployed, we set ENABLE_ADAPTIVE_SINK_DOP so
-                // that the load is automatically configured as the best performance
-                // configuration. If it is upgraded from an old version, the original
-                // configuration is retained to avoid system stability problems caused by
-                // changes in concurrency
-                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
-                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                                LiteralExprFactory.create("true", BooleanType.BOOLEAN)),
-                        false);
-            }
             checkCaseInsensitive();
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
-        } catch (Throwable t) {
-            LOG.warn("transfer to leader failed with error", t);
-            feType = oldType;
-            throw t;
+            if (!isReady.get()) {
+                // No rollback: a half-done activation cannot be un-done reliably. Let the failure
+                // escape to StateChangeExecutor, which exits the process for a clean restart.
+                throw new RuntimeException("transfer to leader failed", e);
+            }
         }
 
         createBuiltinStorageVolume();
@@ -1387,6 +1473,35 @@ public class GlobalStateMgr {
 
         // trigger actions after transferring to leader
         triggerOnTransferToLeader();
+    }
+
+    @VisibleForTesting
+    void runLeaderBootstrapActions() throws StarRocksException {
+        boolean shouldResetFrontends =
+                (nodeMgr.isFirstTimeStartUp() || Config.bdbje_reset_election_group) && !leaderBootstrapActionsDone;
+        boolean runBootStrapActions = nodeMgr.isFirstTimeStartUp() && !leaderBootstrapActionsDone;
+
+        if (shouldResetFrontends) {
+            nodeMgr.resetFrontends();
+        }
+        if (runBootStrapActions) {
+            initCaseInsensitive();
+            enableAdaptiveSinkDopForFirstStartup();
+        }
+        if (shouldResetFrontends || runBootStrapActions) {
+            leaderBootstrapActionsDone = true;
+        }
+    }
+
+    @VisibleForTesting
+    void enableAdaptiveSinkDopForFirstStartup() throws StarRocksException {
+        // When the cluster is initially deployed, set ENABLE_ADAPTIVE_SINK_DOP so that load is
+        // automatically configured for best performance. For upgraded clusters, retain the
+        // original value to avoid stability risk from concurrency changes.
+        variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                        LiteralExprFactory.create("true", BooleanType.BOOLEAN)),
+                false);
     }
 
     private void triggerOnTransferToLeader() {
@@ -1401,6 +1516,156 @@ public class GlobalStateMgr {
     public void setFrontendNodeType(FrontendNodeType newType) {
         // just for test, don't call it directly
         feType = newType;
+    }
+
+    @VisibleForTesting
+    public void openLeaderWorkAdmissionForTest() {
+        // just for test, don't call it directly: UT harnesses that force feType = LEADER (e.g.
+        // UtFrameUtils.setUpForPersistTest) must also open leader-work admission, as a really
+        // activated leader would via publishLeaderLease().
+        leaderWorkAdmissionOpen.set(true);
+    }
+
+    @VisibleForTesting
+    void beginLeaderActivation() {
+        // The WAL admission gate is already closed here: this node reaches activation only from INACTIVE
+        // (fresh, or after a demotion that closed it; a FAILED activation exits the process instead of
+        // rolling back, so no half-open gate can survive into this method), so it need not be closed again.
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVATING);
+    }
+
+    @VisibleForTesting
+    void publishLeaderLease(long haEpoch) {
+        Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
+        Preconditions.checkState(feType == FrontendNodeType.LEADER,
+                "can only publish leader lease when FE type is LEADER, actual: %s", feType);
+        Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
+                "can only publish leader lease during activation, actual state: %s", leaderRoleState);
+        long generation = leaderGeneration.incrementAndGet();
+        activeLeaderLease = new LeaderLease(haEpoch, generation);
+        leaderWorkAdmissionOpen.set(true);
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVE);
+        // Open the WAL admission gate last, once the node is fully ACTIVE, so leader writes are accepted.
+        openEditLogWalGate();
+    }
+
+    @VisibleForTesting
+    void beginLeaderDemotion(FrontendNodeType targetType) {
+        leaderWorkAdmissionOpen.set(false);
+        leaderGeneration.incrementAndGet();
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = targetType;
+        updateLeaderRoleState(LeaderRoleState.DEMOTING);
+        // Close the WAL admission gate as the first demotion step (the only open -> closed transition): no
+        // new leader writes are admitted, so the in-flight count can only decrease before the seal drains it.
+        closeEditLogWalGate();
+    }
+
+    @VisibleForTesting
+    void completeLeaderDemotion() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.INACTIVE);
+        // Reset the leader-session domination clock; this node is no longer the leader. The WAL gate was
+        // already closed by beginLeaderDemotion at the start of demotion.
+        dominationStartTimeMs = 0L;
+    }
+
+    private void openEditLogWalGate() {
+        EditLog editLog = this.editLog;
+        if (editLog != null) {
+            editLog.openWalGate();
+        }
+    }
+
+    private void closeEditLogWalGate() {
+        EditLog editLog = this.editLog;
+        if (editLog != null) {
+            editLog.closeWalGate();
+        }
+    }
+
+    public LeaderLease captureLeaderLease() {
+        return activeLeaderLease;
+    }
+
+    public LeaderLease captureLeaderLeaseOrThrow() {
+        LeaderLease lease = activeLeaderLease;
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is not available. feType=%s, state=%s, admissionOpen=%s, lease=%s",
+                feType, leaderRoleState, leaderWorkAdmissionOpen.get(), lease);
+        return lease;
+    }
+
+    public boolean isLeaderLeaseValid(LeaderLease lease) {
+        return lease != null
+                && lease.isValid()
+                && lease.equals(activeLeaderLease)
+                && leaderWorkAdmissionOpen.get()
+                && feType == FrontendNodeType.LEADER
+                && leaderRoleState == LeaderRoleState.ACTIVE;
+    }
+
+    public void checkLeaderLease(LeaderLease lease) {
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is stale. expected=%s, actual=%s, state=%s, admissionOpen=%s",
+                lease, activeLeaderLease, leaderRoleState, leaderWorkAdmissionOpen.get());
+    }
+
+    public boolean isLeaderWorkAdmissionOpen() {
+        return leaderWorkAdmissionOpen.get();
+    }
+
+    public boolean isLeaderDemoting() {
+        return leaderRoleState == LeaderRoleState.DEMOTING;
+    }
+
+    public boolean shouldStopPublishWaitAfterCommit() {
+        return !isLeader() || !isLeaderWorkAdmissionOpen() || isLeaderDemoting();
+    }
+
+    /**
+     * True when this node must NOT perform leader-only BE agent-task work — it is demoting, or its FE
+     * type is not a leader/bootstrap role. Used both to reject enqueue ({@code AgentTaskQueue.addTask})
+     * and to skip dispatch ({@code AgentBatchTask.run()}), so a demoting/non-leader node cannot push
+     * stale leader-session RPCs (e.g. a force-DROP that deletes replica files the next leader still
+     * references) to BE. INIT stays allowed so bootstrap, checkpoint-image GlobalStateMgr instances,
+     * and plain unit tests are unaffected.
+     */
+    public boolean isAgentTaskDispatchDisallowed() {
+        if (isLeaderDemoting()) {
+            return true;
+        }
+        FrontendNodeType type = getFeType();
+        if (type == FrontendNodeType.LEADER) {
+            // Activation window: feType flips to LEADER before publishLeaderLease() opens leader-work
+            // admission (and the EditLog WAL gate), so the type alone does not make this node an ACTIVE
+            // leader yet; hold BE-mutating agent tasks until admission opens.
+            return !isLeaderWorkAdmissionOpen();
+        }
+        return type == FrontendNodeType.FOLLOWER
+                || type == FrontendNodeType.OBSERVER
+                || type == FrontendNodeType.UNKNOWN;
+    }
+
+    @VisibleForTesting
+    LeaderRoleState getLeaderRoleState() {
+        return leaderRoleState;
+    }
+
+    @VisibleForTesting
+    FrontendNodeType getPendingDemotionTargetType() {
+        return pendingDemotionTargetType;
+    }
+
+    private void updateLeaderRoleState(LeaderRoleState newState) {
+        leaderRoleState = newState;
+        leaderRoleStateSinceMs = System.currentTimeMillis();
     }
 
     // start all daemon threads only running on Master
@@ -1470,7 +1735,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
@@ -1491,6 +1755,8 @@ public class GlobalStateMgr {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
+
+            vectorIndexBuildScheduler.start();
         }
 
         if (Config.enable_safe_mode) {
@@ -1517,6 +1783,150 @@ public class GlobalStateMgr {
         }
     }
 
+    /**
+     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops every leader-only
+     * daemon in reverse start order so leader-session state is released promptly during
+     * demotion and the FE singletons become reusable when this node is re-elected.
+     */
+    void stopLeaderOnlyDaemonThreads() {
+        // Fire-and-forget: request stop on every leader-only daemon/pool and return WITHOUT joining, so
+        // this single state-change thread is not blocked draining ~40 daemons (a stuck one used to force
+        // System.exit here, degrading a graceful transfer into a restart). Each daemon's worker self-cleans
+        // in onStopped() and deregisters on exit; the re-activation cleanliness gate then verifies quiescence
+        // and exits only if a straggler is still alive when this node is re-elected.
+        // Stop in the reverse order of startLeaderOnlyDaemonThreads().
+        if (RunMode.isSharedDataMode()) {
+            stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopBestEffort());
+        }
+        stopOne("tabletCollector", () -> tabletCollector.stopBestEffort());
+        stopOne("reportHandler", () -> reportHandler.stopBestEffort());
+        if (RunMode.isSharedDataMode()) {
+            stopOne("clusterSnapshotMgr", () -> clusterSnapshotMgr.stopBestEffort());
+        }
+        stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopBestEffort());
+        stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopBestEffort());
+        stopOne("replicationMgr", () -> replicationMgr.stopBestEffort());
+        stopOne("safeModeChecker", () -> safeModeChecker.stopBestEffort());
+        if (RunMode.isSharedDataMode()) {
+            stopOne("vectorIndexBuildScheduler", () -> vectorIndexBuildScheduler.stopBestEffort());
+            stopOne("fullVacuumDaemon", () -> fullVacuumDaemon.stopBestEffort());
+            stopOne("autovacuumDaemon", () -> autovacuumDaemon.stopBestEffort());
+            stopOne("starMgrMetaSyncer", () -> starMgrMetaSyncer.stopBestEffort());
+        }
+        if (taskRunStateSynchronizer != null) {
+            stopOne("taskRunStateSynchronizer", () -> taskRunStateSynchronizer.stopBestEffort());
+        }
+        stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopBestEffort());
+        stopOne("mvActiveChecker", () -> mvActiveChecker.stopBestEffort());
+        stopOne("pipeScheduler", () -> pipeScheduler.stopBestEffort());
+        stopOne("pipeListener", () -> pipeListener.stopBestEffort());
+        if (taskCleaner != null) {
+            stopOne("taskCleaner", () -> taskCleaner.stopBestEffort());
+        }
+        stopOne("taskManager", () -> taskManager.stop(0));
+        stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopBestEffort());
+        stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopBestEffort());
+        stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopBestEffort());
+        stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopBestEffort());
+        stopOne("batchWriteMgr", () -> batchWriteMgr.stopBestEffort());
+        stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopBestEffort());
+        stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopBestEffort());
+        if (timePrinter != null) {
+            stopOne("timePrinter", () -> timePrinter.stopBestEffort());
+        }
+        stopOne("recycleBin", () -> getRecycleBin().stopBestEffort());
+        stopOne("backupHandler", () -> getBackupHandler().stopBestEffort());
+        stopOne("consistencyChecker", () -> consistencyChecker.stopBestEffort());
+        stopOne("alterJobMgr", () -> getAlterJobMgr().stopBestEffort());
+        if (txnTimeoutChecker != null) {
+            stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopBestEffort());
+        }
+        stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopBestEffort());
+        stopOne("exportChecker", ExportChecker::stopAll);
+        stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopBestEffort());
+        stopOne("loadEtlChecker", () -> loadEtlChecker.stopBestEffort());
+        stopOne("tabletWriteLogHistorySyncer", () -> tabletWriteLogHistorySyncer.stopBestEffort());
+        stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopBestEffort());
+        stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopBestEffort());
+        stopOne("loadJobScheduler", () -> loadJobScheduler.stopBestEffort());
+        stopOne("loadingLoadTaskScheduler", () -> loadingLoadTaskScheduler.close());
+        stopOne("pendingLoadTaskScheduler", () -> pendingLoadTaskScheduler.close());
+        if (!RunMode.isSharedDataMode()) {
+            stopOne("colocateTableBalancer",
+                    () -> ColocateTableBalancer.getInstance().stopBestEffort());
+            stopOne("tabletScheduler", () -> tabletScheduler.stopBestEffort());
+            stopOne("tabletChecker", () -> tabletChecker.stopBestEffort());
+        }
+        stopOne("heartbeatMgr", () -> heartbeatMgr.stopBestEffort());
+        stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopBestEffort());
+        stopOne("checkpointController", () -> checkpointController.stopBestEffort());
+        if (RunMode.isSharedDataMode()) {
+            stopOne("starMgrCheckpointController",
+                    () -> StarMgrServer.getCurrentState().stopCheckpointController());
+        }
+    }
+
+    private void stopOne(String name, Runnable action) {
+        try {
+            action.run();
+        } catch (Throwable t) {
+            LOG.warn("stop {} failed", name, t);
+        }
+    }
+
+    /**
+     * Re-activation cleanliness gate. Demotion stops leader-only daemons fire-and-forget (no join, see
+     * {@link #stopLeaderOnlyDaemonThreads()}), so a straggler whose interrupt was eaten may still be
+     * alive when this node is re-elected. Before serving as leader again this verifies the previous
+     * session's workers finished: a fresh worker running concurrently with a straggler against the same
+     * singleton state is strictly worse than a restart. If any straggler remains, it logs the offenders
+     * (and how long the leader role state has lingered) and terminates the process for a clean restart.
+     * Called before feType is set to LEADER so no new leader work starts while a previous session lingers.
+     */
+    private void assertLeaderSessionQuiescedOrExit() {
+        List<String> stragglers = findLeaderSessionStragglers();
+        if (!stragglers.isEmpty()) {
+            long inFlightMs = System.currentTimeMillis() - leaderRoleStateSinceMs;
+            LOG.error("re-activation aborted: the previous leader session did not quiesce; these leader-only "
+                    + "workers/pools are still in flight after {}ms: {}. Terminating the process for a clean "
+                    + "restart instead of running concurrent workers against shared state.", inFlightMs, stragglers);
+            System.exit(-1);
+        }
+    }
+
+    /**
+     * Leader-session workers/pools that have NOT finished stopping from a previous leader session. A pool
+     * is a straggler only when it was shut down (by the previous demotion) but has not terminated - a
+     * fresh or actively-running pool is NOT shut down and so is never flagged. Extracted from the gate so
+     * it is unit-testable without triggering {@link System#exit}.
+     */
+    @VisibleForTesting
+    List<String> findLeaderSessionStragglers() {
+        List<String> stragglers = new ArrayList<>();
+        // Daemons: onStopped() awaits its owned pools until terminated before the worker clears
+        // isRunning, so a daemon absent here means its worker AND its pools are quiesced.
+        for (LeaderDaemon daemon : LeaderDaemon.getRunningInstances()) {
+            stragglers.add(daemon.getName());
+        }
+        // Leader-session pools with no owning daemon (no isRunning to cover them): a pool is a straggler
+        // only if a previous demotion shut it down (fire-and-forget, no await) and it has not terminated.
+        if (loadingLoadTaskScheduler != null
+                && loadingLoadTaskScheduler.isShutdown() && !loadingLoadTaskScheduler.isTerminated()) {
+            stragglers.add("loadingLoadTaskScheduler(pool)");
+        }
+        if (pendingLoadTaskScheduler != null
+                && pendingLoadTaskScheduler.isShutdown() && !pendingLoadTaskScheduler.isTerminated()) {
+            stragglers.add("pendingLoadTaskScheduler(pool)");
+        }
+        if (ExportChecker.anyPoolStoppedButNotTerminated()) {
+            stragglers.add("exportChecker(pools)");
+        }
+        if (taskManager != null && taskManager.schedulersStoppedButNotTerminated()) {
+            stragglers.add("taskManager(schedulers)");
+        }
+        return stragglers;
+    }
+
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
         if (!checkpointWorkerStarted) {
@@ -1531,6 +1941,9 @@ public class GlobalStateMgr {
 
         portConnectivityChecker.start();
         tabletStatMgr.start();
+        // Runs on every FE: each flushes its own recorded partition access times; the leader additionally
+        // loads the read-path baseline and GCs the internal table.
+        partitionAccessTimePersister.start();
         // load and export job label cleaner thread
         labelCleaner.start();
         // ES state store
@@ -1547,6 +1960,12 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
             StarMgrServer.getCurrentState().startCheckpointWorker();
+        }
+        // Register listeners that need a fully-constructed GlobalStateMgr (e.g. classes whose
+        // own static initializer transitively touches MetricRepo / getCurrentState()).
+        if (!deployerListenerRegistered) {
+            Deployer.registerConfigListener(configRefreshDaemon);
+            deployerListenerRegistered = true;
         }
         configRefreshDaemon.start();
 
@@ -1589,6 +2008,11 @@ public class GlobalStateMgr {
             initDefaultWarehouse();
         }
 
+        boolean demotedFromLeader = feType == FrontendNodeType.LEADER;
+        if (demotedFromLeader) {
+            executeLeaderDemotionStages(newType);
+        }
+
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
         if (replayer == null) {
             createReplayer();
@@ -1599,7 +2023,96 @@ public class GlobalStateMgr {
 
         MetricRepo.init();
 
-        feType = newType;
+        if (!demotedFromLeader) {
+            feType = newType;
+        }
+    }
+
+    @VisibleForTesting
+    void executeLeaderDemotionStages(FrontendNodeType targetType) {
+        LOG.info("leader demotion to {} starting", targetType);
+        long startMs = System.currentTimeMillis();
+        runDemotionStage("beginLeaderDemotion", () -> beginLeaderDemotion(targetType));
+        runDemotionStage("abandonInFlightAgentTasks", this::abandonInFlightAgentTasks);
+        runDemotionStage("sealJournalWriter", this::sealJournalWriter);
+        runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
+        runDemotionStage("awaitJournalVisibleStateResets", this::awaitJournalVisibleStateResets);
+        runDemotionStage("switchFrontendType", () -> feType = targetType);
+        runDemotionStage("completeLeaderDemotion", this::completeLeaderDemotion);
+        LOG.info("leader demotion to {} completed in {}ms", targetType, System.currentTimeMillis() - startMs);
+    }
+
+    private void runDemotionStage(String stageName, Runnable stage) {
+        long startMs = System.currentTimeMillis();
+        try {
+            stage.run();
+        } catch (Throwable t) {
+            LOG.error("leader demotion stage '{}' failed after {}ms, will exit",
+                    stageName, System.currentTimeMillis() - startMs, t);
+            System.exit(-1);
+            return;
+        }
+        LOG.info("leader demotion stage '{}' completed in {}ms", stageName, System.currentTimeMillis() - startMs);
+    }
+
+    /**
+     * Abandon every in-flight BE agent task the (demoting) leader issued: fail their completion
+     * latches so waiters (e.g. create-tablet in TabletTaskExecutor.waitForFinished, which can run on
+     * a user connection thread that demotion never interrupts) unblock immediately and release their
+     * db locks instead of waiting out tablet_create_timeout for an operation whose journal write is
+     * already fenced, and drop the tasks from the queue so they do not leak across a demote/re-elect
+     * cycle. AgentTaskQueue.addTask() rejects new tasks once demoting, closing the TOCTOU.
+     */
+    private void abandonInFlightAgentTasks() {
+        com.starrocks.task.AgentTaskQueue.abandonInFlightTasks(
+                new com.starrocks.common.Status(TStatusCode.CANCELLED, "leader is demoting"));
+    }
+
+    /**
+     * Wait for the leader-only daemons whose onStopped() rewrites JOURNAL-VISIBLE state (alter-job
+     * fields, routine-load job state) to fully quiesce before the follower replayer starts. Their
+     * resets restore shared objects to the last durable state, while the replayer mutates the SAME
+     * objects when it applies the new leader's journal - and replay takes no job monitor, so a reset
+     * running after (or interleaved with) replay would tear freshly replayed durable state (e.g. an
+     * optimize job left WAITING_TXN with its just-replayed tmpPartitionIds cleared) with nothing to
+     * ever repair it. Daemons whose onStopped() only drops leader-session transients (queues, pools,
+     * slot counts) stay fire-and-forget; the re-activation gate still covers those.
+     * The wait shares the leader_demotion_drain_timeout_sec budget (a fresh slice for this stage);
+     * a daemon stuck in onStopped() past it fails the stage and runDemotionStage exits the process -
+     * the pre-demotion behavior for a leader that cannot stop cleanly.
+     */
+    private void awaitJournalVisibleStateResets() {
+        LeaderDaemon.awaitQuiesced(
+                Lists.newArrayList(getSchemaChangeHandler(), getRollupHandler(), routineLoadScheduler),
+                Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
+    }
+
+    @VisibleForTesting
+    void sealJournalWriter() {
+        if (journalWriter == null) {
+            return;
+        }
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // One deadline for the whole seal: the drain and the writer close SHARE the configured budget
+        // (previously each got the full value, so feType could stay LEADER for up to 2x the config while
+        // statements neither forward nor succeed - the zombie-leader window).
+        long deadlineMs = System.currentTimeMillis() + timeoutMs;
+        // The WAL admission gate was already closed by beginLeaderDemotion (demotion stage 1). Flip the
+        // writer out of RUNNING so a commit failure/interrupt during the drain is a graceful abort rather
+        // than a process exit.
+        journalWriter.beginSeal();
+        // Drain every in-flight leader write (queue put + journal commit + WAL apply). When this returns the
+        // in-flight count is zero, which implies the journal queue is empty and all writes are committed.
+        if (editLog != null) {
+            editLog.awaitWalDrained(timeoutMs);
+        }
+        // Stop the writer daemon and take the committed watermark; the queue is asserted empty here.
+        long watermark = journalWriter.close(Math.max(1L, deadlineMs - System.currentTimeMillis()));
+        long current = replayedJournalId.get();
+        if (watermark > current) {
+            replayedJournalId.set(watermark);
+            LOG.info("advanced replayedJournalId {} -> {} on leader demotion", current, watermark);
+        }
     }
 
     // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,
@@ -1925,9 +2438,9 @@ public class GlobalStateMgr {
     }
 
     public void createTaskCleaner() {
-        taskCleaner = new FrontendDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+        taskCleaner = new LeaderDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 doTaskBackgroundJob();
                 setInterval(Config.task_check_interval_second * 1000L);
             }
@@ -1939,10 +2452,10 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
+        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker",
                 Config.transaction_clean_interval_second * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 globalTransactionMgr.abortTimeoutTxns();
 
                 try {
@@ -2232,9 +2745,9 @@ public class GlobalStateMgr {
 
     public void createTimePrinter() {
         // time printer will write timestamp edit log every 10 seconds
-        timePrinter = new FrontendDaemon("timePrinter", 10 * 1000L) {
+        timePrinter = new LeaderDaemon("timePrinter", 10 * 1000L) {
             @Override
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
                 Timestamp stamp = new Timestamp();
                 editLog.logTimestamp(stamp);
             }
@@ -2398,6 +2911,11 @@ public class GlobalStateMgr {
         return feType == FrontendNodeType.LEADER;
     }
 
+    @VisibleForTesting
+    long getLeaderRoleStateSinceMs() {
+        return leaderRoleStateSinceMs;
+    }
+
     public void setSynchronizedTime(long time) {
         this.synchronizedTimeMs = time;
     }
@@ -2408,6 +2926,16 @@ public class GlobalStateMgr {
 
     public void setJournal(Journal journal) {
         this.journal = journal;
+    }
+
+    @VisibleForTesting
+    void setJournalWriterForTest(JournalWriter journalWriter) {
+        this.journalWriter = journalWriter;
+    }
+
+    @VisibleForTesting
+    void setReplayedJournalIdForTest(long replayedJournalId) {
+        this.replayedJournalId.set(replayedJournalId);
     }
 
     public void setNextId(long id) {
@@ -2546,6 +3074,11 @@ public class GlobalStateMgr {
         refreshOthersFeTable(tableName, partitionNames, true);
     }
 
+    /**
+     * Refresh external table metadata on every peer FE and wait for all peer RPCs to finish.
+     * This method is synchronous from the caller's perspective, while the per-peer RPC fan-out
+     * is still bounded by {@code refreshOtherFeRpcExecutor}.
+     */
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         if (allFrontends.size() == 0) {
@@ -2557,8 +3090,7 @@ public class GlobalStateMgr {
                 continue;
             }
 
-            resultMap.put(fe.getHost(), refreshOtherFesTable(
-                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+            resultMap.put(fe.getHost(), submitRefreshOtherFeRpc(fe, tableName, partitions));
         }
 
         String errMsg = "";
@@ -2586,8 +3118,47 @@ public class GlobalStateMgr {
         }
     }
 
-    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
-                                                List<String> partitions) {
+    /**
+     * Enqueue a background "refresh other FE" job and return immediately to the caller.
+     * The dispatched task eventually reuses {@link #refreshOthersFeTable(TableName, List, boolean)}
+     * so asynchronous and synchronous refreshes share the same peer RPC concurrency limit.
+     */
+    public Future<?> refreshOthersFeTableAsync(TableName tableName, List<String> partitions) {
+        List<String> partitionsSnapshot = partitions == null ? List.of() : new ArrayList<>(partitions);
+        try {
+            return refreshOtherFeDispatchExecutor.submit(() -> {
+                try {
+                    refreshOthersFeTable(tableName, partitionsSnapshot, false);
+                } catch (Throwable t) {
+                    LOG.error("Async refresh others fe failed on {}.{}.{} with partitions {}",
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, t);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            LOG.error("Async refresh others fe dispatch rejected on {}.{}.{} with partitions {}",
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, e);
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private Future<TStatus> submitRefreshOtherFeRpc(Frontend fe, TableName tableName, List<String> partitions) {
+        TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
+        try {
+            return refreshOtherFeRpcExecutor.submit(() -> refreshOtherFeTableRpc(thriftAddress, tableName, partitions));
+        } catch (RejectedExecutionException e) {
+            LOG.warn("Refresh other FE rpc enqueue rejected for {}", thriftAddress, e);
+            return CompletableFuture.completedFuture(buildRefreshOtherFeRejectedStatus(e));
+        }
+    }
+
+    private TStatus buildRefreshOtherFeRejectedStatus(RejectedExecutionException e) {
+        TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+        status.setError_msgs(Lists.newArrayList(e.getMessage()));
+        return status;
+    }
+
+    private TStatus refreshOtherFeTableRpc(TNetworkAddress thriftAddress, TableName tableName,
+                                           List<String> partitions) {
         int timeout;
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
@@ -2595,35 +3166,29 @@ public class GlobalStateMgr {
             timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         }
 
-        FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
-            TRefreshTableRequest request = new TRefreshTableRequest();
-            request.setCatalog_name(tableName.getCatalog());
-            request.setDb_name(tableName.getDb());
-            request.setTable_name(tableName.getTbl());
-            request.setPartitions(partitions);
-            try {
-                TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        thriftAddress,
-                        timeout,
-                        client -> client.refreshTable(request));
-                return response.getStatus();
-            } catch (Exception e) {
-                LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList(e.getMessage()));
-                return status;
-            }
-        });
-
-        new Thread(task).start();
-
-        return task;
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name(tableName.getCatalog());
+        request.setDb_name(tableName.getDb());
+        request.setTable_name(tableName.getTbl());
+        request.setPartitions(partitions);
+        try {
+            TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddress,
+                    timeout,
+                    client -> client.refreshTable(request));
+            return response.getStatus();
+        } catch (Exception e) {
+            LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            return status;
+        }
     }
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
-                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable();
+                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable() || table.isOdpsTable();
     }
 
     public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
@@ -2678,26 +3243,36 @@ public class GlobalStateMgr {
                 lockedDbMap.put(dbId, db);
             }
 
-            // lock all dbs
-            for (Database db : lockedDbMap.values()) {
-                locker.lockDatabase(db.getId(), LockType.READ);
-            }
-            LOG.info("acquired all the dbs' read lock.");
-
-            long journalId = getMaxJournalId();
-            File dumpFile = new File(Config.meta_dir, "image." + journalId);
-            dumpFilePath = dumpFile.getAbsolutePath();
+            // Track the dbs actually locked. lockDatabase() can throw (deadlock victim / interrupt),
+            // so on a partial acquisition we must release only what we hold. Releasing a never-locked
+            // db throws IllegalMonitorStateException, which would abort the finally before unlock()
+            // runs and strand the global meta lock indefinitely.
+            List<Database> lockedDbs = new ArrayList<>();
             try {
-                LOG.info("begin to dump {}", dumpFilePath);
-                saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
-            } catch (IOException e) {
-                LOG.error("failed to dump image to {}", dumpFilePath, e);
+                // lock all dbs
+                for (Database db : lockedDbMap.values()) {
+                    locker.lockDatabase(db.getId(), LockType.READ);
+                    lockedDbs.add(db);
+                }
+                LOG.info("acquired all the dbs' read lock.");
+
+                long journalId = getMaxJournalId();
+                File dumpFile = new File(Config.meta_dir, "image." + journalId);
+                dumpFilePath = dumpFile.getAbsolutePath();
+                try {
+                    LOG.info("begin to dump {}", dumpFilePath);
+                    saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
+                } catch (IOException e) {
+                    LOG.error("failed to dump image to {}", dumpFilePath, e);
+                }
+            } finally {
+                // unlock only the dbs we actually locked
+                for (Database db : lockedDbs) {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
             }
         } finally {
-            // unlock all
-            for (Database db : lockedDbMap.values()) {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
+            // Always release the global meta lock, even if db-lock acquisition or release above threw.
             unlock();
         }
 
@@ -2805,7 +3380,8 @@ public class GlobalStateMgr {
      * Once set, this value becomes immutable for the entire cluster lifecycle.
      * Any failure during initialization will cause the system to exit.
      */
-    private void initCaseInsensitive() {
+    @VisibleForTesting
+    void initCaseInsensitive() {
         try {
             GlobalStateMgr.getCurrentState().getVariableMgr().setCaseInsensitive(Config.enable_table_name_case_insensitive);
         } catch (Exception e) {

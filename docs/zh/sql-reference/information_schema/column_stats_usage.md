@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "column_stats_usage 提供列统计信息使用情况的信息。"
 ---
 
 # column_stats_usage

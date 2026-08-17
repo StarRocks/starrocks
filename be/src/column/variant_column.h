@@ -103,6 +103,8 @@ public:
     void resize(size_t n) override;
     void assign(size_t n, size_t idx) override;
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
+    int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
     void swap_column(Column& rhs) override;
     void reset_column() override;
     void check_or_die() const override;
@@ -156,6 +158,18 @@ public:
     bool has_remain_value() const { return _remain_value_column != nullptr; }
 
     bool is_equal_schema(const VariantColumn* other) const;
+
+    void mutate_each_subcolumn() override {
+        for (auto& column : _typed_columns) {
+            column = (std::move(*column)).mutate();
+        }
+        if (_metadata_column != nullptr) {
+            _metadata_column = BinaryColumn::static_pointer_cast((std::move(*_metadata_column)).mutate());
+        }
+        if (_remain_value_column != nullptr) {
+            _remain_value_column = BinaryColumn::static_pointer_cast((std::move(*_remain_value_column)).mutate());
+        }
+    }
 
     // Encode a single typed cell (from a typed column at a given row) into a VariantRowValue.
     // Handles TYPE_VARIANT recursion, null checks, and VariantEncoder encoding.

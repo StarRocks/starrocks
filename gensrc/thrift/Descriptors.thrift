@@ -40,6 +40,8 @@ include "Exprs.thrift"
 
 enum TRowPositionType {
     ICEBERG_V3_ROW_POSITION,
+    OLAP_ROW_POSITION,
+    LAKE_ROW_POSITION,
 }
 
 // used to describe row position for different tables
@@ -49,6 +51,7 @@ struct TRowPositionDescriptor {
     2: optional Types.TSlotId row_source_slot;
     3: optional list<Types.TSlotId> fetch_ref_slots;
     4: optional list<Types.TSlotId> lookup_ref_slots;
+    5: optional i32 scan_node_id;
 }
 
 struct TSlotDescriptor {
@@ -91,6 +94,7 @@ enum THdfsFileFormat {
   PARQUET = 5,
   ORC = 6,
   SEQUENCE_FILE = 7,
+  LANCE = 8,
 
   UNKNOWN = 100
 }
@@ -209,7 +213,9 @@ enum TSchemaTableType {
 
     SCH_FE_THREADS,
 
-    SCH_BE_TABLET_WRITE_LOG
+    SCH_BE_TABLET_WRITE_LOG,
+
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS
 }
 
 enum THdfsCompression {
@@ -227,6 +233,12 @@ enum TIndexType {
   GIN,
   NGRAMBF,
   VECTOR,
+  // Plain (non-ngram) bloom filter. Used as a fast-path thrift tag for the
+  // lake ADD INDEX IDG flow to carry plain-BF build requests; no TabletIndex
+  // object is created on the FE side for plain BF (source of truth is the
+  // column-level is_bf_column flag driven by the `bloom_filter_columns`
+  // table property).
+  BLOOM_FILTER,
 }
 
 // Not define UNKNOWN type for better compatibility with
@@ -355,6 +367,12 @@ struct TOlapTableIndexSchema {
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
     8: optional bool is_shadow
+    // Per-index distribution routing expressions (slot/cast/literal trees), evaluated
+    // at the sink SENDER to pick the destination tablet for this index. Mirrors
+    // TOlapTablePartitionParam.partition_exprs. When unset, the sink falls back to the
+    // partition-level `distributed_columns` routing (default for all existing loads).
+    // An explicitly EMPTY list means "single tablet, do not route" (degenerate K=1).
+    9: optional list<Exprs.TExpr> distributed_exprs
 }
 
 struct TOlapTableSchemaParam {
@@ -491,6 +509,9 @@ struct THdfsTable {
 
     // timezone
     11: optional string time_zone
+
+    // resolved Avro reader schema json from avro.schema.literal/url
+    12: optional string avro_schema_json
 }
 
 struct TFileTable {
@@ -541,6 +562,14 @@ struct TTableFunctionTable {
     11: optional Types.TParquetOptions parquet_options
 
     12: optional bool csv_include_header
+
+    // enclose character for CSV unload. When set, all non-NULL field values are
+    // wrapped with this character; occurrences of the enclose character (and the
+    // escape character itself) within field content are escaped using csv_escape.
+    13: optional i8 csv_enclose
+
+    // escape character for CSV unload. Used together with csv_enclose.
+    14: optional i8 csv_escape
 }
 
 struct TIcebergSchemaField {
@@ -660,6 +689,18 @@ struct TPaimonTable {
     4: optional TIcebergSchema paimon_schema
 }
 
+struct TFlussTable {
+    // Encoded scan-time configuration. FE merges catalog-level options and table properties;
+    // BE forwards this to the Java reader for Fluss connection and lake-source setup.
+    1: optional string runtime_conf
+
+    // timezone
+    2: optional string time_zone
+
+    // StarRocks catalog name, used by BE Java reader to reuse Fluss connections.
+    3: optional string catalog_name
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -686,6 +727,10 @@ struct TJDBCTable {
     6: optional string jdbc_table
     7: optional string jdbc_user
     8: optional string jdbc_passwd
+}
+
+struct TLanceTable {
+  1: optional string lance_dataset_uri
 }
 
 // "Union" of all table types.
@@ -727,6 +772,12 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Lance Table
+  37: optional TLanceTable lanceTable
+
+  // Fluss Table schema
+  38: optional TFlussTable flussTable
 }
 
 struct TDescriptorTable {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the sample variance of an expression."
 ---
 
 # var_samp,variance_samp

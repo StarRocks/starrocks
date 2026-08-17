@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts each element of an SQL array to a JSON value and returns a JSON array that consists of the JSON values."
 ---
 
 # json_array

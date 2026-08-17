@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts the specified date into a string in the specified Joda DateTimeFormat pattern format."
 ---
 
 # jodatime_format

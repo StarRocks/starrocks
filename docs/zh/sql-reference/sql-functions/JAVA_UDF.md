@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从 v2.2.0 起，使用 Java 编写用户定义函数来扩展 StarRocks 功能。"
 sidebar_position: 0.9
 ---
 
@@ -19,7 +20,7 @@ sidebar_position: 0.9
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
 - 在服务器上安装 JDK 17。
-- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/management/FE_configuration.md)。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/configuration/FE_parameters/FE_parameters.md)。
 
 ## 开发并使用 UDF
 
@@ -411,6 +412,89 @@ PROPERTIES (
 |type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
 |file|UDF 所在 Jar 包的 HTTP 路径。格式为`http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
 |isolation|(可选）如需在 UDF 执行中共享函数实例并支持静态变量，请将其设置为 "shared"。|
+|input|（可选）输入格式。取值：`scalar`（默认，每行一个装箱的 Java 对象）和 `arrow`（向量化，每个参数一个覆盖整批数据的 Apache Arrow `FieldVector`）。参见[向量化（Arrow）输入](#向量化arrow输入)。|
+
+#### 向量化（Arrow）输入
+
+设置 `"input" = "arrow"` 可将 Java UDF 从逐行装箱的调用方式切换为**向量化**方式：您的方法为每个参数接收一个覆盖整批数据的 Apache Arrow `FieldVector`，并（对 scalar / UDTF）返回一个 `FieldVector`。列数据通过 [Arrow C Data Interface](https://arrow.apache.org/docs/format/CDataInterface.html) 与 BE 零拷贝交换，避免了默认路径逐行装箱/拆箱的开销。
+
+在 Maven 项目中添加 Arrow 依赖（版本需与 StarRocks 发行版内置版本一致）；因 BE 已内置该库，使用 `provided` 作用域：
+
+```xml
+<dependency>
+    <groupId>org.apache.arrow</groupId>
+    <artifactId>arrow-vector</artifactId>
+    <version>17.0.0</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+请通过 `arg.getAllocator()` 从框架管理的分配器分配结果向量，以便引擎管理其生命周期。
+
+:::note
+BE 在内置 JVM 中执行 UDF，该 JVM 必须向 Arrow 的堆外内存层开放 `java.nio`。发行版自带的 `conf/be.conf` 已通过
+`JAVA_OPTS="... --add-opens=java.base/java.nio=ALL-UNNAMED ..."` 设置；若自定义 `JAVA_OPTS`，请保留该参数，否则 arrow 输入的 UDF 无法初始化。
+:::
+
+**Scalar** —— `evaluate(FieldVector...)` 返回 `FieldVector`：
+
+```java
+public class ArrowAdd {
+    public IntVector evaluate(IntVector a, IntVector b) {
+        IntVector out = new IntVector("result", a.getAllocator());
+        int n = a.getValueCount();
+        out.allocateNew(n);
+        for (int i = 0; i < n; i++) {
+            if (a.isNull(i) || b.isNull(i)) {
+                out.setNull(i);
+            } else {
+                out.set(i, a.get(i) + b.get(i));
+            }
+        }
+        out.setValueCount(n);
+        return out;
+    }
+}
+```
+
+```SQL
+CREATE FUNCTION arrow_add(INT, INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.udf.sample.ArrowAdd",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
+);
+```
+
+**UDTF** —— `process(FieldVector...)` 返回 `T[][]`（每个输入行对应一个输出行数组 `T[]`，仅输入向量化）。
+
+**UDAF** —— `update(State, FieldVector...)` 接收发往同一个 state 的整批数据；`create`/`merge`/`serialize`/`finalize` 保持常规（装箱）签名。
+
+> **限制**
+>
+> - Arrow 输入的 UDAF 仅支持**全局聚合**和**有序流式聚合**（整批数据属于同一个 state）。将 Arrow UDAF 用于哈希 `GROUP BY` 的查询会返回明确错误——`GROUP BY` 的 UDAF 请使用默认（装箱）输入。
+> - 暂不支持窗口函数（`analytic = "true"`）的 Arrow 输入。
+
+SQL 类型与方法接收到的 Arrow `FieldVector` 的映射：
+
+| SQL 类型   | Arrow FieldVector          |
+| ---------- | -------------------------- |
+| BOOLEAN    | `BitVector`                |
+| TINYINT    | `TinyIntVector`            |
+| SMALLINT   | `SmallIntVector`           |
+| INT        | `IntVector`                |
+| BIGINT     | `BigIntVector`             |
+| FLOAT      | `Float4Vector`             |
+| DOUBLE     | `Float8Vector`             |
+| VARCHAR    | `VarCharVector`            |
+| DECIMAL    | `DecimalVector`            |
+| DATE       | `DateDayVector`            |
+| DATETIME   | `TimeStampMicroVector`     |
+| ARRAY      | `ListVector`               |
+| MAP        | `MapVector`                |
+| STRUCT     | `StructVector`             |
 
 #### 创建 UDAF
 
@@ -545,20 +629,139 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 > **注意**
 >
-> 当前 Scalar UDF 只支持非嵌套的 ARRAY 和 MAP 的参数/返回类型。
+> Scalar UDF、UDAF 和 UDTF 都支持嵌套的 `ARRAY`、`MAP` 和 `STRUCT`
+> 参数/返回类型,包括任意嵌套形式,例如
+> `ARRAY<ARRAY<INT>>`、`ARRAY<MAP<INT, STRING>>`、
+> `MAP<INT, ARRAY<STRING>>`、`STRUCT<a INT, b ARRAY<STRING>>`,以及
+> `ARRAY<STRUCT<a INT, b STRING>>`。叶子元素类型仍须为下表列出的标量类型。
+> 由于 Java 泛型擦除,对于子树中不含 STRUCT 的 ARRAY / MAP 槽,
+> Java 方法签名只需声明原始类型 `java.util.List` / `java.util.Map`,
+> StarRocks 会根据 SQL 签名驱动逐行的类型转换。STRUCT 槽则必须绑定
+> 到一个具体的 Java `record` 类,以便分析器在 JNI 边界处保留正式的
+> record 类型(详见下文 [STRUCT 类型绑定](#struct-类型绑定))。
 
-| SQL TYPE       | Java TYPE         |
-| -------------- | ----------------- |
-| BOOLEAN        | java.lang.Boolean |
-| TINYINT        | java.lang.Byte    |
-| SMALLINT       | java.lang.Short   |
-| INT            | java.lang.Integer |
-| BIGINT         | java.lang.Long    |
-| FLOAT          | java.lang.Float   |
-| DOUBLE         | java.lang.Double  |
-| STRING/VARCHAR | java.lang.String  |
-| ARRAY          | java.util.List    |
-| Map            | java.util.Map     |
+| SQL TYPE                                       | Java TYPE             |
+| ---------------------------------------------- | --------------------- |
+| BOOLEAN                                        | java.lang.Boolean     |
+| TINYINT                                        | java.lang.Byte        |
+| SMALLINT                                       | java.lang.Short       |
+| INT                                            | java.lang.Integer     |
+| BIGINT                                         | java.lang.Long        |
+| FLOAT                                          | java.lang.Float       |
+| DOUBLE                                         | java.lang.Double      |
+| STRING/VARCHAR                                 | java.lang.String      |
+| DECIMAL(p, s) (DECIMAL32 / 64 / 128 / 256)     | java.math.BigDecimal  |
+| DATE                                           | java.time.LocalDate   |
+| DATETIME                                       | java.time.LocalDateTime |
+| ARRAY                                          | java.util.List        |
+| Map                                            | java.util.Map         |
+| STRUCT                                         | UDF 作者声明的 Java `record` 类 |
+
+> **说明**
+>
+> 对于 `DECIMAL` 参数，UDF 返回的 BigDecimal 在写回列前会按照列声明的
+> `(precision, scale)` 使用 `RoundingMode.HALF_UP` 重新缩放。如果重新缩放后的
+> 值无法装入声明的 `(precision, scale)`，行为由会话变量 `overflow_mode` 决定：
+>
+> - `OUTPUT_NULL`（默认）：该行写入 `NULL`。
+> - `REPORT_ERROR`：查询以 `ArithmeticException` 错误终止。
+
+### STRUCT 类型绑定
+
+`STRUCT` 参数和返回类型必须绑定到 UDF 作者声明的 Java `record` 类（JDK 14+）。
+绑定按位置进行：
+
+- record 的成员数必须与 SQL `STRUCT` 字段数一致。
+- 每个成员的类型必须与对应位置的 SQL 字段类型匹配；成员名不强制
+  （Java 标识符无法表达所有合法的 SQL 字段名,且 CREATE FUNCTION
+  按位置绑定,与会话变量 `STRUCT_CAST_BY_NAME` 无关）。
+- 嵌套 `STRUCT` 在任意位置都支持：作为 record 的成员、作为 `ARRAY`
+  的元素 (`List<MyRecord>`)、或作为 `MAP` 的 key/value
+  (`Map<String, MyRecord>`)。
+
+同样的 record 类绑定规则同时适用于 scalar UDF、UDAF 和 UDTF。
+对 UDAF,record 类用于 `update(State, ...)` 的参数和 `finalize(State)`
+的返回类型。对 UDTF,record 类用于 `process(...)` 的参数和
+`TYPE[] process(...)` 的元素返回类型。
+
+#### Scalar UDF 示例
+
+```java
+public record Address(String street, Integer zip) {}
+
+public record AddressOut(String full, Integer region) {}
+
+public class AddrUdf {
+    public AddressOut evaluate(Address addr) {
+        return new AddressOut(addr.street() + " #" + addr.zip(), addr.zip() / 1000);
+    }
+}
+```
+
+```sql
+CREATE FUNCTION addr_udf(struct<street string, zip int>)
+RETURNS struct<`full` string, region int>
+PROPERTIES (
+    "symbol" = "com.example.AddrUdf",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/addr_udf.jar"
+);
+```
+
+#### UDAF 示例
+
+```java
+public record Item(String name, Integer qty) {}
+
+public record TopItem(String name, Long total) {}
+
+public class TopItemAgg {
+    public static class State {
+        // 序列化代码省略
+        public int serializeLength() { return 0; }
+    }
+    public State create() { return new State(); }
+    public void destroy(State state) {}
+    public void update(State state, Item item) { /* ... */ }
+    public void serialize(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public void merge(State state, java.nio.ByteBuffer buf) { /* ... */ }
+    public TopItem finalize(State state) { return new TopItem("a", 0L); }
+}
+```
+
+```sql
+CREATE AGGREGATE FUNCTION top_item_agg(struct<name string, qty int>)
+RETURNS struct<name string, total bigint>
+PROPERTIES (
+    "symbol" = "com.example.TopItemAgg",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/top_item_agg.jar"
+);
+```
+
+#### UDTF 示例
+
+```java
+public record Pair(String key, Integer value) {}
+
+public class ExplodePairs {
+    public Pair[] process(java.util.Map<String, Integer> m) {
+        return m.entrySet().stream()
+                .map(e -> new Pair(e.getKey(), e.getValue()))
+                .toArray(Pair[]::new);
+    }
+}
+```
+
+```sql
+CREATE TABLE FUNCTION explode_pairs(map<string, int>)
+RETURNS struct<`key` string, `value` int>
+PROPERTIES (
+    "symbol" = "com.example.ExplodePairs",
+    "type" = "StarrocksJar",
+    "file" = "http://localhost:8080/explode_pairs.jar"
+);
+```
 
 ## 参数配置
 

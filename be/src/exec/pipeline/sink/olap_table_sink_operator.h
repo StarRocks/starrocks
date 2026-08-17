@@ -17,11 +17,10 @@
 #include <utility>
 
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/async_data_sink.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks {
-
-class AsyncDataSink;
 
 namespace pipeline {
 class OlapTableSinkOperator final : public Operator {

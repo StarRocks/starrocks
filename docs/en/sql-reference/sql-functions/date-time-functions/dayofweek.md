@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the weekday index for a given date."
 ---
 
 # dayofweek

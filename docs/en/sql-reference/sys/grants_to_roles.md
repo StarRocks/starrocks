@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "System view showing the privileges granted to each user-defined role in StarRocks."
 ---
 
 # grants_to_roles
@@ -8,7 +9,7 @@ You can view the privileges granted to user-defined roles by querying the view `
 
 :::note
 
-By default, only users or roles with the `user_admin` role can access this view. You can grant other users the SELECT privilege on this view using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
+By default, only users or roles with the `user_admin` role can access this view. You can grant other users the SELECT privilege on this view using [GRANT](../sql-statements/account-management/GRANT.md).
 
 :::
 

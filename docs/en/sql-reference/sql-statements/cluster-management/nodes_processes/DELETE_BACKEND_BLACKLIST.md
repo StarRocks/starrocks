@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Removes a BE/CN node from the BE Blacklist."
 ---
 
 # DELETE BACKEND/COMPUTE NOT BLACKLIST

@@ -23,6 +23,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,6 +37,7 @@ import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -123,8 +125,9 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                 continue;
             } catch (Throwable e) {
                 // TODO: change the exception into an checked exception in MetadataMgr.getTable
-                // The underlying SDK might throw an deep exception with this message
-                if (!(e.getMessage() != null && e.getMessage().contains("table not found"))) {
+                // For hive catalog, a dropped table surfaces as NoSuchObjectException in the cause chain
+                // rather than as a special return value, so skip the warning log for that expected case.
+                if (!LogUtil.isCausedBy(e, NoSuchObjectException.class)) {
                     LOG.warn("failed to get table meta", e);
                 }
                 continue;

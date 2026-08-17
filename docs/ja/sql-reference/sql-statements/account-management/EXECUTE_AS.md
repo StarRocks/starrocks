@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use IMPERSONATE privilege with EXECUTE AS to switch the execution context to another user."
 ---
 
 # EXECUTE AS
@@ -22,7 +23,7 @@ EXECUTE AS user WITH NO REVERT
 
 ## 使用上の注意
 
-- 現在ログインしているユーザー (EXECUTE AS ステートメントを呼び出すユーザー) は、他のユーザーを偽装する権限を付与されている必要があります。詳細については、[GRANT](../account-management/GRANT.md) を参照してください。
+- 現在ログインしているユーザー (EXECUTE AS ステートメントを呼び出すユーザー) は、他のユーザーを偽装する権限を付与されている必要があります。詳細については、[GRANT](./GRANT.md) を参照してください。
 - EXECUTE AS ステートメントには WITH NO REVERT 句を含める必要があります。これは、現在のセッションが終了する前に、元のログインユーザーに実行コンテキストを戻すことができないことを意味します。
 
 ## 例

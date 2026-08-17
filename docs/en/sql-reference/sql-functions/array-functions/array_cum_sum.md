@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the cumulative sums of elements in an array."
 ---
 
 # array_cum_sum

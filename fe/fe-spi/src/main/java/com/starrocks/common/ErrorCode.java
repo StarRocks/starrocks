@@ -172,6 +172,9 @@ public enum ErrorCode {
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables distribution columns must have the same data type with group %s," +
                     " current col: %s, should be: %s, current info %s"),
+    ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
+            "Colocate tables must have the same distribution type with group %s," +
+                    " expected: %s, actual: %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
     ERROR_DYNAMIC_PARTITION_TIME_UNIT(5065, new byte[] {'4', '2', '0', '0', '0'},
@@ -275,11 +278,13 @@ public enum ErrorCode {
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
-            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select statements"),
+            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select/show statements"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT_ORDER(5306, new byte[] {'2', '5', 'P', '0', '1'},
             "Explicit transaction only support single update/delete before insert statement"),
     ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE(5307, new byte[] {'2', '5', 'P', '0', '1'},
             "SELECT cannot read table '%s' modified earlier in the same transaction"),
+    ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE(5308, new byte[] {'2', '5', 'P', '0', '1'},
+            "Partial update cannot be applied to table '%s' modified earlier in the same transaction"),
 
     /**
      * 5400 - 5499: Internal error
@@ -367,6 +372,9 @@ public enum ErrorCode {
 
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
             "The interval of the Multi-Range Partition must be greater than 0"),
+
+    ERR_GET_PARTITION_ACCESS_TIME(5704, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Failed to get partition access time: %s"),
 
     /**
      * 5800 - 5899: Pipe

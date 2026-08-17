@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -33,13 +34,15 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
@@ -47,6 +50,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
@@ -74,11 +78,15 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -100,7 +108,6 @@ public class HiveMetadata implements ConnectorMetadata {
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
-    private Executor refreshOthersFeExecutor;
     private final ConnectorProperties properties;
 
     public HiveMetadata(String catalogName,
@@ -110,7 +117,6 @@ public class HiveMetadata implements ConnectorMetadata {
                         HiveStatisticsProvider statisticsProvider,
                         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
                         Executor updateExecutor,
-                        Executor refreshOthersFeExecutor,
                         ConnectorProperties properties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
@@ -119,8 +125,21 @@ public class HiveMetadata implements ConnectorMetadata {
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.properties = properties;
+    }
+
+    @Deprecated
+    public HiveMetadata(String catalogName,
+                        HdfsEnvironment hdfsEnvironment,
+                        HiveMetastoreOperations hmsOps,
+                        RemoteFileOperations fileOperations,
+                        HiveStatisticsProvider statisticsProvider,
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
+                        Executor updateExecutor,
+                        Executor refreshOthersFeExecutor,
+                        ConnectorProperties properties) {
+        this(catalogName, hdfsEnvironment, hmsOps, fileOperations, statisticsProvider, cacheUpdateProcessor,
+                updateExecutor, properties);
     }
 
     @Override
@@ -313,7 +332,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadataRequestContext requestContext) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
@@ -374,12 +393,25 @@ public class HiveMetadata implements ConnectorMetadata {
         return fileOps.getRemoteFilesAsync(table, params, (p) -> this.buildGetRemoteFilesPartitions(table, p));
     }
 
-    @Override
-    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        ImmutableList.Builder<Partition> partitionBuilder = ImmutableList.builder();
-        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
-        partitionBuilder.addAll(existingPartitions.values());
-        return fileOps.getRemotePartitions(partitionBuilder.build());
+    public Optional<Map<String, Optional<HivePartitionDataInfo>>> getHivePartitionDataInfos(
+            HiveTable table, List<String> partitionNames, int partitionLimit) {
+        String scheme = Optional.ofNullable(URI.create(table.getTableLocation()).getScheme())
+                .orElse("")
+                .toUpperCase(Locale.ROOT);
+        List<String> partitionNamesToFetch = partitionNames;
+        if (partitionLimit >= 0 && partitionLimit < partitionNames.size()) {
+            partitionNamesToFetch = partitionNames.subList(partitionNames.size() - partitionLimit, partitionNames.size());
+        }
+
+        switch (scheme) {
+            case "HDFS":
+                return Optional.of(getPartitionDataInfosByDirectoryMtime(table, partitionNamesToFetch));
+            case "OSS":
+            case "S3":
+                return Optional.of(getPartitionDataInfosByRemoteFiles(table, partitionNamesToFetch));
+            default:
+                return Optional.empty();
+        }
     }
 
     @Override
@@ -393,6 +425,66 @@ public class HiveMetadata implements ConnectorMetadata {
             partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
             return partitions.build();
         }
+    }
+
+    private Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfosByDirectoryMtime(
+            Table table, List<String> partitionNames) {
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newLinkedHashMap();
+        partitionNames.forEach(partitionName -> partitionDataInfos.put(partitionName, Optional.empty()));
+
+        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+        List<String> existingPartitionNames = new ArrayList<>();
+        List<Path> paths = new ArrayList<>();
+        for (String partitionName : partitionNames) {
+            Partition partition = existingPartitions.get(partitionName);
+            if (partition != null) {
+                existingPartitionNames.add(partitionName);
+                paths.add(new Path(partition.getFullPath()));
+            }
+        }
+        if (paths.isEmpty()) {
+            return partitionDataInfos;
+        }
+
+        // HDFS exposes directory-level modification time, so MV repair can cheaply detect changes
+        // without listing every file under each partition directory.
+        FileStatus[] fileStatuses = fileOps.getFileStatus(paths.toArray(new Path[0]));
+        for (int i = 0; i < existingPartitionNames.size() && i < fileStatuses.length; i++) {
+            partitionDataInfos.put(existingPartitionNames.get(i),
+                    Optional.of(new HivePartitionDataInfo(fileStatuses[i].getModificationTime(), 1)));
+        }
+        return partitionDataInfos;
+    }
+
+    private Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfosByRemoteFiles(
+            Table table, List<String> partitionNames) {
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newLinkedHashMap();
+        if (partitionNames.isEmpty()) {
+            return partitionDataInfos;
+        }
+
+        // Object stores do not provide a stable directory mtime signal, so derive change tokens
+        // from the partition's current file listing instead.
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setPartitionNames(partitionNames)
+                .setCheckPartitionExistence(false)
+                .build();
+        List<RemoteFileInfo> remoteFileInfos = getRemoteFiles(table, params);
+        for (int i = 0; i < partitionNames.size(); i++) {
+            Optional<HivePartitionDataInfo> partitionDataInfo = Optional.empty();
+            if (i < remoteFileInfos.size()) {
+                List<RemoteFileDesc> remoteFileDescs = remoteFileInfos.get(i).getFiles();
+                if (remoteFileDescs != null) {
+                    long lastFileModifiedTime = Long.MIN_VALUE;
+                    for (RemoteFileDesc remoteFileDesc : remoteFileDescs) {
+                        lastFileModifiedTime = Math.max(lastFileModifiedTime, remoteFileDesc.getModificationTime());
+                    }
+                    partitionDataInfo = Optional.of(new HivePartitionDataInfo(lastFileModifiedTime, remoteFileDescs.size()));
+                }
+            }
+            partitionDataInfos.put(partitionNames.get(i), partitionDataInfo);
+        }
+        return partitionDataInfos;
     }
 
     @Override
@@ -424,7 +516,16 @@ public class HiveMetadata implements ConnectorMetadata {
             Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
             if (columnStatistics.isEmpty()) {
                 double outputRowNums = statistics.getOutputRowCount();
-                statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys, outputRowNums);
+                if (session.getSessionVariable().enableHiveColumnStats()) {
+                    // Column stats enabled but unavailable (e.g. exception) — estimate from type/partition info
+                    statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys,
+                            outputRowNums);
+                } else {
+                    // Column stats explicitly disabled — keep UNKNOWN so the optimizer respects the intent
+                    Statistics.Builder unknownBuilder = Statistics.builder().setOutputRowCount(outputRowNums);
+                    columnRefOperators.forEach(c -> unknownBuilder.addColumnStatistic(c, ColumnStatistic.unknown()));
+                    statistics = unknownBuilder.build();
+                }
             }
         }
 
@@ -487,9 +588,25 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         HiveCommitter committer = new HiveCommitter(
-                hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
+                hmsOps, fileOps, updateExecutor, table, new Path(stagingDir));
+        String writeType = isOverwrite ? "overwrite" : "insert";
+        long startMs = System.currentTimeMillis();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {
             committer.commit(partitionUpdates);
+            long totalRows = partitionUpdates.stream().mapToLong(PartitionUpdate::getRowCount).sum();
+            long totalBytes = partitionUpdates.stream().mapToLong(PartitionUpdate::getTotalSizeInBytes).sum();
+            long totalFiles = partitionUpdates.stream().mapToLong(PartitionUpdate::getFileCount).sum();
+            ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_HIVE, writeType);
+            ConnectorMetricsMgr.increaseWriteRows(ConnectorMetricsMgr.CONNECTOR_HIVE, totalRows, writeType);
+            ConnectorMetricsMgr.increaseWriteBytes(ConnectorMetricsMgr.CONNECTOR_HIVE, totalBytes, writeType);
+            ConnectorMetricsMgr.increaseWriteFiles(ConnectorMetricsMgr.CONNECTOR_HIVE, totalFiles, writeType);
+        } catch (Exception e) {
+            // Write failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
+            throw e;
+        } finally {
+            ConnectorMetricsMgr.increaseWriteDurationMs(ConnectorMetricsMgr.CONNECTOR_HIVE,
+                    System.currentTimeMillis() - startMs, writeType);
         }
     }
 

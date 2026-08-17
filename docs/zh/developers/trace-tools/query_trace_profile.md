@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "收集和分析查询追踪配置文件以诊断 StarRocks 查询执行。"
 ---
 
 # Query Trace Profile

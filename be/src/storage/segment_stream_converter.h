@@ -26,9 +26,9 @@ public:
                                     std::unique_ptr<WritableFile> output_file,
                                     std::unordered_map<uint32_t, uint32_t>* column_unique_id_map);
 
-    virtual Status append(const void* data, size_t size) override;
+    Status append(const void* data, size_t size) override;
 
-    virtual Status close() override;
+    Status close() override;
 
 private:
     std::unordered_map<uint32_t, uint32_t>* _column_unique_id_map;

@@ -18,17 +18,19 @@
 #include <queue>
 
 #include "base/brpc/ref_count_closure.h"
-#include "exec/tablet_info.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
+#include "platform/platform_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/descriptors.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
+#include "storage/chunk_helper.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
-#include "util/brpc_stub_cache.h"
-#include "util/internal_service_recoverable_stub.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 
@@ -64,7 +66,6 @@ Status TableReader::init(const TableReaderParams& params) {
     RETURN_IF_ERROR(_partition_param->init(nullptr));
     _location_param = std::make_unique<OlapTableLocationParam>(params.location_param);
     _nodes_info = std::make_unique<StarRocksNodesInfo>(params.nodes_info);
-    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc());
     return Status::OK();
 }
 
@@ -156,6 +157,7 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
         multi_get->add(keys, key_index, key_index);
     }
     vector<TabletMultiGet*> multi_gets;
+    multi_gets.reserve(multi_gets_by_tablet.size());
     for (auto& iter : multi_gets_by_tablet) {
         multi_gets.push_back(iter.second.get());
     }
@@ -225,7 +227,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
             LOG(WARNING) << msg;
             st = Status::InternalError(msg);
         } else {
-            auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+            auto stub = PlatformEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
             if (stub == nullptr) {
                 string msg = strings::Substitute("multi_get fail to get brpc stub for $0:$1 tablet:$2", node_info->host,
                                                  node_info->brpc_port, tablet_id);
@@ -269,7 +271,6 @@ Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService
     if (_params->timeout_ms > 0) {
         closure->cntl.set_timeout_ms(_params->timeout_ms);
     }
-    closure->ref();
     stub->local_tablet_reader_multi_get(&closure->cntl, &request, &closure->result, closure);
     closure->join();
     if (closure->cntl.Failed()) {
@@ -286,7 +287,7 @@ Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService
     }
     auto& values_pb = result.values();
     TRY_CATCH_BAD_ALLOC({
-        StatusOr<Chunk> res = serde::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
+        StatusOr<Chunk> res = serde::ProtobufChunkSerde::deserialize_with_schema(*value_schema, values_pb.data());
         if (!res.ok()) return res.status();
         values.columns().swap(res.value().columns());
     });

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use the DROP FILE statement to delete a file."
 ---
 
 # DROP FILE

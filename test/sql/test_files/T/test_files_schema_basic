@@ -1,0 +1,53 @@
+-- name: test_files_schema_basic
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- PARQUET by name: file has k1..k8; schema declares only k2, k7
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select k2, k7 from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 INT, k7 VARCHAR(64)")
+order by k2 limit 3;
+
+-- ORC by name: same shape
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select k2, k7 from files(
+    "path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*",
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "k2 BIGINT, k7 STRING")
+order by k2 limit 3;
+
+-- AVRO by name (adjust column name to match primitive.avro's schema)
+shell: ossutil64 cp --force ./sql/test_files/avro_format/primitive.avro oss://${oss_bucket}/test_files/avro_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select count(*) from files(
+    "path" = "oss://${oss_bucket}/test_files/avro_format/${uuid0}/*",
+    "format" = "avro",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "int_field INT");
+
+-- CSV by position: names are aliases. basic1.csv's first two columns drive the mapping.
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+select aaa, bbb from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "schema" = "aaa BIGINT, bbb VARCHAR(64)")
+order by aaa limit 3;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/avro_format/${uuid0}/ > /dev/null
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

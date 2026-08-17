@@ -15,16 +15,17 @@
 #include "column/fixed_length_column_base.h"
 
 #include "base/hash/hash_util.hpp"
+#include "base/simd/filter.h"
 #include "base/simd/gather.h"
 #include "base/types/decimal12.h"
 #include "base/types/int128.h"
 #include "base/types/int256.h"
-#include "column/column_filter_range.h"
 #include "column/column_sorter_comparator.h"
 #include "column/mysql_row_buffer.h"
-#include "column/type_traits.h"
+#include "column/raw_data_visitor.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_local_io_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -46,7 +47,9 @@ void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t c
     const size_t orig_size = datas.size();
     raw::stl_vector_resize_uninitialized(&datas, orig_size + count);
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    RawDataVisitor rv;
+    CHECK(src.accept(&rv).ok());
+    const T* src_data = reinterpret_cast<const T*>(rv.result());
     strings::memcpy_inlined(datas.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
@@ -61,7 +64,9 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     raw::stl_vector_resize_uninitialized(&datas, orig_size + size);
     auto* dest_data = datas.data() + orig_size;
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    RawDataVisitor rv;
+    CHECK(src.accept(&rv).ok());
+    const T* src_data = reinterpret_cast<const T*>(rv.result());
     SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
@@ -176,7 +181,7 @@ size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from,
     // TODO: FIXME
     const auto src = immutable_data();
     raw::stl_vector_resize_uninitialized(&_data, src.size());
-    auto size = column_filter_range::filter_range<T>(filter, _data.data(), src.data(), from, to);
+    auto size = SIMD::Filter::filter_range(_data.data(), src.data(), filter.data(), from, to);
     _data.resize(size);
     _resource.reset();
     return size;

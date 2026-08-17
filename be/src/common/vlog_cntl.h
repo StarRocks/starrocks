@@ -18,8 +18,6 @@
 
 #include <string>
 
-#include "gutil/macros.h"
-
 namespace starrocks {
 class VLogCntl {
 public:
@@ -28,7 +26,10 @@ public:
         return log_module;
     }
 
-    DISALLOW_COPY_AND_MOVE(VLogCntl);
+    VLogCntl(const VLogCntl&) = delete;
+    VLogCntl& operator=(const VLogCntl&) = delete;
+    VLogCntl(VLogCntl&&) = delete;
+    VLogCntl& operator=(VLogCntl&&) = delete;
 
     void setLogLevel(const std::string& module, int level) { google::SetVLOGLevel(module.c_str(), level); }
 

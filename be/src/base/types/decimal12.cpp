@@ -34,6 +34,7 @@
 
 #include "base/types/decimal12.h"
 
+#include <cinttypes>
 #include <cstdio>
 #include <cstring>
 
@@ -41,9 +42,28 @@
 
 namespace {
 constexpr int32_t kPowerTable[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
+
+uint64_t to_unsigned_magnitude(int64_t value) {
+    return value < 0 ? static_cast<uint64_t>(-(value + 1)) + 1 : static_cast<uint64_t>(value);
+}
+
+uint32_t to_unsigned_magnitude(int32_t value) {
+    return value < 0 ? static_cast<uint32_t>(-static_cast<int64_t>(value)) : static_cast<uint32_t>(value);
+}
 } // namespace
 
 namespace starrocks {
+
+std::string decimal12_t::to_string() const {
+    char buf[128] = {'\0'};
+    const char* sign = integer < 0 || fraction < 0 ? "-" : "";
+    const uint64_t integer_magnitude = to_unsigned_magnitude(integer);
+    const uint32_t fraction_magnitude = to_unsigned_magnitude(fraction);
+
+    snprintf(buf, sizeof(buf), "%s%" PRIu64 ".%09u", sign, integer_magnitude, fraction_magnitude);
+
+    return std::string(buf);
+}
 
 Status decimal12_t::from_string(const std::string& str) {
     integer = 0;
@@ -73,7 +93,7 @@ Status decimal12_t::from_string(const std::string& str) {
             sscanf(value_string, ".%9d", &fraction);
             integer = 0;
         } else {
-            sscanf(value_string, "%18ld.%9d", &integer, &fraction);
+            sscanf(value_string, "%18" SCNd64 ".%9d", &integer, &fraction);
         }
         DIAGNOSTIC_POP
 

@@ -23,6 +23,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
@@ -85,7 +86,7 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
     DCHECK_LE(_join_stage, stage) << "current=" << _join_stage << ", advance to " << stage;
     if (_join_stage != stage) {
         _join_stage = stage;
-        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, stage);
+        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, static_cast<int>(stage));
     }
 }
 
@@ -273,11 +274,15 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
+    // A null _curr_build_chunk means the previous round just consumed all build chunks, so use the
+    // first build chunk to decide column nullability.
+    // NOTE: this can still be wrong if column info differs between build chunks.
+    Chunk* ref_build_chunk = _num_build_chunks() > 0 ? _cross_join_context->get_build_chunk(0) : _curr_build_chunk;
     for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         bool nullable = right_to_nullable | _col_types[i]->is_nullable();
-        if (_curr_build_chunk) {
-            nullable |= _curr_build_chunk->is_column_nullable(slot->id());
+        if (ref_build_chunk) {
+            nullable |= ref_build_chunk->is_column_nullable(slot->id());
         }
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
@@ -330,10 +335,8 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
             }
         }
 
-        // null data
-        for (size_t i = 0; i < num_rows; ++i) {
-            filter_data[i] |= null_data[i];
-        }
+        // null data - use SIMD-optimized OR
+        ColumnHelper::or_two_filters(num_rows, filter_data.data(), null_data.data());
 
         // process other conjucts
         for (size_t i = 1; i < _join_conjuncts.size(); ++i) {
@@ -592,7 +595,6 @@ Status NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
     DCHECK(_curr_build_chunk);
     size_t cur_build_chunk_rows = _curr_build_chunk->num_rows();
     COUNTER_UPDATE(_permute_rows_counter, cur_build_chunk_rows);
-    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _col_types.size(); i++) {
         bool is_probe = i < _probe_column_count;
         SlotDescriptor* slot = _col_types[i];
@@ -605,7 +607,6 @@ Status NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
             dst_col->append(*src_col);
         }
     }
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 
@@ -680,18 +681,28 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
 // 2. Apply the conjuncts, and append it to output buffer
 // 3. Maintain match index and implement left join and right join
 StatusOr<ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    StatusOr<ChunkPtr> res;
+    TRY_CATCH_ALLOC_SCOPE_START()
     _check_post_probe();
     size_t chunk_size = state->chunk_size();
 
     if (_join_op == TJoinOp::INNER_JOIN) {
-        return _pull_chunk_for_inner_join(chunk_size);
+        res = _pull_chunk_for_inner_join(chunk_size);
     } else {
-        return _pull_chunk_for_other_join(chunk_size);
+        res = _pull_chunk_for_other_join(chunk_size);
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
+    return res;
 }
 
 // eval conjuncts for nest loop join, apply common exprs and conjuncts first
 Status NLJoinProbeOperator::_eval_conjuncts(const ChunkPtr& chunk) {
+    // The permuted chunk may have no row left, either because the join conjuncts filtered all of
+    // them out, or because the previous round already consumed the last probe row. There is nothing
+    // to evaluate on it, and the common exprs cannot be evaluated against an empty chunk.
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
     CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
     RETURN_IF_ERROR(guard.evaluate());
     RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
@@ -786,35 +797,32 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
     return Status::OK();
 }
 
-void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
-    auto ctx = state->query_ctx();
-    if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
-        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(
-                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
-        }
-
-        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
-            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
-            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
-        }
+OperatorExecStatsSnapshot NLJoinProbeOperator::exec_stats_snapshot() const {
+    OperatorExecStatsSnapshot snapshot;
+    snapshot.plan_node_id = _plan_node_id;
+    snapshot.update_pull_rows = true;
+    snapshot.pull_rows = COUNTER_VALUE(_pull_row_num_counter);
+    if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+        snapshot.update_pred_filter_rows = true;
+        snapshot.pred_filter_rows = COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter);
     }
+    if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        snapshot.update_rf_filter_rows = true;
+        int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+        int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+        snapshot.rf_filter_rows = input_rows - output_rows;
+    }
+    return snapshot;
 }
 
-void NLJoinProbeOperatorFactory::_init_row_desc() {
-    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _probe_column_count++;
-        }
+void NLJoinProbeOperatorFactory::_init_col_types() {
+    for (auto* slot : _left_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _probe_column_count++;
     }
-    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _build_column_count++;
-        }
+    for (auto* slot : _right_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _build_column_count++;
     }
 }
 
@@ -830,7 +838,7 @@ Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     // Unref is called in _cross_join_context->decr_prober, when call probe operators have called decr_prober.
     _cross_join_context->ref();
 
-    _init_row_desc();
+    _init_col_types();
 
     RETURN_IF_ERROR(ExprExecutor::prepare(_common_expr_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_common_expr_ctxs, state));

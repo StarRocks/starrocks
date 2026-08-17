@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビットマップをBIGINT配列に変換します。"
 ---
 
 # bitmap_to_array

@@ -33,5 +33,5 @@ public interface InsertLoadTxnCallback {
     /**
      * After transaction is committed, do some follow-up work.
      */
-    void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+    void afterCommitted(TransactionState txnState) throws StarRocksException;
 }

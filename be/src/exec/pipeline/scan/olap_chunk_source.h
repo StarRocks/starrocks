@@ -17,19 +17,18 @@
 #include <utility>
 
 #include "common/runtime_profile.h"
-#include "exec/olap_common.h"
-#include "exec/olap_scan_prepare.h"
-#include "exec/olap_utils.h"
+#include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/runtime_state.h"
-#include "storage/conjunctive_predicates.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/olap_scan_keys.h"
+#include "storage_primitive/olap_scan_range.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 
@@ -63,6 +62,7 @@ private:
     TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(TabletReaderParams* params);
+    Status _init_glm(TabletReaderParams* params);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
@@ -70,8 +70,6 @@ private:
     Status _init_column_access_paths(Schema* schema);
     Status _prune_schema_by_access_paths(Schema* schema);
     Status _extend_schema_by_access_paths();
-    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
-                                          const ColumnAccessPath* path);
 
 private:
     TabletReaderParams _params{};
@@ -109,7 +107,7 @@ private:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     bool _use_vector_index = false;
-    bool _use_ivfpq = false;
+    bool _refine_distance = false;
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id;
 
@@ -199,7 +197,16 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;

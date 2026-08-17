@@ -19,6 +19,7 @@
 #include "storage/kv_store.h"
 #include "storage/primary_index.h"
 #include "storage/tablet.h"
+#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -37,6 +38,7 @@ StatusOr<FileInfo> LocalPrimaryKeyCompactionConflictResolver::filename() const {
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     const auto& schema = _rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }

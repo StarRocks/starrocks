@@ -1,0 +1,3906 @@
+	N
+a	a
+aa	aa
+aaa	aaa
+aaaa	aaaa
+aaaaa	aaaaa
+aaaa,	aaaa
+aaaa"	N
+aaaa\	aaaa
+aaaa 	aaaa 
+aaa,	aaa
+aaa,a	aaaa
+aaa,,	aaa
+aaa,"	aaa
+aaa,\	aaa
+aaa, 	aaa 
+aaa"	N
+aaa"a	N
+aaa",	N
+aaa""	aaa"
+aaa"\	N
+aaa" 	N
+aaa\	aaa
+aaa\a	aaaa
+aaa\,	aaa
+aaa\"	aaa"
+aaa\\	aaa\
+aaa\ 	aaa 
+aaa 	aaa 
+aaa a	aaa a
+aaa ,	aaa 
+aaa "	N
+aaa \	aaa 
+aaa  	aaa  
+aa,	aa
+aa,a	aaa
+aa,aa	aaaa
+aa,a,	aaa
+aa,a"	aa
+aa,a\	aaa
+aa,a 	aaa 
+aa,,	aa
+aa,,a	aaa
+aa,,,	aa
+aa,,"	aa
+aa,,\	aa
+aa,, 	aa 
+aa,"	aa
+aa,"a	aa
+aa,",	aa
+aa,""	aa
+aa,"\	aa
+aa," 	aa
+aa,\	aa
+aa,\a	aaa
+aa,\,	aa
+aa,\"	aa
+aa,\\	aa
+aa,\ 	aa 
+aa, 	aa 
+aa, a	aa a
+aa, ,	aa 
+aa, "	aa
+aa, \	aa 
+aa,  	aa  
+aa"	N
+aa"a	N
+aa"aa	N
+aa"a,	N
+aa"a"	aaa
+aa"a\	N
+aa"a 	N
+aa",	N
+aa",a	N
+aa",,	N
+aa","	aa,
+aa",\	N
+aa", 	N
+aa""	aa"
+aa""a	aa"a
+aa"",	aa"
+aa"""	N
+aa""\	aa"
+aa"" 	aa" 
+aa"\	N
+aa"\a	N
+aa"\,	N
+aa"\"	N
+aa"\\	N
+aa"\ 	N
+aa" 	N
+aa" a	N
+aa" ,	N
+aa" "	aa 
+aa" \	N
+aa"  	N
+aa\	aa
+aa\a	aaa
+aa\aa	aaaa
+aa\a,	aaa
+aa\a"	N
+aa\a\	aaa
+aa\a 	aaa 
+aa\,	aa
+aa\,a	aaa
+aa\,,	aa
+aa\,"	aa
+aa\,\	aa
+aa\, 	aa 
+aa\"	aa"
+aa\"a	aa"a
+aa\",	aa"
+aa\""	N
+aa\"\	aa"
+aa\" 	aa" 
+aa\\	aa\
+aa\\a	aa\a
+aa\\,	aa\
+aa\\"	N
+aa\\\	aa\
+aa\\ 	aa\ 
+aa\ 	aa 
+aa\ a	aa a
+aa\ ,	aa 
+aa\ "	N
+aa\ \	aa 
+aa\  	aa  
+aa 	aa 
+aa a	aa a
+aa aa	aa aa
+aa a,	aa a
+aa a"	N
+aa a\	aa a
+aa a 	aa a 
+aa ,	aa 
+aa ,a	aa a
+aa ,,	aa 
+aa ,"	aa 
+aa ,\	aa 
+aa , 	aa  
+aa "	N
+aa "a	N
+aa ",	N
+aa ""	aa "
+aa "\	N
+aa " 	N
+aa \	aa 
+aa \a	aa a
+aa \,	aa 
+aa \"	aa "
+aa \\	aa \
+aa \ 	aa  
+aa  	aa  
+aa  a	aa  a
+aa  ,	aa  
+aa  "	N
+aa  \	aa  
+aa   	aa   
+a,	a
+a,a	aa
+a,aa	aaa
+a,aaa	aaaa
+a,aa,	aaa
+a,aa"	a
+a,aa\	aaa
+a,aa 	aaa 
+a,a,	aa
+a,a,a	aaa
+a,a,,	aa
+a,a,"	aa
+a,a,\	aa
+a,a, 	aa 
+a,a"	a
+a,a"a	a
+a,a",	a
+a,a""	aa"
+a,a"\	a
+a,a" 	a
+a,a\	aa
+a,a\a	aaa
+a,a\,	aa
+a,a\"	aa"
+a,a\\	aa\
+a,a\ 	aa 
+a,a 	aa 
+a,a a	aa a
+a,a ,	aa 
+a,a "	a
+a,a \	aa 
+a,a  	aa  
+a,,	a
+a,,a	aa
+a,,aa	aaa
+a,,a,	aa
+a,,a"	a
+a,,a\	aa
+a,,a 	aa 
+a,,,	a
+a,,,a	aa
+a,,,,	a
+a,,,"	a
+a,,,\	a
+a,,, 	a 
+a,,"	a
+a,,"a	a
+a,,",	a
+a,,""	a
+a,,"\	a
+a,," 	a
+a,,\	a
+a,,\a	aa
+a,,\,	a
+a,,\"	a
+a,,\\	a
+a,,\ 	a 
+a,, 	a 
+a,, a	a a
+a,, ,	a 
+a,, "	a
+a,, \	a 
+a,,  	a  
+a,"	a
+a,"a	a
+a,"aa	a
+a,"a,	a
+a,"a"	aa
+a,"a\	a
+a,"a 	a
+a,",	a
+a,",a	a
+a,",,	a
+a,","	a,
+a,",\	a
+a,", 	a
+a,""	a
+a,""a	a"a
+a,"",	a
+a,"""	a
+a,""\	a"
+a,"" 	a" 
+a,"\	a
+a,"\a	a
+a,"\,	a
+a,"\"	a
+a,"\\	a
+a,"\ 	a
+a," 	a
+a," a	a
+a," ,	a
+a," "	a 
+a," \	a
+a,"  	a
+a,\	a
+a,\a	aa
+a,\aa	aaa
+a,\a,	aa
+a,\a"	a
+a,\a\	aa
+a,\a 	aa 
+a,\,	a
+a,\,a	aa
+a,\,,	a
+a,\,"	a
+a,\,\	a
+a,\, 	a 
+a,\"	a
+a,\"a	a
+a,\",	a
+a,\""	a"
+a,\"\	a
+a,\" 	a
+a,\\	a
+a,\\a	aa
+a,\\,	a
+a,\\"	a
+a,\\\	a
+a,\\ 	a 
+a,\ 	a 
+a,\ a	a a
+a,\ ,	a 
+a,\ "	a
+a,\ \	a 
+a,\  	a  
+a, 	a 
+a, a	a a
+a, aa	a aa
+a, a,	a a
+a, a"	a
+a, a\	a a
+a, a 	a a 
+a, ,	a 
+a, ,a	a a
+a, ,,	a 
+a, ,"	a 
+a, ,\	a 
+a, , 	a  
+a, "	a
+a, "a	a
+a, ",	a
+a, ""	a "
+a, "\	a
+a, " 	a
+a, \	a 
+a, \a	a a
+a, \,	a 
+a, \"	a "
+a, \\	a \
+a, \ 	a  
+a,  	a  
+a,  a	a  a
+a,  ,	a  
+a,  "	a
+a,  \	a  
+a,   	a   
+a"	N
+a"a	N
+a"aa	N
+a"aaa	N
+a"aa,	N
+a"aa"	aaa
+a"aa\	N
+a"aa 	N
+a"a,	N
+a"a,a	N
+a"a,,	N
+a"a,"	aa,
+a"a,\	N
+a"a, 	N
+a"a"	aa
+a"a"a	aa"a
+a"a",	aa
+a"a""	N
+a"a"\	aa"
+a"a" 	aa" 
+a"a\	N
+a"a\a	N
+a"a\,	N
+a"a\"	N
+a"a\\	N
+a"a\ 	N
+a"a 	N
+a"a a	N
+a"a ,	N
+a"a "	aa 
+a"a \	N
+a"a  	N
+a",	N
+a",a	N
+a",aa	N
+a",a,	N
+a",a"	a,a
+a",a\	N
+a",a 	N
+a",,	N
+a",,a	N
+a",,,	N
+a",,"	a,,
+a",,\	N
+a",, 	N
+a","	a,
+a","a	a,a
+a",",	a,
+a",""	N
+a","\	a,
+a"," 	a, 
+a",\	N
+a",\a	N
+a",\,	N
+a",\"	N
+a",\\	N
+a",\ 	N
+a", 	N
+a", a	N
+a", ,	N
+a", "	a, 
+a", \	N
+a",  	N
+a""	a"
+a""a	a"a
+a""aa	a"aa
+a""a,	a"a
+a""a"	N
+a""a\	a"a
+a""a 	a"a 
+a"",	a"
+a"",a	a"a
+a"",,	a"
+a"","	a"
+a"",\	a"
+a"", 	a" 
+a"""	N
+a"""a	N
+a""",	N
+a""""	a""
+a"""\	N
+a""" 	N
+a""\	a"
+a""\a	a"a
+a""\,	a"
+a""\"	N
+a""\\	a"
+a""\ 	a" 
+a"" 	a" 
+a"" a	a" a
+a"" ,	a" 
+a"" "	N
+a"" \	a" 
+a""  	a"  
+a"\	N
+a"\a	N
+a"\aa	N
+a"\a,	N
+a"\a"	aa
+a"\a\	N
+a"\a 	N
+a"\,	N
+a"\,a	N
+a"\,,	N
+a"\,"	a,
+a"\,\	N
+a"\, 	N
+a"\"	N
+a"\"a	N
+a"\",	N
+a"\""	a"
+a"\"\	N
+a"\" 	N
+a"\\	N
+a"\\a	N
+a"\\,	N
+a"\\"	a\
+a"\\\	N
+a"\\ 	N
+a"\ 	N
+a"\ a	N
+a"\ ,	N
+a"\ "	a 
+a"\ \	N
+a"\  	N
+a" 	N
+a" a	N
+a" aa	N
+a" a,	N
+a" a"	a a
+a" a\	N
+a" a 	N
+a" ,	N
+a" ,a	N
+a" ,,	N
+a" ,"	a ,
+a" ,\	N
+a" , 	N
+a" "	a 
+a" "a	a "a
+a" ",	a 
+a" ""	N
+a" "\	a "
+a" " 	a " 
+a" \	N
+a" \a	N
+a" \,	N
+a" \"	N
+a" \\	N
+a" \ 	N
+a"  	N
+a"  a	N
+a"  ,	N
+a"  "	a  
+a"  \	N
+a"   	N
+a\	a
+a\a	aa
+a\aa	aaa
+a\aaa	aaaa
+a\aa,	aaa
+a\aa"	N
+a\aa\	aaa
+a\aa 	aaa 
+a\a,	aa
+a\a,a	aaa
+a\a,,	aa
+a\a,"	aa
+a\a,\	aa
+a\a, 	aa 
+a\a"	N
+a\a"a	N
+a\a",	N
+a\a""	aa"
+a\a"\	N
+a\a" 	N
+a\a\	aa
+a\a\a	aaa
+a\a\,	aa
+a\a\"	aa"
+a\a\\	aa\
+a\a\ 	aa 
+a\a 	aa 
+a\a a	aa a
+a\a ,	aa 
+a\a "	N
+a\a \	aa 
+a\a  	aa  
+a\,	a
+a\,a	aa
+a\,aa	aaa
+a\,a,	aa
+a\,a"	a
+a\,a\	aa
+a\,a 	aa 
+a\,,	a
+a\,,a	aa
+a\,,,	a
+a\,,"	a
+a\,,\	a
+a\,, 	a 
+a\,"	a
+a\,"a	a
+a\,",	a
+a\,""	a
+a\,"\	a
+a\," 	a
+a\,\	a
+a\,\a	aa
+a\,\,	a
+a\,\"	a
+a\,\\	a
+a\,\ 	a 
+a\, 	a 
+a\, a	a a
+a\, ,	a 
+a\, "	a
+a\, \	a 
+a\,  	a  
+a\"	a"
+a\"a	a"a
+a\"aa	a"aa
+a\"a,	a"a
+a\"a"	N
+a\"a\	a"a
+a\"a 	a"a 
+a\",	a"
+a\",a	a"a
+a\",,	a"
+a\","	a"
+a\",\	a"
+a\", 	a" 
+a\""	N
+a\""a	N
+a\"",	N
+a\"""	a""
+a\""\	N
+a\"" 	N
+a\"\	a"
+a\"\a	a"a
+a\"\,	a"
+a\"\"	a""
+a\"\\	a"\
+a\"\ 	a" 
+a\" 	a" 
+a\" a	a" a
+a\" ,	a" 
+a\" "	N
+a\" \	a" 
+a\"  	a"  
+a\\	a\
+a\\a	a\a
+a\\aa	a\aa
+a\\a,	a\a
+a\\a"	N
+a\\a\	a\a
+a\\a 	a\a 
+a\\,	a\
+a\\,a	a\a
+a\\,,	a\
+a\\,"	a\
+a\\,\	a\
+a\\, 	a\ 
+a\\"	N
+a\\"a	N
+a\\",	N
+a\\""	a\"
+a\\"\	N
+a\\" 	N
+a\\\	a\
+a\\\a	a\a
+a\\\,	a\
+a\\\"	a\"
+a\\\\	a\\
+a\\\ 	a\ 
+a\\ 	a\ 
+a\\ a	a\ a
+a\\ ,	a\ 
+a\\ "	N
+a\\ \	a\ 
+a\\  	a\  
+a\ 	a 
+a\ a	a a
+a\ aa	a aa
+a\ a,	a a
+a\ a"	N
+a\ a\	a a
+a\ a 	a a 
+a\ ,	a 
+a\ ,a	a a
+a\ ,,	a 
+a\ ,"	a 
+a\ ,\	a 
+a\ , 	a  
+a\ "	N
+a\ "a	N
+a\ ",	N
+a\ ""	a "
+a\ "\	N
+a\ " 	N
+a\ \	a 
+a\ \a	a a
+a\ \,	a 
+a\ \"	a "
+a\ \\	a \
+a\ \ 	a  
+a\  	a  
+a\  a	a  a
+a\  ,	a  
+a\  "	N
+a\  \	a  
+a\   	a   
+a 	a 
+a a	a a
+a aa	a aa
+a aaa	a aaa
+a aa,	a aa
+a aa"	N
+a aa\	a aa
+a aa 	a aa 
+a a,	a a
+a a,a	a aa
+a a,,	a a
+a a,"	a a
+a a,\	a a
+a a, 	a a 
+a a"	N
+a a"a	N
+a a",	N
+a a""	a a"
+a a"\	N
+a a" 	N
+a a\	a a
+a a\a	a aa
+a a\,	a a
+a a\"	a a"
+a a\\	a a\
+a a\ 	a a 
+a a 	a a 
+a a a	a a a
+a a ,	a a 
+a a "	N
+a a \	a a 
+a a  	a a  
+a ,	a 
+a ,a	a a
+a ,aa	a aa
+a ,a,	a a
+a ,a"	a 
+a ,a\	a a
+a ,a 	a a 
+a ,,	a 
+a ,,a	a a
+a ,,,	a 
+a ,,"	a 
+a ,,\	a 
+a ,, 	a  
+a ,"	a 
+a ,"a	a 
+a ,",	a 
+a ,""	a 
+a ,"\	a 
+a ," 	a 
+a ,\	a 
+a ,\a	a a
+a ,\,	a 
+a ,\"	a 
+a ,\\	a 
+a ,\ 	a  
+a , 	a  
+a , a	a  a
+a , ,	a  
+a , "	a 
+a , \	a  
+a ,  	a   
+a "	N
+a "a	N
+a "aa	N
+a "a,	N
+a "a"	a a
+a "a\	N
+a "a 	N
+a ",	N
+a ",a	N
+a ",,	N
+a ","	a ,
+a ",\	N
+a ", 	N
+a ""	a "
+a ""a	a "a
+a "",	a "
+a """	N
+a ""\	a "
+a "" 	a " 
+a "\	N
+a "\a	N
+a "\,	N
+a "\"	N
+a "\\	N
+a "\ 	N
+a " 	N
+a " a	N
+a " ,	N
+a " "	a  
+a " \	N
+a "  	N
+a \	a 
+a \a	a a
+a \aa	a aa
+a \a,	a a
+a \a"	N
+a \a\	a a
+a \a 	a a 
+a \,	a 
+a \,a	a a
+a \,,	a 
+a \,"	a 
+a \,\	a 
+a \, 	a  
+a \"	a "
+a \"a	a "a
+a \",	a "
+a \""	N
+a \"\	a "
+a \" 	a " 
+a \\	a \
+a \\a	a \a
+a \\,	a \
+a \\"	N
+a \\\	a \
+a \\ 	a \ 
+a \ 	a  
+a \ a	a  a
+a \ ,	a  
+a \ "	N
+a \ \	a  
+a \  	a   
+a  	a  
+a  a	a  a
+a  aa	a  aa
+a  a,	a  a
+a  a"	N
+a  a\	a  a
+a  a 	a  a 
+a  ,	a  
+a  ,a	a  a
+a  ,,	a  
+a  ,"	a  
+a  ,\	a  
+a  , 	a   
+a  "	N
+a  "a	N
+a  ",	N
+a  ""	a  "
+a  "\	N
+a  " 	N
+a  \	a  
+a  \a	a  a
+a  \,	a  
+a  \"	a  "
+a  \\	a  \
+a  \ 	a   
+a   	a   
+a   a	a   a
+a   ,	a   
+a   "	N
+a   \	a   
+a    	a    
+,	
+,a	a
+,aa	aa
+,aaa	aaa
+,aaaa	aaaa
+,aaa,	aaa
+,aaa"	
+,aaa\	aaa
+,aaa 	aaa 
+,aa,	aa
+,aa,a	aaa
+,aa,,	aa
+,aa,"	aa
+,aa,\	aa
+,aa, 	aa 
+,aa"	
+,aa"a	
+,aa",	
+,aa""	aa"
+,aa"\	
+,aa" 	
+,aa\	aa
+,aa\a	aaa
+,aa\,	aa
+,aa\"	aa"
+,aa\\	aa\
+,aa\ 	aa 
+,aa 	aa 
+,aa a	aa a
+,aa ,	aa 
+,aa "	
+,aa \	aa 
+,aa  	aa  
+,a,	a
+,a,a	aa
+,a,aa	aaa
+,a,a,	aa
+,a,a"	a
+,a,a\	aa
+,a,a 	aa 
+,a,,	a
+,a,,a	aa
+,a,,,	a
+,a,,"	a
+,a,,\	a
+,a,, 	a 
+,a,"	a
+,a,"a	a
+,a,",	a
+,a,""	a
+,a,"\	a
+,a," 	a
+,a,\	a
+,a,\a	aa
+,a,\,	a
+,a,\"	a
+,a,\\	a
+,a,\ 	a 
+,a, 	a 
+,a, a	a a
+,a, ,	a 
+,a, "	a
+,a, \	a 
+,a,  	a  
+,a"	
+,a"a	
+,a"aa	
+,a"a,	
+,a"a"	aa
+,a"a\	
+,a"a 	
+,a",	
+,a",a	
+,a",,	
+,a","	a,
+,a",\	
+,a", 	
+,a""	a"
+,a""a	a"a
+,a"",	a"
+,a"""	
+,a""\	a"
+,a"" 	a" 
+,a"\	
+,a"\a	
+,a"\,	
+,a"\"	
+,a"\\	
+,a"\ 	
+,a" 	
+,a" a	
+,a" ,	
+,a" "	a 
+,a" \	
+,a"  	
+,a\	a
+,a\a	aa
+,a\aa	aaa
+,a\a,	aa
+,a\a"	
+,a\a\	aa
+,a\a 	aa 
+,a\,	a
+,a\,a	aa
+,a\,,	a
+,a\,"	a
+,a\,\	a
+,a\, 	a 
+,a\"	a"
+,a\"a	a"a
+,a\",	a"
+,a\""	
+,a\"\	a"
+,a\" 	a" 
+,a\\	a\
+,a\\a	a\a
+,a\\,	a\
+,a\\"	
+,a\\\	a\
+,a\\ 	a\ 
+,a\ 	a 
+,a\ a	a a
+,a\ ,	a 
+,a\ "	
+,a\ \	a 
+,a\  	a  
+,a 	a 
+,a a	a a
+,a aa	a aa
+,a a,	a a
+,a a"	
+,a a\	a a
+,a a 	a a 
+,a ,	a 
+,a ,a	a a
+,a ,,	a 
+,a ,"	a 
+,a ,\	a 
+,a , 	a  
+,a "	
+,a "a	
+,a ",	
+,a ""	a "
+,a "\	
+,a " 	
+,a \	a 
+,a \a	a a
+,a \,	a 
+,a \"	a "
+,a \\	a \
+,a \ 	a  
+,a  	a  
+,a  a	a  a
+,a  ,	a  
+,a  "	
+,a  \	a  
+,a   	a   
+,,	
+,,a	a
+,,aa	aa
+,,aaa	aaa
+,,aa,	aa
+,,aa"	
+,,aa\	aa
+,,aa 	aa 
+,,a,	a
+,,a,a	aa
+,,a,,	a
+,,a,"	a
+,,a,\	a
+,,a, 	a 
+,,a"	
+,,a"a	
+,,a",	
+,,a""	a"
+,,a"\	
+,,a" 	
+,,a\	a
+,,a\a	aa
+,,a\,	a
+,,a\"	a"
+,,a\\	a\
+,,a\ 	a 
+,,a 	a 
+,,a a	a a
+,,a ,	a 
+,,a "	
+,,a \	a 
+,,a  	a  
+,,,	
+,,,a	a
+,,,aa	aa
+,,,a,	a
+,,,a"	
+,,,a\	a
+,,,a 	a 
+,,,,	
+,,,,a	a
+,,,,,	
+,,,,"	
+,,,,\	
+,,,, 	 
+,,,"	
+,,,"a	
+,,,",	
+,,,""	
+,,,"\	
+,,," 	
+,,,\	
+,,,\a	a
+,,,\,	
+,,,\"	
+,,,\\	
+,,,\ 	 
+,,, 	 
+,,, a	 a
+,,, ,	 
+,,, "	
+,,, \	 
+,,,  	  
+,,"	
+,,"a	
+,,"aa	
+,,"a,	
+,,"a"	a
+,,"a\	
+,,"a 	
+,,",	
+,,",a	
+,,",,	
+,,","	,
+,,",\	
+,,", 	
+,,""	
+,,""a	"a
+,,"",	
+,,"""	
+,,""\	"
+,,"" 	" 
+,,"\	
+,,"\a	
+,,"\,	
+,,"\"	
+,,"\\	
+,,"\ 	
+,," 	
+,," a	
+,," ,	
+,," "	 
+,," \	
+,,"  	
+,,\	
+,,\a	a
+,,\aa	aa
+,,\a,	a
+,,\a"	
+,,\a\	a
+,,\a 	a 
+,,\,	
+,,\,a	a
+,,\,,	
+,,\,"	
+,,\,\	
+,,\, 	 
+,,\"	
+,,\"a	
+,,\",	
+,,\""	"
+,,\"\	
+,,\" 	
+,,\\	
+,,\\a	a
+,,\\,	
+,,\\"	
+,,\\\	
+,,\\ 	 
+,,\ 	 
+,,\ a	 a
+,,\ ,	 
+,,\ "	
+,,\ \	 
+,,\  	  
+,, 	 
+,, a	 a
+,, aa	 aa
+,, a,	 a
+,, a"	
+,, a\	 a
+,, a 	 a 
+,, ,	 
+,, ,a	 a
+,, ,,	 
+,, ,"	 
+,, ,\	 
+,, , 	  
+,, "	
+,, "a	
+,, ",	
+,, ""	 "
+,, "\	
+,, " 	
+,, \	 
+,, \a	 a
+,, \,	 
+,, \"	 "
+,, \\	 \
+,, \ 	  
+,,  	  
+,,  a	  a
+,,  ,	  
+,,  "	
+,,  \	  
+,,   	   
+,"	
+,"a	
+,"aa	
+,"aaa	
+,"aa,	
+,"aa"	aa
+,"aa\	
+,"aa 	
+,"a,	
+,"a,a	
+,"a,,	
+,"a,"	a,
+,"a,\	
+,"a, 	
+,"a"	a
+,"a"a	a"a
+,"a",	a
+,"a""	
+,"a"\	a"
+,"a" 	a" 
+,"a\	
+,"a\a	
+,"a\,	
+,"a\"	
+,"a\\	
+,"a\ 	
+,"a 	
+,"a a	
+,"a ,	
+,"a "	a 
+,"a \	
+,"a  	
+,",	
+,",a	
+,",aa	
+,",a,	
+,",a"	,a
+,",a\	
+,",a 	
+,",,	
+,",,a	
+,",,,	
+,",,"	,,
+,",,\	
+,",, 	
+,","	,
+,","a	,a
+,",",	,
+,",""	
+,","\	,
+,"," 	, 
+,",\	
+,",\a	
+,",\,	
+,",\"	
+,",\\	
+,",\ 	
+,", 	
+,", a	
+,", ,	
+,", "	, 
+,", \	
+,",  	
+,""	
+,""a	a
+,""aa	aa
+,""a,	a
+,""a"	
+,""a\	a
+,""a 	a 
+,"",	
+,"",a	a
+,"",,	
+,"","	
+,"",\	
+,"", 	 
+,"""	
+,"""a	
+,""",	
+,""""	"
+,"""\	
+,""" 	
+,""\	
+,""\a	a
+,""\,	
+,""\"	
+,""\\	
+,""\ 	 
+,"" 	 
+,"" a	 a
+,"" ,	 
+,"" "	
+,"" \	 
+,""  	  
+,"\	
+,"\a	
+,"\aa	
+,"\a,	
+,"\a"	a
+,"\a\	
+,"\a 	
+,"\,	
+,"\,a	
+,"\,,	
+,"\,"	,
+,"\,\	
+,"\, 	
+,"\"	
+,"\"a	
+,"\",	
+,"\""	"
+,"\"\	
+,"\" 	
+,"\\	
+,"\\a	
+,"\\,	
+,"\\"	\
+,"\\\	
+,"\\ 	
+,"\ 	
+,"\ a	
+,"\ ,	
+,"\ "	 
+,"\ \	
+,"\  	
+," 	
+," a	
+," aa	
+," a,	
+," a"	 a
+," a\	
+," a 	
+," ,	
+," ,a	
+," ,,	
+," ,"	 ,
+," ,\	
+," , 	
+," "	 
+," "a	a
+," ",	 
+," ""	
+," "\	
+," " 	 
+," \	
+," \a	
+," \,	
+," \"	
+," \\	
+," \ 	
+,"  	
+,"  a	
+,"  ,	
+,"  "	  
+,"  \	
+,"   	
+,\	
+,\a	a
+,\aa	aa
+,\aaa	aaa
+,\aa,	aa
+,\aa"	
+,\aa\	aa
+,\aa 	aa 
+,\a,	a
+,\a,a	aa
+,\a,,	a
+,\a,"	a
+,\a,\	a
+,\a, 	a 
+,\a"	
+,\a"a	
+,\a",	
+,\a""	a"
+,\a"\	
+,\a" 	
+,\a\	a
+,\a\a	aa
+,\a\,	a
+,\a\"	a"
+,\a\\	a\
+,\a\ 	a 
+,\a 	a 
+,\a a	a a
+,\a ,	a 
+,\a "	
+,\a \	a 
+,\a  	a  
+,\,	
+,\,a	a
+,\,aa	aa
+,\,a,	a
+,\,a"	
+,\,a\	a
+,\,a 	a 
+,\,,	
+,\,,a	a
+,\,,,	
+,\,,"	
+,\,,\	
+,\,, 	 
+,\,"	
+,\,"a	
+,\,",	
+,\,""	
+,\,"\	
+,\," 	
+,\,\	
+,\,\a	a
+,\,\,	
+,\,\"	
+,\,\\	
+,\,\ 	 
+,\, 	 
+,\, a	 a
+,\, ,	 
+,\, "	
+,\, \	 
+,\,  	  
+,\"	
+,\"a	
+,\"aa	
+,\"a,	
+,\"a"	a
+,\"a\	
+,\"a 	
+,\",	
+,\",a	
+,\",,	
+,\","	,
+,\",\	
+,\", 	
+,\""	
+,\""a	"a
+,\"",	
+,\"""	
+,\""\	"
+,\"" 	" 
+,\"\	
+,\"\a	
+,\"\,	
+,\"\"	
+,\"\\	
+,\"\ 	
+,\" 	
+,\" a	
+,\" ,	
+,\" "	 
+,\" \	
+,\"  	
+,\\	
+,\\a	a
+,\\aa	aa
+,\\a,	a
+,\\a"	
+,\\a\	a
+,\\a 	a 
+,\\,	
+,\\,a	a
+,\\,,	
+,\\,"	
+,\\,\	
+,\\, 	 
+,\\"	
+,\\"a	
+,\\",	
+,\\""	"
+,\\"\	
+,\\" 	
+,\\\	
+,\\\a	a
+,\\\,	
+,\\\"	
+,\\\\	
+,\\\ 	 
+,\\ 	 
+,\\ a	 a
+,\\ ,	 
+,\\ "	
+,\\ \	 
+,\\  	  
+,\ 	 
+,\ a	 a
+,\ aa	 aa
+,\ a,	 a
+,\ a"	
+,\ a\	 a
+,\ a 	 a 
+,\ ,	 
+,\ ,a	 a
+,\ ,,	 
+,\ ,"	 
+,\ ,\	 
+,\ , 	  
+,\ "	
+,\ "a	
+,\ ",	
+,\ ""	 "
+,\ "\	
+,\ " 	
+,\ \	 
+,\ \a	 a
+,\ \,	 
+,\ \"	 "
+,\ \\	 \
+,\ \ 	  
+,\  	  
+,\  a	  a
+,\  ,	  
+,\  "	
+,\  \	  
+,\   	   
+, 	 
+, a	 a
+, aa	 aa
+, aaa	 aaa
+, aa,	 aa
+, aa"	
+, aa\	 aa
+, aa 	 aa 
+, a,	 a
+, a,a	 aa
+, a,,	 a
+, a,"	 a
+, a,\	 a
+, a, 	 a 
+, a"	
+, a"a	
+, a",	
+, a""	 a"
+, a"\	
+, a" 	
+, a\	 a
+, a\a	 aa
+, a\,	 a
+, a\"	 a"
+, a\\	 a\
+, a\ 	 a 
+, a 	 a 
+, a a	 a a
+, a ,	 a 
+, a "	
+, a \	 a 
+, a  	 a  
+, ,	 
+, ,a	 a
+, ,aa	 aa
+, ,a,	 a
+, ,a"	 
+, ,a\	 a
+, ,a 	 a 
+, ,,	 
+, ,,a	 a
+, ,,,	 
+, ,,"	 
+, ,,\	 
+, ,, 	  
+, ,"	 
+, ,"a	 
+, ,",	 
+, ,""	 
+, ,"\	 
+, ," 	 
+, ,\	 
+, ,\a	 a
+, ,\,	 
+, ,\"	 
+, ,\\	 
+, ,\ 	  
+, , 	  
+, , a	  a
+, , ,	  
+, , "	 
+, , \	  
+, ,  	   
+, "	
+, "a	
+, "aa	
+, "a,	
+, "a"	 a
+, "a\	
+, "a 	
+, ",	
+, ",a	
+, ",,	
+, ","	 ,
+, ",\	
+, ", 	
+, ""	 "
+, ""a	 "a
+, "",	 "
+, """	
+, ""\	 "
+, "" 	 " 
+, "\	
+, "\a	
+, "\,	
+, "\"	
+, "\\	
+, "\ 	
+, " 	
+, " a	
+, " ,	
+, " "	  
+, " \	
+, "  	
+, \	 
+, \a	 a
+, \aa	 aa
+, \a,	 a
+, \a"	
+, \a\	 a
+, \a 	 a 
+, \,	 
+, \,a	 a
+, \,,	 
+, \,"	 
+, \,\	 
+, \, 	  
+, \"	 "
+, \"a	 "a
+, \",	 "
+, \""	
+, \"\	 "
+, \" 	 " 
+, \\	 \
+, \\a	 \a
+, \\,	 \
+, \\"	
+, \\\	 \
+, \\ 	 \ 
+, \ 	  
+, \ a	  a
+, \ ,	  
+, \ "	
+, \ \	  
+, \  	   
+,  	  
+,  a	  a
+,  aa	  aa
+,  a,	  a
+,  a"	
+,  a\	  a
+,  a 	  a 
+,  ,	  
+,  ,a	  a
+,  ,,	  
+,  ,"	  
+,  ,\	  
+,  , 	   
+,  "	
+,  "a	
+,  ",	
+,  ""	  "
+,  "\	
+,  " 	
+,  \	  
+,  \a	  a
+,  \,	  
+,  \"	  "
+,  \\	  \
+,  \ 	   
+,   	   
+,   a	   a
+,   ,	   
+,   "	
+,   \	   
+,    	    
+"	N
+"a	N
+"aa	N
+"aaa	N
+"aaaa	N
+"aaa,	N
+"aaa"	aaa
+"aaa\	N
+"aaa 	N
+"aa,	N
+"aa,a	N
+"aa,,	N
+"aa,"	aa,
+"aa,\	N
+"aa, 	N
+"aa"	aa
+"aa"a	aa"a
+"aa",	aa
+"aa""	N
+"aa"\	aa"
+"aa" 	aa" 
+"aa\	N
+"aa\a	N
+"aa\,	N
+"aa\"	N
+"aa\\	N
+"aa\ 	N
+"aa 	N
+"aa a	N
+"aa ,	N
+"aa "	aa 
+"aa \	N
+"aa  	N
+"a,	N
+"a,a	N
+"a,aa	N
+"a,a,	N
+"a,a"	a,a
+"a,a\	N
+"a,a 	N
+"a,,	N
+"a,,a	N
+"a,,,	N
+"a,,"	a,,
+"a,,\	N
+"a,, 	N
+"a,"	a,
+"a,"a	a,a
+"a,",	a,
+"a,""	N
+"a,"\	a,
+"a," 	a, 
+"a,\	N
+"a,\a	N
+"a,\,	N
+"a,\"	N
+"a,\\	N
+"a,\ 	N
+"a, 	N
+"a, a	N
+"a, ,	N
+"a, "	a, 
+"a, \	N
+"a,  	N
+"a"	a
+"a"a	aa
+"a"aa	aaa
+"a"a,	aa
+"a"a"	N
+"a"a\	aa
+"a"a 	aa 
+"a",	a
+"a",a	aa
+"a",,	a
+"a","	a
+"a",\	a
+"a", 	a 
+"a""	N
+"a""a	N
+"a"",	N
+"a"""	a"
+"a""\	N
+"a"" 	N
+"a"\	a
+"a"\a	aa
+"a"\,	a
+"a"\"	N
+"a"\\	a
+"a"\ 	a 
+"a" 	a 
+"a" a	a a
+"a" ,	a 
+"a" "	N
+"a" \	a 
+"a"  	a  
+"a\	N
+"a\a	N
+"a\aa	N
+"a\a,	N
+"a\a"	aa
+"a\a\	N
+"a\a 	N
+"a\,	N
+"a\,a	N
+"a\,,	N
+"a\,"	a,
+"a\,\	N
+"a\, 	N
+"a\"	N
+"a\"a	N
+"a\",	N
+"a\""	a"
+"a\"\	N
+"a\" 	N
+"a\\	N
+"a\\a	N
+"a\\,	N
+"a\\"	a\
+"a\\\	N
+"a\\ 	N
+"a\ 	N
+"a\ a	N
+"a\ ,	N
+"a\ "	a 
+"a\ \	N
+"a\  	N
+"a 	N
+"a a	N
+"a aa	N
+"a a,	N
+"a a"	a a
+"a a\	N
+"a a 	N
+"a ,	N
+"a ,a	N
+"a ,,	N
+"a ,"	a ,
+"a ,\	N
+"a , 	N
+"a "	a 
+"a "a	a "a
+"a ",	a 
+"a ""	N
+"a "\	a "
+"a " 	a " 
+"a \	N
+"a \a	N
+"a \,	N
+"a \"	N
+"a \\	N
+"a \ 	N
+"a  	N
+"a  a	N
+"a  ,	N
+"a  "	a  
+"a  \	N
+"a   	N
+",	N
+",a	N
+",aa	N
+",aaa	N
+",aa,	N
+",aa"	,aa
+",aa\	N
+",aa 	N
+",a,	N
+",a,a	N
+",a,,	N
+",a,"	,a,
+",a,\	N
+",a, 	N
+",a"	,a
+",a"a	,a"a
+",a",	,a
+",a""	N
+",a"\	,a"
+",a" 	,a" 
+",a\	N
+",a\a	N
+",a\,	N
+",a\"	N
+",a\\	N
+",a\ 	N
+",a 	N
+",a a	N
+",a ,	N
+",a "	,a 
+",a \	N
+",a  	N
+",,	N
+",,a	N
+",,aa	N
+",,a,	N
+",,a"	,,a
+",,a\	N
+",,a 	N
+",,,	N
+",,,a	N
+",,,,	N
+",,,"	,,,
+",,,\	N
+",,, 	N
+",,"	,,
+",,"a	,,a
+",,",	,,
+",,""	N
+",,"\	,,
+",," 	,, 
+",,\	N
+",,\a	N
+",,\,	N
+",,\"	N
+",,\\	N
+",,\ 	N
+",, 	N
+",, a	N
+",, ,	N
+",, "	,, 
+",, \	N
+",,  	N
+","	,
+","a	,a
+","aa	,aa
+","a,	,a
+","a"	N
+","a\	,a
+","a 	,a 
+",",	,
+",",a	,a
+",",,	,
+",","	,
+",",\	,
+",", 	, 
+",""	N
+",""a	N
+","",	N
+","""	,"
+",""\	N
+","" 	N
+","\	,
+","\a	,a
+","\,	,
+","\"	N
+","\\	,
+","\ 	, 
+"," 	, 
+"," a	, a
+"," ,	, 
+"," "	N
+"," \	, 
+","  	,  
+",\	N
+",\a	N
+",\aa	N
+",\a,	N
+",\a"	,a
+",\a\	N
+",\a 	N
+",\,	N
+",\,a	N
+",\,,	N
+",\,"	,,
+",\,\	N
+",\, 	N
+",\"	N
+",\"a	N
+",\",	N
+",\""	,"
+",\"\	N
+",\" 	N
+",\\	N
+",\\a	N
+",\\,	N
+",\\"	,\
+",\\\	N
+",\\ 	N
+",\ 	N
+",\ a	N
+",\ ,	N
+",\ "	, 
+",\ \	N
+",\  	N
+", 	N
+", a	N
+", aa	N
+", a,	N
+", a"	, a
+", a\	N
+", a 	N
+", ,	N
+", ,a	N
+", ,,	N
+", ,"	, ,
+", ,\	N
+", , 	N
+", "	, 
+", "a	, "a
+", ",	, 
+", ""	N
+", "\	, "
+", " 	, " 
+", \	N
+", \a	N
+", \,	N
+", \"	N
+", \\	N
+", \ 	N
+",  	N
+",  a	N
+",  ,	N
+",  "	,  
+",  \	N
+",   	N
+""	
+""a	a
+""aa	aa
+""aaa	aaa
+""aa,	aa
+""aa"	N
+""aa\	aa
+""aa 	aa 
+""a,	a
+""a,a	aa
+""a,,	a
+""a,"	a
+""a,\	a
+""a, 	a 
+""a"	N
+""a"a	N
+""a",	N
+""a""	a"
+""a"\	N
+""a" 	N
+""a\	a
+""a\a	aa
+""a\,	a
+""a\"	a"
+""a\\	a\
+""a\ 	a 
+""a 	a 
+""a a	a a
+""a ,	a 
+""a "	N
+""a \	a 
+""a  	a  
+"",	
+"",a	a
+"",aa	aa
+"",a,	a
+"",a"	
+"",a\	a
+"",a 	a 
+"",,	
+"",,a	a
+"",,,	
+"",,"	
+"",,\	
+"",, 	 
+"","	
+"","a	
+"",",	
+"",""	
+"","\	
+""," 	
+"",\	
+"",\a	a
+"",\,	
+"",\"	
+"",\\	
+"",\ 	 
+"", 	 
+"", a	 a
+"", ,	 
+"", "	
+"", \	 
+"",  	  
+"""	N
+"""a	N
+"""aa	N
+"""a,	N
+"""a"	"a
+"""a\	N
+"""a 	N
+""",	N
+""",a	N
+""",,	N
+""","	",
+""",\	N
+""", 	N
+""""	"
+""""a	""a
+"""",	"
+"""""	N
+""""\	""
+"""" 	"" 
+"""\	N
+"""\a	N
+"""\,	N
+"""\"	N
+"""\\	N
+"""\ 	N
+""" 	N
+""" a	N
+""" ,	N
+""" "	" 
+""" \	N
+"""  	N
+""\	
+""\a	a
+""\aa	aa
+""\a,	a
+""\a"	N
+""\a\	a
+""\a 	a 
+""\,	
+""\,a	a
+""\,,	
+""\,"	
+""\,\	
+""\, 	 
+""\"	N
+""\"a	N
+""\",	N
+""\""	"
+""\"\	N
+""\" 	N
+""\\	
+""\\a	a
+""\\,	
+""\\"	N
+""\\\	
+""\\ 	 
+""\ 	 
+""\ a	 a
+""\ ,	 
+""\ "	N
+""\ \	 
+""\  	  
+"" 	 
+"" a	 a
+"" aa	 aa
+"" a,	 a
+"" a"	N
+"" a\	 a
+"" a 	 a 
+"" ,	 
+"" ,a	 a
+"" ,,	 
+"" ,"	 
+"" ,\	 
+"" , 	  
+"" "	N
+"" "a	N
+"" ",	N
+"" ""	 "
+"" "\	N
+"" " 	N
+"" \	 
+"" \a	 a
+"" \,	 
+"" \"	 "
+"" \\	 \
+"" \ 	  
+""  	  
+""  a	  a
+""  ,	  
+""  "	N
+""  \	  
+""   	   
+"\	N
+"\a	N
+"\aa	N
+"\aaa	N
+"\aa,	N
+"\aa"	aa
+"\aa\	N
+"\aa 	N
+"\a,	N
+"\a,a	N
+"\a,,	N
+"\a,"	a,
+"\a,\	N
+"\a, 	N
+"\a"	a
+"\a"a	a"a
+"\a",	a
+"\a""	N
+"\a"\	a"
+"\a" 	a" 
+"\a\	N
+"\a\a	N
+"\a\,	N
+"\a\"	N
+"\a\\	N
+"\a\ 	N
+"\a 	N
+"\a a	N
+"\a ,	N
+"\a "	a 
+"\a \	N
+"\a  	N
+"\,	N
+"\,a	N
+"\,aa	N
+"\,a,	N
+"\,a"	,a
+"\,a\	N
+"\,a 	N
+"\,,	N
+"\,,a	N
+"\,,,	N
+"\,,"	,,
+"\,,\	N
+"\,, 	N
+"\,"	,
+"\,"a	,a
+"\,",	,
+"\,""	N
+"\,"\	,
+"\," 	, 
+"\,\	N
+"\,\a	N
+"\,\,	N
+"\,\"	N
+"\,\\	N
+"\,\ 	N
+"\, 	N
+"\, a	N
+"\, ,	N
+"\, "	, 
+"\, \	N
+"\,  	N
+"\"	N
+"\"a	N
+"\"aa	N
+"\"a,	N
+"\"a"	"a
+"\"a\	N
+"\"a 	N
+"\",	N
+"\",a	N
+"\",,	N
+"\","	",
+"\",\	N
+"\", 	N
+"\""	"
+"\""a	""a
+"\"",	"
+"\"""	N
+"\""\	""
+"\"" 	"" 
+"\"\	N
+"\"\a	N
+"\"\,	N
+"\"\"	N
+"\"\\	N
+"\"\ 	N
+"\" 	N
+"\" a	N
+"\" ,	N
+"\" "	" 
+"\" \	N
+"\"  	N
+"\\	N
+"\\a	N
+"\\aa	N
+"\\a,	N
+"\\a"	\a
+"\\a\	N
+"\\a 	N
+"\\,	N
+"\\,a	N
+"\\,,	N
+"\\,"	\,
+"\\,\	N
+"\\, 	N
+"\\"	\
+"\\"a	\"a
+"\\",	\
+"\\""	N
+"\\"\	\"
+"\\" 	\" 
+"\\\	N
+"\\\a	N
+"\\\,	N
+"\\\"	N
+"\\\\	N
+"\\\ 	N
+"\\ 	N
+"\\ a	N
+"\\ ,	N
+"\\ "	\ 
+"\\ \	N
+"\\  	N
+"\ 	N
+"\ a	N
+"\ aa	N
+"\ a,	N
+"\ a"	 a
+"\ a\	N
+"\ a 	N
+"\ ,	N
+"\ ,a	N
+"\ ,,	N
+"\ ,"	 ,
+"\ ,\	N
+"\ , 	N
+"\ "	 
+"\ "a	a
+"\ ",	 
+"\ ""	N
+"\ "\	
+"\ " 	 
+"\ \	N
+"\ \a	N
+"\ \,	N
+"\ \"	N
+"\ \\	N
+"\ \ 	N
+"\  	N
+"\  a	N
+"\  ,	N
+"\  "	  
+"\  \	N
+"\   	N
+" 	N
+" a	N
+" aa	N
+" aaa	N
+" aa,	N
+" aa"	 aa
+" aa\	N
+" aa 	N
+" a,	N
+" a,a	N
+" a,,	N
+" a,"	 a,
+" a,\	N
+" a, 	N
+" a"	 a
+" a"a	 a"a
+" a",	 a
+" a""	N
+" a"\	 a"
+" a" 	 a" 
+" a\	N
+" a\a	N
+" a\,	N
+" a\"	N
+" a\\	N
+" a\ 	N
+" a 	N
+" a a	N
+" a ,	N
+" a "	 a 
+" a \	N
+" a  	N
+" ,	N
+" ,a	N
+" ,aa	N
+" ,a,	N
+" ,a"	 ,a
+" ,a\	N
+" ,a 	N
+" ,,	N
+" ,,a	N
+" ,,,	N
+" ,,"	 ,,
+" ,,\	N
+" ,, 	N
+" ,"	 ,
+" ,"a	 ,a
+" ,",	 ,
+" ,""	N
+" ,"\	 ,
+" ," 	 , 
+" ,\	N
+" ,\a	N
+" ,\,	N
+" ,\"	N
+" ,\\	N
+" ,\ 	N
+" , 	N
+" , a	N
+" , ,	N
+" , "	 , 
+" , \	N
+" ,  	N
+" "	 
+" "a	 a
+" "aa	 aa
+" "a,	 a
+" "a"	N
+" "a\	 a
+" "a 	 a 
+" ",	 
+" ",a	 a
+" ",,	 
+" ","	 
+" ",\	 
+" ", 	  
+" ""	N
+" ""a	N
+" "",	N
+" """	 "
+" ""\	N
+" "" 	N
+" "\	 
+" "\a	 a
+" "\,	 
+" "\"	N
+" "\\	 
+" "\ 	  
+" " 	  
+" " a	  a
+" " ,	  
+" " "	N
+" " \	  
+" "  	   
+" \	N
+" \a	N
+" \aa	N
+" \a,	N
+" \a"	 a
+" \a\	N
+" \a 	N
+" \,	N
+" \,a	N
+" \,,	N
+" \,"	 ,
+" \,\	N
+" \, 	N
+" \"	N
+" \"a	N
+" \",	N
+" \""	 "
+" \"\	N
+" \" 	N
+" \\	N
+" \\a	N
+" \\,	N
+" \\"	 \
+" \\\	N
+" \\ 	N
+" \ 	N
+" \ a	N
+" \ ,	N
+" \ "	  
+" \ \	N
+" \  	N
+"  	N
+"  a	N
+"  aa	N
+"  a,	N
+"  a"	  a
+"  a\	N
+"  a 	N
+"  ,	N
+"  ,a	N
+"  ,,	N
+"  ,"	  ,
+"  ,\	N
+"  , 	N
+"  "	  
+"  "a	a
+"  ",	  
+"  ""	N
+"  "\	
+"  " 	 
+"  \	N
+"  \a	N
+"  \,	N
+"  \"	N
+"  \\	N
+"  \ 	N
+"   	N
+"   a	N
+"   ,	N
+"   "	   
+"   \	N
+"    	N
+\	
+\a	a
+\aa	aa
+\aaa	aaa
+\aaaa	aaaa
+\aaa,	aaa
+\aaa"	N
+\aaa\	aaa
+\aaa 	aaa 
+\aa,	aa
+\aa,a	aaa
+\aa,,	aa
+\aa,"	aa
+\aa,\	aa
+\aa, 	aa 
+\aa"	N
+\aa"a	N
+\aa",	N
+\aa""	aa"
+\aa"\	N
+\aa" 	N
+\aa\	aa
+\aa\a	aaa
+\aa\,	aa
+\aa\"	aa"
+\aa\\	aa\
+\aa\ 	aa 
+\aa 	aa 
+\aa a	aa a
+\aa ,	aa 
+\aa "	N
+\aa \	aa 
+\aa  	aa  
+\a,	a
+\a,a	aa
+\a,aa	aaa
+\a,a,	aa
+\a,a"	a
+\a,a\	aa
+\a,a 	aa 
+\a,,	a
+\a,,a	aa
+\a,,,	a
+\a,,"	a
+\a,,\	a
+\a,, 	a 
+\a,"	a
+\a,"a	a
+\a,",	a
+\a,""	a
+\a,"\	a
+\a," 	a
+\a,\	a
+\a,\a	aa
+\a,\,	a
+\a,\"	a
+\a,\\	a
+\a,\ 	a 
+\a, 	a 
+\a, a	a a
+\a, ,	a 
+\a, "	a
+\a, \	a 
+\a,  	a  
+\a"	N
+\a"a	N
+\a"aa	N
+\a"a,	N
+\a"a"	aa
+\a"a\	N
+\a"a 	N
+\a",	N
+\a",a	N
+\a",,	N
+\a","	a,
+\a",\	N
+\a", 	N
+\a""	a"
+\a""a	a"a
+\a"",	a"
+\a"""	N
+\a""\	a"
+\a"" 	a" 
+\a"\	N
+\a"\a	N
+\a"\,	N
+\a"\"	N
+\a"\\	N
+\a"\ 	N
+\a" 	N
+\a" a	N
+\a" ,	N
+\a" "	a 
+\a" \	N
+\a"  	N
+\a\	a
+\a\a	aa
+\a\aa	aaa
+\a\a,	aa
+\a\a"	N
+\a\a\	aa
+\a\a 	aa 
+\a\,	a
+\a\,a	aa
+\a\,,	a
+\a\,"	a
+\a\,\	a
+\a\, 	a 
+\a\"	a"
+\a\"a	a"a
+\a\",	a"
+\a\""	N
+\a\"\	a"
+\a\" 	a" 
+\a\\	a\
+\a\\a	a\a
+\a\\,	a\
+\a\\"	N
+\a\\\	a\
+\a\\ 	a\ 
+\a\ 	a 
+\a\ a	a a
+\a\ ,	a 
+\a\ "	N
+\a\ \	a 
+\a\  	a  
+\a 	a 
+\a a	a a
+\a aa	a aa
+\a a,	a a
+\a a"	N
+\a a\	a a
+\a a 	a a 
+\a ,	a 
+\a ,a	a a
+\a ,,	a 
+\a ,"	a 
+\a ,\	a 
+\a , 	a  
+\a "	N
+\a "a	N
+\a ",	N
+\a ""	a "
+\a "\	N
+\a " 	N
+\a \	a 
+\a \a	a a
+\a \,	a 
+\a \"	a "
+\a \\	a \
+\a \ 	a  
+\a  	a  
+\a  a	a  a
+\a  ,	a  
+\a  "	N
+\a  \	a  
+\a   	a   
+\,	
+\,a	a
+\,aa	aa
+\,aaa	aaa
+\,aa,	aa
+\,aa"	
+\,aa\	aa
+\,aa 	aa 
+\,a,	a
+\,a,a	aa
+\,a,,	a
+\,a,"	a
+\,a,\	a
+\,a, 	a 
+\,a"	
+\,a"a	
+\,a",	
+\,a""	a"
+\,a"\	
+\,a" 	
+\,a\	a
+\,a\a	aa
+\,a\,	a
+\,a\"	a"
+\,a\\	a\
+\,a\ 	a 
+\,a 	a 
+\,a a	a a
+\,a ,	a 
+\,a "	
+\,a \	a 
+\,a  	a  
+\,,	
+\,,a	a
+\,,aa	aa
+\,,a,	a
+\,,a"	
+\,,a\	a
+\,,a 	a 
+\,,,	
+\,,,a	a
+\,,,,	
+\,,,"	
+\,,,\	
+\,,, 	 
+\,,"	
+\,,"a	
+\,,",	
+\,,""	
+\,,"\	
+\,," 	
+\,,\	
+\,,\a	a
+\,,\,	
+\,,\"	
+\,,\\	
+\,,\ 	 
+\,, 	 
+\,, a	 a
+\,, ,	 
+\,, "	
+\,, \	 
+\,,  	  
+\,"	
+\,"a	
+\,"aa	
+\,"a,	
+\,"a"	a
+\,"a\	
+\,"a 	
+\,",	
+\,",a	
+\,",,	
+\,","	,
+\,",\	
+\,", 	
+\,""	
+\,""a	"a
+\,"",	
+\,"""	
+\,""\	"
+\,"" 	" 
+\,"\	
+\,"\a	
+\,"\,	
+\,"\"	
+\,"\\	
+\,"\ 	
+\," 	
+\," a	
+\," ,	
+\," "	 
+\," \	
+\,"  	
+\,\	
+\,\a	a
+\,\aa	aa
+\,\a,	a
+\,\a"	
+\,\a\	a
+\,\a 	a 
+\,\,	
+\,\,a	a
+\,\,,	
+\,\,"	
+\,\,\	
+\,\, 	 
+\,\"	
+\,\"a	
+\,\",	
+\,\""	"
+\,\"\	
+\,\" 	
+\,\\	
+\,\\a	a
+\,\\,	
+\,\\"	
+\,\\\	
+\,\\ 	 
+\,\ 	 
+\,\ a	 a
+\,\ ,	 
+\,\ "	
+\,\ \	 
+\,\  	  
+\, 	 
+\, a	 a
+\, aa	 aa
+\, a,	 a
+\, a"	
+\, a\	 a
+\, a 	 a 
+\, ,	 
+\, ,a	 a
+\, ,,	 
+\, ,"	 
+\, ,\	 
+\, , 	  
+\, "	
+\, "a	
+\, ",	
+\, ""	 "
+\, "\	
+\, " 	
+\, \	 
+\, \a	 a
+\, \,	 
+\, \"	 "
+\, \\	 \
+\, \ 	  
+\,  	  
+\,  a	  a
+\,  ,	  
+\,  "	
+\,  \	  
+\,   	   
+\"	N
+\"a	N
+\"aa	N
+\"aaa	N
+\"aa,	N
+\"aa"	aa
+\"aa\	N
+\"aa 	N
+\"a,	N
+\"a,a	N
+\"a,,	N
+\"a,"	a,
+\"a,\	N
+\"a, 	N
+\"a"	a
+\"a"a	a"a
+\"a",	a
+\"a""	N
+\"a"\	a"
+\"a" 	a" 
+\"a\	N
+\"a\a	N
+\"a\,	N
+\"a\"	N
+\"a\\	N
+\"a\ 	N
+\"a 	N
+\"a a	N
+\"a ,	N
+\"a "	a 
+\"a \	N
+\"a  	N
+\",	N
+\",a	N
+\",aa	N
+\",a,	N
+\",a"	,a
+\",a\	N
+\",a 	N
+\",,	N
+\",,a	N
+\",,,	N
+\",,"	,,
+\",,\	N
+\",, 	N
+\","	,
+\","a	,a
+\",",	,
+\",""	N
+\","\	,
+\"," 	, 
+\",\	N
+\",\a	N
+\",\,	N
+\",\"	N
+\",\\	N
+\",\ 	N
+\", 	N
+\", a	N
+\", ,	N
+\", "	, 
+\", \	N
+\",  	N
+\""	
+\""a	a
+\""aa	aa
+\""a,	a
+\""a"	N
+\""a\	a
+\""a 	a 
+\"",	
+\"",a	a
+\"",,	
+\"","	
+\"",\	
+\"", 	 
+\"""	N
+\"""a	N
+\""",	N
+\""""	"
+\"""\	N
+\""" 	N
+\""\	
+\""\a	a
+\""\,	
+\""\"	N
+\""\\	
+\""\ 	 
+\"" 	 
+\"" a	 a
+\"" ,	 
+\"" "	N
+\"" \	 
+\""  	  
+\"\	N
+\"\a	N
+\"\aa	N
+\"\a,	N
+\"\a"	a
+\"\a\	N
+\"\a 	N
+\"\,	N
+\"\,a	N
+\"\,,	N
+\"\,"	,
+\"\,\	N
+\"\, 	N
+\"\"	N
+\"\"a	N
+\"\",	N
+\"\""	"
+\"\"\	N
+\"\" 	N
+\"\\	N
+\"\\a	N
+\"\\,	N
+\"\\"	\
+\"\\\	N
+\"\\ 	N
+\"\ 	N
+\"\ a	N
+\"\ ,	N
+\"\ "	 
+\"\ \	N
+\"\  	N
+\" 	N
+\" a	N
+\" aa	N
+\" a,	N
+\" a"	 a
+\" a\	N
+\" a 	N
+\" ,	N
+\" ,a	N
+\" ,,	N
+\" ,"	 ,
+\" ,\	N
+\" , 	N
+\" "	 
+\" "a	a
+\" ",	 
+\" ""	N
+\" "\	
+\" " 	 
+\" \	N
+\" \a	N
+\" \,	N
+\" \"	N
+\" \\	N
+\" \ 	N
+\"  	N
+\"  a	N
+\"  ,	N
+\"  "	  
+\"  \	N
+\"   	N
+\\	
+\\a	a
+\\aa	aa
+\\aaa	aaa
+\\aa,	aa
+\\aa"	N
+\\aa\	aa
+\\aa 	aa 
+\\a,	a
+\\a,a	aa
+\\a,,	a
+\\a,"	a
+\\a,\	a
+\\a, 	a 
+\\a"	N
+\\a"a	N
+\\a",	N
+\\a""	a"
+\\a"\	N
+\\a" 	N
+\\a\	a
+\\a\a	aa
+\\a\,	a
+\\a\"	a"
+\\a\\	a\
+\\a\ 	a 
+\\a 	a 
+\\a a	a a
+\\a ,	a 
+\\a "	N
+\\a \	a 
+\\a  	a  
+\\,	
+\\,a	a
+\\,aa	aa
+\\,a,	a
+\\,a"	
+\\,a\	a
+\\,a 	a 
+\\,,	
+\\,,a	a
+\\,,,	
+\\,,"	
+\\,,\	
+\\,, 	 
+\\,"	
+\\,"a	
+\\,",	
+\\,""	
+\\,"\	
+\\," 	
+\\,\	
+\\,\a	a
+\\,\,	
+\\,\"	
+\\,\\	
+\\,\ 	 
+\\, 	 
+\\, a	 a
+\\, ,	 
+\\, "	
+\\, \	 
+\\,  	  
+\\"	N
+\\"a	N
+\\"aa	N
+\\"a,	N
+\\"a"	a
+\\"a\	N
+\\"a 	N
+\\",	N
+\\",a	N
+\\",,	N
+\\","	,
+\\",\	N
+\\", 	N
+\\""	
+\\""a	"a
+\\"",	
+\\"""	N
+\\""\	"
+\\"" 	" 
+\\"\	N
+\\"\a	N
+\\"\,	N
+\\"\"	N
+\\"\\	N
+\\"\ 	N
+\\" 	N
+\\" a	N
+\\" ,	N
+\\" "	 
+\\" \	N
+\\"  	N
+\\\	
+\\\a	a
+\\\aa	aa
+\\\a,	a
+\\\a"	N
+\\\a\	a
+\\\a 	a 
+\\\,	
+\\\,a	a
+\\\,,	
+\\\,"	
+\\\,\	
+\\\, 	 
+\\\"	N
+\\\"a	N
+\\\",	N
+\\\""	"
+\\\"\	N
+\\\" 	N
+\\\\	
+\\\\a	a
+\\\\,	
+\\\\"	N
+\\\\\	
+\\\\ 	 
+\\\ 	 
+\\\ a	 a
+\\\ ,	 
+\\\ "	N
+\\\ \	 
+\\\  	  
+\\ 	 
+\\ a	 a
+\\ aa	 aa
+\\ a,	 a
+\\ a"	N
+\\ a\	 a
+\\ a 	 a 
+\\ ,	 
+\\ ,a	 a
+\\ ,,	 
+\\ ,"	 
+\\ ,\	 
+\\ , 	  
+\\ "	N
+\\ "a	N
+\\ ",	N
+\\ ""	 "
+\\ "\	N
+\\ " 	N
+\\ \	 
+\\ \a	 a
+\\ \,	 
+\\ \"	 "
+\\ \\	 \
+\\ \ 	  
+\\  	  
+\\  a	  a
+\\  ,	  
+\\  "	N
+\\  \	  
+\\   	   
+\ 	 
+\ a	 a
+\ aa	 aa
+\ aaa	 aaa
+\ aa,	 aa
+\ aa"	N
+\ aa\	 aa
+\ aa 	 aa 
+\ a,	 a
+\ a,a	 aa
+\ a,,	 a
+\ a,"	 a
+\ a,\	 a
+\ a, 	 a 
+\ a"	N
+\ a"a	N
+\ a",	N
+\ a""	 a"
+\ a"\	N
+\ a" 	N
+\ a\	 a
+\ a\a	 aa
+\ a\,	 a
+\ a\"	 a"
+\ a\\	 a\
+\ a\ 	 a 
+\ a 	 a 
+\ a a	 a a
+\ a ,	 a 
+\ a "	N
+\ a \	 a 
+\ a  	 a  
+\ ,	 
+\ ,a	 a
+\ ,aa	 aa
+\ ,a,	 a
+\ ,a"	 
+\ ,a\	 a
+\ ,a 	 a 
+\ ,,	 
+\ ,,a	 a
+\ ,,,	 
+\ ,,"	 
+\ ,,\	 
+\ ,, 	  
+\ ,"	 
+\ ,"a	 
+\ ,",	 
+\ ,""	 
+\ ,"\	 
+\ ," 	 
+\ ,\	 
+\ ,\a	 a
+\ ,\,	 
+\ ,\"	 
+\ ,\\	 
+\ ,\ 	  
+\ , 	  
+\ , a	  a
+\ , ,	  
+\ , "	 
+\ , \	  
+\ ,  	   
+\ "	N
+\ "a	N
+\ "aa	N
+\ "a,	N
+\ "a"	 a
+\ "a\	N
+\ "a 	N
+\ ",	N
+\ ",a	N
+\ ",,	N
+\ ","	 ,
+\ ",\	N
+\ ", 	N
+\ ""	 "
+\ ""a	 "a
+\ "",	 "
+\ """	N
+\ ""\	 "
+\ "" 	 " 
+\ "\	N
+\ "\a	N
+\ "\,	N
+\ "\"	N
+\ "\\	N
+\ "\ 	N
+\ " 	N
+\ " a	N
+\ " ,	N
+\ " "	  
+\ " \	N
+\ "  	N
+\ \	 
+\ \a	 a
+\ \aa	 aa
+\ \a,	 a
+\ \a"	N
+\ \a\	 a
+\ \a 	 a 
+\ \,	 
+\ \,a	 a
+\ \,,	 
+\ \,"	 
+\ \,\	 
+\ \, 	  
+\ \"	 "
+\ \"a	 "a
+\ \",	 "
+\ \""	N
+\ \"\	 "
+\ \" 	 " 
+\ \\	 \
+\ \\a	 \a
+\ \\,	 \
+\ \\"	N
+\ \\\	 \
+\ \\ 	 \ 
+\ \ 	  
+\ \ a	  a
+\ \ ,	  
+\ \ "	N
+\ \ \	  
+\ \  	   
+\  	  
+\  a	  a
+\  aa	  aa
+\  a,	  a
+\  a"	N
+\  a\	  a
+\  a 	  a 
+\  ,	  
+\  ,a	  a
+\  ,,	  
+\  ,"	  
+\  ,\	  
+\  , 	   
+\  "	N
+\  "a	N
+\  ",	N
+\  ""	  "
+\  "\	N
+\  " 	N
+\  \	  
+\  \a	  a
+\  \,	  
+\  \"	  "
+\  \\	  \
+\  \ 	   
+\   	   
+\   a	   a
+\   ,	   
+\   "	N
+\   \	   
+\    	    
+ 	 
+ a	 a
+ aa	 aa
+ aaa	 aaa
+ aaaa	 aaaa
+ aaa,	 aaa
+ aaa"	N
+ aaa\	 aaa
+ aaa 	 aaa 
+ aa,	 aa
+ aa,a	 aaa
+ aa,,	 aa
+ aa,"	 aa
+ aa,\	 aa
+ aa, 	 aa 
+ aa"	N
+ aa"a	N
+ aa",	N
+ aa""	 aa"
+ aa"\	N
+ aa" 	N
+ aa\	 aa
+ aa\a	 aaa
+ aa\,	 aa
+ aa\"	 aa"
+ aa\\	 aa\
+ aa\ 	 aa 
+ aa 	 aa 
+ aa a	 aa a
+ aa ,	 aa 
+ aa "	N
+ aa \	 aa 
+ aa  	 aa  
+ a,	 a
+ a,a	 aa
+ a,aa	 aaa
+ a,a,	 aa
+ a,a"	 a
+ a,a\	 aa
+ a,a 	 aa 
+ a,,	 a
+ a,,a	 aa
+ a,,,	 a
+ a,,"	 a
+ a,,\	 a
+ a,, 	 a 
+ a,"	 a
+ a,"a	 a
+ a,",	 a
+ a,""	 a
+ a,"\	 a
+ a," 	 a
+ a,\	 a
+ a,\a	 aa
+ a,\,	 a
+ a,\"	 a
+ a,\\	 a
+ a,\ 	 a 
+ a, 	 a 
+ a, a	 a a
+ a, ,	 a 
+ a, "	 a
+ a, \	 a 
+ a,  	 a  
+ a"	N
+ a"a	N
+ a"aa	N
+ a"a,	N
+ a"a"	 aa
+ a"a\	N
+ a"a 	N
+ a",	N
+ a",a	N
+ a",,	N
+ a","	 a,
+ a",\	N
+ a", 	N
+ a""	 a"
+ a""a	 a"a
+ a"",	 a"
+ a"""	N
+ a""\	 a"
+ a"" 	 a" 
+ a"\	N
+ a"\a	N
+ a"\,	N
+ a"\"	N
+ a"\\	N
+ a"\ 	N
+ a" 	N
+ a" a	N
+ a" ,	N
+ a" "	 a 
+ a" \	N
+ a"  	N
+ a\	 a
+ a\a	 aa
+ a\aa	 aaa
+ a\a,	 aa
+ a\a"	N
+ a\a\	 aa
+ a\a 	 aa 
+ a\,	 a
+ a\,a	 aa
+ a\,,	 a
+ a\,"	 a
+ a\,\	 a
+ a\, 	 a 
+ a\"	 a"
+ a\"a	 a"a
+ a\",	 a"
+ a\""	N
+ a\"\	 a"
+ a\" 	 a" 
+ a\\	 a\
+ a\\a	 a\a
+ a\\,	 a\
+ a\\"	N
+ a\\\	 a\
+ a\\ 	 a\ 
+ a\ 	 a 
+ a\ a	 a a
+ a\ ,	 a 
+ a\ "	N
+ a\ \	 a 
+ a\  	 a  
+ a 	 a 
+ a a	 a a
+ a aa	 a aa
+ a a,	 a a
+ a a"	N
+ a a\	 a a
+ a a 	 a a 
+ a ,	 a 
+ a ,a	 a a
+ a ,,	 a 
+ a ,"	 a 
+ a ,\	 a 
+ a , 	 a  
+ a "	N
+ a "a	N
+ a ",	N
+ a ""	 a "
+ a "\	N
+ a " 	N
+ a \	 a 
+ a \a	 a a
+ a \,	 a 
+ a \"	 a "
+ a \\	 a \
+ a \ 	 a  
+ a  	 a  
+ a  a	 a  a
+ a  ,	 a  
+ a  "	N
+ a  \	 a  
+ a   	 a   
+ ,	 
+ ,a	 a
+ ,aa	 aa
+ ,aaa	 aaa
+ ,aa,	 aa
+ ,aa"	 
+ ,aa\	 aa
+ ,aa 	 aa 
+ ,a,	 a
+ ,a,a	 aa
+ ,a,,	 a
+ ,a,"	 a
+ ,a,\	 a
+ ,a, 	 a 
+ ,a"	 
+ ,a"a	 
+ ,a",	 
+ ,a""	 a"
+ ,a"\	 
+ ,a" 	 
+ ,a\	 a
+ ,a\a	 aa
+ ,a\,	 a
+ ,a\"	 a"
+ ,a\\	 a\
+ ,a\ 	 a 
+ ,a 	 a 
+ ,a a	 a a
+ ,a ,	 a 
+ ,a "	 
+ ,a \	 a 
+ ,a  	 a  
+ ,,	 
+ ,,a	 a
+ ,,aa	 aa
+ ,,a,	 a
+ ,,a"	 
+ ,,a\	 a
+ ,,a 	 a 
+ ,,,	 
+ ,,,a	 a
+ ,,,,	 
+ ,,,"	 
+ ,,,\	 
+ ,,, 	  
+ ,,"	 
+ ,,"a	 
+ ,,",	 
+ ,,""	 
+ ,,"\	 
+ ,," 	 
+ ,,\	 
+ ,,\a	 a
+ ,,\,	 
+ ,,\"	 
+ ,,\\	 
+ ,,\ 	  
+ ,, 	  
+ ,, a	  a
+ ,, ,	  
+ ,, "	 
+ ,, \	  
+ ,,  	   
+ ,"	 
+ ,"a	 
+ ,"aa	 
+ ,"a,	 
+ ,"a"	 a
+ ,"a\	 
+ ,"a 	 
+ ,",	 
+ ,",a	 
+ ,",,	 
+ ,","	 ,
+ ,",\	 
+ ,", 	 
+ ,""	 
+ ,""a	 "a
+ ,"",	 
+ ,"""	 
+ ,""\	 "
+ ,"" 	 " 
+ ,"\	 
+ ,"\a	 
+ ,"\,	 
+ ,"\"	 
+ ,"\\	 
+ ,"\ 	 
+ ," 	 
+ ," a	 
+ ," ,	 
+ ," "	  
+ ," \	 
+ ,"  	 
+ ,\	 
+ ,\a	 a
+ ,\aa	 aa
+ ,\a,	 a
+ ,\a"	 
+ ,\a\	 a
+ ,\a 	 a 
+ ,\,	 
+ ,\,a	 a
+ ,\,,	 
+ ,\,"	 
+ ,\,\	 
+ ,\, 	  
+ ,\"	 
+ ,\"a	 
+ ,\",	 
+ ,\""	 "
+ ,\"\	 
+ ,\" 	 
+ ,\\	 
+ ,\\a	 a
+ ,\\,	 
+ ,\\"	 
+ ,\\\	 
+ ,\\ 	  
+ ,\ 	  
+ ,\ a	  a
+ ,\ ,	  
+ ,\ "	 
+ ,\ \	  
+ ,\  	   
+ , 	  
+ , a	  a
+ , aa	  aa
+ , a,	  a
+ , a"	 
+ , a\	  a
+ , a 	  a 
+ , ,	  
+ , ,a	  a
+ , ,,	  
+ , ,"	  
+ , ,\	  
+ , , 	   
+ , "	 
+ , "a	 
+ , ",	 
+ , ""	  "
+ , "\	 
+ , " 	 
+ , \	  
+ , \a	  a
+ , \,	  
+ , \"	  "
+ , \\	  \
+ , \ 	   
+ ,  	   
+ ,  a	   a
+ ,  ,	   
+ ,  "	 
+ ,  \	   
+ ,   	    
+ "	N
+ "a	N
+ "aa	N
+ "aaa	N
+ "aa,	N
+ "aa"	 aa
+ "aa\	N
+ "aa 	N
+ "a,	N
+ "a,a	N
+ "a,,	N
+ "a,"	 a,
+ "a,\	N
+ "a, 	N
+ "a"	 a
+ "a"a	 a"a
+ "a",	 a
+ "a""	N
+ "a"\	 a"
+ "a" 	 a" 
+ "a\	N
+ "a\a	N
+ "a\,	N
+ "a\"	N
+ "a\\	N
+ "a\ 	N
+ "a 	N
+ "a a	N
+ "a ,	N
+ "a "	 a 
+ "a \	N
+ "a  	N
+ ",	N
+ ",a	N
+ ",aa	N
+ ",a,	N
+ ",a"	 ,a
+ ",a\	N
+ ",a 	N
+ ",,	N
+ ",,a	N
+ ",,,	N
+ ",,"	 ,,
+ ",,\	N
+ ",, 	N
+ ","	 ,
+ ","a	 ,a
+ ",",	 ,
+ ",""	N
+ ","\	 ,
+ "," 	 , 
+ ",\	N
+ ",\a	N
+ ",\,	N
+ ",\"	N
+ ",\\	N
+ ",\ 	N
+ ", 	N
+ ", a	N
+ ", ,	N
+ ", "	 , 
+ ", \	N
+ ",  	N
+ ""	 "
+ ""a	 "a
+ ""aa	 "aa
+ ""a,	 "a
+ ""a"	N
+ ""a\	 "a
+ ""a 	 "a 
+ "",	 "
+ "",a	 "a
+ "",,	 "
+ "","	 "
+ "",\	 "
+ "", 	 " 
+ """	N
+ """a	N
+ """,	N
+ """"	 ""
+ """\	N
+ """ 	N
+ ""\	 "
+ ""\a	 "a
+ ""\,	 "
+ ""\"	N
+ ""\\	 "
+ ""\ 	 " 
+ "" 	 " 
+ "" a	 " a
+ "" ,	 " 
+ "" "	N
+ "" \	 " 
+ ""  	 "  
+ "\	N
+ "\a	N
+ "\aa	N
+ "\a,	N
+ "\a"	 a
+ "\a\	N
+ "\a 	N
+ "\,	N
+ "\,a	N
+ "\,,	N
+ "\,"	 ,
+ "\,\	N
+ "\, 	N
+ "\"	N
+ "\"a	N
+ "\",	N
+ "\""	 "
+ "\"\	N
+ "\" 	N
+ "\\	N
+ "\\a	N
+ "\\,	N
+ "\\"	 \
+ "\\\	N
+ "\\ 	N
+ "\ 	N
+ "\ a	N
+ "\ ,	N
+ "\ "	  
+ "\ \	N
+ "\  	N
+ " 	N
+ " a	N
+ " aa	N
+ " a,	N
+ " a"	  a
+ " a\	N
+ " a 	N
+ " ,	N
+ " ,a	N
+ " ,,	N
+ " ,"	  ,
+ " ,\	N
+ " , 	N
+ " "	  
+ " "a	a
+ " ",	  
+ " ""	N
+ " "\	
+ " " 	 
+ " \	N
+ " \a	N
+ " \,	N
+ " \"	N
+ " \\	N
+ " \ 	N
+ "  	N
+ "  a	N
+ "  ,	N
+ "  "	   
+ "  \	N
+ "   	N
+ \	 
+ \a	 a
+ \aa	 aa
+ \aaa	 aaa
+ \aa,	 aa
+ \aa"	N
+ \aa\	 aa
+ \aa 	 aa 
+ \a,	 a
+ \a,a	 aa
+ \a,,	 a
+ \a,"	 a
+ \a,\	 a
+ \a, 	 a 
+ \a"	N
+ \a"a	N
+ \a",	N
+ \a""	 a"
+ \a"\	N
+ \a" 	N
+ \a\	 a
+ \a\a	 aa
+ \a\,	 a
+ \a\"	 a"
+ \a\\	 a\
+ \a\ 	 a 
+ \a 	 a 
+ \a a	 a a
+ \a ,	 a 
+ \a "	N
+ \a \	 a 
+ \a  	 a  
+ \,	 
+ \,a	 a
+ \,aa	 aa
+ \,a,	 a
+ \,a"	 
+ \,a\	 a
+ \,a 	 a 
+ \,,	 
+ \,,a	 a
+ \,,,	 
+ \,,"	 
+ \,,\	 
+ \,, 	  
+ \,"	 
+ \,"a	 
+ \,",	 
+ \,""	 
+ \,"\	 
+ \," 	 
+ \,\	 
+ \,\a	 a
+ \,\,	 
+ \,\"	 
+ \,\\	 
+ \,\ 	  
+ \, 	  
+ \, a	  a
+ \, ,	  
+ \, "	 
+ \, \	  
+ \,  	   
+ \"	 "
+ \"a	 "a
+ \"aa	 "aa
+ \"a,	 "a
+ \"a"	N
+ \"a\	 "a
+ \"a 	 "a 
+ \",	 "
+ \",a	 "a
+ \",,	 "
+ \","	 "
+ \",\	 "
+ \", 	 " 
+ \""	N
+ \""a	N
+ \"",	N
+ \"""	 ""
+ \""\	N
+ \"" 	N
+ \"\	 "
+ \"\a	 "a
+ \"\,	 "
+ \"\"	 ""
+ \"\\	 "\
+ \"\ 	 " 
+ \" 	 " 
+ \" a	 " a
+ \" ,	 " 
+ \" "	N
+ \" \	 " 
+ \"  	 "  
+ \\	 \
+ \\a	 \a
+ \\aa	 \aa
+ \\a,	 \a
+ \\a"	N
+ \\a\	 \a
+ \\a 	 \a 
+ \\,	 \
+ \\,a	 \a
+ \\,,	 \
+ \\,"	 \
+ \\,\	 \
+ \\, 	 \ 
+ \\"	N
+ \\"a	N
+ \\",	N
+ \\""	 \"
+ \\"\	N
+ \\" 	N
+ \\\	 \
+ \\\a	 \a
+ \\\,	 \
+ \\\"	 \"
+ \\\\	 \\
+ \\\ 	 \ 
+ \\ 	 \ 
+ \\ a	 \ a
+ \\ ,	 \ 
+ \\ "	N
+ \\ \	 \ 
+ \\  	 \  
+ \ 	  
+ \ a	  a
+ \ aa	  aa
+ \ a,	  a
+ \ a"	N
+ \ a\	  a
+ \ a 	  a 
+ \ ,	  
+ \ ,a	  a
+ \ ,,	  
+ \ ,"	  
+ \ ,\	  
+ \ , 	   
+ \ "	N
+ \ "a	N
+ \ ",	N
+ \ ""	  "
+ \ "\	N
+ \ " 	N
+ \ \	  
+ \ \a	  a
+ \ \,	  
+ \ \"	  "
+ \ \\	  \
+ \ \ 	   
+ \  	   
+ \  a	   a
+ \  ,	   
+ \  "	N
+ \  \	   
+ \   	    
+  	  
+  a	  a
+  aa	  aa
+  aaa	  aaa
+  aa,	  aa
+  aa"	N
+  aa\	  aa
+  aa 	  aa 
+  a,	  a
+  a,a	  aa
+  a,,	  a
+  a,"	  a
+  a,\	  a
+  a, 	  a 
+  a"	N
+  a"a	N
+  a",	N
+  a""	  a"
+  a"\	N
+  a" 	N
+  a\	  a
+  a\a	  aa
+  a\,	  a
+  a\"	  a"
+  a\\	  a\
+  a\ 	  a 
+  a 	  a 
+  a a	  a a
+  a ,	  a 
+  a "	N
+  a \	  a 
+  a  	  a  
+  ,	  
+  ,a	  a
+  ,aa	  aa
+  ,a,	  a
+  ,a"	  
+  ,a\	  a
+  ,a 	  a 
+  ,,	  
+  ,,a	  a
+  ,,,	  
+  ,,"	  
+  ,,\	  
+  ,, 	   
+  ,"	  
+  ,"a	  
+  ,",	  
+  ,""	  
+  ,"\	  
+  ," 	  
+  ,\	  
+  ,\a	  a
+  ,\,	  
+  ,\"	  
+  ,\\	  
+  ,\ 	   
+  , 	   
+  , a	   a
+  , ,	   
+  , "	  
+  , \	   
+  ,  	    
+  "	N
+  "a	N
+  "aa	N
+  "a,	N
+  "a"	  a
+  "a\	N
+  "a 	N
+  ",	N
+  ",a	N
+  ",,	N
+  ","	  ,
+  ",\	N
+  ", 	N
+  ""	  "
+  ""a	  "a
+  "",	  "
+  """	N
+  ""\	  "
+  "" 	  " 
+  "\	N
+  "\a	N
+  "\,	N
+  "\"	N
+  "\\	N
+  "\ 	N
+  " 	N
+  " a	N
+  " ,	N
+  " "	   
+  " \	N
+  "  	N
+  \	  
+  \a	  a
+  \aa	  aa
+  \a,	  a
+  \a"	N
+  \a\	  a
+  \a 	  a 
+  \,	  
+  \,a	  a
+  \,,	  
+  \,"	  
+  \,\	  
+  \, 	   
+  \"	  "
+  \"a	  "a
+  \",	  "
+  \""	N
+  \"\	  "
+  \" 	  " 
+  \\	  \
+  \\a	  \a
+  \\,	  \
+  \\"	N
+  \\\	  \
+  \\ 	  \ 
+  \ 	   
+  \ a	   a
+  \ ,	   
+  \ "	N
+  \ \	   
+  \  	    
+   	   
+   a	   a
+   aa	   aa
+   a,	   a
+   a"	N
+   a\	   a
+   a 	   a 
+   ,	   
+   ,a	   a
+   ,,	   
+   ,"	   
+   ,\	   
+   , 	    
+   "	N
+   "a	N
+   ",	N
+   ""	   "
+   "\	N
+   " 	N
+   \	   
+   \a	   a
+   \,	   
+   \"	   "
+   \\	   \
+   \ 	    
+    	    
+    a	    a
+    ,	    
+    "	N
+    \	    
+     	     

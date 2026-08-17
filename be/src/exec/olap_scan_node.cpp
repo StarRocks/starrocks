@@ -17,38 +17,57 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <thread>
 
 #include "base/utility/defer_op.h"
+#include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/column.h"
 #include "column/column_access_path.h"
-#include "column/type_traits.h"
-#include "common/compiler_util.h"
-#include "common/config.h"
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/object_pool.h"
 #include "common/runtime_profile.h"
-#include "common/status.h"
-#include "exec/olap_scan_prepare.h"
-#include "exec/pipeline/limit_operator.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
+#include "compute_env/query/partition_scan_range_pruner.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
+#include "exprs/column_access_path_resolver.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_common.h"
+#include "storage/query/olap_fixed_morsel_queue_builder.h"
+#include "storage/query/split_morsel_queue_builder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "util/priority_thread_pool.hpp"
+#include "storage_primitive/storage_ids.h"
+#include "storage_primitive/storage_version.h"
+#include "types/date_value.h"
+#include "types/datum.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
+#include "types/time_types.h"
 
 // Print log with query id.
 #define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "
@@ -103,8 +122,9 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (_olap_scan_node.__isset.column_access_paths) {
+        auto path_resolver = make_column_access_path_resolver(state, _pool);
         for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], state, _pool);
+            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], path_resolver);
             if (LIKELY(st.ok())) {
                 _column_access_paths.emplace_back(std::move(st.value()));
             } else {
@@ -112,6 +132,17 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
                              << "index: " << i << ", error: " << st.status();
             }
         }
+    }
+
+    if (_olap_scan_node.__isset.partition_conjuncts) {
+        const auto& partition_conjuncts = _olap_scan_node.partition_conjuncts;
+        _partition_exprs.resize(partition_conjuncts.size());
+        for (int i = 0; i < partition_conjuncts.size(); ++i) {
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, partition_conjuncts[i], &_partition_exprs[i], state));
+        }
+
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     }
 
     if (tnode.olap_scan_node.__isset.enable_topn_filter_back_pressure &&
@@ -122,6 +153,8 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _back_pressure_throttle_time = tnode.olap_scan_node.back_pressure_throttle_time;
         _back_pressure_throttle_time_upper_bound = tnode.olap_scan_node.back_pressure_throttle_time_upper_bound;
     }
+    _topn_filter_back_pressure_disabled = tnode.olap_scan_node.__isset.topn_filter_back_pressure_disabled &&
+                                          tnode.olap_scan_node.topn_filter_back_pressure_disabled;
 
     _estimate_scan_and_output_row_bytes();
 
@@ -140,6 +173,7 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
     _runtime_profile->add_info_string("Table", _tuple_desc->table_desc()->name());
+    _runtime_profile->add_info_string("Database", _tuple_desc->table_desc()->database());
     if (_olap_scan_node.__isset.rollup_name) {
         _runtime_profile->add_info_string("Rollup", _olap_scan_node.rollup_name);
     }
@@ -272,6 +306,8 @@ void OlapScanNode::close(RuntimeState* state) {
         Rowset::release_readers(rowsets_per_tablet);
     }
 
+    ExprExecutor::close(_partition_exprs, state);
+
     ScanNode::close(state);
 }
 
@@ -285,7 +321,7 @@ OlapScanNode::~OlapScanNode() {
 void OlapScanNode::_fill_chunk_pool(int count) {
     const size_t capacity = runtime_state()->chunk_size();
     for (int i = 0; i < count; i++) {
-        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity));
+        ChunkPtr chunk(ChunkFactory::new_chunk_pooled(*_chunk_schema, capacity));
         {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(std::move(chunk));
@@ -412,13 +448,23 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
+StatusOr<pipeline::MorselQueueBuilderPtr> OlapScanNode::convert_scan_range_to_morsel_queue_builder(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
+    // Dynamic partition pruning. Partition conjunct contexts were prepared/opened in
+    // OlapScanNode::init and are closed in OlapScanNode::close.
+    std::vector<TScanRangeParams> pruned_scan_ranges;
+    auto* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
+    if (!prune_scan_ranges_by_partition_conjuncts(runtime_state(), tuple_desc, _partition_exprs, scan_ranges,
+                                                  &pruned_scan_ranges)
+                 .ok()) {
+        pruned_scan_ranges = scan_ranges;
+    }
+
     pipeline::Morsels morsels;
     [[maybe_unused]] bool has_more_morsel = false;
-    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+    pipeline::ScanMorsel::build_scan_morsels(node_id, pruned_scan_ranges, accept_empty_scan_ranges(), &morsels,
                                              &has_more_morsel);
     DCHECK(has_more_morsel == false);
 
@@ -444,30 +490,30 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     // Disable by the session variable shouldn't use tablet internal parallel.
     if (!enable_tablet_internal_parallel) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
     ASSIGN_OR_RETURN(auto could,
-                     _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                     _could_tablet_internal_parallel(pruned_scan_ranges, pipeline_dop, num_total_scan_ranges,
                                                      tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
-        return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
     }
 
     // Split tablet physically.
-    ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(scan_ranges));
+    ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));
     if (ok) {
-        return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+        return pipeline::make_physical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
     }
 
-    return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+    return pipeline::make_logical_split_morsel_queue_builder(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
@@ -553,7 +599,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     RETURN_IF_ERROR(cm.parse_conjuncts());
@@ -603,12 +649,30 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _gin_predicate_dict_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
 
-    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, "GetVectorRowRangesTime", "SegmentInit");
-    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorSearchTime", "SegmentInit");
+    const std::string vector_index_name = "VectorIndex";
+    const std::string vector_index_load_name = "VectorIndexLoad";
+    const std::string vector_index_cache_lookup_name = "VectorIndexCacheLookup";
+    const std::string vector_index_search_name = "VectorIndexSearch";
+    _vector_index_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_name, "SegmentInit");
+    _vector_index_load_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_load_name, vector_index_name);
+    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_search_name, vector_index_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_scan_profile, vector_index_cache_lookup_name, vector_index_load_name);
+    _vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_scan_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_scan_profile, "VectorIndexFileRead", vector_index_load_name);
+    _vector_index_init_index_timer = ADD_CHILD_TIMER(_scan_profile, "VectorIndexDeserialize", vector_index_load_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_scan_profile, "VectorIndexSearcherCreate", vector_index_load_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexCacheHit", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexCacheMiss", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorANNSearch", vector_index_search_name);
     _vector_index_filtered_counter =
-            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, "SegmentInit");
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, vector_index_search_name);
     _process_vector_distance_and_id_timer =
-            ADD_CHILD_TIMER(_scan_profile, "ProcessVectorDistanceAndIdTime", "SegmentInit");
+            ADD_CHILD_TIMER(_scan_profile, "VectorResultProcess", vector_index_search_name);
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
@@ -666,7 +730,8 @@ int OlapScanNode::compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
-    PriorityThreadPool* thread_pool = runtime_state()->exec_env()->thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    PriorityThreadPool* thread_pool = query_execution_services->execution->thread_pool;
     int delta = !scanner->keep_priority();
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
     PriorityThreadPool::Task task;
@@ -845,7 +910,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
         field_bytes += type_estimated_overhead_bytes(slot->type().type);
 
         _estimated_scan_row_bytes += field_bytes;
-        if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
+        if (unused_output_column_set.find(std::string(slot->col_name())) == unused_output_column_set.end()) {
             _estimated_output_row_bytes += field_bytes;
         }
     }
@@ -902,7 +967,7 @@ void OlapScanNode::_close_pending_scanners() {
     }
 }
 
-pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
     auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
     size_t dop = morsel_queue_factory->size();
@@ -922,7 +987,7 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto scan_prepare_op = std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(),
                                                                                       this, scan_ctx_factory);
     scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
-    this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_prepare_op.get(), context, rc_rf_probe_collector);
 
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
@@ -936,10 +1001,10 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     // scan_op.
     auto scan_op = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this,
                                                                        std::move(scan_ctx_factory));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto ops = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
-    return context->maybe_interpolate_debug_ops(runtime_state(), _id, ops);
+    return ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops);
 }
 
 } // namespace starrocks

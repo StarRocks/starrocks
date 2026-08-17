@@ -67,7 +67,7 @@ public class AlterUserStmtTest {
         sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals("user", stmt.getUser().getUser());
-        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*XXX'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                         StandardCharsets.UTF_8),
@@ -83,7 +83,7 @@ public class AlterUserStmtTest {
 
         sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '*XXX'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                         StandardCharsets.UTF_8),
@@ -93,7 +93,7 @@ public class AlterUserStmtTest {
         sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'";
         stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals(
-                "ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
+                "ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*XXX'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                         StandardCharsets.UTF_8),
@@ -136,6 +136,47 @@ public class AlterUserStmtTest {
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthOption().getAuthPlugin());
         Assertions.assertNull(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getAuthString());
+    }
+
+    @Test
+    public void testToStringWithDoubleQuotedPasswordLiteral() throws Exception {
+        String sql = "ALTER USER 'user' IDENTIFIED BY \"passwd\"";
+        AlterUserStmt stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8),
+                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertNull(stmt.getAuthOption().getAuthPlugin());
+
+        sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD \"*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0\"";
+        stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED BY PASSWORD '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8),
+                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertNull(stmt.getAuthOption().getAuthPlugin());
+
+        sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY \"passwd\"";
+        stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals("ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8),
+                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertEquals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthOption().getAuthPlugin());
+
+        sql = "ALTER USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS "
+                + "\"*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0\"";
+        stmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals(
+                "ALTER USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8),
+                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertEquals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthOption().getAuthPlugin());
     }
 
     @Test

@@ -56,12 +56,10 @@ class CoreDataAllocatorFactory {
 public:
     CoreDataAllocatorFactory() = default;
     ~CoreDataAllocatorFactory();
-    CoreDataAllocator* get_allocator(size_t cpu_id, size_t data_bytes);
-    static CoreDataAllocatorFactory* instance();
-
-private:
     CoreDataAllocatorFactory(const CoreDataAllocatorFactory&) = delete;
     const CoreDataAllocatorFactory& operator=(const CoreDataAllocatorFactory&) = delete;
+    CoreDataAllocator* get_allocator(size_t cpu_id, size_t data_bytes);
+    static CoreDataAllocatorFactory* instance();
 
 private:
     std::mutex _lock;
@@ -84,6 +82,8 @@ public:
     }
 
     ~CoreLocalValueController() = default;
+    CoreLocalValueController(const CoreLocalValueController&) = delete;
+    const CoreLocalValueController& operator=(const CoreLocalValueController&) = delete;
 
     int get_id() {
         std::lock_guard<std::mutex> l(_lock);
@@ -104,13 +104,9 @@ public:
     CoreDataAllocator* allocator(int i) const { return _allocators[i]; }
 
     static CoreLocalValueController<T>* instance() {
-        static CoreLocalValueController<T> _s_instance;
-        return &_s_instance;
+        static CoreLocalValueController<T>* _s_instance = new CoreLocalValueController<T>();
+        return _s_instance;
     }
-
-private:
-    CoreLocalValueController(const CoreLocalValueController&) = delete;
-    const CoreLocalValueController& operator=(const CoreLocalValueController&) = delete;
 
 private:
     std::mutex _lock;

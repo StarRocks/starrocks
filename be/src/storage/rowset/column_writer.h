@@ -34,25 +34,24 @@
 
 #pragma once
 
-#include <storage/flat_json_config.h>
-
 #include <memory> // for unique_ptr
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
+#include "storage_primitive/flat_json_config.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
 #include "base/bit/bitmap.h"   // for BitmapChange
 #include "base/string/slice.h" // for OwnedSlice
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -213,6 +212,7 @@ public:
     Status init() override;
 
     Status append(const Column& column) override;
+    Status append(const Column&, const Buffer<Slice>& data);
 
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const Column& column);
@@ -274,7 +274,7 @@ private:
         _data_size += 20;
     }
 
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+    Status _append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     Status _write_data_page(Page* page);
 
@@ -282,7 +282,7 @@ private:
     WritableFile* _wfile;
     uint32_t _curr_page_format;
     // total size of data page list
-    uint64_t _data_size;
+    uint64_t _data_size{0};
 
     // cached generated pages,
     PageHead _pages;
@@ -317,6 +317,8 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    Buffer<Slice> _slice_buf;
 };
 
 } // namespace starrocks

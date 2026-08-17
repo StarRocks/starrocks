@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -43,7 +44,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -73,7 +74,7 @@ import static java.util.Objects.requireNonNull;
 
 // CatalogConnectorMetadata provides a uniform interface to provide normal tables and information schema tables.
 // The database name/id is used to route request to specific metadata.
-public class CatalogConnectorMetadata implements ConnectorMetadata {
+public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingConnectorMetadata {
     private final ConnectorMetadata normal;
     private final ConnectorMetadata informationSchema;
     private final ConnectorMetadata tableMetadata;
@@ -132,7 +133,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return normal.listPartitionNames(databaseName, tableName, requestContext);
     }
 
@@ -153,6 +155,20 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+        return metadata.getTableComment(context, dbName, tblName);
+    }
+
+    @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        return normal.getTableFromQuery(context, dbName, query);
+    }
+
+    @Override
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {
@@ -160,6 +176,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         }
 
         return metadata.getCurrentTvrSnapshot(dbName, table);
+    }
+
+    @Override
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.acquireTvrSnapshot(dbName, table, mvId);
     }
 
     @Override
@@ -187,6 +213,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getVersionCommitTimeMillis(dbName, table, version);
+    }
+
+    @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(context, dbName, tblName);
@@ -208,19 +244,26 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        return normal.getRemotePartitions(table, partitionNames);
-    }
-
-    @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
                                                     long snapshotId, String serializedPredicate, MetadataTableType type) {
         return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
     }
 
     @Override
+    public ConnectorMetadata delegateFor(Table table) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata == null ? normal : metadata;
+    }
+
+    @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return normal.getPartitions(table, partitionNames);
+    }
+
+    @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        return normal.getPartitions(table, partitionNames, requestContext);
     }
 
     @Override
@@ -346,7 +389,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createMaterializedView(CreateMaterializedViewStmt stmt) throws AnalysisException, DdlException {
+    public void createMaterializedView(CreateSyncMVStmt stmt) throws AnalysisException, DdlException {
         normal.createMaterializedView(stmt);
     }
 

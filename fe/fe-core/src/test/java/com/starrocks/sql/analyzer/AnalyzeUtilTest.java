@@ -26,9 +26,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
@@ -37,6 +42,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -171,6 +177,87 @@ public class AnalyzeUtilTest {
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk"));
         Assertions.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
+    }
+
+    @Test
+    public void testCollectTableAndViewSkipsCteReferenceWithoutAnalyze() {
+        String sql = "with x as (select v1 from db2.t0) " +
+                "select db1.t0.v1 from db1.t0 join x on db1.t0.v1 = x.v1";
+        StatementBase statementBase = SqlParser.parse(sql, 0L).get(0);
+        Map<TableName, Table> m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        Set<String> tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        Set<String> expectedTables = new HashSet<>(Lists.newArrayList("db1.t0", "db2.t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+    }
+
+    @Test
+    public void testCollectTableAndViewKeepsBaseTableInsideCteDefinitionWithoutAnalyze() {
+        String sql = "with t0 as (select * from t0) select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, 0L).get(0);
+        Map<TableName, Table> m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        Set<String> tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        Set<String> expectedTables = new HashSet<>(Lists.newArrayList("t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with x as (select * from y), y as (select * from t0) select * from y";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("y", "t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with X as (select * from t0) select * from x";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("t0", "x"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with recursive cte(n) as " +
+                "(select v1 from t0 union all select n from cte where n < 10) select * from cte";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with recursive cte(n) as " +
+                "(select v1 from cte union all select n from cte where n < 10) select * from cte";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("cte"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with recursive cte as (select v1 from t0 except select v1 from cte) select * from cte";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("t0", "cte"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with recursive cte as " +
+                "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) select * from cte";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        QueryStatement queryStatement = (QueryStatement) statementBase;
+        CTERelation cteRelation = queryStatement.getQueryRelation().getCteRelations().get(0);
+        SetOperationRelation setOperationRelation =
+                (SetOperationRelation) cteRelation.getCteQueryStatement().getQueryRelation();
+        SelectRelation recursiveMember = (SelectRelation) setOperationRelation.getRelations().get(1);
+        recursiveMember.setRelation(new CTERelation(cteRelation.getCteMouldId(), cteRelation.getName(),
+                cteRelation.getColumnOutputNames(), cteRelation.getCteQueryStatement(), true, false));
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
     }
 
     @Test
@@ -459,6 +546,108 @@ public class AnalyzeUtilTest {
                 Assertions.assertTrue(partitionNames.get(desc.getPartitionName()) != null);
             }
         }
+    }
+
+    /**
+     * Test that different partition values which produce the same formatted name
+     * (due to hyphen stripping in getFormatPartitionValue) each get their own partition
+     * with a unique name, rather than having the second value silently skipped.
+     */
+    @Test
+    public void testPartitionNameCollisionWithHyphens() throws Exception {
+        OlapTable t1 = (OlapTable) starRocksAssert.getTable(DB_NAME, "auto_tbl1");
+
+        // These two values produce the same formatted partition name because hyphens are stripped:
+        // "eightfolddemo-hiring-test.com" -> "eightfolddemohiringtest2ecom"
+        // "eightfolddemo-hiringtest.com"  -> "eightfolddemohiringtest2ecom"
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("eightfolddemo-hiring-test.com"));
+        partitionValues.add(Lists.newArrayList("eightfolddemo-hiringtest.com"));
+
+        AddPartitionClause clause =
+                AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, null);
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) clause.getPartitionDesc();
+        List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
+
+        // Both values must produce a partition (not just one)
+        Assertions.assertEquals(2, descs.size());
+
+        // Partition names must be unique
+        Set<String> names = new HashSet<>();
+        for (PartitionDesc desc : descs) {
+            Assertions.assertTrue(names.add(desc.getPartitionName()),
+                    "Duplicate partition name: " + desc.getPartitionName());
+        }
+
+        // Each partition must have the correct value
+        Set<String> values = new HashSet<>();
+        for (PartitionDesc desc : descs) {
+            MultiItemListPartitionDesc multiDesc = (MultiItemListPartitionDesc) desc;
+            List<List<String>> multiValues = multiDesc.getMultiValues();
+            Assertions.assertEquals(1, multiValues.size());
+            values.add(multiValues.get(0).get(0));
+        }
+        Assertions.assertTrue(values.contains("eightfolddemo-hiring-test.com"));
+        Assertions.assertTrue(values.contains("eightfolddemo-hiringtest.com"));
+    }
+
+    /**
+     * Test deduplication works correctly: identical partition values in the same batch
+     * should be deduplicated (only one partition created).
+     */
+    @Test
+    public void testPartitionValueDeduplication() throws Exception {
+        OlapTable t1 = (OlapTable) starRocksAssert.getTable(DB_NAME, "auto_tbl1");
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("same-value"));
+        partitionValues.add(Lists.newArrayList("same-value"));
+        partitionValues.add(Lists.newArrayList("different-value"));
+
+        AddPartitionClause clause =
+                AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, null);
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) clause.getPartitionDesc();
+        List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
+
+        // Duplicate value should be deduplicated, leaving 2 distinct partitions
+        Assertions.assertEquals(2, descs.size());
+    }
+
+    /**
+     * Test multiple different values that all collide on the same formatted partition name.
+     * e.g., "a-b", "a:b", "a b", "ab" all format to "ab".
+     */
+    @Test
+    public void testMultiplePartitionNameCollisions() throws Exception {
+        OlapTable t1 = (OlapTable) starRocksAssert.getTable(DB_NAME, "auto_tbl1");
+
+        // All these values format to "ab" because hyphens, colons, and spaces are stripped
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("ab"));
+        partitionValues.add(Lists.newArrayList("a-b"));
+        partitionValues.add(Lists.newArrayList("a:b"));
+        partitionValues.add(Lists.newArrayList("a b"));
+
+        AddPartitionClause clause =
+                AnalyzerUtils.getAddPartitionClauseFromPartitionValues(t1, partitionValues, false, null);
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) clause.getPartitionDesc();
+        List<PartitionDesc> descs = listPartitionDesc.getPartitionDescs();
+
+        // All 4 distinct values must each get a partition
+        Assertions.assertEquals(4, descs.size());
+
+        // All partition names must be unique
+        Set<String> names = new HashSet<>();
+        for (PartitionDesc desc : descs) {
+            Assertions.assertTrue(names.add(desc.getPartitionName()),
+                    "Duplicate partition name: " + desc.getPartitionName());
+        }
+
+        // All values must be present
+        Set<String> values = descs.stream()
+                .map(d -> ((MultiItemListPartitionDesc) d).getMultiValues().get(0).get(0))
+                .collect(Collectors.toSet());
+        Assertions.assertEquals(Set.of("ab", "a-b", "a:b", "a b"), values);
     }
 
     @Test

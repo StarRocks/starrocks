@@ -155,7 +155,7 @@ public class IcebergTableTest extends TableTestBase {
             Assertions.assertEquals(c.getName(), "k1");
         }
 
-        TTableDescriptor tds = table.toThrift(new ArrayList<DescriptorTable.ReferencedPartitionInfo>());
+        table.toThrift(new ArrayList<DescriptorTable.ReferencedPartitionInfo>());
     }
 
     @Test
@@ -338,6 +338,65 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
+    public void testToThriftUsesInitialDefaultNotWriteDefault() {
+        // Build an Iceberg schema where initial-default != write-default
+        Schema iceSchema = new Schema(
+                Types.NestedField.optional("c_both").withId(1)
+                        .ofType(Types.IntegerType.get()).withInitialDefault(5).withWriteDefault(10).build(),
+                Types.NestedField.optional("c_write_only").withId(2)
+                        .ofType(Types.IntegerType.get()).withWriteDefault(10).build(),
+                Types.NestedField.optional("c_initial_only").withId(3)
+                        .ofType(Types.IntegerType.get()).withInitialDefault(5).build(),
+                Types.NestedField.optional("c_no_default").withId(4)
+                        .ofType(Types.IntegerType.get()).build()
+        );
+
+        // Mock native table
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        Mockito.when(nativeTable.schema()).thenReturn(iceSchema);
+        Mockito.when(nativeTable.spec()).thenReturn(PartitionSpec.unpartitioned());
+        Mockito.when(nativeTable.location()).thenReturn("s3://bucket/table");
+        Mockito.when(nativeTable.sortOrder()).thenReturn(SortOrder.unsorted());
+
+        // Simulate what toFullSchemas does: Column.defaultValue = write-default (or fallback to initial-default)
+        Column cBoth = new Column("c_both", INT, true);
+        cBoth.setDefaultValue("10"); // write-default
+        Column cWriteOnly = new Column("c_write_only", INT, true);
+        cWriteOnly.setDefaultValue("10"); // write-default
+        Column cInitialOnly = new Column("c_initial_only", INT, true);
+        cInitialOnly.setDefaultValue("5"); // initial-default as fallback
+        Column cNoDefault = new Column("c_no_default", INT, true);
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(Lists.newArrayList(cBoth, cWriteOnly, cInitialOnly, cNoDefault))
+                .setNativeTable(nativeTable)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        TTableDescriptor desc = table.toThrift(new ArrayList<>());
+        List<com.starrocks.thrift.TColumn> tColumns = desc.getIcebergTable().getColumns();
+
+        // Case A: both defaults differ -> TColumn should use initial-default (5), not write-default (10)
+        Assertions.assertTrue(tColumns.get(0).isSetDefault_value());
+        Assertions.assertEquals("5", tColumns.get(0).getDefault_value());
+
+        // Case B: only write-default -> TColumn should have no default (cleared per spec)
+        Assertions.assertFalse(tColumns.get(1).isSetDefault_value());
+
+        // Case C: only initial-default -> TColumn should use initial-default (5)
+        Assertions.assertTrue(tColumns.get(2).isSetDefault_value());
+        Assertions.assertEquals("5", tColumns.get(2).getDefault_value());
+
+        // Case D: no default at all -> TColumn should have no default
+        Assertions.assertFalse(tColumns.get(3).isSetDefault_value());
+    }
+
+    @Test
     public void testGetNativeTableThrows() {
         org.apache.iceberg.Schema icebergSchema =
                 new org.apache.iceberg.Schema(
@@ -363,5 +422,36 @@ public class IcebergTableTest extends TableTestBase {
                 .build();
         LightWeightIcebergTable light = new LightWeightIcebergTable(base);
         Assertions.assertThrows(UnsupportedOperationException.class, light::getNativeTable);
+    }
+
+    @Test
+    public void testGetStatsCollectMetadata() {
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        org.apache.iceberg.Snapshot snapshot = Mockito.mock(org.apache.iceberg.Snapshot.class);
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.snapshotId()).thenReturn(123456789L);
+        Mockito.when(snapshot.summary()).thenReturn(ImmutableMap.of(
+                "total-data-files", "5",
+                "total-records", "1000"));
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(new ArrayList<>())
+                .setNativeTable(nativeTable)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        Map<String, String> metadata = table.getStatsCollectMetadata();
+        Assertions.assertEquals("123456789", metadata.get("snapshot_id"));
+        Assertions.assertEquals("5", metadata.get("total_files"));
+        Assertions.assertEquals("1000", metadata.get("total_rows"));
+
+        // No current snapshot (e.g. empty table) -> empty metadata, not an error.
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(null);
+        Assertions.assertTrue(table.getStatsCollectMetadata().isEmpty());
     }
 }

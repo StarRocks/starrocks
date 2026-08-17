@@ -22,12 +22,14 @@
 #include "common/runtime_profile.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/hash_partition_sink_operator.h"
 #include "exec/pipeline/hash_partition_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/agg/count.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
@@ -37,7 +39,7 @@
 namespace starrocks {
 
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs),
+        : PipelineNode(pool, tnode, descs),
           _tnode(tnode),
           _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {}
 
@@ -56,30 +58,6 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status AnalyticNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
-
-    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
-
-    return Status::OK();
-}
-
-Status AnalyticNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(child(0)->open(state));
-
-    return _analytor->open(state);
-}
-
-Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::InternalError("should not call get_next() in AnalyticNode");
-}
-
 void AnalyticNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
@@ -93,16 +71,28 @@ void AnalyticNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     bool is_skewed = _tnode.analytic_node.__isset.is_skewed && _tnode.analytic_node.is_skewed;
+    bool force_merge_sort = _tnode.analytic_node.__isset.force_merge_sort && _tnode.analytic_node.force_merge_sort;
 
     if (_tnode.analytic_node.partition_exprs.empty()) {
         // analytic's dop must be 1 if with no partition clause
-        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), ops_with_sink);
+    } else if (force_merge_sort) {
+        // force_merge_sort feeds the AnalyticNode through OrderedPartitionExchanger, which assumes a single,
+        // globally-ordered input stream (dop=1). When the upstream DOP is > 1 the data is already partitioned
+        // and sorting already happened. This can occur when there are multiple analytics with different frames
+        // but the same partitioning and order by clauses. So only interpolate when DOP == 1; otherwise run the
+        // analytic directly on the parallel streams, which is correct.
+        if (upstream_source_op->degree_of_parallelism() == 1) {
+            ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_ordered_partition_exchange(
+                    context, runtime_state(), id(), ops_with_sink, _partition_exprs);
+        }
     } else if (_use_hash_based_partition) {
         bool has_outer_join_child =
                 _tnode.analytic_node.__isset.has_outer_join_child && _tnode.analytic_node.has_outer_join_child;
@@ -112,8 +102,8 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
                 has_outer_join_child, _tnode.analytic_node.partition_exprs);
 
         // prepend local shuffle to PartitionSortSinkOperator
-        ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops_with_sink,
-                                                                          _partition_exprs);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                context, runtime_state(), id(), ops_with_sink, _partition_exprs);
         upstream_source_op = context->source_operator(ops_with_sink);
 
         ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(context->next_operator_id(), id(),
@@ -127,27 +117,27 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
         ops_with_sink.push_back(std::move(hash_partition_source_op));
     } else if (is_skewed) {
         // The former sort will use passthrough exchange, so we need to add ordered partition local exchange here.
-        ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(runtime_state(), id(),
-                                                                                    ops_with_sink, _partition_exprs);
+        ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_ordered_partition_exchange(
+                context, runtime_state(), id(), ops_with_sink, _partition_exprs);
     }
 
     upstream_source_op = context->source_operator(ops_with_sink);
     auto degree_of_parallelism = upstream_source_op->degree_of_parallelism();
 
     AnalytorFactoryPtr analytor_factory = std::make_shared<AnalytorFactory>(
-            degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc, _use_hash_based_partition);
+            degree_of_parallelism, _tnode, _result_tuple_desc, _use_hash_based_partition);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     ops_with_sink.emplace_back(
             std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor_factory));
-    this->init_runtime_filter_for_operator(ops_with_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_sink);
 
     OpFactories ops_with_source;
     auto source_op =
             std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
     source_op->set_skewed(is_skewed);
-    this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, source_op.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(source_op.get(), upstream_source_op);
     ops_with_source.push_back(std::move(source_op));
 

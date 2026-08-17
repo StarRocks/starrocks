@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "eventsはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # events

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['alter table']
+description: "Modifies an existing StarRocks table: renaming, partitioning, bucketing, columns, rollup indexes, and table properties."
 ---
 
 # ALTER TABLE
@@ -13,6 +14,7 @@ ALTER TABLE Modifies an existing table, including:
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
+- [Modify the tablet size](#modify-the-tablet-size)
 - [Modify columns (add/delete columns, change column order, and modify column comment)](#modify-columns-adddelete-columns-change-column-order-modify-column-comment)
 - [Create/delete rollup](#modify-rollup)
 - [Create/delete index](#modify-indexes)
@@ -440,7 +442,53 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
-  ``
+  ```
+
+### Modify the tablet size
+
+StarRocks supports splitting and merging tablets from v4.1 onwards, allowing dynamic management of tablet size, thus an adaptive mechanism for handling data skew.
+
+Syntax for SPLIT:
+
+```SQL
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
+    ｜
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+Syntax for MERGE:
+
+```SQL
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
+    [
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
+    ｜
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) ... }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+Parameter:
+
+- `tablet_reshard_target_size`: The target size of the tablets after the SPLIT or MERGE operation. Default: 10 GB. You do not need to specify this parameter if you have explicitly specified tablet IDs.
+
+  - A tablet will be split if both the following conditions are met:
+    - The size of the tablet is **larger** than `tablet_reshard_target_size`. 
+    - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+
+  - A tablet will be merged if both the following conditions are met:
+    - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
+    - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+
+For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
 
 ### Modify columns (add/delete columns, change column order, modify column comment)
 
@@ -461,6 +509,7 @@ Note:
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
 2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
 3. You cannot add a column that already exists in the base index to the rollup. (You can recreate a rollup if needed.)
+4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
 
 #### Add multiple columns to specified index
 
@@ -494,6 +543,8 @@ Note:
 
 3. You cannot add a column that already exists in the base index to the rollup. (You can create another rollup if needed.)
 
+4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
+
 #### Add a generated column (from v3.1)
 
 Syntax:
@@ -519,6 +570,7 @@ Note:
 
 1. You cannot drop partition column.
 2. If the column is dropped from the base index, it will also be dropped if it is included in the rollup.
+3. On range-distribution tables in shared-data clusters, dropping a key column (a range sort-key column) is supported for Duplicate Key and Aggregate tables (Aggregate only when there is no `REPLACE` or `REPLACE_IF_NOT_NULL` value column), from v4.2 onwards. The operation triggers an online rewrite that re-sorts the data, and re-aggregates it under the reduced key for Aggregate tables. It is not supported for Primary Key or Unique Key tables, for a column that has an index (drop the index first), or for tables that have a rollup or synchronous materialized view.
 
 #### Modify the column type, position, comment, and other properties
 
@@ -538,9 +590,10 @@ Note:
 
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
-3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8 in the [column](#column) part).
-4. The partition column cannot be modified.
-5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
+3. While modifying the type, default value, nullability, and position, you must specify the full definition of the column in the statement.
+4. Modifying only the column comment — whether via `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` or via a full column definition where only the comment differs — changes only the metadata and does not initiate a Schema Change task. This applies to Primary Key columns, key columns, and regular columns. If the full definition also changes any other attribute of the column, the statement initiates a Schema Change task as usual.
+5. The partition column cannot be modified.
+6. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
    - Convert TINYINT/SMALLINT/INT/BIGINT to TINYINT/SMALLINT/INT/BIGINT/DOUBLE.
    - Convert TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
@@ -551,8 +604,8 @@ Note:
    - Convert FLOAT to DOUBLE
    - Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
 
-6. Conversion from NULL to NOT NULL is not supported.
-7. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
+7. Conversion from NULL to NOT NULL is not supported.
+8. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
 
 #### Reorder the columns of specified index
 
@@ -688,17 +741,31 @@ Syntax:
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: Support setting timeout time and the default timeout time is one day.
 
+`ORDER BY`: defines an independent sort key for the rollup that can differ from the base table's sort key. It is supported only for range-distribution tables in shared-data clusters (from v4.2 onwards), and lets queries that filter or aggregate on the rollup's leading sort-key columns be served by the rollup. The following limitations apply:
+
+- The table must be a Duplicate Key, Aggregate, or Unique Key table. Primary Key tables are not supported.
+- The table must not be a colocate table and must not contain an AUTO_INCREMENT column.
+- Multiple such rollups are supported. Each `ALTER TABLE` statement adds one rollup (add several rollups with separate statements). The rollup is always derived from the base index; `FROM <another_rollup>` is not supported. The table must not carry a synchronous materialized view.
+
 Example:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+Example: create a rollup with an independent sort key on a range-distribution table in a shared-data cluster.
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### Create rollups in batches
@@ -1052,7 +1119,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ```sql
     ALTER TABLE example_db.my_table
     ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
-    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`
     TO example_rollup_index;
     ```
 
@@ -1347,6 +1414,53 @@ Drop persistent index on tablets `100` and `101` for Primary Key table `db1.test
 
 ```sql
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
+```
+
+### SPLIT or MERGE tablets
+
+- Split all tablets that meet the conditions in the table to a target size of 10 GB (Default).
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- Split all tablets that meet the conditions in a partition.
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+PARTITION (p1);
+```
+
+- Split specific tablets by ID.
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+(9588955, 9588956, 9588957);
+```
+
+- Merge all tablets that meet the conditions in the table to a target size of 2 GB.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- Merge all tablets that meet the conditions in specific partitions.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- Merge specific tablets by ID.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+(9588955, 9588956, 9588957)
+(9588958, 9588959);
 ```
 
 ## References

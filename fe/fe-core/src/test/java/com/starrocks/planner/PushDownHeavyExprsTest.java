@@ -59,6 +59,7 @@ public class PushDownHeavyExprsTest {
                 "PROPERTIES('replication_num'='1');";
 
         starRocksAssert.withTable(tblSql);
+        ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
     }
 
     @Test

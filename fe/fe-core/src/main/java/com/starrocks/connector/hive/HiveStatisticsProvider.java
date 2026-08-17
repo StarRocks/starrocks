@@ -23,6 +23,8 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
+import com.starrocks.connector.statistics.RowCountEstimator;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -38,6 +40,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -69,7 +72,7 @@ public class HiveStatisticsProvider {
             Table table,
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         if (table.isUnPartitioned()) {
             HivePartitionStats tableStats = hmsOps.getTableStatistics(table.getCatalogDBName(), table.getCatalogTableName());
             return createUnpartitionedStats(tableStats, columns, builder, table);
@@ -92,7 +95,9 @@ public class HiveStatisticsProvider {
         avgRowNumPerPartition = getPerPartitionRowAvgNums(partitionStatistics.values());
 
         if (avgRowNumPerPartition <= 0) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, partitionKeys));
+            double estimatedRows = getEstimatedRowCount(table, partitionKeys);
+            builder.setOutputRowCount(estimatedRows);
+            addFallbackColumnStats(builder, columns, table, partitionKeys, partitionStatistics, estimatedRows);
             return builder.build();
         }
 
@@ -120,7 +125,9 @@ public class HiveStatisticsProvider {
             Table table) {
         long rowNum = tableStats.getCommonStats().getRowNums();
         if (rowNum == -1) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey())));
+            double estimatedRows = getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey()));
+            builder.setOutputRowCount(estimatedRows);
+            addFallbackColumnStats(builder, columns, table, Lists.newArrayList(), Collections.emptyMap(), estimatedRows);
             return builder.build();
         } else {
             builder.setOutputRowCount(rowNum);
@@ -143,22 +150,23 @@ public class HiveStatisticsProvider {
 
         List<RemoteFileInfo> remoteFileInfos =
                 fileOps.getRemoteFileInfoForStats(table, partitions, GetRemoteFilesParams.newBuilder().build());
-        long totalBytes = 0;
-        for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
-            for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
-                totalBytes += fileDesc.getLength();
-            }
+        if (remoteFileInfos.isEmpty()) {
+            return 1;
         }
 
         List<Column> dataColumns = table.getColumns().stream()
                 .filter(column -> table.getDataColumnNames().contains(column.getName()))
                 .collect(Collectors.toList());
 
-        if (totalBytes <= 0) {
-            return 1;
+        Map<RemoteFileInputFormat, Long> bytesByFormat = new LinkedHashMap<>();
+        for (RemoteFileInfo info : remoteFileInfos) {
+            long bytes = info.getFiles().stream().mapToLong(RemoteFileDesc::getLength).sum();
+            bytesByFormat.merge(info.getFormat(), bytes, Long::sum);
         }
-
-        long presentRowNums = totalBytes / dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        long presentRowNums = 0;
+        for (Map.Entry<RemoteFileInputFormat, Long> entry : bytesByFormat.entrySet()) {
+            presentRowNums += RowCountEstimator.estimate(entry.getValue(), dataColumns, entry.getKey());
+        }
         long presentPartitionSize = remoteFileInfos.size();
         return presentRowNums / presentPartitionSize * partitionKeys.size();
     }
@@ -168,10 +176,8 @@ public class HiveStatisticsProvider {
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys,
             double presentRowNums) {
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columns) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
         double totalRowNums = 0;
         try {
@@ -181,6 +187,7 @@ public class HiveStatisticsProvider {
         } finally {
             builder.setOutputRowCount(totalRowNums);
         }
+        addFallbackColumnStats(builder, columns, table, partitionKeys, Collections.emptyMap(), totalRowNums);
 
         return builder.build();
     }
@@ -299,11 +306,17 @@ public class HiveStatisticsProvider {
                 .collect(Collectors.toList());
 
         if (columnStatistics.isEmpty()) {
-            return ColumnStatistic.unknown();
+            return typeNdvStatistic(column, rowNums);
         }
 
+        double ndv = ndv(columnStatistics);
+        if (Double.isNaN(ndv)) {
+            // No partition had a valid NDV in HMS → fall back to type-fraction
+            ndv = ConnectorNdvEstimator.typeNdv(
+                    ConnectorNdvEstimator.fromStarRocksType(column.getType()), Math.max(1L, (long) rowNums));
+        }
         return ColumnStatistic.builder()
-                .setDistinctValuesCount(ndv(columnStatistics))
+                .setDistinctValuesCount(ndv)
                 .setNullsFraction(nullsFraction(column, partitionStatistics))
                 .setAverageRowSize(averageRowSize(column, partitionStatistics, rowNums))
                 .setMaxValue(max(columnStatistics))
@@ -317,8 +330,8 @@ public class HiveStatisticsProvider {
                 .filter(x -> x >= 0)
                 .mapToDouble(x -> x)
                 .max();
-
-        return ndv.isPresent() ? ndv.getAsDouble() : 1;
+        // NaN signals "no valid HMS NDV found" so callers can apply Tier-3 fallback
+        return ndv.isPresent() ? ndv.getAsDouble() : Double.NaN;
     }
 
     private double nullsFraction(Column column, Collection<HivePartitionStats> partitionStatistics) {
@@ -455,5 +468,44 @@ public class HiveStatisticsProvider {
 
     public int getSamplePartitionSize(OptimizerContext session) {
         return session.getSessionVariable().getHivePartitionStatsSampleSize();
+    }
+
+    private static ColumnStatistic typeNdvStatistic(Column column, double rowCount) {
+        ConnectorNdvEstimator.TypeCategory cat = ConnectorNdvEstimator.fromStarRocksType(column.getType());
+        double ndv = ConnectorNdvEstimator.typeNdv(cat, Math.max(1L, (long) rowCount));
+        return ColumnStatistic.builder()
+                .setDistinctValuesCount(ndv)
+                .setAverageRowSize(column.getType().getTypeSize())
+                .setNullsFraction(0)
+                .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                .build();
+    }
+
+    /**
+     * Populates column statistics when HMS row counts are unavailable (fallback path).
+     * Partition columns receive exact NDV derived from the known partition-key list;
+     * data columns receive a type-fraction NDV estimate.
+     */
+    private void addFallbackColumnStats(Statistics.Builder builder,
+                                        List<ColumnRefOperator> columns,
+                                        Table table,
+                                        List<PartitionKey> partitionKeys,
+                                        Map<String, HivePartitionStats> partitionStats,
+                                        double rowCount) {
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+        double avgPerPartition = partitionColumnNames.isEmpty() || partitionKeys.isEmpty()
+                ? 0 : rowCount / partitionKeys.size();
+        for (ColumnRefOperator col : columns) {
+            Column column = table.getColumn(col.getName());
+            if (column == null) {
+                builder.addColumnStatistic(col, ColumnStatistic.unknown());
+            } else if (!partitionColumnNames.isEmpty() && partitionColumnNames.contains(col.getName())) {
+                builder.addColumnStatistic(col, createPartitionColumnStatistics(
+                        column, partitionKeys, partitionStats, partitionColumnNames,
+                        avgPerPartition, rowCount));
+            } else {
+                builder.addColumnStatistic(col, typeNdvStatistic(column, rowCount));
+            }
+        }
     }
 }

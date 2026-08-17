@@ -20,7 +20,7 @@
 #include "gutil/compiler_util.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -29,7 +29,7 @@ class DecimalTypeInfo final : public TypeInfo {
 public:
     ~DecimalTypeInfo() override = default;
 
-    using CppType = typename CppTypeTraits<TYPE>::CppType;
+    using CppType = StorageCppType<TYPE>;
     DecimalTypeInfo(int precision, int scale)
             : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {}
 

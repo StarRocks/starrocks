@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 2.4 版本发布说明：多基表异步物化视图、INSERT OVERWRITE、Kubernetes 无状态计算节点、非等值连接。"
 ---
 
 # StarRocks version 2.4

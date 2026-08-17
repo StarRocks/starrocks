@@ -1,0 +1,220 @@
+-- name: test_multi_stmt_txn_dup_table_with_bundling @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_dup (k1 int, v1 string)
+    duplicate key(k1)
+    distributed by hash(k1) buckets 16
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_dup select generate_series, concat('val_', generate_series) from TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+insert into t_dup select generate_series, concat('val_', generate_series) from TABLE(generate_series(1001, 2000));
+-- result:
+-- !result
+insert into t_dup select generate_series, concat('val_', generate_series) from TABLE(generate_series(2001, 3000));
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select count(*) from t_dup;
+-- result:
+3000
+-- !result
+select count(distinct k1) from t_dup;
+-- result:
+3000
+-- !result
+select * from t_dup where k1 in (1, 500, 1000, 1500, 2000, 2500, 3000) order by k1;
+-- result:
+1	val_1
+500	val_500
+1000	val_1000
+1500	val_1500
+2000	val_2000
+2500	val_2500
+3000	val_3000
+-- !result
+set enable_sql_transaction = false;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+-- name: test_multi_stmt_txn_pk_table_with_bundling @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_pk (k1 int, v1 string)
+    primary key(k1)
+    distributed by hash(k1) buckets 16
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_pk select generate_series, concat('val_', generate_series) from TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+insert into t_pk select generate_series, concat('val_', generate_series) from TABLE(generate_series(1001, 2000));
+-- result:
+-- !result
+insert into t_pk select generate_series, concat('val_', generate_series) from TABLE(generate_series(2001, 3000));
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select count(*) from t_pk;
+-- result:
+3000
+-- !result
+select * from t_pk where k1 in (1, 500, 1000, 1500, 2000, 2500, 3000) order by k1;
+-- result:
+1	val_1
+500	val_500
+1000	val_1000
+1500	val_1500
+2000	val_2000
+2500	val_2500
+3000	val_3000
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_pk select generate_series, concat('updated_', generate_series) from TABLE(generate_series(500, 600));
+-- result:
+-- !result
+insert into t_pk select generate_series, concat('new_', generate_series) from TABLE(generate_series(3001, 3500));
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select count(*) from t_pk;
+-- result:
+3500
+-- !result
+select * from t_pk where k1 in (499, 500, 550, 600, 601, 3000, 3001, 3500) order by k1;
+-- result:
+499	val_499
+500	updated_500
+550	updated_550
+600	updated_600
+601	val_601
+3000	val_3000
+3001	new_3001
+3500	new_3500
+-- !result
+set enable_sql_transaction = false;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+-- name: test_multi_stmt_txn_rollback_with_bundling @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_rollback (k1 int, v1 string)
+    duplicate key(k1)
+    distributed by hash(k1) buckets 16
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+insert into t_rollback select generate_series, concat('original_', generate_series) from TABLE(generate_series(1, 500));
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_rollback select generate_series, concat('should_disappear_', generate_series) from TABLE(generate_series(501, 1000));
+-- result:
+-- !result
+insert into t_rollback select generate_series, concat('also_disappear_', generate_series) from TABLE(generate_series(1001, 1500));
+-- result:
+-- !result
+rollback;
+-- result:
+-- !result
+select count(*) from t_rollback;
+-- result:
+500
+-- !result
+select min(k1), max(k1) from t_rollback;
+-- result:
+1	500
+-- !result
+set enable_sql_transaction = false;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+-- name: test_multi_stmt_txn_bundling_disabled @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_nobundle (k1 int, v1 string)
+    duplicate key(k1)
+    distributed by hash(k1) buckets 16
+    properties('replication_num' = '1', 'file_bundling' = 'false');
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_nobundle select generate_series, concat('val_', generate_series) from TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+insert into t_nobundle select generate_series, concat('val_', generate_series) from TABLE(generate_series(1001, 2000));
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select count(*) from t_nobundle;
+-- result:
+2000
+-- !result
+select count(distinct k1) from t_nobundle;
+-- result:
+2000
+-- !result
+set enable_sql_transaction = false;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

@@ -14,8 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Expectations;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -116,7 +119,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 """;
         String plan = getVerboseExplain(sql);
         String expected = "5 <-> row[([2: VARCHAR_COL, VARCHAR, true], [4: INTEGER_COL, INT, true]); " +
-                "args: VARCHAR,INT; result: struct<col1 varchar(25), col2 int(11)>; args nullable: true; " +
+                "args: VARCHAR,INT; result: struct<`col1` varchar(25), `col2` int(11)>; args nullable: true; " +
                 "result nullable: true].col2[true";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
@@ -135,15 +138,15 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>], row[([9: VARCHAR_COL, INT, " +
                 "true], [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [4: INTEGER_COL, INT, true]); args: " +
-                "INT,INVALID_TYPE,INT; result: struct<col1 int(11), col2 array<int(11)>, col3 int(11)>; args " +
+                "INT,INVALID_TYPE,INT; result: struct<`col1` int(11), `col2` array<int(11)>, `col3` int(11)>; args " +
                 "nullable: true; result nullable: true].col1[true])\n" +
                 "  |  7 <-> DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], row[([9: " +
                 "VARCHAR_COL, INT, true], [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [4: INTEGER_COL, INT, true]); " +
-                "args: INT,INVALID_TYPE,INT; result: struct<col1 int(11), col2 array<int(11)>, col3 int(11)>; args " +
+                "args: INT,INVALID_TYPE,INT; result: struct<`col1` int(11), `col2` array<int(11)>, `col3` int(11)>; args " +
                 "nullable: true; result nullable: true].col2[true])\n" +
                 "  |  8 <-> row[(DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>]), DictDecode([10: " +
                 "ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>]), [4: INTEGER_COL, INT, true]); args: " +
-                "VARCHAR,INVALID_TYPE,INT; result: struct<col1 varchar(25), col2 array<varchar(40)>, col3 int(11)>;" +
+                "VARCHAR,INVALID_TYPE,INT; result: struct<`col1` varchar(25), `col2` array<varchar(40)>, `col3` int(11)>;" +
                 " args nullable: true; result nullable: true].col3[true]\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
@@ -157,7 +160,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         String expected = "5 <-> to_json[(row[([2: VARCHAR_COL, VARCHAR, true], [4: INTEGER_COL, INT, true], " +
                 "[3: ARRAY_VARCHAR_COL, ARRAY<VARCHAR(40)>, true]); args: VARCHAR,INT,INVALID_TYPE; result: " +
-                "struct<col1 varchar(25), col2 int(11), col3 array<varchar(40)>>; args nullable: true; result " +
+                "struct<`col1` varchar(25), `col2` int(11), `col3` array<varchar(40)>>; args nullable: true; result " +
                 "nullable: true]); args: INVALID_TYPE; result: JSON; args nullable: true; result nullable: true]";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
@@ -180,12 +183,12 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 """;
         String plan = getVerboseExplain(sql);
         String expected = "5 <-> named_struct[('c1', DictDecode([6: VARCHAR_COL, INT, true], [<place-holder>], " +
-                "[8: named_struct, struct<c1 int(11), c2 array<int(11)>, c3 int(11)>, true].c1[true]), 'c2', " +
+                "[8: named_struct, struct<`c1` int(11), `c2` array<int(11)>, `c3` int(11)>, true].c1[true]), 'c2', " +
                 "DictDecode([7: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], [8: named_struct, " +
-                "struct<c1 int(11), c2 array<int(11)>, c3 int(11)>, true].c2[true]), 'c3', [8: named_struct, " +
-                "struct<c1 int(11), c2 array<int(11)>, c3 int(11)>, true].c3[true]); args: " +
-                "VARCHAR,VARCHAR,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<c1 varchar(25), c2 " +
-                "array<varchar(40)>, c3 int(11)>; args nullable: true; result nullable: true]";
+                "struct<`c1` int(11), `c2` array<int(11)>, `c3` int(11)>, true].c2[true]), 'c3', [8: named_struct, " +
+                "struct<`c1` int(11), `c2` array<int(11)>, `c3` int(11)>, true].c3[true]); args: " +
+                "VARCHAR,VARCHAR,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` varchar(25), `c2` " +
+                "array<varchar(40)>, `c3` int(11)>; args nullable: true; result nullable: true]";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -203,16 +206,16 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>], named_struct[('c1', [9: " +
                 "VARCHAR_COL, INT, true], 'c2', [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], 'c3', [4: INTEGER_COL, " +
-                "INT, true]); args: VARCHAR,INT,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<c1 int(11), c2 " +
-                "array<int(11)>, c3 int(11)>; args nullable: true; result nullable: true].c1[true])\n" +
+                "INT, true]); args: VARCHAR,INT,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` int(11), `c2` " +
+                "array<int(11)>, `c3` int(11)>; args nullable: true; result nullable: true].c1[true])\n" +
                 "  |  7 <-> DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], named_struct[('c1'" +
                 ", [9: VARCHAR_COL, INT, true], 'c2', [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], 'c3', [4: " +
-                "INTEGER_COL, INT, true]); args: VARCHAR,INT,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<c1 " +
-                "int(11), c2 array<int(11)>, c3 int(11)>; args nullable: true; result nullable: true].c2[true])\n" +
+                "INTEGER_COL, INT, true]); args: VARCHAR,INT,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` " +
+                "int(11), `c2` array<int(11)>, `c3` int(11)>; args nullable: true; result nullable: true].c2[true])\n" +
                 "  |  8 <-> named_struct[('c1', DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>]), 'c2', " +
                 "DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>]), 'c3', [4: INTEGER_COL, INT," +
-                " true]); args: VARCHAR,VARCHAR,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<c1 varchar(25), c2" +
-                " array<varchar(40)>, c3 int(11)>; args nullable: true; result nullable: true].c3[true]\n";
+                " true]); args: VARCHAR,VARCHAR,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` varchar(25), `c2`" +
+                " array<varchar(40)>, `c3` int(11)>; args nullable: true; result nullable: true].c3[true]\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -246,7 +249,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         String expected = "5 <-> DictDecode([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], " +
                 "row[([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [2: VARCHAR_COL, VARCHAR, true]); args: " +
-                "INVALID_TYPE,VARCHAR; result: struct<col1 array<int(11)>, col2 varchar(25)>; args nullable: true; " +
+                "INVALID_TYPE,VARCHAR; result: struct<`col1` array<int(11)>, `col2` varchar(25)>; args nullable: true; " +
                 "result nullable: true].col1[true][1])";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
@@ -263,9 +266,9 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  4 <-> [4: INTEGER_COL, INT, true]\n" +
                 "  |  5 <-> row[(row[(DictDecode([7: VARCHAR_COL, INT, true], [<place-holder>])); args: VARCHAR; " +
-                "result: struct<col1 varchar(25)>; args nullable: true; result nullable: true], [3: " +
+                "result: struct<`col1` varchar(25)>; args nullable: true; result nullable: true], [3: " +
                 "ARRAY_VARCHAR_COL, ARRAY<VARCHAR(40)>, true]); args: INVALID_TYPE,INVALID_TYPE; result: " +
-                "struct<col1 struct<col1 varchar(25)>, col2 array<varchar(40)>>; args nullable: true;" +
+                "struct<`col1` struct<`col1` varchar(25)>, `col2` array<varchar(40)>>; args nullable: true;" +
                 " result nullable: true]\n" +
                 "  |  8 <-> DictDefine([7: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; result:" +
                 " VARCHAR; args nullable: true; result nullable: true]])";
@@ -294,10 +297,10 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String expected = "  10:Project\n" +
                 "  |  output columns:\n" +
                 "  |  5 <-> named_struct[('col1', DictDecode([11: VARCHAR_COL, INT, true], [<place-holder>], [13: " +
-                "row, struct<col1 int(11)>, true].col1[true])); args: VARCHAR,VARCHAR; result: struct<col1 " +
+                "row, struct<`col1` int(11)>, true].col1[true])); args: VARCHAR,VARCHAR; result: struct<`col1` " +
                 "varchar(25)>; args nullable: true; result nullable: true]\n" +
                 "  |  10 <-> named_struct[('col1', DictDecode([12: VARCHAR_COL2, INT, true], [<place-holder>], [14:" +
-                " row, struct<col1 int(11)>, true].col1[true])); args: VARCHAR,VARCHAR; result: struct<col1 " +
+                " row, struct<`col1` int(11)>, true].col1[true])); args: VARCHAR,VARCHAR; result: struct<`col1` " +
                 "varchar(25)>; args nullable: true; result nullable: true]\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
@@ -318,7 +321,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  4 <-> [4: INTEGER_COL, INT, true]\n" +
                 "  |  5 <-> named_struct[('col1', DictDecode([6: VARCHAR_COL, INT, true], [<place-holder>], [8: row," +
-                " struct<col1 int(11)>, true].col1[true])); args: VARCHAR,VARCHAR; result: struct<col1 varchar(25)>; " +
+                " struct<`col1` int(11)>, true].col1[true])); args: VARCHAR,VARCHAR; result: struct<`col1` varchar(25)>; " +
                 "args nullable: true; result nullable: true]\n" +
                 "  |  7 <-> [7: ARRAY_VARCHAR_COL, ARRAY<INT>, true]";
         Assertions.assertTrue(plan.contains(expected), plan);
@@ -344,9 +347,9 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String expected = "  3:Project\n" +
                 "  |  output columns:\n" +
                 "  |  6 <-> named_struct[('col1', DictDecode([7: VARCHAR_COL, INT, true], [<place-holder>], [9: " +
-                "any_value, struct<col1 int(11), col2 int(11)>, true].col1[true]), 'col2', [9: any_value, struct<col1" +
-                " int(11), col2 int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: struct<col1" +
-                " varchar(25), col2 int(11)>; args nullable: true; result nullable: true]\n";
+                "any_value, struct<`col1` int(11), `col2` int(11)>, true].col1[true]), 'col2', [9: any_value, struct<`col1`" +
+                " int(11), `col2` int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: struct<`col1`" +
+                " varchar(25), `col2` int(11)>; args nullable: true; result nullable: true]\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -369,12 +372,12 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         String expected = "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  7 <-> DictDecode([13: VARCHAR_COL, INT, true], [<place-holder>], [16: any_value, struct<col1 " +
-                "int(11), col2 int(11), col3 array<int(11)>>, true].col1[true])\n" +
-                "  |  8 <-> [16: any_value, struct<col1 int(11), col2 int(11), col3 array<int(11)>>, true].col2" +
+                "  |  7 <-> DictDecode([13: VARCHAR_COL, INT, true], [<place-holder>], [16: any_value, struct<`col1` " +
+                "int(11), `col2` int(11), `col3` array<int(11)>>, true].col1[true])\n" +
+                "  |  8 <-> [16: any_value, struct<`col1` int(11), `col2` int(11), `col3` array<int(11)>>, true].col2" +
                 "[false]\n" +
                 "  |  9 <-> DictDecode([14: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], [16: any_value, " +
-                "struct<col1 int(11), col2 int(11), col3 array<int(11)>>, true].col3[true])\n";
+                "struct<`col1` int(11), `col2` int(11), `col3` array<int(11)>>, true].col3[true])\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -404,13 +407,13 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String expected = "  8:Project\n" +
                 "  |  output columns:\n" +
                 "  |  6 <-> named_struct[('col1', DictDecode([13: VARCHAR_COL, INT, true], [<place-holder>], [16: " +
-                "any_value, struct<col1 int(11), col2 int(11)>, true].col1[true]), 'col2', [16: any_value, struct" +
-                "<col1 int(11), col2 int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: struct" +
-                "<col1 varchar(25), col2 int(11)>; args nullable: true; result nullable: true]\n" +
+                "any_value, struct<`col1` int(11), `col2` int(11)>, true].col1[true]), 'col2', [16: any_value, struct" +
+                "<`col1` int(11), `col2` int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: struct" +
+                "<`col1` varchar(25), `col2` int(11)>; args nullable: true; result nullable: true]\n" +
                 "  |  12 <-> named_struct[('col1', DictDecode([14: VARCHAR_COL2, INT, true], [<place-holder>], [18: " +
-                "any_value, struct<col1 int(11), col2 int(11)>, true].col1[true]), 'col2', [18: any_value, struct" +
-                "<col1 int(11), col2 int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: struct" +
-                "<col1 varchar(25), col2 int(11)>; args nullable: true; result nullable: true]\n";
+                "any_value, struct<`col1` int(11), `col2` int(11)>, true].col1[true]), 'col2', [18: any_value, struct" +
+                "<`col1` int(11), `col2` int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: struct" +
+                "<`col1` varchar(25), `col2` int(11)>; args nullable: true; result nullable: true]\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -423,12 +426,12 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains("  1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  5 <-> [10: row, struct<col1 int(11)>, true]\n" +
+                "  |  5 <-> [10: row, struct<`col1` int(11)>, true]\n" +
                 "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
                 "VARCHAR; args nullable: true; result nullable: true]])\n" +
-                "  |  7 <-> row[([4: INTEGER_COL, INT, true]); args: INT; result: struct<col1 int(11)>; args " +
+                "  |  7 <-> row[([4: INTEGER_COL, INT, true]); args: INT; result: struct<`col1` int(11)>; args " +
                 "nullable: true; result nullable: true].col1[true]\n" +
-                "  |  8 <-> row[(1); args: TINYINT; result: struct<col1 tinyint(4)>; args nullable: false; " +
+                "  |  8 <-> row[(1); args: TINYINT; result: struct<`col1` tinyint(4)>; args nullable: false; " +
                 "result nullable: true].col1[true]"), plan);
     }
 
@@ -450,9 +453,9 @@ public class LowCardinalityStructTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains("  3:Project\n" +
                 "  |  output columns:\n" +
                 "  |  7 <-> to_json[(named_struct[('col1', DictDecode([8: VARCHAR_COL, INT, true], [<place-holder>], " +
-                "[10: any_value, struct<col1 int(11), col2 int(11)>, true].col1[true]), 'col2', [10: any_value, " +
-                "struct<col1 int(11), col2 int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: " +
-                "struct<col1 varchar(25), col2 int(11)>; args nullable: true; result nullable: true]); args: " +
+                "[10: any_value, struct<`col1` int(11), `col2` int(11)>, true].col1[true]), 'col2', [10: any_value, " +
+                "struct<`col1` int(11), `col2` int(11)>, true].col2[true]); args: VARCHAR,VARCHAR,VARCHAR,INT; result: " +
+                "struct<`col1` varchar(25), `col2` int(11)>; args nullable: true; result nullable: true]); args: " +
                 "INVALID_TYPE; result: JSON; args nullable: true; result nullable: true]\n"), plan);
     }
 
@@ -465,8 +468,8 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         String expected = "  1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  5 <-> [5: STRUCT_COL, struct<VARCHAR_FIELD varchar(50), INTEGER_FIELD int(11)>, true]\n" +
-                "  |  6 <-> upper[([5: STRUCT_COL, struct<VARCHAR_FIELD varchar(50), INTEGER_FIELD int(11)>, true]." +
+                "  |  5 <-> [5: STRUCT_COL, struct<`VARCHAR_FIELD` varchar(50), `INTEGER_FIELD` int(11)>, true]\n" +
+                "  |  6 <-> upper[([5: STRUCT_COL, struct<`VARCHAR_FIELD` varchar(50), `INTEGER_FIELD` int(11)>, true]." +
                 "VARCHAR_FIELD[true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
                 "  |  7 <-> DictDecode([8: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; " +
                 "result: VARCHAR; args nullable: true; result nullable: true]])\n";
@@ -505,8 +508,8 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: array_agg[([7: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>, " +
-                "col3 array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true; " +
+                "  |  aggregate: array_agg[([7: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>, " +
+                "`col3` array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true; " +
                 "result nullable: true]"), plan);
     }
 
@@ -550,8 +553,8 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  6:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: array_agg[([7: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>, " +
-                "col3 array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true; " +
+                "  |  aggregate: array_agg[([7: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>, " +
+                "`col3` array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true; " +
                 "result nullable: true]"), plan);
     }
 
@@ -574,8 +577,8 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  6:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: array_agg[([9: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>, " +
-                "col3 array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true;" +
+                "  |  aggregate: array_agg[([9: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>, " +
+                "`col3` array<int(11)>>, true]); args: INT,INT,INT; result: ARRAY<INT>; args nullable: true;" +
                 " result nullable: true]"), plan);
     }
 
@@ -588,9 +591,158 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 """;
         String plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: array_agg[([8: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>>, true]);" +
+                "  |  aggregate: array_agg[([8: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, true]);" +
                 " args: INT,INT; result: ARRAY<INT>; args nullable: true; result nullable: true], " +
-                "array_agg[([9: array_agg, struct<col1 array<int(11)>, col2 array<int(11)>>, true]); args: INT,INT;" +
+                "array_agg[([9: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, true]); args: INT,INT;" +
                 " result: ARRAY<INT>; args nullable: true; result nullable: true]\n"), plan);
+    }
+
+    @Test
+    public void testPartialEncoding() throws Exception {
+        String sql = """
+                select array_agg(VARCHAR_COL order by VARCHAR_COL2), GROUP_CONCAT(VARCHAR_COL2)
+                from T JOIN T2 ON (KEY_COL = KEY_COL2)
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains(" 9:Decode\n" +
+                "  |  <dict id 13> : <string id 9>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  8:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([13: array_agg, struct<`col1` array<int(11)>, `col2` array<varchar(25)>>," +
+                " true]); args: INT,VARCHAR; result: ARRAY<INT>; args nullable: true; result nullable: true], " +
+                "group_concat[([10: group_concat, struct<`col1` array<varchar>, `col2` array<varchar>>, true], ',');" +
+                " args: VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggSortOnlyEncodingSingleStage() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='1') */ ARRAY_AGG(INTEGER_COL ORDER BY VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: array_agg[([4: INTEGER_COL, INT, true], [6: VARCHAR_COL, INT, true]); args: INT,INT;" +
+                " result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggSortOnlyEncodingTwoStage() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='2') */ ARRAY_AGG(INTEGER_COL ORDER BY VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([5: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, " +
+                "true]); args: INT,INT; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggArrayOfString() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='2') */ ARRAY_AGG(ARRAY_VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains(" 1:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: array_agg[([3: ARRAY_VARCHAR_COL, ARRAY<VARCHAR(40)>, true]); args: INVALID_TYPE; " +
+                "result: struct<`col1` array<array<varchar(40)>>>; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testArrayAggNonLowCardStringInput1Stage() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='1') */
+                ARRAY_AGG(VARCHAR_COL ORDER BY VARCHAR_COL2)
+                FROM T JOIN T2 ON (KEY_COL = KEY_COL2)
+                """;
+
+        IDictManager dictManager = IDictManager.getInstance();
+        new Expectations(dictManager) {
+            {
+                // Explicitly model: VARCHAR_COL has no dict; other columns keep the default behavior.
+                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                result = false;
+                minTimes = 0;
+
+                dictManager.hasGlobalDict(anyLong, (ColumnId) any, anyLong);
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("6:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: array_agg[([2: VARCHAR_COL, VARCHAR, true], [10: VARCHAR_COL2, INT, true]); " +
+                "args: VARCHAR,INT; result: ARRAY<VARCHAR(25)>; args nullable: true; result nullable: true]\n"), plan);
+    }
+
+    @Test
+    public void testArrayAggNonLowCardStringInput2Stage() throws Exception {
+        String sql = """
+                SELECT /*+ SET_VAR(new_planner_agg_stage='2') */
+                ARRAY_AGG(VARCHAR_COL ORDER BY VARCHAR_COL2)
+                FROM T JOIN T2 ON (KEY_COL = KEY_COL2)
+                """;
+
+        IDictManager dictManager = IDictManager.getInstance();
+        new Expectations(dictManager) {
+            {
+                dictManager.hasGlobalDict(anyLong, ColumnId.create("VARCHAR_COL"), anyLong);
+                result = false;
+            }
+        };
+
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: array_agg[([9: array_agg, struct<`col1` array<varchar(25)>, `col2` array<int(11)>>, " +
+                "true]); args: VARCHAR,INT; result: ARRAY<VARCHAR(25)>; args nullable: true; result nullable: " +
+                "true]"), plan);
+    }
+
+    @Test
+    public void testArrayAggWithDecodeInMiddle() throws Exception {
+        String sql = """ 
+                SELECT
+                GROUP_CONCAT(DISTINCT VARCHAR_COL), ARRAY_AGG(KEY_COL ORDER BY VARCHAR_COL)
+                FROM T
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  aggregate: array_agg[([1: KEY_COL, INT, false], [7: VARCHAR_COL, INT, true]); args: INT,INT; " +
+                "result: struct<`col1` array<int(11)>, `col2` array<int(11)>>; args nullable: true; result nullable: " +
+                "true]\n" +
+                "  |  group by: [7: VARCHAR_COL, INT, true]"), plan);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
+                "  |  aggregate: array_agg[([6: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, " +
+                "true]); args: INT,INT; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  group by: [7: VARCHAR_COL, INT, true]"), plan);
+        Assertions.assertTrue(plan.contains("5:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: group_concat[([2: VARCHAR_COL, VARCHAR(25), true], ','); args: VARCHAR,VARCHAR; " +
+                "result: struct<`col1` array<varchar>, `col2` array<varchar>>; args nullable: true; result nullable: " +
+                "true], array_agg[([6: array_agg, ARRAY<INT>, true]); args: INT,INT; result: struct<`col1` " +
+                "array<int(11)>, `col2` array<int(11)>>; args nullable: true; result nullable: true]"), plan);
+        Assertions.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  aggregate: group_concat[([5: group_concat, struct<`col1` array<varchar>, `col2` " +
+                "array<varchar>>, true], ','); args: VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result " +
+                "nullable: true], array_agg[([6: array_agg, struct<`col1` array<int(11)>, `col2` array<int(11)>>, " +
+                "true]); args: INT,INT; result: ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  "), plan);
+    }
+
+    @Test
+    public void testArrayAggConstantValueWithLowCardOrderKey() throws Exception {
+        String sql = "SELECT array_agg('x' ORDER BY VARCHAR_COL) FROM T";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: array_agg[('x', [6: VARCHAR_COL, INT, true]); args: VARCHAR,INT; " +
+                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true]"), plan);
     }
 }

@@ -24,7 +24,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.MVPartitionCellBuilder;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,7 +47,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
     }
 
     /**
-     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
+     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into
+     * result.
      *
      * Compare the partition of the base table and the partition of the mv.
      * @param baseItems the partition name to its list partition cell of the base table
@@ -54,26 +56,27 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return the list partition diff between the base table and the mv
      */
     public static PartitionDiff getListPartitionDiff(PCellSortedSet baseItems,
-                                                     PCellSortedSet mvItems,
-                                                     Set<String> uniqueResultNames) {
+                                                     PCellSortedSet mvItems) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         // for addition, we need to ensure the partition name is unique in case-insensitive
-        PCellSortedSet adds = diffList(baseItems, mvItems, uniqueResultNames);
+        PCellSortedSet adds = diffList(baseItems, mvItems, true);
         // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
-        PCellSortedSet deletes = diffList(mvItems, baseItems, null);
+        PCellSortedSet deletes = diffList(mvItems, baseItems, false);
         return new PartitionDiff(adds, deletes);
     }
 
     /**
-     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
-     * When `uniqueResultNames` is set, use it to ensure the output partition name is unique in case-insensitive.
-     * NOTE: Ensure output map keys are distinct in case-insensitive which is because the key is used for partition name,
-     * and StarRocks partition name is case-insensitive.
+     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into
+     * result.
+     * When `isEnsureUniqueResultNames` is true, ensure the output partition names are unique in case-insensitive
+     * by checking against both existing destination partitions and partitions generated in this diff.
+     * NOTE: StarRocks partition names are case-insensitive, so output map keys must also be distinct in
+     * case-insensitive when this option is enabled.
      */
     public static PCellSortedSet diffList(PCellSortedSet srcPCells,
                                           PCellSortedSet dstPCells,
-                                          Set<String> uniqueResultNames) {
+                                          boolean isEnsureUniqueResultNames) {
         if (srcPCells == null || srcPCells.isEmpty()) {
             return PCellSortedSet.of();
         }
@@ -89,6 +92,11 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
                         (v1, v2) -> v1, Maps::newTreeMap));
         PCellSortedSet result = PCellSortedSet.of();
+        PCellSortedSet occupiedPartitions = null;
+        if (isEnsureUniqueResultNames) {
+            occupiedPartitions = PCellSortedSet.of();
+            occupiedPartitions.addAll(dstPCells);
+        }
         for (PCellWithName srcPCell : srcPCells.getPartitions()) {
             String pName = srcPCell.name();
             PListCell srcItem = (PListCell) srcPCell.cell();
@@ -107,15 +115,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                         .map(items -> items.get(0))
                         .collect(Collectors.toList());
                 PListCell newSrcValue = new PListCell(newSrcItems);
-                // ensure the partition name is unique
-                if (uniqueResultNames != null && uniqueResultNames.contains(pName)) {
-                    try {
-                        // it's fine to use result to keep it unique here, since we always
-                        pName = AnalyzerUtils.calculateUniquePartitionName(pName, newSrcValue, result);
-                    } catch (Exception e) {
-                        throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
+                // Optionally ensure the output partition name is unique against both existing destination partitions
+                // and newly generated result partitions.
+                if (occupiedPartitions != null) {
+                    if (occupiedPartitions.containsName(pName)) {
+                        try {
+                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newSrcValue, occupiedPartitions);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
+                        }
                     }
-                    uniqueResultNames.add(pName);
+                    occupiedPartitions.add(PCellWithName.of(pName, newSrcValue));
                 }
                 result.add(PCellWithName.of(pName, newSrcValue));
             }
@@ -308,17 +318,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * Collect base table's partition infos.
      */
     @Override
-    public Map<Table, PCellSortedSet> syncBaseTablePartitionInfos() {
-        Map<Table, PCellSortedSet> refBaseTablePartitionMap = Maps.newHashMap();
+    public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos() {
+        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = Maps.newHashMap();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         try {
             for (Map.Entry<Table, List<Column>> e : refBaseTablePartitionColumns.entrySet()) {
                 Table refBaseTable = e.getKey();
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
-                PCellSortedSet basePartitionCells = PartitionUtil.getPartitionCells(refBaseTable,
-                        refPartitionColumns);
-                refBaseTablePartitionMap.put(refBaseTable, basePartitionCells);
+                BaseToMVPartitionMapping mapping = MVPartitionCellBuilder.getPartitionCells(refBaseTable,
+                        refPartitionColumns, pinnedRangeFor(refBaseTable));
+                refBaseTablePartitionMap.put(refBaseTable, mapping);
             }
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.",
@@ -352,7 +362,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
     @Override
     public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude) {
         // table -> map<partition name -> partition cell>
-        Map<Table, PCellSortedSet> refBaseTablePartitionMap = syncBaseTablePartitionInfos();
+        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = syncBaseTablePartitionInfos();
         // merge all base table partition cells
         if (refBaseTablePartitionMap == null) {
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
@@ -363,32 +373,18 @@ public final class ListPartitionDiffer extends PartitionDiffer {
 
     @Override
     public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
-                                                    Map<Table, PCellSortedSet> refBaseTablePartitionMap) {
+                                                    Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap) {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
         PCellSortedSet mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
 
         // collect all base table partition cells
-        PCellSortedSet allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
+        Map<Table, PCellSortedSet> refBaseTableCells = BaseToMVPartitionMapping.extractCells(refBaseTablePartitionMap);
+        PCellSortedSet allBasePartitionItems = collectBasePartitionCells(refBaseTableCells);
 
-        // ensure the result partition name is unique in case-insensitive
-        Set<String> uniqueResultNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        uniqueResultNames.addAll(mvPartitionNameToListMap.getPartitionNames());
+        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems, mvPartitionNameToListMap);
 
-        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems,
-                mvPartitionNameToListMap, uniqueResultNames);
-
-        // collect external partition column mapping
-        Map<Table, PartitionNameSetMap> externalPartitionMaps = Maps.newHashMap();
-        if (!queryRewriteParams.isQueryRewrite()) {
-            try {
-                collectExternalPartitionNameMapping(mv.getRefBaseTablePartitionColumns(), externalPartitionMaps);
-            } catch (Exception e) {
-                LOG.warn("Get external partition column mapping failed.", DebugUtil.getStackTrace(e));
-                return null;
-            }
-        }
-        return new PartitionDiffResult(externalPartitionMaps, refBaseTablePartitionMap, mvPartitionNameToListMap, diff);
+        return new PartitionDiffResult(refBaseTablePartitionMap, mvPartitionNameToListMap, diff);
     }
 
     /**

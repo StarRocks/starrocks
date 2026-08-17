@@ -1,5 +1,7 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
+description: "StarRocks は MPP データベースとして、サブセカンド単位のクエリ速度と大規模データの超高速並列処理によりリアルタイム分析を実現します。"
 ---
 
 # StarRocks とは？

@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <ostream>
 #include <string>
 #include <vector>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
@@ -41,6 +43,13 @@ struct TypeDescriptor {
     /// Only set if type == TYPE_DECIMAL
     int precision{-1};
     int scale{-1};
+
+    /// Only meaningful for TYPE_DATETIME read from lake formats that distinguish
+    /// timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    /// as metadata and does NOT participate in type identity (operator==, hashing, etc.).
+    /// Default false means "shift a UTC instant into the session timezone" (Hive / Iceberg /
+    /// Paimon LTZ); true means the value is a naive wall clock that must NOT be shifted.
+    bool datetime_is_ntz{false};
 
     /// Must be kept in sync with FE's max precision/scale.
     static const int MAX_PRECISION = 76;
@@ -115,7 +124,7 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+    static TypeDescriptor create_struct_type(const std::vector<std::string>& field_names,
                                              const std::vector<TypeDescriptor>& filed_types) {
         TypeDescriptor res;
         res.type = TYPE_STRUCT;

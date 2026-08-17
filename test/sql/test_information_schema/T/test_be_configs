@@ -1,0 +1,3 @@
+-- name: test_update_be_configs
+UPDATE information_schema.be_configs SET VALUE = 'INFO' WHERE name = "sys_log_level";
+UPDATE information_schema.be_configs SET VALUE = 'INFO' WHERE name = "sys_log_level";

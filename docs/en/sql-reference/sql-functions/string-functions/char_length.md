@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the number of characters in a string."
 ---
 
 # char_length

@@ -34,7 +34,11 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "common/status.h"
+#include "common/statusor.h"
+#include "fs/fs.h" // FileInfo
 #ifdef WITH_TENANN
 #include "tenann/common/seq_view.h"
 #include "tenann/searcher/id_filter.h"
@@ -43,13 +47,32 @@
 
 namespace starrocks {
 
+struct OlapReaderStatistics;
+
+enum class VectorIndexReaderInitResult : uint8_t {
+    kReady,
+    kFallback,
+};
+
 class VectorIndexReader {
 public:
     VectorIndexReader() = default;
     virtual ~VectorIndexReader() = default;
 
+    // Whether the reader can restrict the ANN search to a candidate id set efficiently (filtered
+    // search), which enables true pre-filtering. Readers that cannot should be queried via
+    // post-filtering (oversample + filter the result). Conservative default: false.
+    virtual bool supports_efficient_filtered_search() const { return false; }
+
 #ifdef WITH_TENANN
-    virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) = 0;
+    // `vi_file` describes the .vi file: path, the FileSystem that owns it, and its size once
+    // resolved. A null `vi_file.fs` means read the path from the local filesystem. The
+    // FileSystem is held by shared_ptr because the reader built from it is stored in the
+    // tenann index cache and outlives the SegmentIterator that started the load.
+    // Takes ownership of the query-specific meta so implementations can adjust it
+    // without serializing and copying the full IndexMeta again.
+    virtual StatusOr<VectorIndexReaderInitResult> init_searcher(tenann::IndexMeta meta, const FileInfo& vi_file,
+                                                                OlapReaderStatistics& stats) = 0;
 
     virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                           tenann::IdFilter* id_filter = nullptr) = 0;

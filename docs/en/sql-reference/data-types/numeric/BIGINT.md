@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BIGINT is an 8-byte signed integer."
 ---
 
 # BIGINT

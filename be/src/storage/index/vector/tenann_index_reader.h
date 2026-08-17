@@ -15,12 +15,15 @@
 #ifdef WITH_TENANN
 #pragma once
 
+#include <utility>
+
 #include "common/status.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "tenann/common/seq_view.h"
 #include "tenann/common/type_traits.h"
 #include "tenann/factory/ann_searcher_factory.h"
 #include "tenann/factory/index_factory.h"
+#include "tenann/index/index_cache.h"
 #include "tenann/searcher/ann_searcher.h"
 #include "tenann/searcher/faiss_hnsw_ann_searcher.h"
 #include "tenann/searcher/id_filter.h"
@@ -28,12 +31,21 @@
 
 namespace starrocks {
 
+class VectorIndexCache;
+
 class TenANNReader final : public VectorIndexReader {
 public:
-    TenANNReader() = default;
-    ~TenANNReader() override{};
+    TenANNReader(VectorIndexCache& vector_index_cache, bool async_load_on_miss,
+                 tenann::IndexCacheHandle cache_handle = {})
+            : _vector_index_cache(vector_index_cache),
+              _async_load_on_miss(async_load_on_miss),
+              _cache_handle(std::move(cache_handle)) {}
+    ~TenANNReader() override = default;
 
-    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) override;
+    // vi_file.fs == nullptr reads vi_file.path from the local filesystem; otherwise
+    // VectorIndexFileReader bridges tenann to that FileSystem.
+    StatusOr<VectorIndexReaderInitResult> init_searcher(tenann::IndexMeta meta, const FileInfo& vi_file,
+                                                        OlapReaderStatistics& stats) override;
 
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                   tenann::IdFilter* id_filter = nullptr) override;
@@ -41,8 +53,15 @@ public:
                         std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
                         int order) override;
 
+    // tenann HNSW/IVF accept an IdFilter (faiss IDSelector), so filtered search is efficient.
+    bool supports_efficient_filtered_search() const override { return true; }
+
 private:
     std::shared_ptr<tenann::AnnSearcher> _searcher;
+    VectorIndexCache& _vector_index_cache;
+    bool _async_load_on_miss = false;
+    // Pins the cache entry for the reader's lifetime.
+    tenann::IndexCacheHandle _cache_handle;
 };
 
 } // namespace starrocks

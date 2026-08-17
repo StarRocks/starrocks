@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -35,14 +36,18 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class ExecPlan {
@@ -53,11 +58,13 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
+    private final List<PlanFragment> preExecutedFragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
     // splitProduceFragments and joinNodeMap is used for skew join
     private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
 
     private final Map<PhysicalHashJoinOperator, HashJoinNode> joinNodeMap = new HashMap<>();
+    private final Map<PhysicalScanOperator, ScanNode> scanNodeMap = new HashMap<>();
 
     private int planCount = 0;
 
@@ -78,6 +85,8 @@ public class ExecPlan {
     private final boolean isShortCircuit;
 
     private long useBaseline = -1;
+
+    private Set<Long> duplicatedLakeScanTableIds;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -116,12 +125,49 @@ public class ExecPlan {
         return scanNodes;
     }
 
+    // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one
+    // table). Derived lazily from the physical plan and consulted per scan to gate the prepared physical split
+    // scan, whose per-scan reuse of a shared prepared read state is unsafe when the same table feeds two scans.
+    public Set<Long> getDuplicatedLakeScanTableIds() {
+        if (duplicatedLakeScanTableIds == null) {
+            Map<Long, Integer> counts = new HashMap<>();
+            countLakeScanTableIds(physicalPlan, counts);
+            Set<Long> duplicated = new HashSet<>();
+            counts.forEach((tableId, count) -> {
+                if (count >= 2) {
+                    duplicated.add(tableId);
+                }
+            });
+            duplicatedLakeScanTableIds = duplicated;
+        }
+        return duplicatedLakeScanTableIds;
+    }
+
+    private static void countLakeScanTableIds(OptExpression optExpression, Map<Long, Integer> counts) {
+        if (optExpression == null) {
+            return;
+        }
+        if (optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+            Table table = ((PhysicalOlapScanOperator) optExpression.getOp()).getTable();
+            if (table != null && table.isCloudNativeTableOrMaterializedView()) {
+                counts.merge(table.getId(), 1, Integer::sum);
+            }
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            countLakeScanTableIds(child, counts);
+        }
+    }
+
     public List<Expr> getOutputExprs() {
         return outputExprs;
     }
 
     public ArrayList<PlanFragment> getFragments() {
         return fragments;
+    }
+
+    public List<PlanFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
     }
 
     public PlanFragment getTopFragment() {
@@ -175,6 +221,10 @@ public class ExecPlan {
 
     public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
         return joinNodeMap;
+    }
+    
+    public Map<PhysicalScanOperator, ScanNode> getScanNodeMap() {
+        return scanNodeMap;
     }
 
     public OptExpression getPhysicalPlan() {

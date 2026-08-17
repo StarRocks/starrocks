@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将逗号分隔的数字字符串转换为 BITMAP。"
 ---
 
 # bitmap_from_string

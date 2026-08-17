@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Predicate;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -150,14 +151,17 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
 
     private boolean validMv(MaterializationContext mvContext, List<LogicalScanOperator> scanOperators) {
         // mv is SPG, so there is only one baseTable
-        long baseTableId = mvContext.getBaseTables().get(0).getId();
+        // Use Table.equals rather than getId() so external tables (e.g. IcebergTable) that
+        // override equals() by catalog/db/tableIdentifier match correctly across plan rebuilds,
+        // where CONNECTOR_ID_GENERATOR may assign different numeric ids to the same logical table.
+        Table mvBaseTable = mvContext.getBaseTables().get(0);
         Set<ColumnRefOperator> mvUsedColRefs = MvUtils.collectScanColumn(mvContext.getMvExpression());
         Set<String> mvUsedColNames = mvUsedColRefs.stream()
                 .map(ColumnRefOperator::getName)
                 .collect(Collectors.toSet());
         boolean baseTableFoundInMv = false;
         for (LogicalScanOperator scanOperator : scanOperators) {
-            if (scanOperator.getTable().getId() != baseTableId) {
+            if (!mvBaseTable.equals(scanOperator.getTable())) {
                 continue;
             }
             baseTableFoundInMv = true;

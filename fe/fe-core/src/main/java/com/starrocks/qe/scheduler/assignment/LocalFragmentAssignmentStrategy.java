@@ -18,9 +18,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListUtil;
-import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -82,16 +80,6 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         // The fragment which only contains scan nodes without scan ranges,
         // such as SchemaScanNode, is assigned to an arbitrary worker.
         if (execFragment.getInstances().isEmpty()) {
-            PlanNode leftMostNode = execFragment.getLeftMostNode();
-            if (leftMostNode instanceof LookUpNode) {
-                // @TODO(silverbullet233): only assign to scan-related workers
-                for (ComputeNode worker : workerProvider.getAllWorkers()) {
-                    FragmentInstance instance = new FragmentInstance(worker, execFragment);
-                    execFragment.addInstance(instance);
-                }
-                return;
-            }
-
             long workerId = workerProvider.selectNextWorker();
             ComputeNode worker = workerProvider.getWorkerById(workerId);
             FragmentInstance instance = new FragmentInstance(worker, execFragment);
@@ -162,6 +150,42 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         return visitedReplicatedScanIds.add(scanId);
     }
 
+    private List<List<TScanRangeParams>> splitScanRangesByDriverSeqCount(
+            List<TScanRangeParams> scanRanges, int driverSeqCount) {
+        if (Config.enable_schedule_insert_query_by_row_count && isLoadType
+                && !scanRanges.isEmpty()
+                && scanRanges.get(0).getScan_range().isSetInternal_scan_range()) {
+            return splitScanRangeParamByRowCount(scanRanges, driverSeqCount);
+        }
+        return ListUtil.splitBySize(scanRanges, driverSeqCount);
+    }
+
+    private void addScanRangesPerDriverSeq(
+            FragmentInstance instance, Integer scanId, List<List<TScanRangeParams>> scanRangesPerDriverSeq) {
+        for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
+            instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
+        }
+    }
+
+    private void assignIncrementalScanRangesToDeployedLayout(
+            PlanFragment fragment, FragmentInstance instance, Integer scanId, List<TScanRangeParams> scanRanges) {
+        FragmentInstance.DeployedScanRangeLayout deployedLayout =
+                instance.getDeployedScanRangeLayout(scanId).orElse(null);
+        if (deployedLayout == null || !deployedLayout.isPerDriverSeq()) {
+            instance.addScanRanges(scanId, scanRanges);
+            if (deployedLayout == null) {
+                instance.recordDeployedScanRangesWithoutDriverSeq(scanId);
+            }
+            fragment.disablePhysicalPropertyOptimize();
+            return;
+        }
+
+        List<List<TScanRangeParams>> scanRangesPerDriverSeq =
+                splitScanRangesByDriverSeqCount(scanRanges, deployedLayout.getDriverSeqCount());
+        addScanRangesPerDriverSeq(instance, scanId, scanRangesPerDriverSeq);
+        instance.paddingScanRanges();
+    }
+
     private void assignScanRangesToColocateFragmentInstancePerWorker(
             ExecutionFragment execFragment,
             Map<Integer, Long> bucketSeqToWorkerId,
@@ -200,7 +224,6 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         }
         
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
-            ComputeNode worker = workerProvider.getWorkerById(workerId);
 
             // 2. split how many scanRange one instance should scan
             List<List<Integer>> bucketSeqsPerInstance = ListUtil.splitBySize(bucketSeqsOfWorker, expectedInstanceNum);
@@ -293,15 +316,19 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
                 for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
                     FragmentInstance instance = null;
-                    if (useIncrementalScanRanges && !fragmentInstanceMap.isEmpty()) {
+                    boolean reuse = useIncrementalScanRanges && !fragmentInstanceMap.isEmpty();
+                    if (reuse) {
                         instance = fragmentInstanceMap.get(workerId);
                     } else {
                         instance =
                                 new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                         execFragment.addInstance(instance);
                     }
-                    if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
+                    if (reuse) {
+                        assignIncrementalScanRangesToDeployedLayout(fragment, instance, scanId, scanRanges);
+                    } else if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
+                        instance.recordDeployedScanRangesWithoutDriverSeq(scanId);
                         fragment.disablePhysicalPropertyOptimize();
                     } else {
                         int expectedPhysicalDop = Math.max(1, Math.min(pipelineDop, scanRanges.size()));
@@ -316,14 +343,8 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             maxDop = Math.max(maxDop, expectedPhysicalDop);
                             logicalDop = Math.min(scanRanges.size(), maxDop);
                         }
-                        List<List<TScanRangeParams>> scanRangesPerDriverSeq;
-                        if (Config.enable_schedule_insert_query_by_row_count && isLoadType
-                                && !scanRanges.isEmpty()
-                                && scanRanges.get(0).getScan_range().isSetInternal_scan_range()) {
-                            scanRangesPerDriverSeq = splitScanRangeParamByRowCount(scanRanges, logicalDop);
-                        } else {
-                            scanRangesPerDriverSeq = ListUtil.splitBySize(scanRanges, logicalDop);
-                        }
+                        List<List<TScanRangeParams>> scanRangesPerDriverSeq =
+                                splitScanRangesByDriverSeqCount(scanRanges, logicalDop);
                         // Make pipeline input dop == sink dop to avoid extra local-shuffle.
                         // TODO: Make XXXSink support group execution to further improve performance.
                         if (fragment.isForceAssignScanRangesPerDriverSeq() &&
@@ -332,10 +353,9 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         }
                         instance.setPipelineDop(expectedPhysicalDop);
                         instance.setGroupExecutionScanDop(logicalDop);
+                        instance.recordDeployedScanRangesPerDriverSeq(scanId, logicalDop);
 
-                        for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
-                            instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
-                        }
+                        addScanRangesPerDriverSeq(instance, scanId, scanRangesPerDriverSeq);
                         instance.paddingScanRanges();
                     }
                 }

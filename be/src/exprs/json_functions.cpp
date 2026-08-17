@@ -14,10 +14,7 @@
 
 #include "exprs/json_functions.h"
 
-#include <re2/re2.h>
-
 #include <algorithm>
-#include <boost/tokenizer.hpp>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -29,10 +26,10 @@
 #include "column/json_column.h"
 #include "column/json_converter.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -40,15 +37,14 @@
 #include "exprs/column_ref.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -57,227 +53,6 @@ namespace starrocks {
 // Forward declaration for helper function
 static bool json_slice_contains(const arangodb::velocypack::Slice& target,
                                 const arangodb::velocypack::Slice& candidate);
-
-// static const re2::RE2 JSON_PATTERN("^([a-zA-Z0-9_\\-\\:\\s#\\|\\.]*)(?:\\[([0-9]+)\\])?");
-// json path cannot contains: ", [, ]
-const re2::RE2 SIMPLE_JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9]+|\*)\])?)", re2::RE2::Quiet);
-
-Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exprs,
-                                        std::vector<SimpleJsonPath>* parsed_paths) {
-    // Allow two kind of syntax:
-    // strict jsonpath: $.a.b[x]
-    // simple syntax: a.b
-
-    for (int i = 0; i < path_exprs.size(); i++) {
-        std::string col;
-        std::string index;
-        auto& current = path_exprs[i];
-
-        if (i == 0) {
-            if (current.size() == 0 || current[0] != '$') {
-                parsed_paths->emplace_back("", -1, true);
-                continue;
-            }
-        }
-
-        if (UNLIKELY(!RE2::FullMatch(path_exprs[i], SIMPLE_JSONPATH_PATTERN, &col, &index))) {
-            parsed_paths->emplace_back("", -1, false);
-            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[i]));
-        } else {
-            int idx = -1;
-            if (!index.empty()) {
-                if (index == "*") {
-                    idx = -2;
-                } else {
-                    idx = atoi(index.c_str());
-                }
-            }
-            parsed_paths->emplace_back(col, idx, true);
-        }
-    }
-    return Status::OK();
-}
-
-Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL) {
-        return Status::OK();
-    }
-
-    if (!context->is_notnull_constant_column(1)) {
-        return Status::OK();
-    }
-
-    ColumnPtr path = context->get_constant_column(1);
-    auto path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path);
-    std::string path_str(path_value.data, path_value.size);
-    // Must remove or replace the escape sequence.
-    path_str.erase(std::remove(path_str.begin(), path_str.end(), '\\'), path_str.end());
-    if (path_str.empty()) {
-        return Status::OK();
-    }
-
-    std::vector<std::string> path_exprs;
-    try {
-        boost::tokenizer<boost::escaped_list_separator<char>> tok(path_str,
-                                                                  boost::escaped_list_separator<char>("\\", ".", "\""));
-        path_exprs.assign(tok.begin(), tok.end());
-    } catch (const boost::escaped_list_error& e) {
-        return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
-    }
-    auto* parsed_paths = new std::vector<SimpleJsonPath>();
-    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths));
-
-    context->set_function_state(scope, parsed_paths);
-    VLOG(10) << "prepare json path. size: " << parsed_paths->size();
-    return Status::OK();
-}
-
-Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
-        if (parsed_paths != nullptr) {
-            delete parsed_paths;
-            VLOG(10) << "close json path";
-        }
-    }
-
-    return Status::OK();
-}
-
-Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
-                                          simdjson::ondemand::value* value) noexcept {
-#define HANDLE_SIMDJSON_ERROR(err, msg)                                                          \
-    do {                                                                                         \
-        const simdjson::error_code& _err = err;                                                  \
-        const std::string& _msg = msg;                                                           \
-        if (UNLIKELY(_err)) {                                                                    \
-            auto err_msg = fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg); \
-            VLOG(2) << err_msg;                                                                  \
-            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS)        \
-                return Status::NotFound(err_msg);                                                \
-            return Status::DataQualityError(err_msg);                                            \
-        }                                                                                        \
-    } while (false);
-
-    if (jsonpath.size() <= 1) {
-        // The first elem of json path should be '$'.
-        // A valid json path's size is >= 2.
-        return Status::InvalidArgument("empty json path");
-    }
-
-    simdjson::ondemand::value tvalue;
-
-    // Skip the first $.
-    for (int i = 1; i < jsonpath.size(); i++) {
-        if (UNLIKELY(!jsonpath[i].is_valid)) {
-            auto msg = fmt::format("invalid json path: {}", jsonpaths_to_string(jsonpath));
-            VLOG(2) << msg;
-            return Status::InvalidArgument(msg);
-        }
-
-        const std::string& col = jsonpath[i].key;
-        int index = jsonpath[i].idx;
-
-        // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
-        // we have to do some special treatment for the second elem of json path.
-        // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
-        if (i == 1) {
-            if (obj.is_empty()) {
-                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
-                VLOG(2) << msg;
-                return Status::NotFound(msg);
-            }
-
-            if (col == "*") {
-                // There should be no jsonpath for this pattern, $.*
-                return Status::InvalidArgument(
-                        fmt::format("extracting * from root-object is not supported, the json path: {}",
-                                    jsonpaths_to_string(jsonpath)));
-            } else {
-                HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i)));
-            }
-        } else {
-            // There are always two patterns.
-            // 1. {"field_name": null}
-            // 2. {"field_name": {"field_type": data}}
-            // For pattern1, we just return null value.
-            // For pattern2, we get the first field of object as next value.
-
-            if (tvalue.is_null()) {
-                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
-                VLOG(2) << msg;
-                return Status::NotFound(msg);
-            }
-
-            if (tvalue.type() != simdjson::ondemand::json_type::object) {
-                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
-                VLOG(2) << msg;
-                return Status::NotFound(msg);
-            }
-
-            if (col == "*") {
-                for (auto field : tvalue.get_object()) {
-                    tvalue = field.value();
-                    break;
-                }
-            } else {
-                HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
-                                      fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i)));
-            }
-        }
-
-        if (index != -1) {
-            if (tvalue.is_null()) {
-                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
-                VLOG(2) << msg;
-                return Status::NotFound(msg);
-            }
-
-            // try to access tvalue as array.
-            // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
-            simdjson::ondemand::array arr;
-            HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
-                                  fmt::format("failed to access field as array, field: {}, jsonpath: {}", col,
-                                              jsonpaths_to_string(jsonpath)));
-
-            HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
-                                  fmt::format("failed to access array field: {}, index: {}, jsonpath: {}", col, index,
-                                              jsonpaths_to_string(jsonpath)));
-        }
-    }
-
-    if (tvalue.is_null()) {
-        auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath));
-        VLOG(2) << msg;
-        return Status::NotFound(msg);
-    }
-
-    std::swap(*value, tvalue);
-
-    return Status::OK();
-}
-
-Status JsonFunctions::parse_json_paths(const std::string& path_string, std::vector<SimpleJsonPath>* parsed_paths) {
-    // split path by ".", and escape quota by "\"
-    // eg:
-    //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]
-    //    '$."text.abc".xyz'  ->  [$, text.abc, xyz]
-    //    '$."text.abc"[1].xyz'  ->  [$, text.abc[1], xyz]
-    boost::tokenizer<boost::escaped_list_separator<char>> tok(path_string,
-                                                              boost::escaped_list_separator<char>("\\", ".", "\""));
-    std::vector<std::string> paths(tok.begin(), tok.end());
-    return _get_parsed_paths(paths, parsed_paths);
-}
-
-std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>& paths, size_t sub_index) {
-    std::string output{"$"};
-    size_t sz = (sub_index == -1 || sub_index >= paths.size()) ? paths.size() - 1 : sub_index;
-    for (size_t i = 1; i <= sz; ++i) {
-        output.append(".").append(paths[i].to_string());
-    }
-    return output;
-}
 
 StatusOr<ColumnPtr> JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
     return _get_json_value<TYPE_INT>(context, columns);
@@ -293,6 +68,10 @@ StatusOr<ColumnPtr> JsonFunctions::get_json_double(FunctionContext* context, con
 
 StatusOr<ColumnPtr> JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
     return _get_json_value<TYPE_VARCHAR>(context, columns);
+}
+
+StatusOr<ColumnPtr> JsonFunctions::get_json_scalar_string(FunctionContext* context, const Columns& columns) {
+    return _get_json_scalar_value(context, columns);
 }
 
 StatusOr<ColumnPtr> JsonFunctions::get_native_json_bool(FunctionContext* context, const Columns& columns) {
@@ -315,6 +94,10 @@ StatusOr<ColumnPtr> JsonFunctions::get_native_json_string(FunctionContext* conte
     return _json_query_impl<TYPE_VARCHAR>(context, columns);
 }
 
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_scalar_string(FunctionContext* context, const Columns& columns) {
+    return _json_query_scalar_impl(context, columns);
+}
+
 StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
     int num_rows = columns[0]->size();
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
@@ -329,6 +112,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
 
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             result.append_null();
         } else {
             result.append(std::move(json.value()));
@@ -397,6 +183,9 @@ StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& column
             JsonValue json_value;
             auto st = JsonValue::parse(raw, &json_value);
             if (!st.ok()) {
+                if (context != nullptr && context->allow_throw_exception()) {
+                    return st;
+                }
                 result.append_null();
             } else {
                 result.append(std::move(json_value));
@@ -411,6 +200,12 @@ StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, con
     ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
     const auto& paths = columns[1];
     return _full_json_query_impl<ResultType>(context, Columns{jsons, paths});
+}
+
+StatusOr<ColumnPtr> JsonFunctions::_get_json_scalar_value(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
+    const auto& paths = columns[1];
+    return _full_json_query_impl<TYPE_VARCHAR>(context, Columns{jsons, paths}, true);
 }
 
 //////////////////////////// User visiable functions /////////////////////////////////
@@ -430,6 +225,8 @@ public:
     ObjectPool pool;
     Expr* ref;
     Expr* cast_expr;
+
+    bool is_json_column_scalar = false;
 };
 
 static NativeJsonState* get_native_json_state(FunctionContext* context) {
@@ -494,6 +291,16 @@ StatusOr<ColumnPtr> JsonFunctions::_json_query_impl(FunctionContext* context, co
     return _full_json_query_impl<ResultType>(context, columns);
 }
 
+StatusOr<ColumnPtr> JsonFunctions::_json_query_scalar_impl(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const auto* cc = ColumnHelper::get_data_column(columns[0].get());
+    const JsonColumn* js = down_cast<const JsonColumn*>(cc);
+    if (js->is_flat_json()) {
+        return _flat_json_query_impl<TYPE_VARCHAR>(context, columns, true);
+    }
+    return _full_json_query_impl<TYPE_VARCHAR>(context, columns, true);
+}
+
 template <LogicalType TargetType>
 static StatusOr<ColumnPtr> _extract_with_cast(FunctionContext* context, NativeJsonState* state, const std::string& path,
                                               const JsonColumn* json_column) {
@@ -522,6 +329,8 @@ static StatusOr<ColumnPtr> _extract_with_cast(FunctionContext* context, NativeJs
                 state->flat_column_type = json_column->get_flat_field_type(flat_path);
                 state->flat_path = flat_path;
                 state->real_path.reset(real_path);
+                // In the json_flattener.cpp we know that the object and array will become TYPE_JSON
+                state->is_json_column_scalar = state->flat_column_type != TYPE_JSON;
                 if (TargetType != TYPE_UNKNOWN && real_path.paths.empty() && state->flat_column_type != TargetType) {
                     // full match, check target type is match flat type, need cast again
                     state->ref = state->pool.add(new ColumnRef(TypeDescriptor(state->flat_column_type), 0));
@@ -553,17 +362,19 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                     state->real_path.paths.emplace_back(p);
                     continue;
                 }
-                if (p.key.find('.') != std::string::npos) {
-                    in_flat = false;
-                }
-                if (in_flat) {
-                    flat_path += "." + p.key;
+                // A key containing the '.' separator is still a valid flat level once wrapped in
+                // quotes (the inverse of JsonFlatPath::split_path, matching SubfieldAccessPathNormalizer
+                // on the FE); only a key whose name itself contains a '"' is unrepresentable and falls
+                // back to extraction from the reconstructed JSON via real_path.
+                if (in_flat && p.key.find('"') == std::string::npos) {
+                    flat_path += (p.key.find('.') == std::string::npos) ? "." + p.key : ".\"" + p.key + "\"";
                     if (p.array_selector->type != NONE) {
                         state->real_path.paths.emplace_back("", p.array_selector);
                         in_flat = false;
                     }
                     continue;
                 }
+                in_flat = false;
                 state->real_path.paths.emplace_back(p);
             }
 
@@ -577,6 +388,14 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
             // Remove leading dot if flat_path is not empty
             // flat_path starts with "." when paths are added, but can be empty if no paths were added
             state->flat_path = flat_path.empty() ? "" : flat_path.substr(1);
+            if (in_flat) {
+                const auto& paths = json_column->flat_column_paths();
+                for (size_t i = 0; i < paths.size(); i++) {
+                    if (paths[i] == state->flat_path) {
+                        state->is_json_column_scalar = json_column->get_flat_field_type(paths[i]) != TYPE_JSON;
+                    }
+                }
+            }
             state->init_flat = true;
         });
     }
@@ -657,7 +476,8 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
 }
 
 template <LogicalType ResultType>
-StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* context, const Columns& columns,
+                                                         bool scalar_type_only) {
     ASSIGN_OR_RETURN(auto flat_column, _extract_from_flat_json<ResultType>(context, columns));
     auto* state = get_native_json_state(context);
     if (state->is_partial_match) {
@@ -676,10 +496,14 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             JsonValue* json_value = json_viewer.value(row);
             builder.clear();
             vpack::Slice slice = JsonPath::extract(json_value, state->real_path, &builder);
-            Status st = cast_vpjson_to<ResultType, false>(slice, result);
-            if (!st.ok()) {
+            if (scalar_type_only && !is_slice_scalar_type(slice)) {
                 result.append_null();
-                continue;
+            } else {
+                Status st = cast_vpjson_to<ResultType, false>(slice, result);
+                if (!st.ok()) {
+                    result.append_null();
+                    continue;
+                }
             }
         }
         return result.build(ColumnHelper::is_all_const(columns));
@@ -687,6 +511,12 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
     } else {
         // full match
         StatusOr<ColumnPtr> ret;
+        if (scalar_type_only && !state->is_json_column_scalar) {
+            auto num_rows = flat_column->size();
+            ColumnBuilder<ResultType> result(num_rows);
+            result.append_nulls(num_rows);
+            return result.build(ColumnHelper::is_all_const(columns));
+        }
         if (ResultType != state->flat_column_type) {
             DCHECK(state->cast_expr != nullptr);
             Chunk chunk;
@@ -705,7 +535,8 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
 }
 
 template <LogicalType ResultType>
-StatusOr<ColumnPtr> JsonFunctions::_full_json_query_impl(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_full_json_query_impl(FunctionContext* context, const Columns& columns,
+                                                         bool scalar_type_only) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -730,10 +561,14 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_query_impl(FunctionContext* contex
 
         builder.clear();
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
-        Status st = cast_vpjson_to<ResultType, false>(slice, result);
-        if (!st.ok()) {
+        if (scalar_type_only && !is_slice_scalar_type(slice)) {
             result.append_null();
-            continue;
+        } else {
+            Status st = cast_vpjson_to<ResultType, false>(slice, result);
+            if (!st.ok()) {
+                result.append_null();
+                continue;
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -810,7 +645,7 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_exists(FunctionContext* context, c
             VLOG(2) << "parse json path failed: " << path_str;
             continue;
         }
-        VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string().value();
+        VLOG(2) << "json_exists for  " << path_str << " of " << json_value->to_string_uncheck();
         vpack::Builder builder;
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
         result.append(!slice.isNone());
@@ -921,12 +756,12 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
                 DCHECK(field_name != nullptr);
 
                 if (!field_name_slice.isString()) {
-                    VLOG(2) << "nonstring json field name" << field_name->to_string().value();
+                    VLOG(2) << "nonstring json field name" << field_name->to_string_uncheck();
                     ok = false;
                     break;
                 }
                 if (field_name_slice.stringRef().length() == 0) {
-                    VLOG(2) << "json field name could not be empty string" << field_name->to_string().value();
+                    VLOG(2) << "json field name could not be empty string" << field_name->to_string_uncheck();
                     ok = false;
                     break;
                 }
@@ -935,7 +770,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
                     DCHECK(field_value != nullptr);
                     builder.add(field_name->to_vslice().stringRef(), field_value->to_vslice());
                 } else {
-                    VLOG(2) << "field value not exists, patch a null value" << field_name->to_string().value();
+                    VLOG(2) << "field value not exists, patch a null value" << field_name->to_string_uncheck();
                     builder.add(field_name->to_vslice().stringRef(), vpack::Value(vpack::ValueType::Null));
                 }
                 ok = true;
@@ -1466,7 +1301,7 @@ StatusOr<ColumnPtr> JsonFunctions::is_json_scalar(FunctionContext* context, cons
         vpack::Slice slice = json->to_vslice();
 
         // A scalar is any value that is not an object, array
-        bool is_scalar = !slice.isObject() && !slice.isArray();
+        bool is_scalar = is_slice_scalar_type(slice);
         result.append(is_scalar);
     }
 
@@ -1815,7 +1650,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_set(FunctionContext* context, const Colu
                 null_arg = true;
                 break;
             }
-            JsonPath json_path = res.value();
+            const JsonPath& json_path = res.value();
 
             JsonValue* new_val = val_viewers[i].value(row);
 
@@ -1833,6 +1668,11 @@ StatusOr<ColumnPtr> JsonFunctions::json_set(FunctionContext* context, const Colu
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+bool JsonFunctions::is_slice_scalar_type(const vpack::Slice& slice) {
+    // A slice is scalar if it's number or string or boolean
+    return !slice.isObject() && !slice.isArray();
 }
 
 } // namespace starrocks

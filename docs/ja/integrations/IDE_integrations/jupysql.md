@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 description: Jupyter notebooks と StarRocks
 displayed_sidebar: docs
 ---
@@ -7,7 +8,7 @@ displayed_sidebar: docs
 
 このガイドでは、ノートブック、コード、データのための最新のウェブベースのインタラクティブ開発環境である [Jupyter](https://jupyter.org/) と StarRocks クラスターを統合する方法を説明します。
 
-これらはすべて、Jupyter 上で %sql、%%sql、%sqlplot マジックを介して SQL を実行し、大規模なデータセットをプロットできる [JupySQL](https://jupysql.ploomber.io/) によって可能になります。
+これらはすべて、Jupyter 上で %sql、%%sql、%sqlplot マジックを介して SQL を実行し、大規模なデータセットをプロットできる [JupySQL](https://jupysql.readthedocs.io/) によって可能になります。
 
 JupySQL を Jupyter 上で使用して、StarRocks 上でクエリを実行することができます。
 
@@ -17,7 +18,7 @@ JupySQL を Jupyter 上で使用して、StarRocks 上でクエリを実行す�
 
 始める前に、以下のソフトウェアがローカルにインストールされている必要があります：
 
-- [JupySQL](https://jupysql.ploomber.io/en/latest/quick-start.html): `pip install jupysql`
+- [JupySQL](https://jupysql.readthedocs.io/en/latest/quick-start.html): `pip install jupysql`
 - Jupyterlab: `pip install jupyterlab`
 - [SKlearn Evaluation](https://github.com/ploomber/sklearn-evaluation): `pip install sklearn-evaluation`
 - Python

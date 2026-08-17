@@ -21,8 +21,8 @@ namespace starrocks {
 
 #define GCBYTES_ONE_STEP (16 * 1024 * 1024) // minimun GC bytes in one step
 
-// GCHelper is for tcmalloc GC, it accepts a period and a start time for initialization,
-// for each gc, call `bytes_should_gc` to calculate how many bytes should gc for current time
+// GCHelper smooths capacity shrink decisions over time. For each adjustment,
+// call `bytes_should_gc` to calculate how many bytes should be released.
 class GCHelper {
 public:
     GCHelper(const size_t period, const size_t interval, const MonoTime& now);
@@ -34,10 +34,10 @@ private:
 
     size_t _backlog_bytes_limit();
 
-    size_t _interval;                   // gc interval for period
+    size_t _interval{0};                // gc interval for period
     MonoTime _epoch;                    // last timestamp `bytes_should_gc` is called
-    size_t _bytes_limit;                // how many bytes should limit to
-    size_t _remained_bytes;             // how many bytes there are remained
+    size_t _bytes_limit{0};             // how many bytes should limit to
+    size_t _remained_bytes{0};          // how many bytes there are remained
     size_t _backlog[SMOOTHSTEP_NSTEPS]; // preserve last period gc info, each interval occupies one
 };
 

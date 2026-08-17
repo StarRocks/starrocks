@@ -49,15 +49,13 @@ void RuntimeFilterLayout::init(int filter_id, const std::vector<int32_t>& bucket
     this->_bucketseq_to_instance = bucketseq_to_instance;
 }
 
-void WithLayoutMixin::init(const TRuntimeFilterDescription& desc) {
+void init_runtime_filter_layout(const TRuntimeFilterDescription& desc, RuntimeFilterLayout* layout) {
     if (desc.__isset.layout) {
-        _layout.init(desc.layout);
+        layout->init(desc.layout);
+    } else if (desc.__isset.bucketseq_to_instance) {
+        layout->init(desc.filter_id, desc.bucketseq_to_instance);
     } else {
-        if (desc.__isset.bucketseq_to_instance) {
-            _layout.init(desc.filter_id, desc.bucketseq_to_instance);
-        } else {
-            _layout.init(desc.filter_id, {});
-        }
+        layout->init(desc.filter_id, {});
     }
 }
 

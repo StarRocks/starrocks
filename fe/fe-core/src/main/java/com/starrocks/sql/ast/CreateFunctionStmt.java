@@ -32,6 +32,12 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String MD5_CHECKSUM = "md5";
     public static final String TYPE_KEY = "type";
     public static final String ISOLATION_KEY = "isolation";
+    public static final String ISOLATION_SHARED = "shared";
+    public static final String ISOLATION_ISOLATED = "isolated";
+    // For Python UDFs: connect to this user-provided Arrow Flight worker service URL instead of
+    // spawning a local worker. The user runs and isolates that worker service themselves.
+    public static final String SERVICE_URL_KEY = "service_url";
+    public static final String INTERMEDIATE_KEY = "intermediate";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String TYPE_STARROCKS_PYTHON = "Python";
     public static final String EVAL_METHOD_NAME = "evaluate";
@@ -48,6 +54,9 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String IS_ANALYTIC_NAME = "analytic";
     public static final String PROCESS_METHOD_NAME = "process";
     public static final String INPUT_TYPE = "input";
+    // Values for the INPUT_TYPE property.
+    public static final String INPUT_TYPE_SCALAR = "scalar";
+    public static final String INPUT_TYPE_ARROW = "arrow";
 
     private final FunctionRef functionRef;
     private final boolean isAggregate;
@@ -75,6 +84,10 @@ public class CreateFunctionStmt extends DdlStmt {
                     .put(PrimitiveType.BIGINT, Long.class)
                     .put(PrimitiveType.CHAR, String.class)
                     .put(PrimitiveType.VARCHAR, String.class)
+                    .put(PrimitiveType.DECIMAL32, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL64, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL128, java.math.BigDecimal.class)
+                    .put(PrimitiveType.DECIMAL256, java.math.BigDecimal.class)
                     .build();
 
     public CreateFunctionStmt(String functionType,

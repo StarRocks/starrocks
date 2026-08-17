@@ -35,18 +35,21 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/data_stream_recvr.h"
-#include "runtime/exec_env.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -54,14 +57,13 @@ namespace starrocks {
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _texchange_node(tnode.exchange_node),
-          _num_senders(0),
+
           _stream_recvr(nullptr),
-          _input_row_desc(descs, tnode.exchange_node.input_row_tuples),
+          _input_record_desc(descs, tnode.exchange_node.input_row_tuples),
           _is_merging(tnode.exchange_node.__isset.sort_info),
           _is_parallel_merge(tnode.exchange_node.__isset.enable_parallel_merge &&
                              tnode.exchange_node.enable_parallel_merge),
-          _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0),
-          _num_rows_skipped(0) {
+          _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0) {
     DCHECK_GE(_offset, 0);
 }
 
@@ -81,13 +83,14 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     // TODO: figure out appropriate buffer size
     DCHECK_GT(_num_senders, 0);
-    _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
-    _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
-            state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
+    _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+    auto* query_execution_services = state->query_execution_services();
+    _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
+            state, _input_record_desc, state->fragment_instance_id(), _id, _num_senders,
             config::exchg_node_buffer_size_bytes, _is_merging, _sub_plan_query_statistics_recvr, false, 1, false);
     _stream_recvr->bind_profile(0, _runtime_profile);
     if (_is_merging) {
-        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
+        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state));
     }
     return Status::OK();
 }
@@ -97,7 +100,8 @@ Status ExchangeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-        RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(), &_sort_exec_exprs, &_is_asc_order,
+        RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(),
+                                                     _sort_exec_exprs.lhs_ordering_expr_ctxs(), &_is_asc_order,
                                                      &_nulls_first));
     }
     return Status::OK();
@@ -243,7 +247,7 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
     *out << ")";
 }
 
-pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
@@ -251,7 +255,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     if (!_is_merging) {
         auto* query_ctx = context->runtime_state()->query_ctx();
         auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(
-                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc,
+                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_record_desc,
                 query_ctx->enable_pipeline_level_shuffle());
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
@@ -264,8 +268,8 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         if ((_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) &&
             !_sort_exec_exprs.lhs_ordering_expr_ctxs().empty()) {
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeParallelMergeSourceOperatorFactory>(
-                    context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
-                    _nulls_first, _offset, _limit);
+                    context->next_operator_id(), id(), _num_senders, _input_record_desc, &_sort_exec_exprs,
+                    _is_asc_order, _nulls_first, _offset, _limit);
             if (_texchange_node.__isset.parallel_merge_late_materialize_mode) {
                 exchange_merge_sort_source_operator->set_materialized_mode(
                         _texchange_node.parallel_merge_late_materialize_mode);
@@ -274,11 +278,12 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
             operators.emplace_back(std::move(exchange_merge_sort_source_operator));
             // This particular exchange source will be executed in a concurrent way, and finally we need to gather them into one
             // stream to satisfied the ordering property
-            operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), operators);
+            operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state(), id(), operators);
         } else {
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
-                    context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
-                    _nulls_first, _offset, _limit);
+                    context->next_operator_id(), id(), _num_senders, _input_record_desc, &_sort_exec_exprs,
+                    _is_asc_order, _nulls_first, _offset, _limit);
             exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
             operators.emplace_back(std::move(exchange_merge_sort_source_operator));
         }
@@ -287,18 +292,19 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, operators.back().get(), context, rc_rf_probe_collector);
 
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     if (operators.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(operators, context, id());
+        pipeline::may_add_chunk_accumulate_operator(operators, context, id());
     }
 
-    operators = context->maybe_interpolate_debug_ops(runtime_state(), _id, operators);
-    operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), operators);
+    operators = ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, operators);
+    operators =
+            ::starrocks::pipeline::builder::maybe_interpolate_collect_stats(context, runtime_state(), id(), operators);
 
     return operators;
 }

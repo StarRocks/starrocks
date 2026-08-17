@@ -144,7 +144,8 @@ const DataCacheDiskMetrics StarCacheEngine::cache_metrics() const {
     auto starcache_metrics = _cache->metrics(0);
     DataCacheDiskMetrics metrics = {.status = static_cast<DataCacheStatus>(starcache_metrics.status),
                                     .disk_quota_bytes = starcache_metrics.disk_quota_bytes,
-                                    .disk_used_bytes = starcache_metrics.disk_used_bytes};
+                                    .disk_used_bytes = starcache_metrics.disk_used_bytes,
+                                    .meta_used_bytes = starcache_metrics.meta_used_bytes};
     return metrics;
 }
 

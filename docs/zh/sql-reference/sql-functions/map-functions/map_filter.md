@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据 Boolean 数组或 Lambda 函数过滤 Map 中的键值对。"
 ---
 
 # map_filter

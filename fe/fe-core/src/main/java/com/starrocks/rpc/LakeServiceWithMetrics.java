@@ -20,6 +20,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -200,5 +202,11 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
         increaseMetrics();
         return lakeService.repairTabletMetadata(request);
+    }
+
+    @Override
+    public Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request) {
+        increaseMetrics();
+        return lakeService.buildVectorIndex(request);
     }
 }

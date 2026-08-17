@@ -1,0 +1,25 @@
+-- name: test_hive_table_with_comment
+
+create external catalog hive_catalog_${uuid0} PROPERTIES (
+    "type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database hive_catalog_${uuid0}.test_hive_comment_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/hive_catalog_${uuid0}/test_hive_comment_db_${uuid0}"
+);
+
+create table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_test (
+    id int comment 'id column comment',
+    name varchar(20) comment 'name column comment'
+)
+comment 'table level comment';
+
+show create table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_test;
+
+drop table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_test force;
+drop database hive_catalog_${uuid0}.test_hive_comment_db_${uuid0};
+drop catalog hive_catalog_${uuid0};

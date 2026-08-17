@@ -15,21 +15,55 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
+
+set(STARROCKS_PRECONFIG_MODE "AUTO" CACHE STRING "Preconfigure bootstrap mode: AUTO, ON, or OFF")
+set_property(CACHE STARROCKS_PRECONFIG_MODE PROPERTY STRINGS AUTO ON OFF)
+set(STARROCKS_PRECONFIG_MODE_NORMALIZED "${STARROCKS_PRECONFIG_MODE}")
+string(TOUPPER "${STARROCKS_PRECONFIG_MODE_NORMALIZED}" STARROCKS_PRECONFIG_MODE_NORMALIZED)
+
+set(STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE OFF)
+if ((DEFINED CMAKE_C_COMPILER AND NOT "${CMAKE_C_COMPILER}" STREQUAL "") OR
+    (DEFINED CMAKE_CXX_COMPILER AND NOT "${CMAKE_CXX_COMPILER}" STREQUAL ""))
+    set(STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE ON)
+endif()
+
+set(STARROCKS_USE_PRECONFIG OFF)
+if (STARROCKS_PRECONFIG_MODE_NORMALIZED STREQUAL "ON")
+    set(STARROCKS_USE_PRECONFIG ON)
+elseif (STARROCKS_PRECONFIG_MODE_NORMALIZED STREQUAL "AUTO")
+    if (NOT DEFINED ENV{STARROCKS_HOME} OR "$ENV{STARROCKS_HOME}" STREQUAL "" OR
+        NOT DEFINED ENV{STARROCKS_THIRDPARTY} OR "$ENV{STARROCKS_THIRDPARTY}" STREQUAL "" OR
+        ((NOT STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE) AND
+         (((NOT DEFINED ENV{CC} OR "$ENV{CC}" STREQUAL "") OR
+          (NOT DEFINED ENV{CXX} OR "$ENV{CXX}" STREQUAL "")) AND
+         (NOT DEFINED ENV{STARROCKS_GCC_HOME} OR "$ENV{STARROCKS_GCC_HOME}" STREQUAL "") AND
+         (NOT DEFINED ENV{STARROCKS_LLVM_HOME} OR "$ENV{STARROCKS_LLVM_HOME}" STREQUAL ""))))
+        set(STARROCKS_USE_PRECONFIG ON)
+    endif()
+elseif (NOT STARROCKS_PRECONFIG_MODE_NORMALIZED STREQUAL "OFF")
+    message(FATAL_ERROR
+            "Invalid STARROCKS_PRECONFIG_MODE='${STARROCKS_PRECONFIG_MODE}'. Expected AUTO, ON, or OFF.")
+endif()
+
+if (STARROCKS_USE_PRECONFIG)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/BootstrapEnv.cmake")
+endif()
 
 # set CMAKE_C_COMPILER, this must set before project command
-if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
+if (STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE)
+elseif (DEFINED ENV{CC} AND NOT "$ENV{CC}" STREQUAL "" AND DEFINED ENV{CXX} AND NOT "$ENV{CXX}" STREQUAL "")
     set(CMAKE_C_COMPILER "$ENV{CC}")
     set(CMAKE_CXX_COMPILER "$ENV{CXX}")
-elseif (DEFINED ENV{STARROCKS_GCC_HOME})
+elseif (DEFINED ENV{STARROCKS_GCC_HOME} AND NOT "$ENV{STARROCKS_GCC_HOME}" STREQUAL "")
     # prefer GCC
     set(CMAKE_C_COMPILER "$ENV{STARROCKS_GCC_HOME}/bin/gcc")
     set(CMAKE_CXX_COMPILER "$ENV{STARROCKS_GCC_HOME}/bin/g++")
-elseif (DEFINED ENV{STARROCKS_LLVM_HOME})
+elseif (DEFINED ENV{STARROCKS_LLVM_HOME} AND NOT "$ENV{STARROCKS_LLVM_HOME}" STREQUAL "")
     set(CMAKE_C_COMPILER "$ENV{STARROCKS_LLVM_HOME}/bin/clang")
     set(CMAKE_CXX_COMPILER "$ENV{STARROCKS_LLVM_HOME}/bin/clang++")
 else()
-    message(FATAL_ERROR "STARROCKS_GCC_HOME environment variable is not set")
+    message(FATAL_ERROR "Neither STARROCKS_GCC_HOME nor STARROCKS_LLVM_HOME environment variable is set")
 endif()
 
 # disable pkgconfig searching libraries, all libraries are static imported
@@ -40,6 +74,8 @@ macro( pkg_check_modules )
 endmacro()
 
 project(starrocks CXX C)
+
+include(CheckSymbolExists)
 
 # set CMAKE_BUILD_TYPE
 if (NOT CMAKE_BUILD_TYPE)
@@ -55,6 +91,9 @@ execute_process(COMMAND bash "-c" "uname -m"
                 OUTPUT_VARIABLE
                 CMAKE_BUILD_TARGET_ARCH
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (APPLE AND CMAKE_BUILD_TARGET_ARCH STREQUAL "arm64")
+    set(CMAKE_BUILD_TARGET_ARCH "aarch64")
+endif()
 message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
@@ -66,26 +105,98 @@ set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(SRC_DIR "${BASE_DIR}/src")
 set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
+set(BE_PROTO_THRIFT_GENSRC_DIR "${CMAKE_BINARY_DIR}/gensrc")
+set(BE_PROTO_THRIFT_GEN_CPP_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/gen_cpp")
+set(BE_PROTO_THRIFT_CODEGEN_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/codegen")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
-if (APPLE)
-    set(MAKE_TEST "ON")
-else()
-    option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
+# Keep the active Thrift package version in the compile command so cached
+# objects built against an older Thrift header ABI cannot be reused after
+# a runtime upgrade.
+set(STARROCKS_THRIFT_CONFIG_H "${THIRDPARTY_DIR}/include/thrift/config.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_THRIFT_CONFIG_H}")
+if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
+    file(STRINGS "${STARROCKS_THRIFT_CONFIG_H}" STARROCKS_THRIFT_VERSION_LINE
+         REGEX "^#define PACKAGE_VERSION \"[^\"]+\"$")
+    if (STARROCKS_THRIFT_VERSION_LINE)
+        string(REGEX REPLACE "^#define PACKAGE_VERSION \"([^\"]+)\"$" "\\1"
+               STARROCKS_THRIFT_PACKAGE_VERSION "${STARROCKS_THRIFT_VERSION_LINE}")
+        add_compile_definitions(STARROCKS_THRIFT_PACKAGE_VERSION="${STARROCKS_THRIFT_PACKAGE_VERSION}")
+        message(STATUS "Thrift package version is ${STARROCKS_THRIFT_PACKAGE_VERSION}")
+    endif()
 endif()
+
+if (APPLE)
+    find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
+                 ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+    find_library(STARROCKS_LIBEVENT_CORE_LIBRARY NAMES libevent_core.dylib event_core PATHS ${THIRDPARTY_DIR}/lib
+                 ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+    find_library(STARROCKS_LIBEVENT_EXTRA_LIBRARY NAMES libevent_extra.dylib event_extra PATHS ${THIRDPARTY_DIR}/lib
+                 ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+
+    set(_STARROCKS_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES}")
+    set(_STARROCKS_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
+    set(_STARROCKS_REQUIRED_QUIET "${CMAKE_REQUIRED_QUIET}")
+    list(APPEND CMAKE_REQUIRED_INCLUDES "${THIRDPARTY_DIR}/include" "${THIRDPARTY_DIR}/include/event")
+    list(APPEND CMAKE_REQUIRED_LIBRARIES ${STARROCKS_LIBEVENT_EXTRA_LIBRARY} ${STARROCKS_LIBEVENT_CORE_LIBRARY}
+         ${STARROCKS_LIBEVENT_LIBRARY})
+    set(CMAKE_REQUIRED_QUIET TRUE)
+
+    check_symbol_exists(evhttp_request_get_user_data "event2/http.h" STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA)
+    check_symbol_exists(evhttp_request_set_user_data "event2/http.h" STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA)
+    check_symbol_exists(evhttp_set_newreqcb "event2/http.h" STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+    check_symbol_exists(evhttp_request_set_on_free_cb "event2/http.h"
+                        STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB)
+
+    set(CMAKE_REQUIRED_INCLUDES "${_STARROCKS_REQUIRED_INCLUDES}")
+    set(CMAKE_REQUIRED_LIBRARIES "${_STARROCKS_REQUIRED_LIBRARIES}")
+    set(CMAKE_REQUIRED_QUIET "${_STARROCKS_REQUIRED_QUIET}")
+    unset(_STARROCKS_REQUIRED_INCLUDES)
+    unset(_STARROCKS_REQUIRED_LIBRARIES)
+    unset(_STARROCKS_REQUIRED_QUIET)
+    unset(STARROCKS_LIBEVENT_LIBRARY CACHE)
+    unset(STARROCKS_LIBEVENT_CORE_LIBRARY CACHE)
+    unset(STARROCKS_LIBEVENT_EXTRA_LIBRARY CACHE)
+
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_SET_NEWREQCB=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB=1)
+    endif()
+endif()
+
+option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
 message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
-option(WITH_STARCACHE "Build binary with starcache library" ON)
+option(THIN_ARCHIVE "Build binary with thin archive" OFF)
+
+set(WITH_STARCACHE_DEFAULT ON)
+if (APPLE)
+    set(WITH_STARCACHE_DEFAULT OFF)
+endif()
+option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEFAULT})
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_GLIBC_COMPAT "Build starrocks_be with the glibc compatibility shim, so it runs on hosts with an older glibc than the build image's" OFF)
+option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
+option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
+option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
+option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
@@ -111,13 +222,17 @@ endif()
 option(ENABLE_MULTI_DYNAMIC_LIBS "Enable dynamic linking of individual StarRocks modules (developer option)" OFF)
 
 message(STATUS "WITH TENANN is: ${WITH_TENANN}")
+if (APPLE AND WITH_STARCACHE)
+    message(STATUS "Disable starcache on macOS")
+    set(WITH_STARCACHE OFF CACHE BOOL "Build binary with starcache library" FORCE)
+endif()
 
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
         message(FATAL_ERROR "Need GCC version at least 4.8.2")
     endif()
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 elseif (NOT APPLE)
     message(FATAL_ERROR "Compiler should be GNU")
 endif()
@@ -160,7 +275,9 @@ check_function_exists(sched_getcpu HAVE_SCHED_GETCPU)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} $ENV{STARROCKS_CXX_COMMON_FLAGS}")
 
 # -no-pie: Disable Position Independent Executables (PIE) as certain libraries cannot be linked against PIE executables.
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+if (NOT APPLE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+endif()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_FLAGS}")
 
 # compiler flags that are common across debug/release builds
@@ -177,7 +294,11 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 #  -fno-omit-frame-pointers: Keep frame pointer for functions in register
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++23 -D__STDC_FORMAT_MACROS")
+if (APPLE)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS")
+endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
 if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
@@ -185,7 +306,7 @@ endif()
 # disable link delete(void*, long)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if (NOT ${MAKE_TEST} STREQUAL "ON")
         # there are too many warnings reported by clang in be/test and it will take some time to fix.
         # temporarily disable Werror in the unit test so that clang can compile.
@@ -193,6 +314,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
+    # GCC 15's libstdc++ annotates __find_if (used by std::find_if/any_of/all_of/remove_if) with
+    # "#pragma GCC unroll 4". clang treats that as an explicit unroll request and emits
+    # -Wpass-failed=transform-warning when the predicate is not trivially unrollable, which -Werror
+    # turns into a build failure. These are missed-optimization diagnostics, not correctness issues,
+    # so keep the warning but do not let it fail the build.
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=pass-failed")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
@@ -237,10 +364,10 @@ if (${WITH_STARCACHE} STREQUAL "ON")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if (DEFINED ENV{STARROCKS_GCC_HOME})
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} --gcc-toolchain=$ENV{STARROCKS_GCC_HOME}")
-    else()
+    elseif (NOT APPLE)
         message(WARNING "STARROCKS_GCC_HOME evnironment variable is not set, ")
     endif()
 endif()
@@ -270,6 +397,11 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
 endif()
 
+if (APPLE AND STARROCKS_JIT_ENABLE)
+    message(STATUS "Disable JIT on macOS")
+    set(STARROCKS_JIT_ENABLE OFF CACHE BOOL "Enable LLVM JIT support" FORCE)
+endif()
+
 if (STARROCKS_JIT_ENABLE)
     message(STATUS "Enable JIT")
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -DSTARROCKS_JIT_ENABLE")
@@ -288,11 +420,6 @@ endif()
 if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
-endif()
-
-if (ENABLE_QUERY_DEBUG_TRACE)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
-    message(STATUS "enable query debug trace")
 endif()
 
 if (ENABLE_FAULT_INJECTION)
@@ -366,13 +493,21 @@ message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
 add_definitions(-DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H)
 
 # Set include dirs
+if (APPLE)
+    include_directories(
+        BEFORE
+        ${SRC_DIR}/macos_compat
+    )
+endif()
 include_directories(
     BEFORE
     ${SRC_DIR}/formats/orc/apache-orc/c++/include/
 )
 include_directories(
+    BEFORE
     ${SRC_DIR}/
     ${TEST_DIR}/
+    ${BE_PROTO_THRIFT_GENSRC_DIR}/
     ${GENSRC_DIR}/
     SYSTEM ${THIRDPARTY_DIR}/include
     SYSTEM ${GPERFTOOLS_HOME}/include
@@ -386,50 +521,112 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     include_directories(${THIRDPARTY_DIR}/include/breakpad/)
 endif()
 
-set(WL_START_GROUP "-Wl,--start-group")
-set(WL_END_GROUP "-Wl,--end-group")
-set(WL_LINK_STATIC "-Wl,-Bstatic")
-set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
+if (APPLE)
+    set(WL_START_GROUP "")
+    set(WL_END_GROUP "")
+    set(WL_LINK_STATIC "")
+    set(WL_LINK_DYNAMIC "")
+    # Darwin has no GNU whole-archive/group flags. Force-load the static
+    # registrar libraries on executable targets via STARROCKS_FORCE_LOAD_LIBS().
+    set(WL_WHOLE_ARCHIVE_PREFIX "")
+    set(WL_WHOLE_ARCHIVE_SUFFIX "")
+else()
+    set(WL_START_GROUP "-Wl,--start-group")
+    set(WL_END_GROUP "-Wl,--end-group")
+    set(WL_LINK_STATIC "-Wl,-Bstatic")
+    set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
+    set(WL_WHOLE_ARCHIVE_PREFIX "-Wl,--whole-archive")
+    set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
+endif()
+
+include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
+
+# Concrete connectors reach the BE binary only as transitive PRIVATE deps of
+# ModuleBootstrap/Exec, which CMake places after the thirdparty group. List every
+# connector ModuleBootstrap pulls (guarded by the same options) ahead of it.
+set (DIRECT_CONNECTOR_LINK_LIBS
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+    ConnectorCacheStats
+)
+if (WITH_CONNECTOR_BENCHMARK)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorBenchmark)
+endif()
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorElasticsearch)
+endif()
+if (WITH_CONNECTOR_JDBC)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorJDBC)
+endif()
+if (WITH_CONNECTOR_MYSQL)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorMySQL)
+endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    ${WL_START_GROUP}
-    Agent
-    Column
-    Connector
-    Exec
-    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
-    FileSystem
-    Formats
-    IO
-    Serde
-    Storage
-    Rowset
-    Runtime
-    Service
-    ServiceBE
-    Types
-    Udf
-    Util
-    Script
-    Webserver
-    TestUtil
+    HttpService
     Tools
-    Geo
-    Cache
-    orc
+    AgentServer
+    Script
+    ModuleBootstrap
+    Orchestration
+    DataWorkflows
+    ${WL_START_GROUP}
+    Exec
+    ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
-    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    TypesCore
-    FSCore
-    IOCore
-    Common
-    Base
-    Gutil
-    StarRocksGen
+    # Concrete data sinks are PRIVATE dependencies of Exec. Keep them in the
+    # main link list ahead of connectors, Storage, format, and thirdparty
+    # provider archives so one-pass static linkers see their unresolved
+    # references first.
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkDictionaryCache
+    DataSinkTablet
+    DataSinkFile
+    # ConnectorLake depends on Storage, while connectors also depend on the
+    # format libs and thirdparty archives below; keep them ahead of those
+    # dependencies.
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
+    ${WL_END_GROUP}
+    Storage
+    # The concrete format libraries must be linked ahead of the thirdparty
+    # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
+    # the Formats aggregate lets CMake append its concrete members after that
+    # group as transitive deps, which leaves FormatAvro's avro/avrocpp
+    # references unresolved. List the members explicitly, with FormatCore last,
+    # to keep them ahead of their thirdparty archives.
+    Formats
+    FormatParquet
+    FormatOrc
+    FormatAvro
+    FormatJson
+    FormatCsv
+    FormatCore
+    ExecRuntime
+    ComputeEnv
+    ExecPrimitive
+    StoragePrimitive
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:Expr> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    $<TARGET_FILE:Cache>
+    $<TARGET_FILE:HdfsFileSystem>
+    Runtime
+    Platform
+    $<TARGET_FILE:ChunkCore>
+    $<TARGET_FILE:ColumnCore>
+    $<TARGET_FILE:Types>
+    $<TARGET_FILE:FileSystem>
+    $<TARGET_FILE:IO>
+    Geo
+    $<TARGET_FILE:Common>
+    $<TARGET_FILE:Base>
+    $<TARGET_FILE:Gutil>
+    $<TARGET_FILE:StarRocksGen>
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
@@ -489,9 +686,9 @@ set(STARROCKS_DEPENDENCIES
     zstd
     streamvbyte
     arrow
+    arrow_testing
     arrow_flight
     arrow_flight_sql
-    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
@@ -530,8 +727,18 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    blake3
     ${WL_END_GROUP}
 )
+
+if (APPLE)
+    list(REMOVE_ITEM STARROCKS_DEPENDENCIES
+        opentelemetry_trace
+        http_client_curl
+        opentelemetry_resources
+        opentelemetry_common
+        opentelemetry_exporter_jaeger_trace)
+endif()
 
 if (NOT BUILD_FORMAT_LIB)
     set(STARROCKS_DEPENDENCIES
@@ -570,9 +777,28 @@ option(WITH_PCH "Enable precompiled headers for BE targets" ON)
 if (WITH_PCH)
     add_library(StarRocksPCH INTERFACE)
     target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
     endif()
+endif()
+
+if (APPLE)
+    if (CMAKE_CXX_COMPILER_AR)
+        set(CMAKE_AR "${CMAKE_CXX_COMPILER_AR}" CACHE FILEPATH "Archiver" FORCE)
+    endif()
+    if (CMAKE_CXX_COMPILER_RANLIB)
+        set(CMAKE_RANLIB "${CMAKE_CXX_COMPILER_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    endif()
+endif()
+
+if (THIN_ARCHIVE)
+    set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
+    set(CMAKE_C_ARCHIVE_APPEND   "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_APPEND "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
+
+    set(CMAKE_C_ARCHIVE_FINISH   "true")
+    set(CMAKE_CXX_ARCHIVE_FINISH "true")
 endif()
 
 
@@ -588,7 +814,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if (APPLE)
+        # Darwin only supports the dynamic ASan runtime selected by -fsanitize=address.
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
         set(DEP_SANITIZE_LIBS -static-libsan)
     else()
@@ -613,7 +841,11 @@ else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+if (APPLE)
+    set(WRAP_LINKER_FLAGS "")
+else()
+    set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+endif()
 
 FUNCTION(ADD_BE_LIB LIB_NAME)
     IF(ENABLE_MULTI_DYNAMIC_LIBS)
@@ -634,18 +866,50 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
+function(STARROCKS_FORCE_LOAD_LIBS TARGET_NAME)
+    if (APPLE)
+        foreach(FORCE_LOAD_TARGET IN LISTS ARGN)
+            target_link_options(${TARGET_NAME} PRIVATE "LINKER:-force_load,$<TARGET_FILE:${FORCE_LOAD_TARGET}>")
+        endforeach()
+    endif()
+endfunction()
 
-set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp)
 
-if (NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
+set(STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC})
+if (NOT APPLE)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -lgomp)
+endif()
+
+if (NOT APPLE AND NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when ENABLE_MULTI_DYNAMIC_LIBS or MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
     set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
 
+if (APPLE)
+    set(STARROCKS_SYSTEM_LINK_LIBS
+        -lresolv
+        -lm
+        -pthread
+        "-framework Foundation"
+        "-framework CoreText"
+        "-framework ApplicationServices"
+        "-framework SystemConfiguration"
+    )
+    find_library(MIMALLOC_LIB
+        NAMES mimalloc
+        HINTS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 /opt/homebrew/lib /usr/local/lib
+    )
+    if (MIMALLOC_LIB AND NOT "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
+        list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
+    endif()
+else()
+    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -lc -lm -ldl -rdynamic -pthread)
+endif()
+
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on
@@ -653,10 +917,25 @@ if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
-# Set libraries for test
-set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+# Set libraries for test. TestUtil is UT-only and intentionally stays out of
+# STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
+# compile or link test helper code.
+set (TEST_LINK_LIBS
+    Orchestration
+    ${STARROCKS_LINK_LIBS}
+    TestUtil
     ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
     gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+# Several benches assert with gtest macros, so benchmarks need gtest just like tests do.
+set (BENCH_LINK_LIBS
+    ${STARROCKS_LINK_LIBS}
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
     gtest
     ${WL_END_GROUP}
 )
@@ -667,7 +946,7 @@ set(BUILD_SHARED_LIBS OFF)
 set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
 include(cmake_modules/FindGlibcVersion.cmake)
 
-if (GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
+if (NOT APPLE AND GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
     if ("${STARROCKS_LINKER}" STREQUAL "" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
         set(STARROCKS_LINKER "gold")
         message(STATUS "forcibly switch linker to: ${STARROCKS_LINKER}")
@@ -685,12 +964,13 @@ if (${MAKE_TEST} STREQUAL "ON")
     add_definitions(-DFIU_ENABLE)
 else()
     if (BUILD_FORMAT_LIB)
+        set(THIN_ARCHIVE OFF)
         # output *.a, *.so, *.dylib to output/format-lib-tmp
         set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
     else()
         # output *.a, *.so, *.dylib to output/tmp
-        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
     endif ()
     # output *.exe to output/lib
@@ -707,6 +987,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
+    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -726,7 +1007,8 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${BENCH_LINK_LIBS})
+    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
@@ -738,28 +1020,37 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
-add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/fs_ext)
+add_subdirectory(${SRC_DIR}/exec_primitive)
+add_subdirectory(${SRC_DIR}/connector_primitive)
+add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/module)
+add_subdirectory(${SRC_DIR}/data_sink)
 add_subdirectory(${SRC_DIR}/exec)
+add_subdirectory(${SRC_DIR}/schema_scanner)
 add_subdirectory(${SRC_DIR}/exprs)
 add_subdirectory(${SRC_DIR}/gen_cpp)
 add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/platform)
+add_subdirectory(${SRC_DIR}/storage_primitive)
 add_subdirectory(${SRC_DIR}/storage)
+add_subdirectory(${SRC_DIR}/data_workflows)
+add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
-add_subdirectory(${SRC_DIR}/serde)
-add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/testutil)
-add_subdirectory(${SRC_DIR}/types)
-add_subdirectory(${SRC_DIR}/udf)
 add_subdirectory(${SRC_DIR}/cache)
+add_subdirectory(${SRC_DIR}/compute_env)
+add_subdirectory(${SRC_DIR}/exprs_ext)
+add_subdirectory(${SRC_DIR}/orchestration)
+add_subdirectory(${SRC_DIR}/service)
+add_subdirectory(${SRC_DIR}/types)
 
 add_subdirectory(${SRC_DIR}/tools)
-add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
 if (BUILD_FORMAT_LIB)
@@ -806,8 +1097,11 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
     ${BASE_DIR}/../conf/asan_suppressions.conf
-    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
+
+install(FILES
+    ${BASE_DIR}/../conf/type_checker_config.xml
+    DESTINATION ${OUTPUT_DIR}/lib)
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

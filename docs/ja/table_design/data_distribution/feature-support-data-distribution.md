@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks でサポートされるパーティション化とバケット化機能の参照: 式に基づくパーティション化、リストパーティション化、ランダムバケット化。"
 sidebar_position: 50
 sidebar_label: 機能サポート
 ---
@@ -56,6 +57,10 @@ sidebar_label: 機能サポート
         <td></td>
     </tr>
 </table>
+
+:::note
+v4.1 以降、タブレットの最大容量は 100 GB に変更されました。
+:::
 
 ## パーティション化
 

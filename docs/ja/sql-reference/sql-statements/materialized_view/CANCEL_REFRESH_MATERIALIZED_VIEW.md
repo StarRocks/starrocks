@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "非同期マテリアライズドビューのリフレッシュタスクをキャンセルします。"
 ---
 
 # CANCEL REFRESH MATERIALIZED VIEW

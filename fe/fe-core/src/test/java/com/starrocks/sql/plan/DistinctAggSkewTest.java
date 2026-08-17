@@ -86,4 +86,91 @@ public class DistinctAggSkewTest extends PlanTestBase {
                 "  |  <slot 3> : 3: value\n" +
                 "  |  <slot 5> : CAST(murmur_hash3_32(CAST(3: value AS VARCHAR)) % 512 AS SMALLINT)");
     }
+
+    @Test
+    void testSkewRewriteNotAppliedWhenDistinctColNdvHighAndShufflesByDistinctCol() throws Exception {
+        // GIVEN
+        // When the distinct column has high NDV (> bucket count) and stage 1 groups by the distinct
+        // column, the standard plan already distributes well via (group, distinct_col) shuffle key.
+        // The bucket rewrite should be penalized so the CBO picks the standard plan.
+        final var sql = "select `group`, count(distinct value) as cnt from null_skew_table group by `group`";
+
+        // Group column is skewed (would normally trigger the rewrite with 0.2 reward)
+        final var skewedGroupStat = ColumnStatistic.builder() //
+                .setNullsFraction(0.8) //
+                .setDistinctValuesCount(2) //
+                .setAverageRowSize(8) //
+                .build();
+        // Distinct column has high NDV (> 1024 bucket count)
+        final var highNdvDistinctStat = ColumnStatistic.builder() //
+                .setNullsFraction(0.0) //
+                .setDistinctValuesCount(10_000_000) //
+                .setAverageRowSize(8) //
+                .build();
+
+        final var table = getOlapTable("null_skew_table");
+
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        statisticStorage.addColumnStatistic(table, "group", skewedGroupStat);
+        statisticStorage.addColumnStatistic(table, "value", highNdvDistinctStat);
+
+        try {
+            connectContext.getSessionVariable().setEnableDistinctColumnBucketization(true);
+            connectContext.getSessionVariable().setEnableForceGroupBySkewEliminateWhenSkewed(true);
+            setTableStatistics(table, 10_000_000);
+
+            // WHEN
+            final var plan = getFragmentPlan(sql);
+
+            // THEN
+            assertNotContains(plan, "murmur_hash3_32");
+            assertContains(plan, "HASH_PARTITIONED: 2: group, 3: value");
+        } finally {
+            connectContext.getSessionVariable().setEnableDistinctColumnBucketization(false);
+            connectContext.getSessionVariable().setEnableForceGroupBySkewEliminateWhenSkewed(false);
+        }
+    }
+
+    @Test
+    void testSkewRewriteAppliedWhenDistinctColNdvLow() throws Exception {
+        // GIVEN
+        // When the distinct column has low NDV (<= bucket count), the standard plan's shuffle by
+        // (group, distinct_col) doesn't provide good distribution. The bucket rewrite should still
+        // be applied when group-by columns are skewed.
+        final var sql = "select `group`, count(distinct value) as cnt from null_skew_table group by `group`";
+
+        // Group column is skewed
+        final var skewedGroupStat = ColumnStatistic.builder() //
+                .setNullsFraction(0.8) //
+                .setDistinctValuesCount(2) //
+                .setAverageRowSize(8) //
+                .build();
+        // Distinct column has low NDV (<= 1024 bucket count)
+        final var lowNdvDistinctStat = ColumnStatistic.builder() //
+                .setNullsFraction(0.0) //
+                .setDistinctValuesCount(500) //
+                .setAverageRowSize(8) //
+                .build();
+
+        final var table = getOlapTable("null_skew_table");
+
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        statisticStorage.addColumnStatistic(table, "group", skewedGroupStat);
+        statisticStorage.addColumnStatistic(table, "value", lowNdvDistinctStat);
+
+        try {
+            connectContext.getSessionVariable().setEnableDistinctColumnBucketization(true);
+            connectContext.getSessionVariable().setEnableForceGroupBySkewEliminateWhenSkewed(true);
+            setTableStatistics(table, 10_000_000);
+
+            // WHEN
+            final var plan = getFragmentPlan(sql);
+
+            // THEN
+            assertContains(plan, "murmur_hash3_32");
+        } finally {
+            connectContext.getSessionVariable().setEnableDistinctColumnBucketization(false);
+            connectContext.getSessionVariable().setEnableForceGroupBySkewEliminateWhenSkewed(false);
+        }
+    }
 }

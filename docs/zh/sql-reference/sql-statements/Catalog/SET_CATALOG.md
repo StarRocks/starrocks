@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET CATALOG 用于切换到指定的 Catalog。"
 ---
 
 # SET CATALOG

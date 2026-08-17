@@ -24,10 +24,10 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/sum.h"
@@ -53,7 +53,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSetWithAggStateAllocator<T>;
 
-    void update(T key) { set.insert(key); }
+    void update([[maybe_unused]] MemPool* mem_pool, T key) { set.insert(key); }
 
     void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
 
@@ -113,7 +113,7 @@ struct AdaptiveSliceHashSet {
     }
 
     void try_convert_to_two_level(MemPool* mem_pool) {
-        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold()) {
             two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
             two_level_set->reserve(set->capacity());
             two_level_set->insert(set->begin(), set->end());
@@ -296,7 +296,7 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
         sum = SumType{};
     }
 
-    void update(T key) {
+    void update([[maybe_unused]] MemPool* mempool, T key) {
         [[maybe_unused]] const auto result = set.insert(key);
         if constexpr (compute_sum) {
             if (result.second) {
@@ -390,13 +390,7 @@ struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT
     using Base::update;
     MemPool mem_pool;
 
-    void update(CppType key) {
-        if constexpr (IsSlice<CppType>) {
-            this->Base::update(&mem_pool, key);
-        } else {
-            this->Base::update(key);
-        }
-    }
+    void update(CppType key) { this->Base::update(&mem_pool, key); }
 
     void reset() {
         this->Base::reset();
@@ -415,13 +409,8 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
-        } else {
-            const auto immutable_data = column->immutable_data();
-            this->data(state).update(immutable_data[row_num]);
-        }
+        auto value = GetContainer<LT>::get_data(columns[0], row_num);
+        this->data(state).update(ctx->mem_pool(), value);
     }
 
     // The following two functions are specialized because of performance issue.
@@ -429,7 +418,6 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& agg_state = this->data(state);
 
         struct CacheEntry {
@@ -437,7 +425,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(column);
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
@@ -457,8 +445,6 @@ public:
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
         // exploit cache locality further, but I don't see much steady performance gain by doing that.
@@ -468,7 +454,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(column);
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
             auto& agg_state = this->data(state);
@@ -503,7 +489,7 @@ public:
             } else {
                 T key;
                 memcpy(&key, slice.data, sizeof(T));
-                this->data(state).update(key);
+                this->data(state).update(ctx->mem_pool(), key);
             }
         }
     }
@@ -524,36 +510,35 @@ public:
         Bytes& bytes = dst_column->get_bytes();
 
         const auto* src_column = down_cast<const ColumnType*>(src[0].get());
-        if constexpr (IsSlice<T>) {
-            bytes.reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
-        } else {
-            bytes.reserve(chunk_size * sizeof(T));
-        }
-        dst_column->get_offset().resize(chunk_size + 1);
-
         size_t old_size = bytes.size();
+
+        size_t final_size = old_size;
+        if constexpr (IsSlice<T>) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                final_size += sizeof(uint32_t) + src_column->get_slice(i).size;
+            }
+        } else {
+            final_size += chunk_size * sizeof(T);
+        }
+
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
+
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (IsSlice<T>) {
                 Slice key = src_column->get_slice(i);
-                size_t new_size = old_size + key.size + sizeof(uint32_t);
-                bytes.resize(new_size);
-
                 auto size = (uint32_t)key.size;
                 memcpy(bytes.data() + old_size, &size, sizeof(uint32_t));
                 old_size += sizeof(uint32_t);
                 memcpy(bytes.data() + old_size, key.data, key.size);
                 old_size += key.size;
-                dst_column->get_offset()[i + 1] = new_size;
             } else {
                 T key = src_column->immutable_data()[i];
-
-                size_t new_size = old_size + sizeof(T);
-                bytes.resize(new_size);
                 memcpy(bytes.data() + old_size, &key, sizeof(T));
-
-                dst_column->get_offset()[i + 1] = new_size;
-                old_size = new_size;
+                old_size += sizeof(T);
             }
+            offsets.set(i + 1, old_size);
         }
     }
 
@@ -632,15 +617,14 @@ public:
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
             const auto off = array_column->offsets().immutable_data();
-            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+            const auto& datas = GetContainer<TYPE_VARCHAR>::get_data(column);
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {
-                    agg_state.update(mem_pool, binary_column->get_slice(i));
+                    agg_state.update(mem_pool, datas[i]);
                 }
             }
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
-            agg_state.update(mem_pool, binary_column.get_slice(row_num));
+            agg_state.update(mem_pool, GetContainer<TYPE_VARCHAR>::get_data(data_column, row_num));
         }
 
         agg_state.update_over_limit();
@@ -729,7 +713,7 @@ public:
             size_t new_size = old_size + result_value.size();
 
             auto& data = binary_column->get_bytes();
-            data.resize(old_size + new_size);
+            data.resize(new_size);
 
             memcpy(data.data() + old_size, result_value.data(), result_value.size());
 
@@ -840,28 +824,15 @@ struct TFusedMultiDistinctFunction final
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const InputColumn*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            this->data(state).update(column->get_slice(row_num));
-        } else {
-            const auto immutable_data = column->immutable_data();
-            this->data(state).update(immutable_data[row_num]);
-        }
+        this->data(state).update(ctx->mem_pool(), GetContainer<LT>::get_data(columns[0], row_num));
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const InputColumn*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            for (auto i = frame_start; i < frame_end; ++i) {
-                this->data(state).update(column->get_slice(i));
-            }
-        } else {
-            const auto* data = column->immutable_data().data();
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                this->data(state).update(data[i]);
-            }
+        const auto& datas = GetContainer<LT>::get_data(columns[0]);
+        for (auto i = frame_start; i < frame_end; ++i) {
+            this->data(state).update(datas[i]);
         }
     }
 

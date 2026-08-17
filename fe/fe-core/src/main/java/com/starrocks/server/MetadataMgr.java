@@ -32,6 +32,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -49,8 +50,8 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -64,6 +65,7 @@ import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
@@ -418,7 +420,6 @@ public class MetadataMgr {
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {
-        TableName tableName = new TableName(catalogName, dbName, tblName);
         com.starrocks.sql.ast.QualifiedName qualifiedName = com.starrocks.sql.ast.QualifiedName.of(
                 catalogName != null ? java.util.Arrays.asList(catalogName, dbName, tblName)
                         : java.util.Arrays.asList(dbName, tblName));
@@ -549,6 +550,12 @@ public class MetadataMgr {
                 .orElse(TvrTableSnapshot.empty());
     }
 
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.acquireTvrSnapshot(dbName, table, mvId))
+                .orElse(TvrTableSnapshot.empty());
+    }
+
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
                                                          TvrTableSnapshot fromSnapshotExclusive,
                                                          TvrTableSnapshot toSnapshotInclusive) {
@@ -564,6 +571,11 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
                 .orElse(TvrTableSnapshot.empty());
+    }
+
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.flatMap(metadata -> metadata.getVersionCommitTimeMillis(dbName, table, version));
     }
 
     public Optional<Database> getDatabase(ConnectContext context, BaseTableInfo baseTableInfo) {
@@ -633,6 +645,11 @@ public class MetadataMgr {
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
     public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+        return getBasicTable(context, catalogName, dbName, tblName, false);
+    }
+
+    public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                    boolean fetchExternalMetadata) {
         if (catalogName == null) {
             return getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
         }
@@ -641,7 +658,11 @@ public class MetadataMgr {
             return getTable(context, catalogName, dbName, tblName);
         }
 
-        // for external catalog, do not reach external metadata service
+        // for external catalog, optionally reach external metadata service
+        if (fetchExternalMetadata) {
+            return getTable(context, catalogName, dbName, tblName);
+        }
+
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(
                         metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
@@ -649,7 +670,7 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
-                                           ConnectorMetadatRequestContext requestContext) {
+                                           ConnectorMetadataRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
@@ -730,10 +751,77 @@ public class MetadataMgr {
                 }
             }
         }
-        return statistics.build();
+        return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
+                                         String catalogName,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate,
+                                         long limit,
+                                         TvrVersionRange versionRange) {
+        Statistics statistics = computeTableStatistics(session, catalogName, table, columns, partitionKeys,
+                predicate, limit, versionRange);
+        captureExternalTableStatisticsToDump(session, catalogName, table, statistics);
+        return statistics;
+    }
+
+    // Capture external-table statistics into the query dump at this single choke point -- it covers both the
+    // connector branch and the internal/ANALYZE early-return, iceberg and hive alike -- so replay can feed them
+    // back exactly as internal-table statistics are. Only fires while a dump is being taken.
+    private void captureExternalTableStatisticsToDump(OptimizerContext session, String catalogName, Table table,
+                                                      Statistics statistics) {
+        if (statistics == null || session == null || session.getDumpInfo() == null
+                || CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> e : statistics.getColumnStatistics().entrySet()) {
+            session.getDumpInfo().addTableStatistics(table, e.getKey().getName(), e.getValue());
+        }
+        // Also record the total row count. Iceberg has no hms scanRowCount to carry it, and replay needs it so
+        // column NDVs/cardinality are not clamped by a tiny fallback row count. Zero is a valid finite count
+        // (an empty external table) and must be recorded too, otherwise replay substitutes its nonzero fallback
+        // (100 for iceberg / 1 for hive) and plans an empty table with the wrong cardinality.
+        if (statistics.getOutputRowCount() >= 0 && !Double.isInfinite(statistics.getOutputRowCount())) {
+            session.getDumpInfo().addExternalTableRowCount(table, (long) statistics.getOutputRowCount());
+        }
+        // For a partitioned iceberg table also record its partition spec + names + per-partition counts (hive
+        // captures the same via OptExternalPartitionPruner) so replay can reproduce partition pruning.
+        if (table instanceof IcebergTable && !((IcebergTable) table).isUnPartitioned()) {
+            captureIcebergPartitionsToDump(session, catalogName, (IcebergTable) table);
+        }
+    }
+
+    // Record a partitioned iceberg table's partition spec, partition names, and real per-partition record
+    // counts into the dump. Guarded so a metadata hiccup never fails the query being dumped.
+    private void captureIcebergPartitionsToDump(OptimizerContext session, String catalogName, IcebergTable table) {
+        try {
+            List<String> transforms = table.getPartitionColumnNamesWithTransform();
+            List<String> partitionNames = listPartitionNames(catalogName, table.getCatalogDBName(),
+                    table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
+            session.getDumpInfo().addExternalTablePartitions(table, transforms, partitionNames);
+            // Real per-partition record count (Iceberg $partitions.record_count, no data scan), reusing the
+            // existing table_row_count section, so replay reconstructs each partition's DataFile with its true
+            // row count instead of an even total/partitionCount split. getPartitions returns infos positionally
+            // aligned to partitionNames.
+            List<PartitionInfo> partitions = getPartitions(catalogName, table, partitionNames);
+            for (int i = 0; i < partitionNames.size() && i < partitions.size(); i++) {
+                if (partitions.get(i) instanceof Partition) {
+                    long recordCount = ((Partition) partitions.get(i)).getRecordCount();
+                    if (recordCount > 0) {
+                        session.getDumpInfo().addPartitionRowCount(table, partitionNames.get(i), recordCount);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to capture iceberg partitions for dump: {}.{}",
+                    table.getCatalogDBName(), table.getCatalogTableName(), e);
+        }
+    }
+
+    private Statistics computeTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
@@ -775,7 +863,8 @@ public class MetadataMgr {
                     });
 
                     return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount())
+                            .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
                     return connectorBasicStats;
                 }
@@ -794,20 +883,6 @@ public class MetadataMgr {
                                          ScalarOperator predicate) {
         return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1,
                 TvrTableSnapshot.empty());
-    }
-
-    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        if (connectorMetadata.isPresent()) {
-            try {
-                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
-            } catch (Exception e) {
-                LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
-                        table.getCatalogName(), table, e);
-                throw e;
-            }
-        }
-        return new ArrayList<>();
     }
 
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
@@ -854,6 +929,23 @@ public class MetadataMgr {
         if (connectorMetadata.isPresent()) {
             try {
                 return connectorMetadata.get().getPartitions(table, partitionNames);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     */
+    public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPartitions(table, partitionNames, requestContext);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;

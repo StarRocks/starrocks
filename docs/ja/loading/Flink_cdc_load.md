@@ -1,5 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
+description: "Flink CDC を使用して MySQL の変更データをリアルタイムでキャプチャし、StarRocks Flink コネクタで StarRocks テーブルに同期する方法。"
 ---
 
 # MySQL からのリアルタイム同期
@@ -16,7 +18,7 @@ StarRocks は、MySQL から StarRocks へのデータをリアルタイムで�
 
 :::tip
 
-Flink CDC は MySQL から Flink への同期に使用されます。このトピックでは、バージョン 3.0 未満の Flink CDC を使用しているため、SMT を使用してテーブルスキーマを同期します。ただし、Flink CDC 3.0 を使用する場合、StarRocks へのテーブルスキーマの同期に SMT を使用する必要はありません。Flink CDC 3.0 は、MySQL データベース全体のスキーマ、シャード化されたデータベースとテーブルのスキーマを同期することもでき、スキーマ変更の同期もサポートしています。詳細な使用方法については、[Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks) を参照してください。
+Flink CDC は MySQL から Flink への同期に使用されます。このトピックでは、バージョン 3.0 未満の Flink CDC を使用しているため、SMT を使用してテーブルスキーマを同期します。ただし、Flink CDC 3.0 を使用する場合、StarRocks へのテーブルスキーマの同期に SMT を使用する必要はありません。Flink CDC 3.0 は、MySQL データベース全体のスキーマ、シャード化されたデータベースとテーブルのスキーマを同期することもでき、スキーマ変更の同期もサポートしています。詳細な使用方法については、[Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/) を参照してください。
 
 :::
 
@@ -78,7 +80,7 @@ MySQL からデータを同期するには、以下のツールをインスト�
         Java HotSpot(TM) 64-Bit Server VM (build 25.301-b09, mixed mode)
     ```
 
-   b. [Flink インストールパッケージ](https://flink.apache.org/downloads.html) をダウンロードして解凍します。Flink 1.14 以降を使用することをお勧めします。最小許可バージョンは Flink 1.11 です。このトピックでは Flink 1.14.5 を使用します。
+   b. [Flink インストールパッケージ](https://flink.apache.org/downloads/) をダウンロードして解凍します。Flink 1.14 以降を使用することをお勧めします。最小許可バージョンは Flink 1.11 です。このトピックでは Flink 1.14.5 を使用します。
 
    ```Bash
       # Flink をダウンロードします。
@@ -124,8 +126,8 @@ MySQL からデータを同期するには、以下のツールをインスト�
     > システムに Flink クラスターが既に実行されている場合、Flink クラスターを停止し、JAR パッケージをロードして検証するために再起動する必要があります。
     >
     > ```Bash
-    > $ ./bin/stop-cluster.sh
-    > $ ./bin/start-cluster.sh
+    > ./bin/stop-cluster.sh
+    > ./bin/start-cluster.sh
     > ```
 
 5. [SMT パッケージ](https://www.starrocks.io/download/community) をダウンロードして解凍し、`flink-1.14.5` ディレクトリに配置します。StarRocks は Linux x86 と macOS ARM64 用の SMT パッケージを提供しています。オペレーティングシステムと CPU に基づいて選択できます。
@@ -235,7 +237,7 @@ MySQL からリアルタイムでデータを同期するには、システム�
     - `[table-rule]`: データベース & テーブルのマッチングルールと対応する flink-connector-starrocks の設定。
 
        - `Database`, `table`: MySQL のデータベース & テーブルの名前。正規表現がサポートされています。
-       - `flink.starrocks.*`: flink-connector-starrocks の設定情報。詳細な設定と情報については、[flink-connector-starrocks](../loading/Flink-connector-starrocks.md) を参照してください。
+       - `flink.starrocks.*`: flink-connector-starrocks の設定情報。詳細な設定と情報については、[flink-connector-starrocks](./Flink-connector-starrocks.md) を参照してください。
 
        > 異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する必要がある場合。たとえば、一部のテーブルが頻繁に更新され、データロードを加速する必要がある場合は、[異なるテーブルに対して異なる flink-connector-starrocks 設定を使用する](#use-different-flink-connector-starrocks-configurations-for-different-tables) を参照してください。MySQL シャーディングから取得した複数のテーブルを同じ StarRocks テーブルにロードする必要がある場合は、[MySQL シャーディング後の複数のテーブルを StarRocks の 1 つのテーブルに同期する](#synchronize-multiple-tables-after-mysql-sharding-to-one-table-in-starrocks) を参照してください。
 
@@ -382,7 +384,7 @@ Flink クラスターを実行し、Flink ジョブを送信して MySQL から 
     Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
-2. [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) を使用するか、Flink SQL クライアントで `bin/flink list -running` コマンドを実行して、Flink クラスターで実行中の Flink ジョブとジョブ ID を確認できます。
+2. [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/try-flink/flink-operations-playground/#flink-webui) を使用するか、Flink SQL クライアントで `bin/flink list -running` コマンドを実行して、Flink クラスターで実行中の Flink ジョブとジョブ ID を確認できます。
 
     - Flink WebUI
       ![img](../_assets/4.9.3.png)

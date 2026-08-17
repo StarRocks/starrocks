@@ -2512,6 +2512,88 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testBackupAllFunctionStmt() throws Exception {
+        mockRepository();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        FunctionName fn = FunctionName.createFnName("db1.backup_all_fn_udf");
+        Function function = new ScalarFunction(fn,
+                Arrays.asList(StringType.STRING), StringType.STRING, false);
+        try {
+            db1.addFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+
+        ctxToRoot();
+        grantOrRevoke("grant repository on system to test");
+        ctxToTestUser();
+
+        try {
+            String[] sqls = new String[] {
+                    "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTIONS) PROPERTIES ('type' = 'full');",
+                    "BACKUP SNAPSHOT db1.backup_name1 TO example_repo ON (ALL FUNCTION) PROPERTIES ('type' = 'full');",
+                    "BACKUP DATABASE db1 SNAPSHOT backup_name1 TO example_repo ON (ALL FUNCTIONS) " +
+                            "PROPERTIES ('type' = 'full');"};
+
+            // Without USAGE on the function the check must fail (no more "Database is empty" misfire).
+            String expectError = "Access denied; you need (at least one of) the USAGE privilege(s) on FUNCTION";
+            for (String sql : sqls) {
+                StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+                try {
+                    Authorizer.check(statement, starRocksAssert.getCtx());
+                    Assertions.fail("expected access denied for: " + sql);
+                } catch (Exception e) {
+                    logSysInfo(e.getMessage() + ", sql: " + sql);
+                    Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+                }
+            }
+
+            // Regression: when the BACKUP statement has no db prefix, the session db must
+            // be resolved before the privilege check; otherwise auth would silently bypass.
+            String sqlSessionDb =
+                    "BACKUP SNAPSHOT backup_name1 TO example_repo ON (ALL FUNCTIONS) PROPERTIES ('type' = 'full');";
+            String previousDb = starRocksAssert.getCtx().getDatabase();
+            starRocksAssert.getCtx().setDatabase("db1");
+            try {
+                StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sqlSessionDb, starRocksAssert.getCtx());
+                try {
+                    Authorizer.check(statement, starRocksAssert.getCtx());
+                    Assertions.fail("expected access denied for: " + sqlSessionDb);
+                } catch (Exception e) {
+                    logSysInfo(e.getMessage() + ", sql: " + sqlSessionDb);
+                    Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+                }
+            } finally {
+                starRocksAssert.getCtx().setDatabase(previousDb);
+            }
+
+            // Granting USAGE on ALL FUNCTIONS in db1 lets the check pass.
+            ctxToRoot();
+            grantOrRevoke("grant usage on ALL FUNCTIONS in database db1 to test");
+            ctxToTestUser();
+            try {
+                for (String sql : sqls) {
+                    StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+                    Authorizer.check(statement, starRocksAssert.getCtx());
+                }
+            } finally {
+                ctxToRoot();
+                grantOrRevoke("revoke usage on ALL FUNCTIONS in database db1 from test");
+                ctxToTestUser();
+            }
+        } finally {
+            ctxToRoot();
+            grantOrRevoke("revoke repository on system from test");
+            try {
+                db1.dropFunctionForRestore(function);
+            } catch (Throwable e) {
+                // ignore
+            }
+            ctxToTestUser();
+        }
+    }
+
+    @Test
     public void testShowBackupStmtInShowExecutor() throws Exception {
 
         mockAddBackupJob("db1");
@@ -2939,14 +3021,12 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
             // ignore
         }
         String showSql = "show full functions in db1";
-        String expectError = "Access denied for user 'test' to database 'db1'";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(showSql, starRocksAssert.getCtx());
         ctxToTestUser();
         Authorizer.check(statement, starRocksAssert.getCtx());
 
         ctxToRoot();
         grantOrRevoke("grant create materialized view on DATABASE db1 to test");
-        expectError = "You need any privilege on any TABLE/VIEW/MV in database";
         ctxToTestUser();
         Authorizer.check(statement, starRocksAssert.getCtx());
         ctxToRoot();
@@ -3101,7 +3181,6 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     @Test
     public void testGrantRevokeBuiltinRole() throws Exception {
         String sql = "create role r1";
-        AuthorizationMgr manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 
@@ -3483,8 +3562,6 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
         String createSql2 = "create pipe p2 " +
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
-        String dropSql = "drop pipe p1";
-        String dropSql2 = "drop pipe p2";
         ConnectContext ctx = starRocksAssert.getCtx();
 
         ctxToTestUser();
@@ -3708,7 +3785,6 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testPipePEntryObject() throws Exception {
         PipeManagerTest.mockRepoExecutorDML();
 
-        GlobalStateMgr mgr = GlobalStateMgr.getCurrentState();
         ctxToRoot();
         starRocksAssert.getCtx().setDatabase("db1");
         starRocksAssert.withTable("create table db1.tbl_pipe (id int, str string) properties('replication_num'='1') ");

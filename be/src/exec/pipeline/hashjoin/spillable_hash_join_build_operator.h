@@ -21,10 +21,10 @@
 
 #include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/spill/spiller.h"
 #include "exec/join/join_hash_table.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
-#include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::pipeline {
@@ -66,7 +66,10 @@ private:
     Status init_spiller_partitions(RuntimeState* state, HashJoinBuilder* builder);
 
     size_t _hash_table_iterate_idx = 0;
-    std::vector<JoinHashTable*> _hash_tables;
+    // Own (shared_ptr) the build chunks being spilled instead of borrowing the JoinHashTables by raw
+    // pointer, so the async spill iterator never dereferences hash-table state that the join builder
+    // may free on cancel/close. See _convert_hash_map_to_chunk.
+    std::vector<ChunkPtr> _build_chunks;
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;

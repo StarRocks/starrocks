@@ -37,20 +37,20 @@
 #include <mutex>
 #include <vector>
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
-#include "storage/column_mapping.h"
 #include "storage/compaction_utils.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage_primitive/column_mapping.h"
 
 namespace butil {
 class IOBuf;
@@ -135,10 +135,13 @@ public:
     }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
-    virtual Status add_rowset(RowsetSharedPtr rowset) { return Status::NotSupported("RowsetWriter::add_rowset"); }
+    virtual Status add_rowset(const RowsetSharedPtr& rowset) {
+        return Status::NotSupported("RowsetWriter::add_rowset");
+    }
 
     // Precondition: the input `rowset` should have the same type of the rowset we're building
-    virtual Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) {
+    virtual Status add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
+                                                       const SchemaMapping& schema_mapping) {
         return Status::NotSupported("RowsetWriter::add_rowset_for_linked_schema_change");
     }
 
@@ -239,8 +242,9 @@ public:
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info) override;
 
     // add rowset by create hard link
-    Status add_rowset(RowsetSharedPtr rowset) override;
-    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override;
+    Status add_rowset(const RowsetSharedPtr& rowset) override;
+    Status add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
+                                               const SchemaMapping& schema_mapping) override;
 
     Status flush() override;
 

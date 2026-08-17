@@ -43,8 +43,8 @@ private:
     const Options* options_;
     std::string buffer_;             // Destination buffer
     std::vector<uint32_t> restarts_; // Restart points
-    int counter_;                    // Number of entries emitted since restart
-    bool finished_;                  // Has Finish() been called?
+    int counter_{0};                 // Number of entries emitted since restart
+    bool finished_{false};           // Has Finish() been called?
     std::string last_key_;
 };
 

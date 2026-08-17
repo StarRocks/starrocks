@@ -576,9 +576,10 @@ public class SkewJoinV2Test extends PlanTestBase {
             try {
                 String sql = "select v2, v5 from t0 left join[shuffle] t1 on v1 = v4";
                 String plan = getVerboseExplain(sql);
-                assertCContains(plan, "SplitCastDataSink:\n" +
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
                         "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
-                        "  OutPut Exchange Id: 02\n" +
+                        "  OutPut Exchange Id: 01\n" +
                         "  Split expr: [1: v1, BIGINT, true] IS NOT NULL\n" +
                         "  OutPut Partition: RANDOM\n" +
                         "  OutPut Exchange Id: 06\n" +
@@ -592,6 +593,17 @@ public class SkewJoinV2Test extends PlanTestBase {
                         "  |    6:EXCHANGE\n" +
                         "  |       distribution type: ROUND_ROBIN\n" +
                         "  |       cardinality: 20000000");
+                assertContains(plan, "Input Partition: RANDOM\n" +
+                        "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
+                        "  OutPut Exchange Id: 03\n" +
+                        "\n" +
+                        "  2:OlapScanNode\n" +
+                        "     table: t1, rollup: t1\n" +
+                        "     preAggregation: on\n" +
+                        "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                        "     tabletList=10016,10018,10020\n" +
+                        "     actualRows=0, avgRowSize=9.0\n" +
+                        "     cardinality: 20000000");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "loads 提供导入作业的结果信息。"
 ---
 
 # loads
@@ -27,14 +28,20 @@ displayed_sidebar: docs
 | UNSELECTED_ROWS      | 由于 WHERE 子句中指定的条件而被过滤掉的数据行数。 |
 | SINK_ROWS            | 加载的数据行数。                     |
 | RUNTIME_DETAILS      | 加载运行时元数据。详情请参见 [RUNTIME_DETAILS](#runtime_details)。 |
-| CREATE_TIME          | 导入作业创建的时间。格式：`yyyy-MM-dd HH:mm:ss`。示例：`2023-07-24 14:58:58`。 |
-| LOAD_START_TIME      | 导入作业 LOADING 阶段的开始时间。格式：`yyyy-MM-dd HH:mm:ss`。示例：`2023-07-24 14:58:58`。 |
-| LOAD_COMMIT_TIME     | 加载事务提交的时间。格式：`yyyy-MM-dd HH:mm:ss`。示例：`2023-07-24 14:58:58`。 |
-| LOAD_FINISH_TIME     | 导入作业 LOADING 阶段的结束时间。格式：`yyyy-MM-dd HH:mm:ss`。示例：`2023-07-24 14:58:58`。 |
+| CREATE_TIME          | 导入作业创建的时间。格式：`yyyy-MM-dd HH:mm:ss.SSSSSS`。示例：`2023-07-24 14:58:58.123000`。 |
+| LOAD_START_TIME      | 导入作业 LOADING 阶段的开始时间。格式：`yyyy-MM-dd HH:mm:ss.SSSSSS`。示例：`2023-07-24 14:58:58.123000`。 |
+| LOAD_COMMIT_TIME     | 加载事务提交的时间。格式：`yyyy-MM-dd HH:mm:ss.SSSSSS`。示例：`2023-07-24 14:58:58.123000`。 |
+| LOAD_FINISH_TIME     | 导入作业 LOADING 阶段的结束时间。格式：`yyyy-MM-dd HH:mm:ss.SSSSSS`。示例：`2023-07-24 14:58:58.123000`。 |
 | PROPERTIES           | 导入作业的静态属性。详情请参见 [PROPERTIES](#properties)。 |
 | ERROR_MSG            | 导入作业的错误信息。如果导入作业未遇到任何错误，则返回 `NULL`。 |
 | TRACKING_SQL         | 可用于查询导入作业跟踪日志的 SQL 语句。仅当导入作业涉及不合格数据行时，才返回 SQL 语句。如果导入作业不涉及任何不合格数据行，则返回 `NULL`。 |
 | REJECTED_RECORD_PATH | 可以从中访问导入作业中过滤掉的所有不合格数据行的路径。记录的不合格数据行数由导入作业中配置的 `log_rejected_record_num` 参数决定。可以使用 `wget` 命令访问该路径。如果导入作业不涉及任何不合格数据行，则返回 `NULL`。 |
+
+:::note
+
+从 v4.2 版本开始，`CREATE_TIME`、`LOAD_START_TIME`、`LOAD_COMMIT_TIME` 和 `LOAD_FINISH_TIME` 支持毫秒精度。秒以下部分以六位小数渲染，其中最后三位始终为 `0`（例如 `2023-07-24 14:58:58.123000`）。针对这些字段的谓词（例如 `LOAD_FINISH_TIME <= '2023-07-24 14:58:58'`）也按毫秒精度进行求值。在更早的版本中，这些字段为秒级精度（格式为 `yyyy-MM-dd HH:mm:ss`）。
+
+:::
 
 ## RUNTIME_DETAILS
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HLL は HyperLogLog アルゴリズムに基づく実装です。"
 ---
 
 # hll_union_agg

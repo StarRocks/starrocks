@@ -17,6 +17,7 @@
 #include <algorithm>
 
 #include "common/status.h"
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 
 namespace starrocks::pipeline {
@@ -31,8 +32,10 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
     _stream_aggregator->close(state);
-    DCHECK(is_finished());
-    DCHECK(!has_output());
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || is_finished());
+    DCHECK(state->is_cancelled() || !has_output());
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
@@ -135,14 +138,14 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
 
     } else if (_has_last_chunk) {
         DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
-            _accumulator.push(std::move(res));
+            _accumulator.push(res);
         }
         _accumulator.finalize();
     }

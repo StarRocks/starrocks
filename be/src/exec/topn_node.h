@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "exec/exec_node.h"
-#include "exec/sort_exec_exprs.h"
+#include "common/statusor.h"
+#include "exec/pipeline_node.h"
+#include "exprs/sort_exec_exprs.h"
 
 namespace starrocks {
 
@@ -26,29 +27,25 @@ class RuntimeFilterBuildDescriptor;
 //
 // It sorts rows in a batch of chunks in turn at the open stage,
 // and keeps LIMIT rows after each step for output.
-class TopNNode final : public ::starrocks::ExecNode {
+class TopNNode final : public PipelineNode {
 public:
     TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~TopNNode() override;
 
-    // overridden methods defined in ::starrocks::ExecNode
+    // overridden methods defined in PipelineNode
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed,
-            bool is_merging, bool enable_parallel_merge, bool is_per_pipeline);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context,
+                                                           bool is_partition_topn, bool analytic_need_merge,
+                                                           bool is_merging, bool enable_parallel_merge,
+                                                           bool is_per_pipeline);
 
-    Status _consume_chunks(RuntimeState* state, ExecNode* child);
     const TPlanNode& _tnode;
 
     // Only used for profile
@@ -57,6 +54,20 @@ private:
 
     // _sort_exec_exprs contains the ordering expressions
     SortExecExprs _sort_exec_exprs;
+
+    // The record that is materialized and sorted: the SORT TUPLE alone.
+    //
+    // This is NOT the node's own record (ExecNode::_record_descriptor). A window pre-aggregation
+    // plan gives the sort node a SECOND tuple -- the pre-agg tuple, appended after the sort tuple
+    // by SortNode's constructor on the FE side -- which this node PRODUCES but does not materialize
+    // before sorting. Conflating the two makes the sorter's slot list longer than its list of
+    // sort-tuple expressions, and charges the late-materialization estimate for slots that are
+    // never permuted.
+    //
+    // TODO: this exists only to carry slot ids; see the TODO on
+    // ChunksSorter::materialize_chunk_before_sort for how to remove it entirely.
+    RecordDescriptor _materialized_record_descriptor;
+
     std::vector<SlotId> _early_materialized_slots{};
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
@@ -68,16 +79,12 @@ private:
 
     std::vector<ExprContext*> _local_partition_exprs;
 
-    // Cached descriptor for the materialized tuple. Assigned in Prepare().
-    TupleDescriptor* _materialized_tuple_desc;
-
     // True if the _limit comes from DEFAULT_ORDER_BY_LIMIT and option
     // ABORT_ON_DEFAULT_LIMIT_EXCEEDED is set.
     bool _abort_on_default_limit_exceeded = false;
 
     std::unique_ptr<ChunksSorter> _chunks_sorter;
 
-    RuntimeProfile::Counter* _sort_timer;
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 

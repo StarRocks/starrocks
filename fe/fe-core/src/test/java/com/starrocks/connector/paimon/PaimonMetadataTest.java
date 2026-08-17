@@ -23,12 +23,14 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.proc.ExternalSchemaProcNode;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
@@ -70,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Frontend;
 import com.starrocks.type.ArrayType;
@@ -215,10 +218,10 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException, AnalysisException {
         List<DataField> fields = new ArrayList<>();
-        fields.add(new DataField(1, "col2", new IntType(true)));
-        fields.add(new DataField(2, "col3", new DoubleType(false)));
+        fields.add(new DataField(1, "col2", new IntType(false)));
+        fields.add(new DataField(2, "col3", new DoubleType(true)));
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -244,8 +247,8 @@ public class PaimonMetadataTest {
                         "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
-                        "PARTITION BY (col1)\n" +
-                        "PROPERTIES (\"primary-key\" = \"col2\");",
+                        "PRIMARY KEY (`col2`)\n" +
+                        "PARTITION BY (col1);",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
@@ -255,6 +258,13 @@ public class PaimonMetadataTest {
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
         assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
+
+        // Verify DESC shows primary key
+        ExternalSchemaProcNode descNode = new ExternalSchemaProcNode(paimonTable);
+        ProcResult descResult = descNode.fetchResult();
+        List<List<String>> rows = descResult.getRows();
+        assertEquals("true", rows.get(0).get(3));
+        assertEquals("false", rows.get(1).get(3));
     }
 
     @Test
@@ -338,7 +348,7 @@ public class PaimonMetadataTest {
                 result = Arrays.asList(partition1, partition2);
             }
         };
-        List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+        List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadataRequestContext.DEFAULT);
         assertEquals(2, result.size());
         List<String> expectations = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
         Assertions.assertThat(result).hasSameElementsAs(expectations);
@@ -346,6 +356,37 @@ public class PaimonMetadataTest {
         metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), new ArrayList<>(), false);
         metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), expectations, false);
 
+    }
+
+    @Test
+    public void testListPartitionNamesWithDateNullPartition(@Mocked FileStoreTable mockPaimonTable)
+            throws Catalog.TableNotExistException {
+        List<String> partitionNames = Lists.newArrayList("dt");
+        RowType partitionRowType = new RowType(
+                Arrays.asList(new DataField(0, "dt", new org.apache.paimon.types.DateType(true))));
+        Identifier tblIdentifier = new Identifier("db1", "tbl_date_null");
+        org.apache.paimon.partition.Partition partitionDate = new Partition(
+                Map.of("dt", "19723"), 100L, 1L, 1L, 1741327322000L, true);
+        org.apache.paimon.partition.Partition partitionNull = new Partition(
+                Map.of("dt", "__DEFAULT_PARTITION__"), 50L, 1L, 1L, 1741327322000L, true);
+
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(tblIdentifier);
+                result = mockPaimonTable;
+                mockPaimonTable.partitionKeys();
+                result = partitionNames;
+                mockPaimonTable.rowType();
+                result = partitionRowType;
+                paimonNativeCatalog.listPartitions(tblIdentifier);
+                result = Arrays.asList(partitionDate, partitionNull);
+            }
+        };
+        List<String> result = metadata.listPartitionNames("db1", "tbl_date_null",
+                ConnectorMetadataRequestContext.DEFAULT);
+        assertEquals(2, result.size());
+        Assertions.assertThat(result).hasSameElementsAs(
+                Lists.newArrayList("dt=2024-01-01", "dt=__DEFAULT_PARTITION__"));
     }
 
     @Test
@@ -361,6 +402,28 @@ public class PaimonMetadataTest {
         ConnectorTableMetadataProcessor connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
         connectorTableMetadataProcessor.registerPaimonCatalog("paimon_catalog", paimonNativeCatalog);
         connectorTableMetadataProcessor.refreshPaimonCatalog();
+    }
+
+    @Test
+    public void testRefreshPaimonCatalogUnsupportedTableType(@Mocked CachingCatalog cachingCatalog)
+            throws Exception {
+        new Expectations() {
+            {
+                cachingCatalog.listDatabases();
+                result = ImmutableList.of("db");
+                cachingCatalog.listTables("db");
+                result = ImmutableList.of("object_tbl", "normal_tbl");
+                cachingCatalog.refreshPartitions(new Identifier("db", "object_tbl"));
+                result = new ClassCastException(
+                        "class org.apache.paimon.table.object.ObjectTableImpl cannot be cast to " +
+                                "class org.apache.paimon.table.FileStoreTable");
+                cachingCatalog.refreshPartitions(new Identifier("db", "normal_tbl"));
+            }
+        };
+        ConnectorTableMetadataProcessor processor = new ConnectorTableMetadataProcessor();
+        processor.registerPaimonCatalog("paimon_catalog", cachingCatalog);
+        // should not throw — the ClassCastException on object_tbl should be caught and logged
+        processor.refreshPaimonCatalog();
     }
 
     @Test
@@ -780,6 +843,95 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testBuildColumnStatisticAverageRowSize() {
+        // Case 1: avgLen is present — averageRowSize should use avgLen (4), not nullCount (1000)
+        String statsWithAvgLen = "{\n" +
+                "  \"snapshotId\" : 1,\n" +
+                "  \"schemaId\" : 0,\n" +
+                "  \"mergedRecordCount\" : 5000,\n" +
+                "  \"mergedRecordSize\" : 40000,\n" +
+                "  \"colStats\" : {\n" +
+                "    \"id\" : {\n" +
+                "      \"colId\" : 0,\n" +
+                "      \"distinctCount\" : 5000,\n" +
+                "      \"min\" : \"1\",\n" +
+                "      \"max\" : \"5000\",\n" +
+                "      \"nullCount\" : 1000,\n" +
+                "      \"avgLen\" : 4,\n" +
+                "      \"maxLen\" : 4\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        Statistics statistics1 = JsonSerdeUtil.fromJson(statsWithAvgLen, Statistics.class);
+        statistics1.colStats().get("id").deserializeFieldsFromString(new IntType(true));
+
+        new Expectations() {
+            {
+                nativeTable.statistics();
+                result = Optional.of(statistics1);
+            }
+        };
+        PaimonTable paimonTable1 =
+                new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable);
+        optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
+
+        Map<ColumnRefOperator, Column> colRefMap1 = new HashMap<>();
+        ColumnRefOperator idRef = new ColumnRefOperator(10, IntegerType.INT, "id", true);
+        colRefMap1.put(idRef, new Column("id", IntegerType.INT));
+
+        com.starrocks.sql.optimizer.statistics.Statistics result1 =
+                metadata.getTableStatistics(optimizerContext, paimonTable1, colRefMap1,
+                        null, null, -1, null);
+
+        ColumnStatistic idStat = result1.getColumnStatistic(idRef);
+        // averageRowSize should be avgLen (4), NOT nullCount (1000)
+        assertEquals(4.0, idStat.getAverageRowSize(), 0.001);
+
+        // Case 2: avgLen is absent — averageRowSize should fall back to type size
+        String statsWithoutAvgLen = "{\n" +
+                "  \"snapshotId\" : 1,\n" +
+                "  \"schemaId\" : 0,\n" +
+                "  \"mergedRecordCount\" : 100,\n" +
+                "  \"mergedRecordSize\" : 800,\n" +
+                "  \"colStats\" : {\n" +
+                "    \"score\" : {\n" +
+                "      \"colId\" : 1,\n" +
+                "      \"distinctCount\" : 50,\n" +
+                "      \"min\" : \"0.0\",\n" +
+                "      \"max\" : \"99.9\",\n" +
+                "      \"nullCount\" : 500\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        Statistics statistics2 = JsonSerdeUtil.fromJson(statsWithoutAvgLen, Statistics.class);
+        statistics2.colStats().get("score").deserializeFieldsFromString(new DoubleType(true));
+
+        new Expectations() {
+            {
+                nativeTable.statistics();
+                result = Optional.of(statistics2);
+            }
+        };
+        PaimonTable paimonTable2 =
+                new PaimonTable("paimon", "db1", "tbl2", Lists.newArrayList(), nativeTable);
+
+        Map<ColumnRefOperator, Column> colRefMap2 = new HashMap<>();
+        ColumnRefOperator scoreRef = new ColumnRefOperator(11, FloatType.DOUBLE, "score", true);
+        colRefMap2.put(scoreRef, new Column("score", FloatType.DOUBLE));
+
+        com.starrocks.sql.optimizer.statistics.Statistics result2 =
+                metadata.getTableStatistics(optimizerContext, paimonTable2, colRefMap2,
+                        null, null, -1, null);
+
+        ColumnStatistic scoreStat = result2.getColumnStatistic(scoreRef);
+        // Without avgLen, averageRowSize should fall back to type size (DOUBLE = 8 bytes)
+        assertEquals(FloatType.DOUBLE.getTypeSize(), scoreStat.getAverageRowSize(), 0.001);
+        // Verify it's NOT using nullCount (500) as averageRowSize
+        assertTrue(scoreStat.getAverageRowSize() < 100,
+                "averageRowSize should not be nullCount (500), should be type size");
+    }
+
+    @Test
     public void testGetSnapshotIdFromVersion() throws Exception {
 
         //1.initialize env、db、table、load data
@@ -999,9 +1151,7 @@ public class PaimonMetadataTest {
         HdfsEnvironment environment = new HdfsEnvironment();
         ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
         PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
-        long snapshotId;
         ConstantOperator constantOperator;
-        ConnectorTableVersion tableVersion;
 
         //2 check
         //2.1 check startVersion and endVersion are empty
@@ -1762,6 +1912,7 @@ public class PaimonMetadataTest {
                 result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
             }
         };
-        org.junit.jupiter.api.Assertions.assertThrows(DdlException.class, () -> metadata.dropTable(connectContext, dropStmt));
+        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.dropTable(connectContext, dropStmt));
     }
 }

@@ -1,7 +1,12 @@
 ### BE の動的パラメータを設定する
 
-`curl` コマンドを使用して、BE ノードの動的パラメータを設定できます。
+BE ノードの動的パラメータは、`information_schema.be_configs` 内の値を更新することで設定できます。
 
-```Shell
-curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<value>
+:::warning
+無効な値を設定すると、予期しない動作を引き起こす可能性があります。設定を更新するコマンドを実行する前に、必ず再確認してください。
+:::
+
+```SQL
+-- <config_key> を設定のキーに、<config_value> を値に置き換えてください。
+UPDATE information_schema.be_configs SET VALUE = <config_value> WHERE name = "<config_key>";
 ```

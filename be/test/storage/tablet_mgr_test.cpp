@@ -36,12 +36,12 @@
 #include <memory>
 #include <string>
 
-#include "common/config.h"
+#include "column/chunk_factory.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/compaction_manager.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
@@ -59,6 +59,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/txn_manager.h"
+#include "storage_primitive/chunk_iterator.h"
 
 #ifndef BE_TEST
 #define BE_TEST
@@ -161,6 +162,27 @@ TEST_F(TabletMgrTest, CreateTablet) {
     create_tablet_req = get_create_tablet_request(111, 4444);
     create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
+}
+
+// The reported stats must say which tablet version they were computed from: without it the FE
+// cannot tell a fresh snapshot from one this cache served from before the caller's load, and an
+// exact COUNT(*) folded from those numbers goes stale (StarRocks issue #72271).
+TEST_F(TabletMgrTest, GetTabletStatReportsVersion) {
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
+    std::vector<DataDir*> data_dirs;
+    data_dirs.push_back(_data_dirs[0]);
+    ASSERT_TRUE(_tablet_mgr->create_tablet(create_tablet_req, data_dirs).ok());
+    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
+    ASSERT_TRUE(tablet != nullptr);
+
+    TTabletStatResult result;
+    _tablet_mgr->get_tablet_stat(&result);
+
+    auto stat = result.tablets_stats.find(111);
+    ASSERT_NE(result.tablets_stats.end(), stat);
+    ASSERT_TRUE(stat->second.__isset.row_num);
+    ASSERT_TRUE(stat->second.__isset.version);
+    EXPECT_EQ(tablet->max_continuous_version(), stat->second.version);
 }
 
 TEST_F(TabletMgrTest, DropTablet) {
@@ -367,14 +389,14 @@ static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_cont
 static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchemaCSPtr& tablet_schema) {
     std::vector<std::string> test_data;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
-    auto chunk = ChunkHelper::new_chunk(schema, 1024);
+    auto chunk = ChunkFactory::new_chunk(schema, 1024);
     for (size_t i = 0; i < 1024; ++i) {
         test_data.push_back("well" + std::to_string(i));
-        auto cols = chunk->mutable_columns();
-        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        auto cols = chunk->columns();
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
         Slice field_1(test_data[i]);
-        cols[1]->append_datum(Datum(field_1));
-        cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(field_1));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(10000 + i)));
     }
     auto st = writer->add_chunk(*chunk);
     ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();

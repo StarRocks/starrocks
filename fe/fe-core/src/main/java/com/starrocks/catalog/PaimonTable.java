@@ -51,7 +51,7 @@ public class PaimonTable extends Table {
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
@@ -107,12 +107,13 @@ public class PaimonTable extends Table {
     public Map<String, String> getProperties() {
         if (properties == null) {
             this.properties = new HashMap<>();
-            if (!paimonNativeTable.primaryKeys().isEmpty()) {
-                properties.put("primary-key", String.join(",", paimonNativeTable.primaryKeys()));
-            }
             this.properties.putAll(paimonNativeTable.options());
         }
         return properties;
+    }
+
+    public List<String> getPrimaryKeyColumnNames() {
+        return paimonNativeTable.primaryKeys();
     }
 
     @Override

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a WKT (WEll Known Text) to a circle on the sphere of the earth."
 ---
 
 # ST_Circle

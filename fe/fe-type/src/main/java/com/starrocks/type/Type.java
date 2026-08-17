@@ -305,11 +305,35 @@ public abstract class Type implements Cloneable {
                 && !isBinaryType() && !isVariantType();
     }
 
+    // Returns true if this type is VARIANT or transitively contains a VARIANT inside an
+    // ARRAY/MAP/STRUCT. VARIANT has no native storage write path: an OLAP column (or generated MV
+    // column) containing it aborts the BE on write (the storage LogicalType dispatch hits its
+    // default LOG(FATAL) for TYPE_VARIANT), so native schemas must reject any contained VARIANT.
+    public boolean containsVariant() {
+        if (isVariantType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsVariant();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsVariant() || ((MapType) this).getValueType().containsVariant();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsVariant());
+        }
+        return false;
+    }
+
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
-        // Allow VARBINARY as distribution key
+        // Allow VARBINARY as distribution key.
+        // A distribution / key / sort-key column is encoded on the BE via an order-preserving
+        // KeyCoder, so its type must have a registered key coder. TIME has none (it is a compute-only
+        // double, not a storable/encodable column type) and would crash the BE short-key encoder, so
+        // exclude it here alongside the other non-encodable types.
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isVariantType();
+                && !isFunctionType() && !isVariantType() && !isTime();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {

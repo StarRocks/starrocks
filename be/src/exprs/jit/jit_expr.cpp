@@ -19,11 +19,13 @@
 #include <chrono>
 #include <vector>
 
+#include "base/time/time.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/compiler_util.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/expr_jit_codegen.h"
@@ -78,8 +80,12 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
         auto expr_name = ExprJITCodegen::func_name(_expr, state);
         ASSIGN_OR_RETURN(_jit_callable, jit_engine->get_jit_callable(expr_name, context, _expr, _children));
         auto elapsed = MonotonicNanos() - start;
-        if (state->fragment_ctx() != nullptr) {
-            state->fragment_ctx()->update_jit_profile(elapsed);
+        auto* profile = state == nullptr ? nullptr : state->runtime_profile();
+        if (profile != nullptr) {
+            auto* jit_counter = ADD_COUNTER(profile, "JITCounter", TUnit::UNIT);
+            auto* jit_timer = ADD_TIMER(profile, "JITTotalCostTime");
+            COUNTER_UPDATE(jit_counter, 1);
+            COUNTER_UPDATE(jit_timer, elapsed);
         }
     }
     return Status::OK();
@@ -95,15 +101,18 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     jit_columns.reserve(_children.size() + 1);
     Columns args;
     args.reserve(_children.size() + 1);
-    auto unfold_ptr = [&jit_columns](const ColumnPtr& column) {
+    auto unfold_ptr = [&jit_columns](const ColumnPtr& column) -> Status {
         DCHECK(!column->is_constant());
         auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(column);
-        auto data_col_ptr = reinterpret_cast<const int8_t*>(un_col->raw_data());
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(un_col->accept(&visitor));
+        auto data_col_ptr = reinterpret_cast<const int8_t*>(visitor.result());
         const int8_t* null_flags_ptr = nullptr;
         if (un_col_null != nullptr) {
-            null_flags_ptr = reinterpret_cast<const int8_t*>(un_col_null->raw_data());
+            null_flags_ptr = reinterpret_cast<const int8_t*>(un_col_null->immutable_data().data());
         }
         jit_columns.emplace_back(JITColumn{data_col_ptr, null_flags_ptr});
+        return Status::OK();
     };
     size_t num_rows = 0;
     for (Expr* child : _children) {
@@ -131,7 +140,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         }
 
         if (column->is_constant()) {
-            column = ColumnHelper::unfold_const_column(child->type(), num_rows, std::move(column));
+            column = ColumnHelper::unfold_const_column(child->type(), num_rows, column);
         }
         DCHECK(num_rows == column->size())
                 << "size unequal " + std::to_string(num_rows) + " != " + std::to_string(column->size());
@@ -145,11 +154,11 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
                         "and retry");
             }
         }
-        unfold_ptr(column);
+        RETURN_IF_ERROR(unfold_ptr(column));
         backup_args.emplace_back(column);
     }
 
-    unfold_ptr(result_column->as_mutable_ptr());
+    RETURN_IF_ERROR(unfold_ptr(result_column->as_mutable_ptr()));
     // inputs are not empty.
     (*_jit_callable)(num_rows, jit_columns.data());
     //TODO: _jit_function return has_null

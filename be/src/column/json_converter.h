@@ -17,7 +17,7 @@
 #include <velocypack/Slice.h>
 
 #include "column/column_builder.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "types/decimalv3.h"

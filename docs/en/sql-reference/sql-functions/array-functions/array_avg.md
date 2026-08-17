@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the average of all elements in an ARRAY, ignoring NULL values."
 ---
 
 # array_avg

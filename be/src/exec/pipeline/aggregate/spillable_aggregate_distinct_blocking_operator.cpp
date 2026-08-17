@@ -17,9 +17,12 @@
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
+#include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/sorted_streaming_aggregator.h"
-#include "exec/spill/spiller.hpp"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
@@ -142,7 +145,7 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     RETURN_IF_ERROR(_sort_exprs.init(group_by_expr, nullptr, &_pool, state));
     _sort_desc = SortDescs::asc_null_first(group_by_expr.size());
 
-    RETURN_IF_ERROR(_sort_exprs.prepare(state, {}, {}));
+    RETURN_IF_ERROR(_sort_exprs.prepare(state));
     RETURN_IF_ERROR(_sort_exprs.open(state));
 
     // init spill options
@@ -151,11 +154,11 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "agg-distinct-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
-    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
@@ -174,6 +177,8 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);
 
     spill_channel->set_spiller(spiller);
+    // Anchor the spill channel to the aggregator's lifetime (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(aggregator.get());
     aggregator->set_spiller(spiller);
     aggregator->set_spill_channel(std::move(spill_channel));
 
@@ -281,14 +286,14 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_distinct(chunk->num_rows()));
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
 
     } else if (_has_last_chunk) {
         DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
-            _accumulator.push(std::move(res));
+            _accumulator.push(res);
         }
         _accumulator.finalize();
     }

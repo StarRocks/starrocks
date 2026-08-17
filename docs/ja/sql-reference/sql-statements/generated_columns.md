@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "生成列は、複雑な式を含むクエリを高速化するために使用できる機能です。"
 ---
 
 # 生成列

@@ -87,9 +87,11 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -214,6 +216,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public Configuration buildConfFromProperties(Map<String, String> properties, String path) throws StarRocksException {
         // build Hadoop configuration from properties for HadoopFileIO
         Configuration copied = new Configuration(conf.get());
+        disableSharedFileSystemCache(copied, path);
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
                 // Handle Azure ADLS SAS token
@@ -232,7 +235,15 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return copied;
             } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
                 // Handle GCS access token
-                copied.set("fs.gs.auth.access.token.provider.impl", GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                        GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER);
+                copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY,
+                        GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
+                        GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                // The base conf may carry catalog-level impersonation, which gcs-connector would apply
+                // on top of the vended token; vended tokens typically lack IAM impersonation permission.
+                copied.unset(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY);
                 copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, entry.getValue());
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
@@ -240,7 +251,27 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return copied;
             }
         }
-        return conf.get();
+        return copied;
+    }
+
+    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to
+    // HadoopFileIO, whose FileSystem cache key is (scheme, authority, ugi) and excludes the
+    // Configuration holding the credential — one shared instance would serve every catalog on a bucket
+    // with whichever credential created it first. Kept to Azure and GCS deliberately: bypassing the
+    // cache leaks an unclosed FileSystem per call, so other schemes wait for a credential-keyed cache.
+    private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
+            Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
+
+    private static void disableSharedFileSystemCache(Configuration conf, String path) {
+        String scheme = new Path(path).toUri().getScheme();
+        if (scheme == null) {
+            // FileSystem.get() resolves a scheme-less path through fs.defaultFS and only then consults
+            // the flag, so the flag has to be keyed on the default scheme rather than skipped.
+            scheme = FileSystem.getDefaultUri(conf).getScheme();
+        }
+        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
+            conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
+        }
     }
 
     private static class CacheEntry {
@@ -256,12 +287,11 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class DiskCacheEntry {
         private final long length;
         private final InputFile inputFile;
-        private int useCount;
+        private final AtomicInteger useCount = new AtomicInteger(0);
 
         private DiskCacheEntry(long length, InputFile inputFile) {
             this.length = length;
             this.inputFile = inputFile;
-            this.useCount = 0;
         }
 
         public SeekableInputStream toSeekableInputStream() {
@@ -281,12 +311,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             }
         }
 
-        public void pin() {
-            useCount += 1;
+        public int pin() {
+            return useCount.incrementAndGet();
         }
 
-        public void unpin() {
-            useCount -= 1;
+        public int unpin() {
+            return useCount.decrementAndGet();
         }
 
         public static DiskCacheEntry newDiskCacheEntry(SeekableInputStream stream, long fileLength, String key) {
@@ -437,11 +467,20 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             this.diskCache = diskCacheBuilder.maximumWeight(DISK_CACHE_CAPACITY)
                     .expireAfterAccess(DISK_CACHE_EXPIRATION_SECONDS, TimeUnit.SECONDS)
                     .weigher((Weigher<String, DiskCacheEntry>) (key, value) ->
-                            value.useCount == 0 ? (int) Math.min(value.length, Integer.MAX_VALUE) : 0)
+                            (int) Math.min(value.length, Integer.MAX_VALUE))
                     .recordStats()
                     // use sync evictionListener to avoid delete file newly generated by another thread
                     .evictionListener((key, value, cause) -> {
-                        LOG.debug("{} to be eliminated from disk, reason: {}", key, cause);
+                        if (value.useCount.get() > 0) {
+                            // Entry evicted by Caffeine while still in use. Skip delete—file remains as a temporary orphan.
+                            // It will be reloaded and properly evicted on next FE restart.
+                            LOG.warn("diskCache eviction skipped for pinned entry: key={}, useCount={}, " +
+                                            "size={}MB, cause={}", key, value.useCount.get(),
+                                    value.length >> 20, cause);
+                            return;
+                        }
+                        LOG.debug("diskCache eviction: key={}, size={}MB, cause={}",
+                                key, value.length >> 20, cause);
                         IOUtil.deleteLocalFileWithRemotePath(key);
                     }).build();
 
@@ -540,17 +579,16 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         public SeekableInputStream getDiskSeekableStream(String key) {
             DiskCacheEntry diskCacheEntry = diskCache.asMap().computeIfPresent(key, (k, v) -> {
                 v.pin();
+                LOG.debug("diskCache pin: key={}, useCount={}, size={}MB, stats=[{}]",
+                        k, v.useCount.get(), v.length >> 20, diskCache.stats());
                 return v;
             });
             if (diskCacheEntry != null) {
                 try {
                     SeekableInputStream stream = diskCacheEntry.toSeekableInputStream();
-                    return new DiskCacheSeekableInputStream(stream, diskCache, key);
+                    return new DiskCacheSeekableInputStream(stream, diskCache, key, diskCacheEntry);
                 } catch (Exception e) {
-                    diskCache.asMap().computeIfPresent(key, (k, v) -> {
-                        v.unpin();
-                        return v;
-                    });
+                    DiskCacheSeekableInputStream.unpinAndCleanupOrphan(diskCache, key, diskCacheEntry);
                     return null;
                 }
             } else {
@@ -568,11 +606,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         private final SeekableInputStream stream;
         private final Cache<String, DiskCacheEntry> diskCache;
         private final String key;
+        private final DiskCacheEntry entry;
 
-        DiskCacheSeekableInputStream(SeekableInputStream stream, Cache<String, DiskCacheEntry> diskCache, String key) {
+        DiskCacheSeekableInputStream(SeekableInputStream stream, Cache<String, DiskCacheEntry> diskCache,
+                                     String key, DiskCacheEntry entry) {
             this.stream = stream;
             this.diskCache = diskCache;
             this.key = key;
+            this.entry = entry;
         }
 
         @Override
@@ -580,10 +621,25 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             try {
                 stream.close();
             } finally {
-                diskCache.asMap().computeIfPresent(key, (k, v) -> {
-                    v.unpin();
-                    return v;
-                });
+                unpinAndCleanupOrphan(diskCache, key, entry);
+            }
+        }
+
+        static void unpinAndCleanupOrphan(Cache<String, DiskCacheEntry> diskCache, String key, DiskCacheEntry entry) {
+            int remaining = entry.unpin();
+            LOG.debug("diskCache unpin: key={}, useCount={}, size={}MB, stats=[{}]",
+                    key, remaining, entry.length >> 20, diskCache.stats());
+            if (remaining == 0) {
+                // Only delete if *our specific entry* is no longer in the cache.
+                // diskCache.asMap().get(key) == null  -> evicted, no replacement -> safe to delete
+                // diskCache.asMap().get(key) == entry -> still live -> skip, Caffeine handles it
+                // diskCache.asMap().get(key) is a NEW object -> evicted + replaced -> DON'T delete new file
+                DiskCacheEntry current = diskCache.asMap().get(key);
+                if (current == null) {
+                    IOUtil.deleteLocalFileWithRemotePath(key);
+                    LOG.warn("diskCache cleaning up orphaned file for evicted-while-pinned entry: key={}", key);
+                }
+                // if current != null && current != entry: new entry loaded, skip deletion
             }
         }
 

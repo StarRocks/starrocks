@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords:
   - SHOW PARTITIONS
+description: "SHOW PARTITIONS displays partition information for a table, including common and temporary partitions."
 ---
 
 # SHOW PARTITIONS
@@ -44,7 +45,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | PartitionKey             | The partition key that consists of one or more partition columns. |
 | Range                    | The range of the partition, which is a right half-open interval. |
 | DistributionKey          | The bucket key of hash bucketing.                            |
-| Buckets                  | The number of buckets for the partition.                     |
+| Buckets                  | The number of buckets for the partition. For a table with range distribution, this is the actual number of tablets in the partition's base index, which changes as tablets are split and merged. A rollup index in the same partition can have a different number of tablets. |
 | ReplicationNum           | The number of replicas per tablet in the partition.          |
 | StorageMedium            | The storage medium to store the data in the partition. The value `HHD` indicates hard disk drives, and the value `SSD` indicates solid-state drives. |
 | CooldownTime             | The cooldown time for data in the partition. If the initial storage medium is SSD, the storage medium is switched from SSD to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". |
@@ -61,6 +62,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataVersion              | The version number of loading transactions. Compaction operations are not included. |
 | VersionEpoch             | The epoch of partition. The system assigns the version epoch when the partition was created, and changes it when the partition was swapped. |
 | VersionTxnType           | The type of the transaction that generates the current data version. Valid values: `NORMAL` (normal transaction) and `REPLICATION` (data replication). |
+| LastUpdateTime           | The last time the partition was modified by a user write (load / INSERT / DELETE / UPDATE). |
+| LastAccessTime           | The last time the partition was read by a user statement: a query, `INSERT ... SELECT`, `INSERT OVERWRITE`, CTAS, primary-key `UPDATE`/`DELETE`, materialized view refresh, or `EXPORT`. Reads issued by internal statistics collection are excluded. Currently kept in FE memory only (not persisted); aggregated across FEs at query time. |
 
 ## Examples
 
@@ -86,6 +89,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
                     DataSize:  4KB   
                 IsInMemory: false
                     RowCount: 3 
+            LastUpdateTime: 2023-08-08 15:45:13
+            LastAccessTime: 2023-08-09 10:00:00
     1 row in set (0.00 sec)
     ```
 

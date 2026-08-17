@@ -1,10 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "fe_locks provides information about metadata locks in StarRocks FE."
 ---
 
 # fe_locks
 
-`fe_locks` は StarRocks FE のメタデータロックに関する情報を提供します。
+`fe_locks` は StarRocks FE のメタデータロックに関する情報を提供します。これは [`sys`](./sys.md) データベースのシステムビューの一つです。
 
 `fe_locks` には以下のフィールドが提供されています:
 
@@ -26,15 +27,10 @@ displayed_sidebar: docs
 
 ## ロックタイプ
 
-- **DATABASE**：データベースレベルロック（`lock_manager_enabled` が false の場合）。
-- **TABLE**：テーブルレベルロック（`lock_manager_enabled` が true の場合）。
+- **DATABASE**：データベースレベルロック。
+- **TABLE**：テーブルレベルロック。
 
-## 設定
-
-`fe_locks` の動作は `lock_manager_enabled` 設定パラメータに依存します：
-
-- `lock_manager_enabled = true` の場合：テーブルレベル粒度で集中ロック管理を行う新しいロックマネージャーを使用。
-- `lock_manager_enabled = false` の場合：従来のデータベースレベルロックを使用。
+StarRocks は Lock Manager を通じてメタデータロックを管理し、テーブルレベル粒度で集中ロック管理を行います。
 
 ## 例
 

@@ -28,7 +28,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
@@ -79,10 +78,6 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
     Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request);
 
-    @ProtobufRPC(serviceName = "PInternalService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
-            attachmentHandler = ThriftClientAttachmentHandler.class)
-    Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
-
     @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 600000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 
@@ -106,4 +101,3 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PInternalService", methodName = "update_transaction_state", onceTalkTimeout = 600000)
     Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request);
 }
-

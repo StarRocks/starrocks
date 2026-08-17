@@ -15,12 +15,11 @@
 #pragma once
 
 #include "exprs/table_function/table_function.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
 // Now UDTF only support one column return
-class JavaUDTFFunction final : public TableFunction {
+class JavaUDTFFunction : public TableFunction {
 public:
     JavaUDTFFunction() = default;
     ~JavaUDTFFunction() override = default;

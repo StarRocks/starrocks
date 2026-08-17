@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Parses a URL string and extracts a specified component such as host, path, or query parameter."
 ---
 
 # parse_url

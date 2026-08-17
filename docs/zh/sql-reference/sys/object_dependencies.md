@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "系统视图，用于查询异步物化视图与其引用对象的依赖关系。"
 ---
 
 # object_dependencies

@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -68,13 +69,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -108,6 +109,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
@@ -507,8 +509,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, ConnectContext context) {
-            statement.analyze(context);
+        public Void visitCreateSyncMVStmt(CreateSyncMVStmt statement, ConnectContext context) {
+            CreateSyncMVStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -660,6 +662,16 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement,
+                                                                  ConnectContext context) {
+            // No additional analysis needed beyond grammar parsing:
+            // txn_id is INTEGER, reason is a string. All validation (state, source type,
+            // file_bundling, etc.) happens at execution time in the txn manager because
+            // it requires reading mutable txn state under lock.
+            return null;
+        }
+
         // ---------------------------------------- Catalog Statement -------------------------------------------
 
         @Override
@@ -714,6 +726,12 @@ public class Analyzer {
 
         @Override
         public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
+            DMLStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
             DMLStmtAnalyzer.analyze(statement, context);
             return null;
         }

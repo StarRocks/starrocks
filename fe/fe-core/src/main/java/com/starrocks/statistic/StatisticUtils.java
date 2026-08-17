@@ -31,6 +31,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.VirtualColumnRegistry;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -113,12 +114,20 @@ public class StatisticUtils {
             default:
                 throw new IllegalStateException("Unexpected value: " + connectType);
         }
+        // Set warehouse FIRST: ConnectContext.setCurrentWarehouse() replaces sessionVariable
+        // with a fresh clone of defaultSessionVariable, which would discard every override
+        // applied below (enable_profile, queryTimeoutS, parallelism, pipeline, CTE reuse, etc.).
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getBackgroundWarehouse();
+        context.setCurrentWarehouse(warehouse.getName());
+
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         // Note: queryTimeoutS and insertTimeoutS will be set dynamically based on remaining job time
         // in StatisticsCollectJob.calculateAndSetRemainingTimeout() to ensure the total job timeout
@@ -132,14 +141,11 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePlanSerializeConcurrently(false);
         // set the max task num of connector io tasks per scan operator to collectStatsIoTasksPerConnectorOperator,
         // default value is 4, avoid generate too many chunk source for collect stats in BE
-        context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
+        context.getSessionVariable()
+                .setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
         context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setSingleNodeExecPlan(false);
         context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
-
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Warehouse warehouse = manager.getBackgroundWarehouse();
-        context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
         context.setOnlyReadIcebergCache(true);
@@ -197,7 +203,8 @@ public class StatisticUtils {
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
+            if (null != db &&
+                    null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -238,7 +245,7 @@ public class StatisticUtils {
             for (Partition partition : table.getPartitions()) {
                 if (partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
+                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas",
                             tableName, partition.getName());
                     return false;
                 }
@@ -250,7 +257,7 @@ public class StatisticUtils {
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
             long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
-                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+                    PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -429,12 +436,21 @@ public class StatisticUtils {
                     new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("column_names", new TypeDef(columnNameType)),
-                    new ColumnDef("ndv",  new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else {
             throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);
         }
+    }
+
+    // Deterministic, fixed-length (32 hex chars) substitute for the raw table_uuid used as part of the
+    // PK of external_column_statistics / external_histogram_statistics. Iceberg's table_uuid
+    // (catalog.db.table.<36-byte-uuid>) is effectively always longer than this, so hashing it
+    // unconditionally never makes things worse. catalog_name/db_name/table_name are stored as
+    // separate non-key columns on every row, so no traceability is lost by hashing table_uuid.
+    public static String hashTableUuidForPkStorage(String tableUuid) {
+        return Hashing.murmur3_128().hashUnencodedChars(tableUuid).toString();
     }
 
     public static Optional<Double> convertStatisticsToDouble(Type type, String statistic) {
@@ -489,6 +505,10 @@ public class StatisticUtils {
             if (column.isHidden()) {
                 continue;
             }
+            // skip virtual columns (e.g. _tablet_id_), they are not real stored columns
+            if (VirtualColumnRegistry.isVirtualColumn(column.getName())) {
+                continue;
+            }
             // generated column doesn't support cross DB use
             if (column.isGeneratedColumn() && column.generatedColumnExprToString() != null) {
                 String expr = column.generatedColumnExprToString().toLowerCase();
@@ -503,6 +523,10 @@ public class StatisticUtils {
             }
         }
         return columns;
+    }
+
+    public static boolean isUnsupportedHistogramColumnType(Type type) {
+        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType();
     }
 
     public static double multiplyRowCount(double left, double right) {

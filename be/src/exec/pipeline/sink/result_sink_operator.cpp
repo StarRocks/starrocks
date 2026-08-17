@@ -16,21 +16,23 @@
 
 #include <arrow/type.h>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
+#include "data_sink/result/arrow_result_writer.h"
+#include "data_sink/result/customized_result_writer.h"
+#include "data_sink/result/http_result_writer.h"
+#include "data_sink/result/metadata_result_writer.h"
+#include "data_sink/result/mysql_result_writer.h"
+#include "data_sink/result/statistic_result_writer.h"
+#include "data_sink/result/variable_result_writer.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/arrow_result_writer.h"
-#include "runtime/buffer_control_block.h"
-#include "runtime/customized_result_writer.h"
-#include "runtime/http_result_writer.h"
-#include "runtime/metadata_result_writer.h"
-#include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
-#include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/statistic_result_writer.h"
-#include "runtime/variable_result_writer.h"
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {
@@ -72,8 +74,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
         break;
     case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
-        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _output_column_names, profile,
-                                                      _row_desc);
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _output_column_names, profile);
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -110,7 +111,8 @@ void ResultSinkOperator::close(RuntimeState* state) {
             WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         }
 
-        (void)state->exec_env()->result_mgr()->cancel_at_time(
+        auto* query_execution_services = state->query_execution_services();
+        (void)query_execution_services->runtime->result_mgr->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
     }
 
@@ -156,8 +158,9 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
 
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
-                                                                   std::min<int>(_dop << 1, 1024), &_sender));
+    auto* query_execution_services = state->query_execution_services();
+    RETURN_IF_ERROR(query_execution_services->runtime->result_mgr->create_sender(
+            state->fragment_instance_id(), std::min<int>(_dop << 1, 1024), &_sender));
 
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
 

@@ -1706,12 +1706,14 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other
             // when left table col value not hits in hash table needs match all null value rows in right table
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
             auto& null_array = nullable_column->immutable_null_column_data();
-            // TODO: optimize me
-            for (size_t j = _probe_state->cur_nullaware_build_index; j < _table_items->row_count + 1; j++) {
-                if (null_array[j] == 1) {
-                    MATCH_RIGHT_TABLE_ROWS()
-                    RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
-                }
+            // Use SIMD to find NULL positions efficiently instead of checking each byte
+            size_t j = _probe_state->cur_nullaware_build_index;
+            while (j < _table_items->row_count + 1) {
+                j = SIMD::find_nonzero(null_array, j);
+                if (j >= _table_items->row_count + 1) break;
+                MATCH_RIGHT_TABLE_ROWS()
+                RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
+                ++j;
             }
         }
         _probe_state->cur_nullaware_build_index = _table_items->row_count + 1;
@@ -1955,6 +1957,11 @@ template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 void JoinHashMap<LT, CT, MT>::_build_index_output(ChunkPtr* chunk) {
     _probe_state->build_index.resize(_probe_state->count);
     (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+std::unique_ptr<JoinHashMapBase> make_join_hash_map(JoinHashTableItems* table_items, HashTableProbeState* probe_state) {
+    return std::make_unique<JoinHashMap<LT, CT, MT>>(table_items, probe_state);
 }
 
 } // namespace starrocks

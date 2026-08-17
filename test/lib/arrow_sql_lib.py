@@ -63,7 +63,18 @@ class ArrowSqlLib(BaseConnectionLib):
 
         try:
             if len(sql_statements) == 1:
-                return self._execute_single(sql_statements[0])
+                result = self._execute_single(sql_statements[0])
+                if not result.status:
+                    return result
+                # For non-SELECT/WITH statements, suppress the Arrow Flight DDL
+                # StatusResult row so callers see an empty result (consistent with
+                # MySQL protocol behaviour).  SELECT/WITH always pass through as-is,
+                # even if the column happens to be named StatusResult.
+                stripped = sql_statements[0].strip().upper()
+                is_query = stripped.startswith('SELECT') or stripped.startswith('WITH')
+                if not is_query and not self._is_query_result(result):
+                    return SQLRawResult(status=True, result=(), msg="OK", desc=None)
+                return result
 
             # If multiple SQL statements, execute each and return query result
             results = []
@@ -155,7 +166,7 @@ class ArrowSqlLib(BaseConnectionLib):
         return statements if statements else [sql]  # Return original if no split occurred
 
     def _execute_single(self, sql: str) -> SQLRawResult:
-        """Execute a single SQL statement."""
+        """Execute a single SQL statement and return the raw result."""
         with self.connector.cursor() as cursor:
             cursor.execute(sql)
             arrow_table = cursor.fetch_arrow_table()
@@ -165,7 +176,8 @@ class ArrowSqlLib(BaseConnectionLib):
     def _is_query_result(self, result: SQLRawResult) -> bool:
         """
         Check if the result is a query result.
-        Non-query result: cursor.description has only one column named 'StatusResult' with string type.
+        Arrow Flight DDL returns a single string column named 'StatusResult' with value '0'.
+        Any other result (including SELECT ... AS StatusResult) is a real query result.
         """
         if not result.desc:
             return False
@@ -173,11 +185,10 @@ class ArrowSqlLib(BaseConnectionLib):
         if len(result.desc) != 1:
             return True  # More than one column, it's a query
 
-        # Check if it's StatusResult column
         col_name = result.desc[0][0]
-        col_type = str(result.desc[0][1])  # Convert to string for comparison
+        col_type = str(result.desc[0][1])
 
-        # Check if it's a StatusResult (non-query result)
+        # DDL status response: single 'StatusResult' string column
         if col_name == 'StatusResult' and 'string' in col_type.lower():
             return False
 

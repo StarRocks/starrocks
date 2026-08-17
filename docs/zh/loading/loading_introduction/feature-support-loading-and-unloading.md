@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "StarRocks 数据导入导出功能支持的文件格式、数据源和版本参考。"
 sidebar_label: "能力边界"
 ---
 
@@ -15,7 +17,7 @@ sidebar_label: "能力边界"
     <tr>
         <th rowspan="2"></th>
         <th rowspan="2">数据源</th>
-        <th colspan="7">文件格式</th>
+        <th colspan="8">文件格式</th>
     </tr>
     <tr>
         <th>CSV</th>
@@ -25,6 +27,7 @@ sidebar_label: "能力边界"
         <th>Avro</th>
         <th>ProtoBuf</th>
         <th>Thrift</th>
+        <th>Arrow</th>
     </tr>
     <tr>
         <td>Stream Load</td>
@@ -34,6 +37,7 @@ sidebar_label: "能力边界"
         <td>待支持</td>
         <td>待支持</td>
         <td colspan="3">待支持</td>
+        <td>Yes</td>
     </tr>
     <tr>
         <td>INSERT from FILES</td>
@@ -44,6 +48,7 @@ sidebar_label: "能力边界"
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.4.4+)</td>
         <td colspan="2">待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -51,7 +56,7 @@ sidebar_label: "能力边界"
         <td>Yes (v3.2.3+)</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">待支持</td>
+        <td colspan="4">待支持</td>
     </tr>
     <tr>
         <td>Routine Load</td>
@@ -61,7 +66,7 @@ sidebar_label: "能力边界"
         <td>待支持</td>
         <td>待支持</td>
         <td>Yes (v3.0+) [1]</td>
-        <td>待支持</td>
+        <td colspan="2">待支持</td>
         <td>待支持</td>
     </tr>
     <tr>
@@ -71,7 +76,7 @@ sidebar_label: "能力边界"
         <td>待支持</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">待支持</td>
+        <td colspan="4">待支持</td>
     </tr>
     <tr>
         <td>Connectors</td>
@@ -80,7 +85,7 @@ sidebar_label: "能力边界"
         <td>Yes</td>
         <td>待支持</td>
         <td>待支持</td>
-        <td colspan="3">待支持</td>
+        <td colspan="4">待支持</td>
     </tr>
     <tr>
         <td>Kafka Connector [2]</td>
@@ -90,10 +95,11 @@ sidebar_label: "能力边界"
         <td>待支持</td>
         <td colspan="2">Yes (v3.0+)</td>
         <td>待支持</td>
+        <td>待支持</td>
     </tr>
     <tr>
         <td>PIPE [4]</td>
-        <td colspan="8">同 INSERT from FILES</td>
+        <td colspan="9">同 INSERT from FILES</td>
     </tr>
 </table>
 
@@ -308,13 +314,28 @@ sidebar_label: "能力边界"
         <th>EXPORT</th>
     </tr>
     <tr>
-        <td rowspan="2">CSV</td>
+        <td rowspan="5">CSV</td>
         <td>column_separator</td>
         <td rowspan="2">Yes (v3.3+)</td>
         <td rowspan="2">Yes</td>
     </tr>
     <tr>
         <td>line_delimiter [1]</td>
+    </tr>
+    <tr>
+        <td>enclose</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>escape</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>include_header</td>
+        <td>Yes</td>
+        <td>No</td>
     </tr>
 </table>
 
@@ -384,6 +405,20 @@ sidebar_label: "能力边界"
     </tr>
     <tr>
         <td>ORC</td>
+    </tr>
+    <tr>
+        <td>Arrow</td>
+        <td>
+            <ul>
+                <li>lz4</li>
+                <li>zstd</li>
+            </ul>
+        </td>
+        <td>Yes [4]</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
+        <td>待支持</td>
     </tr>
 </table>
 

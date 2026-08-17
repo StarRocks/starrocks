@@ -46,14 +46,15 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
@@ -98,6 +99,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
     private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private final Optional<OdpsCacheUpdateProcessor> cacheUpdateProcessor;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
                         OdpsProperties properties) {
@@ -106,8 +108,8 @@ public class OdpsMetadata implements ConnectorMetadata {
         this.aliyunCloudCredential = aliyunCloudCredential;
         this.properties = properties;
         EnvironmentSettings.Builder settingsBuilder =
-                EnvironmentSettings.newBuilder().withServiceEndpoint(odps.getEndpoint())
-                        .withCredentials(Credentials.newBuilder().withAccount(odps.getAccount()).build());
+                EnvironmentSettings.newBuilder().withServiceEndpoint(OdpsUtils.getEndpoint(odps))
+                        .withCredentials(Credentials.newBuilder().withAccount(OdpsUtils.getAccount(odps)).build());
         if (!StringUtils.isNullOrEmpty(properties.get(OdpsProperties.TUNNEL_ENDPOINT))) {
             settingsBuilder.withTunnelEndpoint(properties.get(OdpsProperties.TUNNEL_ENDPOINT));
         }
@@ -116,6 +118,12 @@ public class OdpsMetadata implements ConnectorMetadata {
         }
         settings = settingsBuilder.build();
         initMetaCache();
+        this.cacheUpdateProcessor = Optional.of(new OdpsCacheUpdateProcessor(
+                catalogName, odps, tableNameCache, tableCache, partitionCache));
+    }
+
+    public Optional<OdpsCacheUpdateProcessor> getCacheUpdateProcessor() {
+        return cacheUpdateProcessor;
     }
 
     private void initMetaCache() {
@@ -157,12 +165,12 @@ public class OdpsMetadata implements ConnectorMetadata {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         try {
             if (StringUtils.isNullOrEmpty(catalogOwner)) {
-                SecurityManager sm = odps.projects().get().getSecurityManager();
+                SecurityManager sm = OdpsUtils.getSecurityManager(odps);
                 String result = sm.runQuery("whoami", false);
                 JsonObject js = JsonParser.parseString(result).getAsJsonObject();
                 catalogOwner = js.get("DisplayName").getAsString();
             }
-            Iterator<Project> iterator = odps.projects().iterator(catalogOwner);
+            Iterator<Project> iterator = OdpsUtils.getProjectIterator(odps, catalogOwner);
             while (iterator.hasNext()) {
                 Project project = iterator.next();
                 builder.add(project.getName());
@@ -173,7 +181,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         }
         ImmutableList<String> databases = builder.build();
         if (databases.isEmpty()) {
-            return ImmutableList.of(odps.getDefaultProject());
+            return ImmutableList.of(OdpsUtils.getDefaultProject(odps));
         }
         return databases;
     }
@@ -181,7 +189,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public Database getDb(ConnectContext context, String name) {
         try {
-            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), name);
+            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(), name);
         } catch (StarRocksConnectorException e) {
             e.printStackTrace();
             return null;
@@ -200,7 +208,7 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     private Set<String> loadProjects(String dbName) {
         ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-        Iterator<com.aliyun.odps.Table> iterator = odps.tables().iterator(dbName);
+        Iterator<com.aliyun.odps.Table> iterator = OdpsUtils.getOdpsTablesIterator(odps, dbName);
         while (iterator.hasNext()) {
             builder.add(iterator.next().getName());
         }
@@ -213,7 +221,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     private OdpsTable loadTable(OdpsTableName odpsTableName) {
-        com.aliyun.odps.Table table = odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
+        com.aliyun.odps.Table table = OdpsUtils.getOdpsTable(odps, odpsTableName);
         try {
             table.reload();
         } catch (OdpsException e) {
@@ -223,7 +231,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
         List<Partition> partitions = get(partitionCache, odpsTableName);
@@ -273,18 +282,25 @@ public class OdpsMetadata implements ConnectorMetadata {
                                          long limit,
                                          TvrVersionRange version) {
         Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columns.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
         // cause we don't know the real schema in file，just use the default Row Count now
-        builder.setOutputRowCount(1);
+        long rowCount = 1;
+        builder.setOutputRowCount(rowCount);
+        for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+            ConnectorNdvEstimator.TypeCategory cat =
+                    ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+            double ndv = Math.max(1.0, Math.min(ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+            builder.addColumnStatistic(entry.getKey(), ColumnStatistic.builder()
+                    .setDistinctValuesCount(ndv)
+                    .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                    .setNullsFraction(0)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build());
+        }
         return builder.build();
     }
 
     private List<Partition> loadPartitions(OdpsTableName odpsTableName) {
-        com.aliyun.odps.Table odpsTable =
-                odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
-        return odpsTable.getPartitions();
+        return OdpsUtils.getOdpsTablePartitions(odps, odpsTableName);
     }
 
     @Override
@@ -312,6 +328,12 @@ public class OdpsMetadata implements ConnectorMetadata {
         if (!table.isUnPartitioned()) {
             partitionCache.invalidate(odpsTableName);
             get(partitionCache, odpsTableName);
+        }
+
+        if (partitionNames != null && !partitionNames.isEmpty()) {
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
+        } else {
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
         }
     }
 

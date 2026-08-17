@@ -14,13 +14,13 @@
 
 #include <column/column_helper.h>
 #include <column/decimalv3_column.h>
-#include <column/type_traits.h>
 #include <exprs/decimal_binary_function.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <random>
 
+#include "column/runtime_type_traits.h"
 #include "exprs/decimal_cast_expr_test_helper.h"
 #include "exprs/overflow.h"
 

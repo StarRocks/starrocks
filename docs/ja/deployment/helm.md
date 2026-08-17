@@ -1,5 +1,7 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "Helm を使用して Kubernetes クラスタ上に StarRocks クラスタを自動でデプロイする方法。"
 ---
 
 # Helm を使用して StarRocks をデプロイする

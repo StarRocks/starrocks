@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/aggregate/aggregate_base_node.h"
 
 // Aggregate means this node handle query with aggregate functions.
@@ -25,13 +26,6 @@ public:
     AggregateStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {}
 
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
-
-private:
-    Status _output_chunk_from_hash_map(ChunkPtr* chunk);
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 };
 } // namespace starrocks

@@ -1,5 +1,7 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
+description: "dbt-starrocks で dbt のモデリングパターンとベストプラクティスを活用して StarRocks 内のデータを変換する方法を説明します。"
 ---
 
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'

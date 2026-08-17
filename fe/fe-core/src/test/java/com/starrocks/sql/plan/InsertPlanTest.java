@@ -15,9 +15,12 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -28,11 +31,16 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
@@ -40,15 +48,19 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -56,6 +68,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -66,6 +79,74 @@ public class InsertPlanTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        starRocksAssert.withTable("CREATE TABLE iceberg_shuffle_src (\n" +
+                "  id INT,\n" +
+                "  dt DATE,\n" +
+                "  ts DATETIME,\n" +
+                "  data VARCHAR(20)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE insert_online_optimize_shadow_generated_column (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v int NOT NULL,\n" +
+                "  tags json NULL,\n" +
+                "  g varchar(32) NULL AS get_json_string(tags, '$.vendorId')\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY (pk)\n" +
+                "DISTRIBUTED BY HASH (pk) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+    }
+
+    @Test
+    public void testOnlineOptimizeRewriteExcludesStaleGeneratedColumns() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("insert_online_optimize_shadow_generated_column");
+        List<Column> originalFullSchema = table.getFullSchema();
+        List<Column> schemaWithStaleGeneratedColumns = new ArrayList<>(originalFullSchema);
+        for (Column column : table.getBaseSchema()) {
+            if (column.isGeneratedColumn()) {
+                schemaWithStaleGeneratedColumns.add(column.deepCopy());
+                Column shadowColumn = column.deepCopy();
+                shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
+                schemaWithStaleGeneratedColumns.add(shadowColumn);
+            }
+        }
+
+        String sql = "insert into insert_online_optimize_shadow_generated_column (pk, v, tags) " +
+                "select pk, v, tags from insert_online_optimize_shadow_generated_column";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
+                .get(0);
+        boolean originalOptimizeRewrite = connectContext.isOptimizeRewrite();
+        connectContext.setOptimizeRewrite(true);
+        try {
+            connectContext.setQueryId(UUIDUtil.genUUID());
+            connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(sql);
+            Analyzer.analyze(insertStmt, connectContext);
+            AnalyzerUtils.collectAllDatabase(connectContext, insertStmt);
+
+            // Simulate fullSchema changing after analysis but before sink planning, as can happen when
+            // an online optimize job publishes or cleans up a shadow schema concurrently with DML.
+            table.setNewFullSchema(schemaWithStaleGeneratedColumns);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, insertStmt);
+            StatementPlanner.lock(locker);
+            try {
+                ExecPlan execPlan = new InsertPlanner(locker, true).plan(insertStmt, connectContext);
+                OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                Assertions.assertEquals(originalFullSchema.size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
+                        .noneMatch(slot -> slot.getColumn().isShadowColumn()));
+            } finally {
+                StatementPlanner.unLock(locker);
+            }
+        } finally {
+            connectContext.setOptimizeRewrite(originalOptimizeRewrite);
+            table.setNewFullSchema(originalFullSchema);
+        }
     }
 
     @Test
@@ -127,7 +208,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n"));
+                "     avgRowSize=17.0\n"));
     }
 
     @Test
@@ -326,7 +407,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n"));
+                "     avgRowSize=6.0\n"));
     }
 
     @Test
@@ -411,6 +492,18 @@ public class InsertPlanTest extends PlanTestBase {
 
         String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
         return ret;
+    }
+
+    private static String getInsertExecPlan(StatementBase statementBase, String originStmt) throws Exception {
+        return getInsertExecPlanObject(statementBase, originStmt).getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private static ExecPlan getInsertExecPlanObject(StatementBase statementBase, String originStmt) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.getDumpInfo().setOriginStmt(originStmt);
+        return new StatementPlanner().plan(statementBase, connectContext);
     }
 
     public static void containsKeywords(String plan, String... keywords) throws Exception {
@@ -630,7 +723,7 @@ public class InsertPlanTest extends PlanTestBase {
         String sql = "explain insert into t0 select * from t0";
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        new StatementPlanner().plan(statementBase, connectContext);
         Assertions.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
 
@@ -879,6 +972,7 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.spec();
                 result = PartitionSpec.unpartitioned();
+                minTimes = 0;
             }
         };
 
@@ -928,8 +1022,9 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testInsertIcebergWithGlobalShuffle() throws Exception {
-        String createIcebergCatalogStmt = "create external catalog iceberg_catalog_shuffle properties (\"type\"=\"iceberg\", " +
+    public void testInsertIcebergRewritePreservesRowLineageColumns() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog_lineage properties " +
+                "(\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
         MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
@@ -938,30 +1033,41 @@ public class InsertPlanTest extends PlanTestBase {
 
         Column k1 = new Column("k1", IntegerType.INT);
         Column k2 = new Column("k2", IntegerType.INT);
+        Column rowId = new Column(IcebergTable.ROW_ID, IntegerType.BIGINT);
+        Column lastUpdatedSequenceNumber =
+                new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, IntegerType.BIGINT);
+        Column filePath = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+
         IcebergTable.Builder builder = IcebergTable.builder();
-        builder.setCatalogName("iceberg_catalog_shuffle");
+        builder.setCatalogName("iceberg_catalog_lineage");
         builder.setCatalogDBName("iceberg_db");
-        builder.setCatalogTableName("iceberg_table");
-        builder.setSrTableName("iceberg_table");
-        builder.setFullSchema(Lists.newArrayList(k1, k2));
+        builder.setCatalogTableName("iceberg_lineage_table");
+        builder.setSrTableName("iceberg_lineage_table");
+        builder.setFullSchema(Lists.newArrayList(k1, k2, rowId, lastUpdatedSequenceNumber, filePath));
         builder.setNativeTable(nativeTable);
         IcebergTable icebergTable = builder.build();
 
         new Expectations(icebergTable) {
             {
                 icebergTable.getUUID();
-                result = 12345566;
+                result = 12345578;
                 minTimes = 0;
 
                 icebergTable.isUnPartitioned();
-                result = false;
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = new ArrayList<>();
                 minTimes = 0;
 
                 icebergTable.getPartitionColumns();
-                result = Arrays.asList(k1);
+                result = new ArrayList<>();
+                minTimes = 0;
 
-                icebergTable.partitionColumnIndexes();
-                result = Arrays.asList(0);
+                icebergTable.getFormatVersion();
+                result = 3;
+                minTimes = 0;
             }
         };
 
@@ -985,32 +1091,27 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.spec();
                 result = PartitionSpec.unpartitioned();
+                minTimes = 0;
             }
         };
 
         new Expectations(metadata) {
             {
-                metadata.getDb((ConnectContext) any, "iceberg_catalog_shuffle", "iceberg_db");
-                result = new Database(12345566, "iceberg_db");
+                metadata.getDb((ConnectContext) any, "iceberg_catalog_lineage", "iceberg_db");
+                result = new Database(12345578, "iceberg_db");
                 minTimes = 0;
 
-                metadata.getTable((ConnectContext) any, "iceberg_catalog_shuffle", "iceberg_db", "iceberg_table");
+                metadata.getTable((ConnectContext) any, "iceberg_catalog_lineage", "iceberg_db",
+                        "iceberg_lineage_table");
                 result = icebergTable;
                 minTimes = 0;
-            }
-        };
-
-        new MockUp<SessionVariable>() {
-            @Mock
-            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
-                return ConnectorSinkShuffleMode.FORCE;
             }
         };
 
         new MockUp<MetaUtils>() {
             @Mock
             public Database getDatabase(String catalogName, String tableName) {
-                return new Database(12345566, "iceberg_db");
+                return new Database(12345578, "iceberg_db");
             }
 
             @Mock
@@ -1020,8 +1121,28 @@ public class InsertPlanTest extends PlanTestBase {
             }
         };
 
-        String actualRes = getInsertExecPlan(
-                "explain insert into iceberg_catalog_shuffle.iceberg_db.iceberg_table select 1, 2 from t0");
+        String sql = "insert into iceberg_catalog_lineage.iceberg_db.iceberg_lineage_table select 1, 2, 3, 4";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true);
+
+        String actualRes = getInsertExecPlan(rewriteStmt, sql);
+        Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
+        Assertions.assertTrue(actualRes.contains(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER), actualRes);
+        Assertions.assertFalse(actualRes.contains(IcebergTable.FILE_PATH), actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffle() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec identitySpec = PartitionSpec.builderFor(icebergSchema).identity("k1").build();
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_shuffle", "iceberg_table", 12345566, icebergSchema, identitySpec,
+                Lists.newArrayList(k1, k2), Lists.newArrayList(k1), Arrays.asList(0), "select 1, 2 from t0");
         String expected = "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:6: k1 | 7: k2\n" +
                 "  PARTITION: HASH_PARTITIONED: 6: k1\n" +
@@ -1055,6 +1176,439 @@ public class InsertPlanTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=9.0\n";
         Assertions.assertEquals(expected, actualRes);
+        Assertions.assertFalse(actualRes.contains(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX),
+                "Identity partition should shuffle on source column, but got:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec bucketSpec = PartitionSpec.builderFor(icebergSchema).bucket("k1", 10).build();
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform", "iceberg_transform_table", 12345567, icebergSchema, bucketSpec,
+                Lists.newArrayList(k1, k2), Lists.newArrayList(k1), Arrays.asList(0), "select v1, v2 from t0");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_bucket");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleBucketTransformPartitionForTimestampWithZone() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec bucketSpec = PartitionSpec.builderFor(icebergSchema).bucket("ts", 10).build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_bucket_tz", "iceberg_bucket_tz_table", 12345577, icebergSchema, bucketSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_timestamptz_bucket");
+        Assertions.assertFalse(actualRes.contains("__iceberg_transform_bucket("),
+                "Timestamptz partition should not use NTZ bucket transform:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleYearTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.DateType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec yearSpec = PartitionSpec.builderFor(icebergSchema).year("ts").build();
+        Column ts = new Column("ts", DateType.DATE);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_year", "iceberg_year_table", 12345568, icebergSchema, yearSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select dt, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_year");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleMonthTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.DateType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec monthSpec = PartitionSpec.builderFor(icebergSchema).month("ts").build();
+        Column ts = new Column("ts", DateType.DATE);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_month", "iceberg_month_table", 12345569, icebergSchema, monthSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select dt, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_month");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleDayTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.DateType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec daySpec = PartitionSpec.builderFor(icebergSchema).day("ts").build();
+        Column ts = new Column("ts", DateType.DATE);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_day", "iceberg_day_table", 12345570, icebergSchema, daySpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select dt, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_day");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleHourTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withoutZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec hourSpec = PartitionSpec.builderFor(icebergSchema).hour("ts").build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_hour", "iceberg_hour_table", 12345571, icebergSchema, hourSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_hour");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleYearTransformPartitionForTimestampWithZone() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec yearSpec = PartitionSpec.builderFor(icebergSchema).year("ts").build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_year_tz", "iceberg_year_tz_table", 12345573, icebergSchema, yearSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_timestamptz_year");
+        Assertions.assertFalse(actualRes.contains("__iceberg_transform_year("),
+                "Timestamptz partition should not use NTZ year transform:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleMonthTransformPartitionForTimestampWithZone() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec monthSpec = PartitionSpec.builderFor(icebergSchema).month("ts").build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_month_tz", "iceberg_month_tz_table", 12345574, icebergSchema, monthSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_timestamptz_month");
+        Assertions.assertFalse(actualRes.contains("__iceberg_transform_month("),
+                "Timestamptz partition should not use NTZ month transform:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleDayTransformPartitionForTimestampWithZone() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec daySpec = PartitionSpec.builderFor(icebergSchema).day("ts").build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_day_tz", "iceberg_day_tz_table", 12345575, icebergSchema, daySpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_timestamptz_day");
+        Assertions.assertFalse(actualRes.contains("__iceberg_transform_day("),
+                "Timestamptz partition should not use NTZ day transform:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleHourTransformPartitionForTimestampWithZone() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec hourSpec = PartitionSpec.builderFor(icebergSchema).hour("ts").build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_hour_tz", "iceberg_hour_tz_table", 12345576, icebergSchema, hourSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_timestamptz_hour");
+        Assertions.assertFalse(actualRes.contains("__iceberg_transform_hour("),
+                "Timestamptz partition should not use NTZ hour transform:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleTruncateTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "data", Types.StringType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec truncateSpec = PartitionSpec.builderFor(icebergSchema).truncate("data", 5).build();
+        Column data = new Column("data", StringType.STRING);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_truncate", "iceberg_truncate_table", 12345572, icebergSchema, truncateSpec,
+                Lists.newArrayList(data, k2), Lists.newArrayList(data), Arrays.asList(0),
+                "select data, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_truncate");
+    }
+
+    @Test
+    public void testInsertHiveWithGlobalShuffle() throws Exception {
+        Column c1 = new Column("c1", IntegerType.INT);
+        Column p1 = new Column("p1", IntegerType.INT);
+        String actualRes = getHiveInsertExecPlanWithGlobalShuffle(
+                "hive_catalog_shuffle", "hive_table",
+                Lists.newArrayList(c1, p1),
+                Lists.newArrayList("p1"),
+                "select 1, 2 from t0",
+                ConnectorSinkShuffleMode.FORCE);
+        // FORCE mode + partitioned hive ⇒ HASH_PARTITIONED by partition column p1
+        Assertions.assertTrue(actualRes.contains("HASH_PARTITIONED:") && actualRes.contains("p1"),
+                "Expected HASH_PARTITIONED by p1, got:\n" + actualRes);
+        Assertions.assertTrue(actualRes.contains("Hive TABLE SINK"),
+                "Expected Hive TABLE SINK, got:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertHiveNeverModeNoShuffle() throws Exception {
+        Column c1 = new Column("c1", IntegerType.INT);
+        Column p1 = new Column("p1", IntegerType.INT);
+        String actualRes = getHiveInsertExecPlanWithGlobalShuffle(
+                "hive_catalog_never", "hive_table",
+                Lists.newArrayList(c1, p1),
+                Lists.newArrayList("p1"),
+                "select 1, 2 from t0",
+                ConnectorSinkShuffleMode.NEVER);
+        // NEVER mode ⇒ no global shuffle, single fragment co-located with scan
+        Assertions.assertFalse(actualRes.contains("HASH_PARTITIONED:"),
+                "NEVER mode should not produce HASH_PARTITIONED, got:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertHiveUnpartitionedNoShuffle() throws Exception {
+        Column c1 = new Column("c1", IntegerType.INT);
+        Column c2 = new Column("c2", IntegerType.INT);
+        String actualRes = getHiveInsertExecPlanWithGlobalShuffle(
+                "hive_catalog_unpart", "hive_table",
+                Lists.newArrayList(c1, c2),
+                Lists.newArrayList(),       // empty partition columns
+                "select 1, 2 from t0",
+                ConnectorSinkShuffleMode.FORCE);
+        // Even with FORCE, no partition columns ⇒ no shuffle (hashing key would be empty)
+        Assertions.assertFalse(actualRes.contains("HASH_PARTITIONED:"),
+                "Unpartitioned hive should not produce HASH_PARTITIONED, got:\n" + actualRes);
+    }
+
+    private String getHiveInsertExecPlanWithGlobalShuffle(String catalogName, String tableName,
+                                                          List<Column> fullSchema,
+                                                          List<String> partitionColumnNames,
+                                                          String selectSql,
+                                                          ConnectorSinkShuffleMode mode) throws Exception {
+        String createHiveCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"hive\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\")", catalogName);
+        starRocksAssert.withCatalog(createHiveCatalogStmt);
+
+        List<String> dataColumnNames = fullSchema.stream()
+                .map(Column::getName)
+                .filter(n -> !partitionColumnNames.contains(n))
+                .collect(java.util.stream.Collectors.toList());
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setId(com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
+                .setTableName(tableName)
+                .setCatalogName(catalogName)
+                .setResourceName(com.starrocks.server.CatalogMgr.ResourceMappingCatalog
+                        .toResourceName(catalogName, "hive"))
+                .setHiveDbName("hive_db")
+                .setHiveTableName(tableName)
+                .setPartitionColumnNames(partitionColumnNames)
+                .setDataColumnNames(dataColumnNames)
+                .setFullSchema(fullSchema)
+                .setTableLocation("hdfs://fake_location/" + tableName)
+                .setProperties(new HashMap<>())
+                .setStorageFormat(com.starrocks.connector.hive.HiveStorageFormat.PARQUET)
+                .setCreateTime(System.currentTimeMillis())
+                .build();
+
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+        long tableId = hiveTable.getId();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, catalogName, "hive_db");
+                result = new Database(tableId, "hive_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, catalogName, "hive_db", tableName);
+                result = hiveTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+                return mode;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String currentCatalogName, String dbName) {
+                return new Database(tableId, "hive_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName currentTableName) {
+                return hiveTable;
+            }
+        };
+
+        boolean enableMaterializedViewRewrite =
+                connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        try {
+            return getInsertExecPlan(String.format(
+                    "explain insert into %s.hive_db.%s %s", catalogName, tableName, selectSql));
+        } finally {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(enableMaterializedViewRewrite);
+        }
+    }
+
+    private String getIcebergInsertExecPlanWithGlobalShuffle(String catalogName, String tableName, long tableId,
+                                                             Schema icebergSchema, PartitionSpec partitionSpec,
+                                                             List<Column> fullSchema, List<Column> partitionColumns,
+                                                             List<Integer> partitionColumnIndexes, String selectSql)
+            throws Exception {
+        String createIcebergCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"iceberg\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")",
+                catalogName);
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName(catalogName);
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName(tableName);
+        builder.setSrTableName(tableName);
+        builder.setFullSchema(fullSchema);
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = tableId;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = false;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = partitionColumns;
+                minTimes = 0;
+
+                icebergTable.partitionColumnIndexes();
+                result = partitionColumnIndexes;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
+                minTimes = 0;
+
+                nativeTable.spec();
+                result = partitionSpec;
+                minTimes = 0;
+
+                nativeTable.schema();
+                result = icebergSchema;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, catalogName, "iceberg_db");
+                result = new Database(tableId, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, catalogName, "iceberg_db", tableName);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+                return ConnectorSinkShuffleMode.FORCE;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String currentCatalogName, String dbName) {
+                return new Database(tableId, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName currentTableName) {
+                return icebergTable;
+            }
+        };
+
+        boolean enableMaterializedViewRewrite =
+                connectContext.getSessionVariable().isEnableMaterializedViewRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        try {
+            return getInsertExecPlan(String.format(
+                    "explain insert into %s.iceberg_db.%s %s", catalogName, tableName, selectSql));
+        } finally {
+            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(enableMaterializedViewRewrite);
+        }
+    }
+
+    private void assertHashPartitionedByExpression(String actualRes, String expectedExpr) {
+        Assertions.assertTrue(actualRes.contains(expectedExpr),
+                "Expected shuffle expression " + expectedExpr + " but got:\n" + actualRes);
+        Pattern distributionPattern = Pattern.compile(
+                "HASH_PARTITIONED:[^\\n]*" + Pattern.quote(expectedExpr));
+        Assertions.assertTrue(distributionPattern.matcher(actualRes).find(),
+                "Expected HASH_PARTITIONED on " + expectedExpr + " but got:\n" + actualRes);
     }
 
     @Test

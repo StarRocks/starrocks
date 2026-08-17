@@ -1,0 +1,5 @@
+extends: script
+message: "Use literal '<' or '>' instead of the HTML entity '%s', and enclose the term in backticks if it contains angle brackets (e.g. `ARRAY<VARCHAR>`)."
+level: error
+scope: raw
+script: HtmlEntities.tengo

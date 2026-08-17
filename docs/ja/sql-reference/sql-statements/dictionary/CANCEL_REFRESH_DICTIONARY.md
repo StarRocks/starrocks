@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL REFRESH DICTIONARY は、辞書オブジェクトのリフレッシュをキャンセルします。"
 ---
 
 # CANCEL REFRESH DICTIONARY

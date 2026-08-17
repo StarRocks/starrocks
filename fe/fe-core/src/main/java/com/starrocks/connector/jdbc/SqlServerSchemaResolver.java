@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
@@ -35,10 +36,18 @@ import static java.lang.Math.max;
 
 public class SqlServerSchemaResolver extends JDBCSchemaResolver {
 
+    public SqlServerSchemaResolver() {
+        this.defaultTableTypes = new String[] {"TABLE", "VIEW"};
+    }
+
     @Override
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null,
-                new String[] {"TABLE", "VIEW"});
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, defaultTableTypes);
+    }
+
+    @Override
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, tblName, defaultTableTypes);
     }
 
     @Override
@@ -60,6 +69,11 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
         Map<String, String> newProp = new HashMap<>(properties);
         newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "[" + dbName + "]" + "." + "[" + name + "]");
         return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, newProp);
+    }
+
+    @Override
+    public List<Partition> getPartitions(Connection connection, Table table) {
+        return Lists.newArrayList(new Partition(table.getName(), System.currentTimeMillis()));
     }
 
     @Override

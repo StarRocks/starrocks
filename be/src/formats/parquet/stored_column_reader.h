@@ -28,7 +28,7 @@
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/range.h"
+#include "storage_primitive/range.h"
 
 namespace tparquet {
 class ColumnChunk;
@@ -87,7 +87,7 @@ class StoredColumnReaderImpl : public StoredColumnReader {
 public:
     StoredColumnReaderImpl(const ColumnReaderOptions& opts) : _opts(opts) {}
 
-    virtual ~StoredColumnReaderImpl() = default;
+    ~StoredColumnReaderImpl() override = default;
 
     // Reset internal state and ready for next read_values
     virtual void reset_levels() = 0;

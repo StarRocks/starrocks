@@ -38,8 +38,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.connector.ConnectorSinkShuffleMode;
-import com.starrocks.connector.ConnectorSinkSortScope;
+import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -56,7 +55,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -67,7 +65,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
@@ -88,12 +85,12 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.ConnectorSinkShuffleSpec;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -114,25 +111,23 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.SortDirection;
-import org.apache.iceberg.SortField;
-import org.apache.iceberg.SortOrder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -279,19 +274,6 @@ public class InsertPlanner {
         }
     }
 
-    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
-        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
-        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
-            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
-                if (t.getValue().isExternalTableWithFileSystem()) {
-                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
-                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
-                }
-            }
-        }
-    }
-
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -301,17 +283,30 @@ public class InsertPlanner {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
-            outputFullSchema = targetTable.getFullSchema();
+            // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
+            // Exclude stale schema-change shadow columns from the sink while retaining derived columns
+            // of normal synchronous materialized views, which are also kept in fullSchema. A completed
+            // OPTIMIZE may also leave same-named generated-column entries in fullSchema, so only emit one
+            // occurrence of each logical column and prefer the committed base-schema definition.
+            outputFullSchema = session.isOptimizeRewrite()
+                    ? getOptimizeOutputFullSchema(targetTable)
+                    : targetTable.getFullSchema();
         }
 
         if (targetTable.isIcebergTable()) {
+            boolean preserveRowLineage = targetTable instanceof IcebergTable
+                    && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
+            Set<String> columnsToFilter = preserveRowLineage
+                    ? IcebergTable.ICEBERG_META_COLUMNS.stream()
+                    .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                            && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                    .collect(Collectors.toSet())
+                    : IcebergTable.ICEBERG_META_COLUMNS;
             outputBaseSchema = outputBaseSchema.stream().filter(col ->
-                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+                    !columnsToFilter.contains(col.getName())).toList();
             outputFullSchema = outputFullSchema.stream().filter(col ->
-                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+                    !columnsToFilter.contains(col.getName())).toList();
         }
-
-        refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -375,12 +370,32 @@ public class InsertPlanner {
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             long tableId = targetTable.getId();
+            // A shadow-rewrite INSERT (the internal online rewrite that materializes a range rollup or a
+            // schema-change shadow index) writes ONLY the target write index. Base columns outside that
+            // index's column set are carried in the tuple solely to satisfy the sink's base
+            // distribution/partition plumbing (BE validates their presence); they are never persisted nor
+            // used for range routing (per-index distribution exprs route by the target index's key). Relax
+            // their slot nullability so an omitted NOT-NULL base column that is default-filled with NULL is
+            // not rejected by the BE non-nullable data validation.
+            boolean shadowRewriteSubsetWrite =
+                    insertStmt.isShadowRewrite() && insertStmt.getTargetWriteIndexId() != null;
+            Set<String> shadowRewriteTargetIndexColumns = Collections.emptySet();
+            if (shadowRewriteSubsetWrite) {
+                MaterializedIndexMeta targetIndexMeta =
+                        ((OlapTable) targetTable).getIndexMetaByMetaId(insertStmt.getTargetWriteIndexId());
+                Preconditions.checkState(targetIndexMeta != null && !targetIndexMeta.getSchema().isEmpty(),
+                        "shadow-rewrite target write index %s not found", insertStmt.getTargetWriteIndexId());
+                shadowRewriteTargetIndexColumns = targetIndexMeta.getSchema().stream()
+                        .map(c -> c.getName().toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+            }
             for (Column column : outputFullSchema) {
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
+                boolean nullable = column.isAllowNull() || (shadowRewriteSubsetWrite
+                        && !shadowRewriteTargetIndexColumns.contains(column.getName().toLowerCase(Locale.ROOT)));
+                slotDescriptor.setIsNullable(nullable);
                 if (column.getType().isVarchar() &&
                         IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
                     Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
@@ -457,6 +472,9 @@ public class InsertPlanner {
                 }
                 if (session.getTxnId() != 0) {
                     ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+                }
+                if (insertStmt.getTargetWriteIndexId() != null) {
+                    ((OlapTableSink) dataSink).setTargetWriteIndexId(insertStmt.getTargetWriteIndexId());
                 }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -579,11 +597,29 @@ public class InsertPlanner {
                 watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
     }
 
+    private List<Column> getOptimizeOutputFullSchema(Table targetTable) {
+        List<Column> outputSchema = new ArrayList<>(targetTable.getBaseSchema());
+        Set<String> outputColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        targetTable.getBaseSchema().stream().map(Column::getName).forEach(outputColumnNames::add);
+        for (Column column : targetTable.getFullSchema()) {
+            if (!column.isShadowColumn() && outputColumnNames.add(column.getName())) {
+                outputSchema.add(column);
+            }
+        }
+        return outputSchema;
+    }
+
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
+        // Retractable IVM: pre-place the sink __op control column as a fixed trailing output before optimize,
+        // so it flows into the sink tuple by position; IvmRewriter binds its value to __ACTION__.
+        boolean ivmOpPreplaced = preplaceIvmLoadOpColumn(session, targetTable, outputColumns, columnRefFactory);
+        PreOptimizePlanContext preOptimizePlanContext = preparePreOptimizePlanContext(
+                insertStmt, session.getSessionVariable(), targetTable, outputColumns, columnRefFactory, logicalPlan);
+
         PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
-                session.getSessionVariable());
+                session.getSessionVariable(), preOptimizePlanContext.partitionColumnIDs);
         OptExpression optimizedPlan;
 
         int sourceTablesCount = collectSourceTablesCount(session, insertStmt);
@@ -591,24 +627,76 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            if (session.getSessionVariable().isEnableIVMRefresh()) {
+                // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
+                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
+            }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
-                    logicalPlan.getRoot(),
+                    preOptimizePlanContext.root,
                     requiredPropertySet,
-                    new ColumnRefSet(logicalPlan.getOutputColumn()));
+                    preOptimizePlanContext.requiredColumns);
         }
 
         //8. Build fragment exec plan
         boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                 || targetTable instanceof MysqlTable);
+        List<String> sinkColNames = queryRelation.getColumnOutputNames();
+        if (ivmOpPreplaced) {
+            sinkColNames = new ArrayList<>(sinkColNames);
+            sinkColNames.add(Load.LOAD_OP_COLUMN);
+        }
         ExecPlan execPlan;
         try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
             execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                    sinkColNames, TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
         }
         return execPlan;
     }
+
+    // Pre-place the sink __op control column (Load.LOAD_OP_COLUMN) as a fixed trailing output for a
+    // retractable PRIMARY KEY IVM refresh: append it to outputColumns and outputFullSchema (last) so it
+    // gets a trailing tuple slot and OUTPUT expr; IvmRewriter binds its value to __ACTION__.
+    private boolean preplaceIvmLoadOpColumn(ConnectContext session, Table targetTable,
+                                            List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory) {
+        if (!session.getSessionVariable().isEnableIVMRefresh()
+                || !(targetTable instanceof OlapTable olapTable)
+                || olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        // Idempotent across optimistic-lock retries (buildExecPlanWithRetry runs this per attempt):
+        // strip a prior attempt's __op before re-appending, or the columns accumulate a duplicate.
+        outputColumns.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        outputColumns.add(columnRefFactory.create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false));
+        Column opColumn = new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT);
+        opColumn.setIsAllowNull(false);
+        List<Column> extendedSchema = new ArrayList<>(outputFullSchema);
+        extendedSchema.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        extendedSchema.add(opColumn);
+        outputFullSchema = extendedSchema;
+        return true;
+    }
+
+    private PreOptimizePlanContext preparePreOptimizePlanContext(InsertStmt insertStmt,
+                                                                 SessionVariable sessionVariable,
+                                                                 Table targetTable,
+                                                                 List<ColumnRefOperator> outputColumns,
+                                                                 ColumnRefFactory columnRefFactory,
+                                                                 LogicalPlan logicalPlan) {
+        OptExpression root = logicalPlan.getRoot();
+        ColumnRefSet requiredColumns = new ColumnRefSet(logicalPlan.getOutputColumn());
+        Optional<ConnectorSinkShuffleSpec> spec = ConnectorSinkShuffleSpec.forTable(targetTable);
+        if (spec.isEmpty() || !spec.get().shouldShuffle(insertStmt, sessionVariable)) {
+            return new PreOptimizePlanContext(root, requiredColumns, null);
+        }
+        ConnectorSinkShuffleSpec.PreOptimizeResult r = spec.get()
+                .prepare(insertStmt, outputColumns, columnRefFactory, root, requiredColumns);
+        return new PreOptimizePlanContext(r.root, r.requiredColumns, r.partitionColumnIDs);
+    }
+
+
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
         Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
@@ -800,15 +888,30 @@ public class InsertPlanner {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Optional<Column> optOriginColumn = outputFullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst();
-                Preconditions.checkState(optOriginColumn.isPresent());
-                Column originColumn = optOriginColumn.get();
-                ColumnRefOperator originColRefOp = outputColumns.get(outputFullSchema.indexOf(originColumn));
+                if (optOriginColumn.isPresent()) {
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(outputFullSchema.indexOf(originColumn));
 
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
+                    ColumnRefOperator columnRefOperator = columnRefFactory.create(
+                            targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
 
-                outputColumns.add(columnRefOperator);
-                columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                    outputColumns.add(columnRefOperator);
+                    columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                } else {
+                    // No same-named origin in the output schema. This is legitimate ONLY for a genuinely
+                    // new added column (e.g. a range ADD-key column); a MODIFY-COLUMN shadow always retains
+                    // its origin and takes the branch above. Preserve the invariant the original code
+                    // asserted (optOriginColumn.isPresent()) by materializing a default only when no
+                    // committed base column has this name -- otherwise a MODIFY shadow that lost its origin
+                    // would silently emit a wrong DEFAULT instead of failing fast.
+                    boolean genuinelyNewColumn =
+                            outputBaseSchema.stream().noneMatch(c -> c.nameEquals(originName, false));
+                    Preconditions.checkState(genuinelyNewColumn,
+                            "shadow column %s has no same-named origin but exists in the base schema",
+                            targetColumn.getName());
+                    // Materialize its CONST/NULL default instead of the origin-cast above.
+                    materializeShadowColumnDefault(columnRefFactory, outputColumns, columnRefMap, targetColumn);
+                }
                 continue;
             }
 
@@ -868,25 +971,46 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ScalarOperator scalarOperator = null;
-                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL) {
-                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
-                } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
-                } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                    throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
-                            + targetColumn.getDefaultExpr().getExpr());
-                }
-                ColumnRefOperator col = columnRefFactory
-                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-                outputColumns.add(col);
-                columnRefMap.put(col, scalarOperator);
+                materializeShadowColumnDefault(columnRefFactory, outputColumns, columnRefMap, targetColumn);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    /**
+     * Materialize {@code targetColumn}'s CONST/NULL default as a fresh {@link ColumnRefOperator}, appended to
+     * {@code outputColumns} and mapped in {@code columnRefMap}. Used by {@link #fillShadowColumns} both for a
+     * plain new-add schema-change column and for a {@code __starrocks_shadow_}-prefixed column with no
+     * same-named origin (a genuinely new added column, e.g. a range ADD-key column).
+     */
+    private void materializeShadowColumnDefault(ColumnRefFactory columnRefFactory, List<ColumnRefOperator> outputColumns,
+                                                Map<ColumnRefOperator, ScalarOperator> columnRefMap, Column targetColumn) {
+        ScalarOperator scalarOperator;
+        Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.NULL) {
+            scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+        } else if (defaultValueType == Column.DefaultValueType.CONST) {
+            // calculatedDefaultValue() evaluates a time-function default (e.g. CURRENT_TIMESTAMP) to the
+            // transaction time and returns a scalar literal's string, but it returns null for a complex
+            // expr-object default (ARRAY/MAP/STRUCT literal); getDefaultValue() renders that via toSql().
+            // Take whichever is non-null so a bundled non-key value column with a complex constant default
+            // is materialized as a VARCHAR constant (cast to the column type downstream) rather than NPEing.
+            String defaultValueStr = targetColumn.calculatedDefaultValue();
+            if (defaultValueStr == null) {
+                defaultValueStr = targetColumn.getDefaultValue();
+            }
+            scalarOperator = ConstantOperator.createVarchar(defaultValueStr);
+        } else {
+            // VARY (variable expr, e.g. uuid()) -- not materializable as a constant for the shadow rewrite.
+            throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                    + targetColumn.getDefaultExpr().getExpr());
+        }
+        ColumnRefOperator col = columnRefFactory
+                .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+        outputColumns.add(col);
+        columnRefMap.put(col, scalarOperator);
     }
 
     private OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
@@ -911,6 +1035,20 @@ public class InsertPlanner {
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
+
+    private static final class PreOptimizePlanContext {
+        private final OptExpression root;
+        private final ColumnRefSet requiredColumns;
+        private final List<Integer> partitionColumnIDs;
+
+        private PreOptimizePlanContext(OptExpression root, ColumnRefSet requiredColumns,
+                                       List<Integer> partitionColumnIDs) {
+            this.root = root;
+            this.requiredColumns = requiredColumns;
+            this.partitionColumnIDs = partitionColumnIDs;
+        }
+    }
+
     /**
      * OlapTableSink may be executed in multiply fragment instances of different machines
      * For non-duplicate key types, we must guarantee that the orders of the same key are
@@ -919,7 +1057,8 @@ public class InsertPlanner {
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
                                                           List<ColumnRefOperator> outputColumns,
-                                                          SessionVariable session) {
+                                                          SessionVariable session,
+                                                          List<Integer> preComputedPartitionColumnIDs) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
             DistributionProperty distributionProperty = DistributionProperty
@@ -928,57 +1067,16 @@ public class InsertPlanner {
         }
 
         Table targetTable = insertStmt.getTargetTable();
-        if (targetTable instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) targetTable;
-
-            // Create distribution property if global shuffle is enabled
-            DistributionProperty distributionProperty = EmptyDistributionProperty.INSTANCE;
-            ConnectorSinkShuffleMode shuffleMode = session.getConnectorSinkShuffleMode();
-
-            // For shuffle mode except NEVER, only apply shuffle to partitioned tables
-            if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
-
-                // For FORCE mode - always enable global shuffle, we also handle the old session variable
-                // `enable_iceberg_sink_global_shuffle` for compatibility.
-                // For AUTO mode - use adaptive logic based on partition count and backend count
-                if (shuffleMode == ConnectorSinkShuffleMode.FORCE || (shuffleMode == ConnectorSinkShuffleMode.AUTO &&
-                        shouldEnableAdaptiveGlobalShuffle(insertStmt, icebergTable, session))) {
-                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    distributionProperty = createDistributionPropertyFromPartitions(partitionColumnIDs);
-                }
-            }
-
-            // Check if we should use host-level sorting for connector sink
-            ConnectorSinkSortScope sortScope = ConnectorSinkSortScope.fromName(session.getConnectorSinkSortScope());
-            boolean useHostLevelSort = (sortScope == ConnectorSinkSortScope.HOST);
-
-            // Get sort order info from Iceberg table
-            List<Ordering> sortOrderings = new ArrayList<>();
-            if (useHostLevelSort) {
-                org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-                SortOrder sortOrder = nativeTable.sortOrder();
-                if (sortOrder != null && sortOrder.isSorted()) {
-                    List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
-                    for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
-                        int sortKeyIndex = sortKeyIndexes.get(idx);
-                        SortField sortField = sortOrder.fields().get(idx);
-                        // Skip non-identity transforms
-                        if (!sortField.transform().isIdentity()) {
-                            continue;
-                        }
-                        boolean isAsc = sortField.direction() == SortDirection.ASC;
-                        boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
-                        sortOrderings.add(new Ordering(outputColumns.get(sortKeyIndex), isAsc, isNullFirst));
-                    }
-                }
-            }
-
-            // Create sort property if host-level sorting is enabled and sort order exists
-            SortProperty sortProperty = SortProperty.createProperty(sortOrderings);
-
-            // Return property set with both distribution and sort properties
-            // These properties also can be empty.
+        Optional<ConnectorSinkShuffleSpec> connectorSpec = ConnectorSinkShuffleSpec.forTable(targetTable);
+        if (connectorSpec.isPresent()) {
+            // preComputedPartitionColumnIDs is non-null iff the spec decided to shuffle
+            // (set in preparePreOptimizePlanContext). When non-empty, create the hash
+            // distribution; otherwise leave the property set distribution-less.
+            DistributionProperty distributionProperty =
+                    (preComputedPartitionColumnIDs != null && !preComputedPartitionColumnIDs.isEmpty())
+                            ? createDistributionPropertyFromPartitions(preComputedPartitionColumnIDs)
+                            : EmptyDistributionProperty.INSTANCE;
+            SortProperty sortProperty = connectorSpec.get().computeSortProperty(session, outputColumns);
             return new PhysicalPropertySet(distributionProperty, sortProperty);
         }
 
@@ -1164,84 +1262,5 @@ public class InsertPlanner {
         return true;
     }
 
-    /**
-     * Judge whether adaptive global shuffle should be enabled based on partition count and backend count.
-     * <p>
-     * Decision criteria (configurable via session variables):
-     * 1. Enable when estimated partition count >= backend count * ratio
-     * 2. OR when estimated partition count >= absolute threshold
-     *
-     * @param insertStmt   INSERT statement
-     * @param icebergTable target Iceberg table
-     * @param session      Session variable
-     * @return whether to enable global shuffle
-     */
-    private boolean shouldEnableAdaptiveGlobalShuffle(InsertStmt insertStmt,
-                                                      IcebergTable icebergTable,
-                                                      SessionVariable session) {
-        // Get the number of alive BE nodes and CN nodes in the cluster
-        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        int aliveBackendNum = clusterInfo.getAliveBackendNumber();
-        int totalComputeNodeNum = clusterInfo.getTotalComputeNodeNumber();
-        int totalWorkerNum = aliveBackendNum + totalComputeNodeNum;
 
-        // Don't enable global shuffle if we have only 1 or 0 worker nodes
-        if (totalWorkerNum <= 1) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
-                                "total worker nodes ({}) <= 1",
-                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                        totalWorkerNum);
-            }
-            return false;
-        }
-
-        // Estimate the number of partitions that may be involved in this insert
-        long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
-
-        // Don't enable global shuffle if unable to estimate partition count or only writing to 1 partition
-        // estimatedPartitionCount <= 1 covers:
-        // - -1: unable to estimate (users typically write to only the latest partition)
-        // - 0 or 1: only writing to one partition
-        if (estimatedPartitionCount <= 1) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
-                                "estimated partition count ({}) <= 1",
-                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                        estimatedPartitionCount);
-            }
-            return false;
-        }
-
-        // Get configured thresholds from connector variables
-        long partitionCountThreshold = session.getConnectorSinkShufflePartitionThreshold();
-        double partitionCountNodeRatio = session.getConnectorSinkShufflePartitionNodeRatio();
-
-        // Decision logic:
-        // 1. estimated partitions >= total worker count * ratio coefficient
-        // 2. OR estimated partitions >= absolute threshold
-        boolean shouldEnable = estimatedPartitionCount >= (long) (totalWorkerNum * partitionCountNodeRatio)
-                || estimatedPartitionCount >= partitionCountThreshold;
-
-        if (shouldEnable && LOG.isDebugEnabled()) {
-            LOG.debug("Enable adaptive global shuffle for connector table {}.{}: " +
-                            "estimated partitions={}, total workers={}, threshold={}, ratio={}",
-                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                    estimatedPartitionCount, totalWorkerNum,
-                    partitionCountThreshold, partitionCountNodeRatio);
-        }
-
-        return shouldEnable;
-    }
-
-    /**
-     * Estimate the number of partitions that may be involved in this INSERT operation.
-     *
-     * @param insertStmt   INSERT statement
-     * @param icebergTable target Iceberg table
-     * @return estimated partition count
-     */
-    private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
-        return InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
-    }
 }

@@ -27,7 +27,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,7 +46,7 @@ import java.util.Set;
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
  */
-public class MVActiveChecker extends FrontendDaemon {
+public class MVActiveChecker extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(MVActiveChecker.class);
 
@@ -56,6 +56,14 @@ public class MVActiveChecker extends FrontendDaemon {
         super("mv-active-checker", Config.mv_active_checker_interval_seconds * 1000);
     }
 
+    @Override
+    protected void onStopped() {
+        // MV_ACTIVE_INFO holds per-MV failure backoff state used only by the leader's activation
+        // loop. Drop it on demotion so the next leader (or this FE on re-election) starts fresh
+        // rather than honoring backoff windows accumulated under the previous leader session.
+        MV_ACTIVE_INFO.clear();
+    }
+
     public static final String MV_BACKUP_INACTIVE_REASON = "it's in backup and will be activated after restore if possible";
 
     // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
@@ -63,11 +71,12 @@ public class MVActiveChecker extends FrontendDaemon {
     private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
             MV_BACKUP_INACTIVE_REASON,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
-            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES,
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING
     );
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // reset if the interval has been changed
         setInterval(Config.mv_active_checker_interval_seconds * 1000L);
 
@@ -120,17 +129,22 @@ public class MVActiveChecker extends FrontendDaemon {
     }
 
     /**
+     * Whether this inactive reason never self-heals via retry (manual inactivation, or one of the
+     * automatic reasons above); callers that would otherwise keep retrying should skip instead.
+     */
+    public static boolean isNonAutoActivatableReason(String reason) {
+        String r = Optional.ofNullable(reason).orElse("");
+        return AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(r)
+                || MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(r::contains);
+    }
+
+    /**
      * @param mv
      * @param checkGracePeriod whether check the grace period, usually background active would check it, but foreground
      *                         job doesn't
      */
     public static void tryToActivate(MaterializedView mv, boolean checkGracePeriod) {
-        // if the mv is set to inactive manually, we don't activate it
-        String reason = Optional.ofNullable(mv.getInactiveReason()).orElse("");
-        if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
-            return;
-        }
-        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(reason::contains)) {
+        if (mv.isActive() || isNonAutoActivatableReason(mv.getInactiveReason())) {
             return;
         }
 
@@ -151,7 +165,8 @@ public class MVActiveChecker extends FrontendDaemon {
         String mvFullName =
                 new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
-        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}", mvFullName, reason);
+        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
+                mvFullName, mv.getInactiveReason());
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setStatisticsContext(false);

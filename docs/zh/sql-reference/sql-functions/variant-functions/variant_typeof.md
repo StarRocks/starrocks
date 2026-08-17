@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "以字符串形式返回 VARIANT 值的类型名称。"
 ---
 
 # variant_typeof

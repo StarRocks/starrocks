@@ -422,21 +422,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             Tuple prevUpperBound = prevRange.getUpperBound();
             Tuple currLowerBound = currRange.getLowerBound();
 
-            // Validate that bounds are not null
-            if (prevUpperBound == null || currLowerBound == null) {
-                throw new IllegalStateException(
-                        "Range bound is null: tablet " + prevTablet.getId() + " upper bound is "
-                                + (prevUpperBound == null ? "null" : prevUpperBound)
-                                + ", tablet " + currTablet.getId() + " lower bound is "
-                                + (currLowerBound == null ? "null" : currLowerBound));
-            }
-
             // Validate range continuity
-            if (!prevUpperBound.equals(currLowerBound)) {
-                throw new IllegalStateException(
-                        "Adjacent tablet ranges are not continuous: tablet " + prevTablet.getId()
-                                + " upper bound " + prevUpperBound + " != tablet " + currTablet.getId()
-                                + " lower bound " + currLowerBound);
+            if (prevUpperBound == null || currLowerBound == null || !prevUpperBound.equals(currLowerBound)) {
+                continue;
             }
 
             // Share the same Tuple object: use prevUpperBound as the shared bound

@@ -1,16 +1,18 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
+description: "共有なし StarRocks クラスタを手動でデプロイする方法（BE がストレージとコンピューティングの両方を担当）。"
 ---
 
-# StarRocks を手動でデプロイする
+import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
-:::tip
-手動デプロイの準備は、[デプロイの前提条件](./deployment_prerequisites.md)と[環境設定の確認](./environment_configurations.md)のドキュメントに記載されています。プロダクションデプロイを計画している場合は、まずこちらを参照してください。StarRocks を始める場合やクイックスタートを試したい場合は、[クイックスタート](../quick_start/quick_start.mdx)を参照してください。
-:::
+# 共有なし StarRocks を手動でデプロイする
 
-このトピックでは、共有なし StarRocks（BE がストレージとコンピューティングの両方を担当する）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](../deployment/deployment_overview.md)を参照してください。
+<ManualPrep />
 
-共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）をデプロイするには、[共有データ StarRocks のデプロイと使用](../deployment/shared_data/s3.md)を参照してください。
+このトピックでは、共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](./deployment.md)を参照してください。
+
+共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）をデプロイするには、[共有データ StarRocks を手動でデプロイする](./deploy_shared_data_manually.md)を参照してください。
 
 ## ステップ 1: Leader FE ノードを起動する
 
@@ -23,7 +25,7 @@ displayed_sidebar: docs
    mkdir -p <meta_dir>
    ```
 
-2. 以前に準備した[StarRocks FE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
+2. 以前に準備した[StarRocks FE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
 
    a. 設定項目 `meta_dir` にメタデータディレクトリを指定します。
 
@@ -32,7 +34,7 @@ displayed_sidebar: docs
       meta_dir = <meta_dir>
       ```
 
-   b. [環境設定チェックリスト](../deployment/environment_configurations.md#fe-ports)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   b. [環境設定チェックリスト](./preparation/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       http_port = aaaa        # デフォルト: 8030
@@ -63,7 +65,7 @@ displayed_sidebar: docs
       JAVA_HOME = <path_to_JDK>
       ```
 
-   f. 高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/management/FE_configuration.md)を参照してください。
+   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/configuration/FE_parameters/FE_parameters.md)を参照してください。
 
 3. FE ノードを起動します。
 
@@ -83,7 +85,7 @@ displayed_sidebar: docs
 
      > **注意**
      >
-     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#hostnames)を参照してください。
+     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
 
 4. FE ログを確認して、FE ノードが正常に起動したかどうかを確認します。
 
@@ -93,11 +95,11 @@ displayed_sidebar: docs
 
    "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020." のようなログ記録は、FE ノードが正常に起動したことを示しています。
 
-## ステップ 2: (共有なしの場合) BE サービスを起動する
+## ステップ 2: BE サービスを起動する
 
 :::note
 
-BE ノードは共有なしクラスタにのみ追加できます。共有データクラスタに BE ノードを追加することは推奨されず、未知の動作を引き起こす可能性があります。
+BEノードは共有なしクラスタにのみ追加でき、CNノードは共有データクラスタにのみ追加できます。これ以外の構成では、予期しない動作を引き起こす可能性があります。
 
 :::
 
@@ -110,22 +112,23 @@ BE ノードは共有なしクラスタにのみ追加できます。共有デ�
    mkdir -p <storage_root_path>
    ```
 
-2. 以前に準備した[StarRocks BE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、BE 設定ファイル **be/conf/be.conf** を修正します。
+2. 以前に準備した[StarRocks BE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、BE 設定ファイル **be/conf/be.conf** を修正します。
 
-   a. 設定項目 `storage_root_path` にデータディレクトリを指定します。
+   a. 設定項目 `storage_root_path` にデータディレクトリを指定します。複数のボリュームはセミコロン (;) で区切ります。例: `/data1;/data2`。
 
       ```YAML
       # <storage_root_path> を作成したデータディレクトリに置き換えます。
       storage_root_path = <storage_root_path>
       ```
 
-   b. [環境設定チェックリスト](../deployment/environment_configurations.md#be-ports)で言及されている BE ポートが占有されている場合は、BE 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   b. [環境設定チェックリスト](./preparation/environment_configurations.md#be-ポート)で言及されている BE ポートが占有されている場合は、BE 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       be_port = vvvv                   # デフォルト: 9060
       be_http_port = xxxx              # デフォルト: 8040
       heartbeat_service_port = yyyy    # デフォルト: 9050
       brpc_port = zzzz                 # デフォルト: 8060
+      starlet_port = uuuu              # デフォルト: 9070
       ```
 
    c. クラスタの IP アドレスアクセスを有効にしたい場合は、設定ファイルに `priority_networks` という設定項目を追加し、BE ノードに専用の IP アドレス（CIDR 形式）を割り当てる必要があります。クラスタの FQDN アクセスを有効にしたい場合は、この設定項目を無視できます。
@@ -146,7 +149,7 @@ BE ノードは共有なしクラスタにのみ追加できます。共有デ�
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/management/BE_configuration.md)を参照してください。
+   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/configuration/BE_parameters/BE_parameters.md)を参照してください。
 
 3. BE ノードを起動します。
 
@@ -156,7 +159,7 @@ BE ノードは共有なしクラスタにのみ追加できます。共有デ�
 
       > **注意**
       >
-      > - FQDN アクセスを有効にして BE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#hostnames)を参照してください。
+      > - FQDN アクセスを有効にして BE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
       > - BE ノードを起動する際にパラメータ `--host_type` を指定する必要はありません。
 
 4. BE ログを確認して、BE ノードが正常に起動したかどうかを確認します。
@@ -171,78 +174,16 @@ BE ノードは共有なしクラスタにのみ追加できます。共有デ�
 
 > **注意**
 >
-> BE ノードが少なくとも 3 つデプロイされ、StarRocks クラスタに追加されると、BE の高可用性クラスタが自動的に形成されます。
-> BE ノードを 1 つだけデプロイしたい場合は、FE 設定ファイル **fe/conf/fe.conf** で `default_replication_num` を `1` に設定する必要があります。
-
-      ```YAML
-      default_replication_num = 1
-      ```
-
-## ステップ 2: (共有データの場合) CN サービスを起動する
-
-:::note
-
-CN ノードは共有データクラスタにのみ追加できます。共有なしクラスタに CN ノードを追加することは推奨されず、未知の動作を引き起こす可能性があります。
-
-:::
-
-Compute Node (CN) は、データを自ら保持しないステートレスなコンピューティングサービスです。クエリのために追加のコンピューティングリソースを提供するために、クラスタに CN ノードをオプションで追加できます。CN ノードは BE デプロイメントファイルでデプロイできます。Compute Nodes は v2.4 以降でサポートされています。
-
-1. 以前に準備した[StarRocks BE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、CN 設定ファイル **be/conf/cn.conf** を修正します。
-
-   a. [環境設定チェックリスト](../deployment/environment_configurations.md)で言及されている CN ポートが占有されている場合は、CN 設定ファイルで有効な代替ポートを割り当てる必要があります。
-
-      ```YAML
-      be_port = vvvv                   # デフォルト: 9060
-      be_http_port = xxxx              # デフォルト: 8040
-      heartbeat_service_port = yyyy    # デフォルト: 9050
-      brpc_port = zzzz                 # デフォルト: 8060
-      ```
-
-   b. クラスタの IP アドレスアクセスを有効にしたい場合は、設定ファイルに `priority_networks` という設定項目を追加し、CN ノードに専用の IP アドレス（CIDR 形式）を割り当てる必要があります。クラスタの FQDN アクセスを有効にしたい場合は、この設定項目を無視できます。
-
-      ```YAML
-      priority_networks = x.x.x.x/x
-      ```
-
-      > **注意**
-      >
-      > - インスタンスが所有する IP アドレスを表示するには、ターミナルで `ifconfig` を実行できます。
-      > - v3.3.0 以降、StarRocks は IPv6 に基づくデプロイをサポートしています。
-
-   c. インスタンスに複数の JDK がインストールされており、環境変数 `JAVA_HOME` に指定されたものとは異なる特定の JDK を使用したい場合は、設定ファイルに `JAVA_HOME` という設定項目を追加して、選択した JDK がインストールされているパスを指定する必要があります。
-
-      ```YAML
-      # <path_to_JDK> を選択した JDK がインストールされているパスに置き換えます。
-      JAVA_HOME = <path_to_JDK>
-      ```
-
-   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/management/BE_configuration.md)を参照してください。CN のパラメータのほとんどは BE から継承されています。
-
-2. CN ノードを起動します。
-
-   ```Bash
-   ./be/bin/start_cn.sh --daemon
-   ```
-
-   > **注意**
-   >
-   > - FQDN アクセスを有効にして CN ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#hostnames)を参照してください。
-   > - CN ノードを起動する際にパラメータ `--host_type` を指定する必要はありません。
-
-3. CN ログを確認して、CN ノードが正常に起動したかどうかを確認します。
-
-   ```Bash
-   cat be/log/cn.INFO | grep heartbeat
-   ```
-
-   "I0313 15:03:45.820030 412450 thrift_server.cpp:375] heartbeat has started listening port on 9050" のようなログ記録は、CN ノードが正常に起動したことを示しています。
-
-4. 他のインスタンスで上記の手順を繰り返すことで、新しい CN ノードを起動できます。
+> - BE ノードが少なくとも 3 つデプロイされ、StarRocks クラスタに追加されると、BE の高可用性クラスタが自動的に形成されます。
+> - BE ノードを 1 つだけデプロイしたい場合は、FE 設定ファイル **fe/conf/fe.conf** で `default_replication_num` を `1` に設定する必要があります。
+>
+>   ```YAML
+>   default_replication_num = 1
+>   ```
 
 ## ステップ 3: クラスタをセットアップする
 
-すべての FE と BE/CN ノードが正常に起動した後、StarRocks クラスタをセットアップできます。
+すべての FE と BE ノードが正常に起動した後、StarRocks クラスタをセットアップできます。
 
 次の手順は、MySQL クライアントで実行されます。MySQL クライアント 5.5.0 以降がインストールされている必要があります。
 
@@ -262,7 +203,7 @@ Compute Node (CN) は、データを自ら保持しないステートレスな�
 
    例:
 
-```Plain
+   ```Plain
    MySQL [(none)]> SHOW PROC '/frontends'\G
    *************************** 1. row ***************************
                 Name: x.x.x.x_9010_1686810741121
@@ -288,9 +229,7 @@ Compute Node (CN) は、データを自ら保持しないステートレスな�
    - フィールド `Role` が `FOLLOWER` の場合、この FE ノードは Leader FE ノードとして選出される資格があります。
    - フィールド `Role` が `LEADER` の場合、この FE ノードは Leader FE ノードです。
 
-3. BE/CN ノードをクラスタに追加します。
-
-   - (共有なしの場合) BE ノードを追加します。
+3. BE ノードをクラスタに追加します。
 
    ```SQL
    -- <be_address> を BE ノードの IP アドレス (priority_networks) 
@@ -303,22 +242,7 @@ Compute Node (CN) は、データを自ら保持しないステートレスな�
    >
    > 上記のコマンドを使用して、複数の BE ノードを一度に追加できます。各 `<be_address>:<heartbeat_service_port>` ペアは 1 つの BE ノードを表します。
 
-   - (共有データの場合) CN ノードを追加します。
-
-   ```SQL
-   -- <cn_address> を CN ノードの IP アドレス (priority_networks) 
-   -- または FQDN に置き換え、<heartbeat_service_port> を 
-   -- cn.conf で指定した heartbeat_service_port (デフォルト: 9050) に置き換えます。
-   ALTER SYSTEM ADD COMPUTE NODE "<cn_address>:<heartbeat_service_port>";
-   ```
-
-   > **注意**
-   >
-   > 1 つの SQL で複数の CN ノードを追加できます。各 `<cn_address>:<heartbeat_service_port>` ペアは 1 つの CN ノードを表します。
-
-4. 次の SQL を実行して、BE/CN ノードのステータスを確認します。
-
-   - (共有なしの場合) BE ノードのステータスを確認します。
+4. 次の SQL を実行して、BE ノードのステータスを確認します。
 
    ```SQL
    SHOW PROC '/backends'\G
@@ -359,37 +283,6 @@ Compute Node (CN) は、データを自ら保持しないステートレスな�
 
    フィールド `Alive` が `true` の場合、この BE ノードは正常に起動し、クラスタに追加されています。
 
-   - (共有データの場合) CN ノードのステータスを確認します。
-
-   ```SQL
-   SHOW PROC '/compute_nodes'\G
-   ```
-
-   例:
-
-   ```Plain
-   MySQL [(none)]> SHOW PROC '/compute_nodes'\G
-   *************************** 1. row ***************************
-           ComputeNodeId: 10003
-                      IP: x.x.x.x
-           HeartbeatPort: 9050
-                  BePort: 9060
-                HttpPort: 8040
-                BrpcPort: 8060
-           LastStartTime: 2023-03-13 15:11:13
-           LastHeartbeat: 2023-03-13 15:11:13
-                   Alive: true
-    SystemDecommissioned: false
-   ClusterDecommissioned: false
-                  ErrMsg: 
-                 Version: 2.5.2-c3772fb
-   1 row in set (0.00 sec)
-   ```
-
-   フィールド `Alive` が `true` の場合、この CN ノードは正常に起動し、クラスタに追加されています。
-
-   CN が正常に起動し、クエリ中に CN を使用したい場合は、システム変数 `SET prefer_compute_node = true;` と `SET use_compute_nodes = -1;` を設定します。詳細については、[システム変数](../sql-reference/System_variable.md#descriptions-of-variables)を参照してください。
-
 ## ステップ 4: (オプション) 高可用性 FE クラスタをデプロイする
 
 高可用性 FE クラスタには、StarRocks クラスタに少なくとも 3 つの Follower FE ノードが必要です。Leader FE ノードが正常に起動した後、2 つの新しい FE ノードを起動して高可用性 FE クラスタをデプロイできます。
@@ -416,7 +309,7 @@ Compute Node (CN) は、データを自ら保持しないステートレスな�
    > - 上記のコマンドを使用して、1 回に 1 つの Follower FE ノードを追加できます。
    > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
 
-3. 新しい FE インスタンスでターミナルを起動し、メタデータストレージ用の専用ディレクトリを作成し、StarRocks FE デプロイメントファイルを保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。詳細な手順については、[ステップ 1: Leader FE ノードを起動する](#step-1-start-the-leader-fe-node)を参照してください。基本的には、FE ノードを起動するためのコマンドを除いて、ステップ 1 の手順を繰り返すことができます。
+3. 新しい FE インスタンスでターミナルを起動し、メタデータストレージ用の専用ディレクトリを作成し、StarRocks FE デプロイメントファイルを保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。詳細な手順については、[ステップ 1: Leader FE ノードを起動する](#ステップ-1-leader-fe-ノードを起動する)を参照してください。基本的には、FE ノードを起動するためのコマンドを除いて、ステップ 1 の手順を繰り返すことができます。
 
    Follower FE ノードを設定した後、次の SQL を実行して Follower FE ノードにヘルパーノードを割り当て、Follower FE ノードを起動します。
 
@@ -537,12 +430,6 @@ Compute Node (CN) は、データを自ら保持しないステートレスな�
   ./be/bin/stop_be.sh
   ```
 
-- CN ノードを停止します。
-
-  ```Bash
-  ./be/bin/stop_cn.sh
-  ```
-
 ## トラブルシューティング
 
 FE または BE ノードを起動する際に発生するエラーを特定するために、次の手順を試してください。
@@ -563,14 +450,6 @@ FE または BE ノードを起動する際に発生するエラーを特定す�
 
   問題を特定して解決した後、既存の BE プロセスを終了し、既存の **storage** ディレクトリを削除し、新しいデータストレージディレクトリを作成して、正しい設定で BE ノードを再起動する必要があります。
 
-- CN ノードが正常に起動しない場合は、**be/log/cn.WARNING** にあるログを確認して問題を特定できます。
-
-  ```Bash
-  cat be/log/cn.WARNING
-  ```
-
-  問題を特定して解決した後、既存の CN プロセスを終了し、正しい設定で CN ノードを再起動する必要があります。
-
 ## 次に行うこと
 
-StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](../deployment/post_deployment_setup.md)を参照してください。
+StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](./manage_deployment/post_deployment_setup.md)を参照してください。

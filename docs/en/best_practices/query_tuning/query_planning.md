@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 20
+description: "Optimizing query performance is a common challenge in analytics systems."
 ---
 
 # Query plan

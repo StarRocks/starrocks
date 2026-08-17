@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the 1-based character position of a substring within a string."
 ---
 
 # locate

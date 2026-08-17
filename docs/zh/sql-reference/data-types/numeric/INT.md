@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INT 是 4 字节有符号整数，取值范围为 [-2147483648, 2147483647]。"
 ---
 
 # INT

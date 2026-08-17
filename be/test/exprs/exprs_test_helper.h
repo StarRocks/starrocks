@@ -20,7 +20,7 @@
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
 #include "exprs/expr_executor.h"
-#ifndef STARROCKS_EXPR_CORE_TEST_NO_JIT
+#ifndef STARROCKS_EXPR_TEST_NO_JIT
 #include "exprs/jit/jit_expr.h"
 #endif
 #include "gen_cpp/Descriptors_types.h"
@@ -160,7 +160,7 @@ public:
         // Verify the original result.
         test_func(ptr);
 
-#ifdef STARROCKS_EXPR_CORE_TEST_NO_JIT
+#ifdef STARROCKS_EXPR_TEST_NO_JIT
         (void)expr;
         (void)runtime_state;
         (void)need_jit;
@@ -193,8 +193,18 @@ public:
 #endif
     }
 
+    static bool should_verify_with_jit(const Expr* expr, RuntimeState* runtime_state) {
+#ifdef STARROCKS_EXPR_TEST_NO_JIT
+        (void)expr;
+        (void)runtime_state;
+        return false;
+#else
+        return expr->is_compilable(runtime_state);
+#endif
+    }
+
     static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
-#ifdef STARROCKS_EXPR_CORE_TEST_NO_JIT
+#ifdef STARROCKS_EXPR_TEST_NO_JIT
         (void)ptr;
         (void)expr;
         (void)runtime_state;

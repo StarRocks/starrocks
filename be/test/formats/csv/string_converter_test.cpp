@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "io/formatted_output_stream_string.h"
+#include "formats/io/formatted_output_stream_string.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
@@ -202,7 +202,7 @@ TEST_F(StringConverterTest, test_write_string) {
     std::vector<Slice> strings = {"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"};
     (void)col->append_strings(strings.data(), strings.size());
 
-    io::FormattedOutputStreamString buff;
+    formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
@@ -210,7 +210,7 @@ TEST_F(StringConverterTest, test_write_string) {
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("aaaaaaaaaaaabbbbbbbb\"\"ccccc", buff.as_string());
 
-    io::FormattedOutputStreamString buff2;
+    formats::FormattedOutputStreamString buff2;
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());

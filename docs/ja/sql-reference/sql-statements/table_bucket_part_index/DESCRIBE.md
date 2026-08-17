@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocksテーブルまたは外部テーブルのスキーマを表示します。ソートキーと物化ビュー情報を含みます。"
 ---
 
 # DESC

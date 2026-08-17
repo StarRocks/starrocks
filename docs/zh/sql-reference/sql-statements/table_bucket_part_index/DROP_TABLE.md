@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP TABLE deletes a table from the database."
 ---
 
 # DROP TABLE

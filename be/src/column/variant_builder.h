@@ -59,6 +59,9 @@ public:
     // Build the final row-level variant.
     StatusOr<VariantRowValue> build() const;
 
+    static StatusOr<VariantRowValue> build_row_from_overlays(std::optional<VariantRowRef> base,
+                                                             std::vector<Overlay> overlays);
+
 private:
     std::optional<VariantRowRef> _base;
     std::vector<Overlay> _overlays;

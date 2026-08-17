@@ -17,6 +17,7 @@
 #include <chrono>
 
 #include "base/uid_util.h"
+#include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "gutil/strings/substitute.h"
 
@@ -196,6 +197,12 @@ RuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_i
         _use_times.fetch_add(filter != nullptr);
         return filter;
     }
+}
+
+void RuntimeFilterCache::add_rf_event(const RfTracePoint& pt) {
+    std::string msg =
+            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
+    add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
 void RuntimeFilterCache::add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {

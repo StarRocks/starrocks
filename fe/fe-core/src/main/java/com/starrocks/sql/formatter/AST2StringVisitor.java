@@ -24,6 +24,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -147,6 +148,8 @@ import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
 public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void> {
+    private static final String MASKED_AUTH_TEXT = "*XXX";
+
     // use options:
     //   addFunctionDbName;
     //   withBackquote;
@@ -191,26 +194,39 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             return sb;
         }
 
+        String authString = authOption.getAuthString();
+        String printedAuthString = shouldHideAuthString(authOption) ? MASKED_AUTH_TEXT : authString;
+
         if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
             sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
-            if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+            if (!Strings.isNullOrEmpty(authString)) {
                 if (authOption.isPasswordPlain()) {
                     sb.append(" BY '");
                 } else {
                     sb.append(" AS '");
                 }
-                sb.append(authOption.getAuthString()).append("'");
+                sb.append(printedAuthString).append("'");
             }
         } else {
-            if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+            if (!Strings.isNullOrEmpty(authString)) {
                 if (authOption.isPasswordPlain()) {
-                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                    sb.append(" IDENTIFIED BY '").append(printedAuthString).append("'");
                 } else {
-                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(printedAuthString).append("'");
                 }
             }
         }
         return sb;
+    }
+
+    private boolean shouldHideAuthString(UserAuthOption authOption) {
+        if (Strings.isNullOrEmpty(authOption.getAuthString())) {
+            return false;
+        }
+        if (Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+            return true;
+        }
+        return !AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name().equalsIgnoreCase(authOption.getAuthPlugin());
     }
 
     @Override
@@ -383,6 +399,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         }
 
         sb.append(stmt.getMvName());
+        if (stmt.isForceDrop()) {
+            sb.append(" FORCE");
+        }
         return sb.toString();
     }
 
@@ -557,6 +576,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     .append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
         }
         sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+        if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+            sqlBuilder.append("[materialized] ");
+        } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+            sqlBuilder.append("[not_materialized] ");
+        }
         return sqlBuilder.toString();
     }
 
@@ -748,14 +772,13 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         return sqlBuilder.toString();
     }
 
-    @Override
-    public String visitValues(ValuesRelation node, Void scope) {
+    /**
+     * Renders the bare {@code VALUES (...), (...)} list, without the parentheses that
+     * {@link #visitValues} wraps around it for derived-table position.
+     */
+    protected String visitValueRows(ValuesRelation node) {
         StringBuilder sqlBuilder = new StringBuilder();
-        if (node.isNullValues()) {
-            return null;
-        }
-
-        sqlBuilder.append("(VALUES");
+        sqlBuilder.append("VALUES");
         List<String> values = new ArrayList<>();
         for (int i = 0; i < node.getRows().size(); ++i) {
             StringBuilder rowBuilder = new StringBuilder();
@@ -767,7 +790,20 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             values.add(rowBuilder.toString());
         }
         sqlBuilder.append(Joiner.on(", ").join(values));
-        sqlBuilder.append(")");
+        return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitValues(ValuesRelation node, Void scope) {
+        StringBuilder sqlBuilder = new StringBuilder();
+        if (node.isNullValues()) {
+            return null;
+        }
+
+        // Parenthesized: reaching a ValuesRelation through the generic relation path means it sits in
+        // derived-table position, as in `FROM (VALUES (1), (2)) t`. The INSERT source position wants the
+        // bare list instead and goes through visitInsertSource().
+        sqlBuilder.append("(").append(visitValueRows(node)).append(")");
         if (node.getAlias() != null) {
             sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
@@ -984,6 +1020,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 org.apache.commons.collections4.CollectionUtils.isNotEmpty(
                         insert.getTargetPartitionNames().getPartitionNames())) {
             List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+            // Same namespace distinction as in the FROM clause: without the qualifier this names a
+            // formal partition, i.e. a different write target.
+            if (insert.getTargetPartitionNames().isTemp()) {
+                sb.append("TEMPORARY ");
+            }
             sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
         }
 
@@ -1000,9 +1041,28 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         // source
         if (insert.getQueryStatement() != null) {
-            sb.append(visit(insert.getQueryStatement()));
+            sb.append(visitInsertSource(insert.getQueryStatement(), context));
         }
         return sb.toString();
+    }
+
+    /**
+     * INSERT takes a bare {@code VALUES (...), (...)} list as its source; the parenthesized form
+     * {@link #visitValues} emits for derived-table position does not parse here.
+     */
+    protected String visitInsertSource(QueryStatement queryStatement, Void context) {
+        QueryRelation relation = queryStatement.getQueryRelation();
+        // Anything the generic path decorates the relation with (CTEs, alias, ORDER BY, LIMIT) falls back
+        // to visitQueryStatement so those clauses are not dropped.
+        if (relation instanceof ValuesRelation
+                && !relation.hasWithClause()
+                && relation.getAlias() == null
+                && !relation.hasOrderByClause()
+                && relation.getLimit() == null
+                && !((ValuesRelation) relation).isNullValues()) {
+            return visitValueRows((ValuesRelation) relation);
+        }
+        return visit(queryStatement);
     }
 
     protected void visitInsertLabel(String label, StringBuilder sb) {
@@ -1234,13 +1294,15 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             }
             sb.append(")");
         } else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
-            List<String> p = node.getChildren().stream().map(child -> {
-                String str = visit(child);
-                if (child instanceof SlotRef && node.getIgnoreNulls()) {
+            List<Expr> children = node.getChildren();
+            List<String> p = new ArrayList<>();
+            for (int i = 0; i < children.size(); i++) {
+                String str = visit(children.get(i));
+                if (i == 0 && node.getIgnoreNulls()) {
                     str += " ignore nulls";
                 }
-                return str;
-            }).collect(Collectors.toList());
+                p.add(str);
+            }
             sb.append(Joiner.on(", ").join(p)).append(")");
         } else {
             List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
@@ -1532,6 +1594,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     }
                     strBuilder.append(")");
                 }
+                break;
+            case GROUP_BY_ALL:
+                strBuilder.append("ALL");
                 break;
             default:
                 break;

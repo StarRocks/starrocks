@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW BACKENDS shows the information of all BE nodes in the cluster."
 ---
 
 # SHOW BACKENDS

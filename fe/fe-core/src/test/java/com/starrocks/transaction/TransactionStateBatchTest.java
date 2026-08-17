@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.system.ComputeNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -73,6 +74,53 @@ public class TransactionStateBatchTest {
 
         stateBatch.putBeTablets(partitionId2, nodeToTablets2);
         Assertions.assertEquals(2, stateBatch.getPartitionToTablets().size());
+    }
+
+    @Test
+    public void testSetTabletStats() {
+        long dbId = 1000L;
+        long tableId = 20000L;
+        long partitionId = 7L;
+        TransactionState[] txns = new TransactionState[] {
+                new TransactionState(dbId, Lists.newArrayList(tableId), 3000, "label1", UUIDUtil.genTUniqueId(),
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                        60 * 1000L),
+                new TransactionState(dbId, Lists.newArrayList(tableId), 3001, "label2", UUIDUtil.genTUniqueId(),
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                        60 * 1000L),
+        };
+        for (TransactionState txn : txns) {
+            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partitionId, 2L, 100L));
+            txn.putIdToTableCommitInfo(tableId, tableCommitInfo);
+        }
+        TransactionStateBatch stateBatch = new TransactionStateBatch(Lists.newArrayList(txns));
+
+        // null / empty -> no-op
+        stateBatch.setTabletStats(tableId, partitionId, null);
+        stateBatch.setTabletStats(tableId, partitionId, new HashMap<>());
+        Assertions.assertTrue(txns[0].getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId)
+                .getTabletStats().isEmpty());
+
+        // populated -> fanned onto every batched txn's PartitionCommitInfo
+        Map<Long, TabletStatPB> stats = new HashMap<>();
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 11L;
+        stat.dataSize = 222L;
+        stats.put(5L, stat);
+        stateBatch.setTabletStats(tableId, partitionId, stats);
+        for (TransactionState txn : txns) {
+            Map<Long, TabletStatPB> got =
+                    txn.getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId).getTabletStats();
+            Assertions.assertEquals(1, got.size());
+            Assertions.assertEquals(222L, (long) got.get(5L).dataSize);
+            Assertions.assertEquals(11L, (long) got.get(5L).numRows);
+        }
+
+        // partition absent from the commit info -> filtered out, no NPE
+        stateBatch.setTabletStats(tableId, 999L, stats);
     }
 
 }

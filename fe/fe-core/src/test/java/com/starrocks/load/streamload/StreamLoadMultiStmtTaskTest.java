@@ -33,12 +33,14 @@ import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class StreamLoadMultiStmtTaskTest {
@@ -150,14 +152,14 @@ public class StreamLoadMultiStmtTaskTest {
         map.put("t2", sub2);
         TransactionState txnState = new TransactionState();
         multiTask.beforePrepared(txnState);
-        multiTask.afterPrepared(txnState, true);
+        multiTask.afterPrepared(txnState);
         multiTask.replayOnPrepared(txnState);
         multiTask.beforeCommitted(txnState);
-        multiTask.afterCommitted(txnState, true);
+        multiTask.afterCommitted(txnState);
         multiTask.replayOnCommitted(txnState);
-        multiTask.afterAborted(txnState, true, "reason");
+        multiTask.afterAborted(txnState, "reason");
         multiTask.replayOnAborted(txnState);
-        multiTask.afterVisible(txnState, true);
+        multiTask.afterVisible(txnState);
         multiTask.replayOnVisible(txnState);
         List<List<String>> show = multiTask.getShowInfo();
         Assertions.assertEquals(2, show.size());
@@ -560,5 +562,574 @@ public class StreamLoadMultiStmtTaskTest {
         StreamLoadMultiStmtTask deserialized = GsonUtils.GSON.fromJson(json, StreamLoadMultiStmtTask.class);
         Assertions.assertDoesNotThrow(deserialized::cancelAfterRestart);
         Assertions.assertEquals("CANCELLED", deserialized.getStateName());
+    }
+
+    private StreamLoadTask addSubTask(String tableName, StreamLoadTask.State state) {
+        StreamLoadTask sub = new StreamLoadTask(2L, db, new OlapTable(), "label_multi", "u",
+                "127.0.0.1", 1000, 1, 0,
+                System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(sub, "tableName", tableName);
+        Deencapsulation.setField(sub, "state", state);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, StreamLoadTask> map =
+                (java.util.Map<String, StreamLoadTask>) Deencapsulation.getField(multiTask,
+                        "taskMaps");
+        map.put(tableName, sub);
+        return sub;
+    }
+
+    private void mockCommitTxnDependencies(long txnId) {
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(txnId);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+            }
+
+            @Mock
+            public void commitStmt(com.starrocks.qe.ConnectContext context,
+                                   com.starrocks.sql.ast.txn.CommitStmt stmt) {
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+        };
+    }
+
+    // ---- Commit success must propagate final state to sub-tasks so that
+    // information_schema.loads / SHOW STREAM LOAD do not show PREPARING forever ----
+    @Test
+    public void testCommitTxnPropagatesFinishedToSubTasksWhenTxnVisible() throws Exception {
+        mockCommitTxnDependencies(777L);
+        TransactionState visibleTxn = new TransactionState();
+        visibleTxn.setTransactionStatus(TransactionStatus.VISIBLE);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return visibleTxn;
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARED);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+        Assertions.assertTrue(sub.endTimeMs() > 0);
+        Assertions.assertEquals("FINISHED", multiTask.toThrift().get(0).getState());
+    }
+
+    @Test
+    public void testCommitTxnPropagatesCommittedWhenTxnStatusUnknown() throws Exception {
+        mockCommitTxnDependencies(778L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return null;
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARED);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+    }
+
+    // ---- Reconcile finding the txn committed must not leave sub-tasks CANCELLED ----
+    @Test
+    public void testReconcileCommittedPropagatesToSubTasksInsteadOfCancel() throws Exception {
+        ExplicitTxnState explicitState = new ExplicitTxnState();
+        TransactionState txnState = new TransactionState();
+        txnState.setTransactionStatus(TransactionStatus.VISIBLE);
+        explicitState.setTransactionState(txnState);
+        setupRollbackFailWithReconcileMock(300L, explicitState, false);
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.manualCancelTask(resp);
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+    }
+
+    // ---- New loads must be rejected while the commit is in progress ----
+    @Test
+    public void testTryLoadWhenCommiting() throws StarRocksException {
+        Deencapsulation.setField(multiTask, "state", StreamLoadMultiStmtTask.State.COMMITING);
+        TransactionResult resp = new TransactionResult();
+        Assertions.assertNull(multiTask.tryLoad(0, "t", resp));
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("committing"));
+    }
+
+    @Test
+    public void testExecuteTaskWhenCommiting() {
+        Deencapsulation.setField(multiTask, "state", StreamLoadMultiStmtTask.State.COMMITING);
+        HttpHeaders headers = new DefaultHttpHeaders();
+        TransactionResult resp = new TransactionResult();
+        Assertions.assertNull(multiTask.executeTask(0, "t", headers, resp));
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("committing"));
+    }
+
+    // ---- A COMMITED sub-task is upgraded to FINISHED once the txn becomes visible ----
+    @Test
+    public void testMarkCommittedByParentUpgradesCommittedToFinished() {
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        long now = System.currentTimeMillis();
+
+        sub.markCommittedByParent(false, now);
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+
+        // repeated non-visible propagation is a no-op
+        sub.markCommittedByParent(false, now + 1);
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+
+        sub.markCommittedByParent(true, now + 2);
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+        Assertions.assertEquals(now + 2, sub.endTimeMs());
+        // commitTimeMs from the first propagation is preserved
+        Assertions.assertEquals(now, sub.commitTimeMs());
+
+        // CANCELLED/FINISHED are never overridden
+        sub.markCommittedByParent(false, now + 3);
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+    }
+
+    // ---- The cleaner thread converges COMMITED sub-tasks once the txn is visible ----
+    @Test
+    public void testCheckNeedRemoveUpgradesCommittedSubTasksWhenVisible() {
+        TransactionState visibleTxn = new TransactionState();
+        visibleTxn.setTransactionStatus(TransactionStatus.VISIBLE);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return visibleTxn;
+            }
+        };
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.COMMITED);
+        Deencapsulation.setField(multiTask, "state", StreamLoadMultiStmtTask.State.COMMITED);
+        Deencapsulation.setField(multiTask, "endTimeMs", System.currentTimeMillis());
+
+        Assertions.assertFalse(multiTask.checkNeedRemove(System.currentTimeMillis(), false));
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+    }
+
+    // ---- Multi-table commit must dispatch every table's channel (prepareChannel)
+    // before blocking on any coordinator (waitCoordFinish), so the per-table flushes
+    // overlap on the BEs instead of running one-at-a-time ----
+    @Test
+    public void testCommitTxnFiresAllChannelsBeforeWaiting() throws Exception {
+        List<String> callOrder = new ArrayList<>();
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(890L);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+            }
+
+            @Mock
+            public void commitStmt(com.starrocks.qe.ConnectContext context,
+                                   com.starrocks.sql.ast.txn.CommitStmt stmt) {
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public void prepareChannel(int channelId, String tableName, HttpHeaders headers,
+                                       TransactionResult resp) {
+                callOrder.add("prepare:" + tableName);
+            }
+
+            @Mock
+            public boolean checkNeedPrepareTxn() {
+                return true;
+            }
+
+            @Mock
+            public void waitCoordFinish(TransactionResult resp) {
+                callOrder.add("wait");
+            }
+
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+        };
+        TransactionState visibleTxn = new TransactionState();
+        visibleTxn.setTransactionStatus(TransactionStatus.VISIBLE);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return visibleTxn;
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl2", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl3", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+
+        long prepareCount = callOrder.stream().filter(s -> s.startsWith("prepare:")).count();
+        long waitCount = callOrder.stream().filter(s -> s.equals("wait")).count();
+        Assertions.assertEquals(3, prepareCount);
+        Assertions.assertEquals(3, waitCount);
+
+        // Every prepareChannel must appear before the first waitCoordFinish.
+        int lastPrepareIdx = -1;
+        int firstWaitIdx = Integer.MAX_VALUE;
+        for (int i = 0; i < callOrder.size(); i++) {
+            if (callOrder.get(i).startsWith("prepare:")) {
+                lastPrepareIdx = i;
+            } else if (callOrder.get(i).equals("wait") && firstWaitIdx == Integer.MAX_VALUE) {
+                firstWaitIdx = i;
+            }
+        }
+        Assertions.assertTrue(lastPrepareIdx < firstWaitIdx,
+                "all prepareChannel calls must precede any waitCoordFinish, actual order: " + callOrder);
+    }
+
+    // ---- When a prepareChannel fails partway through the fire loop, the abort path must
+    // cancel EVERY sub-task's coordinator, including the ones already dispatched (in-flight)
+    // before the failure and the ones not yet reached ----
+    @Test
+    public void testCommitTxnCancelsAllSubTasksWhenPrepareChannelFails() throws Exception {
+        List<String> cancelled = new ArrayList<>();
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(891L);
+            }
+
+            @Mock
+            public void rollbackStmt(com.starrocks.qe.ConnectContext ctx,
+                                     com.starrocks.sql.ast.txn.RollbackStmt stmt) {
+                // rollback succeeds, so tryRollbackNow proceeds to cancel sub-tasks
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+                // tables dispatched before the failing one are drained into the txn
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public void prepareChannel(int channelId, String tableName, HttpHeaders headers,
+                                       TransactionResult resp) {
+                // Fail exactly one table; leave the others OK. Whichever iteration order
+                // ConcurrentHashMap picks, the abort path must still reach all sub-tasks.
+                if ("tbl2".equals(tableName)) {
+                    resp.setErrorMsg("prepareChannel failed for " + tableName);
+                }
+            }
+
+            @Mock
+            public boolean checkNeedPrepareTxn() {
+                return true;
+            }
+
+            @Mock
+            public void waitCoordFinish(TransactionResult resp) {
+            }
+
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+
+            @Mock
+            public void cancelCoordinatorOnly(Invocation inv, String reason) {
+                StreamLoadTask self = inv.getInvokedInstance();
+                cancelled.add(self.getTableName());
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl2", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl3", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+        // Every sub-task's coordinator must be cancelled, regardless of whether it was
+        // dispatched before the failing table or never reached.
+        Assertions.assertEquals(3, cancelled.size());
+        Assertions.assertTrue(cancelled.contains("tbl1"));
+        Assertions.assertTrue(cancelled.contains("tbl2"));
+        Assertions.assertTrue(cancelled.contains("tbl3"));
+    }
+
+    // ---- A prepareChannel failure must not drop the loads already dispatched before it:
+    // they must still be added to the transaction (loadData) so the rollback aborts them
+    // with their tablet infos instead of taking rollbackStmt's empty-item branch ----
+    @Test
+    public void testCommitTxnLoadsDispatchedTablesWhenLaterPrepareFails() throws Exception {
+        int[] prepareCalls = {0};
+        int[] loadCalls = {0};
+        boolean[] committed = {false};
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(893L);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+                loadCalls[0]++;
+            }
+
+            @Mock
+            public void commitStmt(com.starrocks.qe.ConnectContext context,
+                                   com.starrocks.sql.ast.txn.CommitStmt stmt) {
+                committed[0] = true;
+            }
+
+            @Mock
+            public void rollbackStmt(com.starrocks.qe.ConnectContext ctx,
+                                     com.starrocks.sql.ast.txn.RollbackStmt stmt) {
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public void prepareChannel(int channelId, String tableName, HttpHeaders headers,
+                                       TransactionResult resp) {
+                // Fail the second channel dispatched; the first is already dispatched.
+                prepareCalls[0]++;
+                if (prepareCalls[0] == 2) {
+                    resp.setErrorMsg("prepareChannel failed on the 2nd channel");
+                }
+            }
+
+            @Mock
+            public boolean checkNeedPrepareTxn() {
+                return true;
+            }
+
+            @Mock
+            public void waitCoordFinish(TransactionResult resp) {
+            }
+
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+
+            @Mock
+            public void cancelCoordinatorOnly(String reason) {
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl2", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl3", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+        // The one table dispatched before the failing 2nd prepare must still be loaded into
+        // the transaction; the pre-fix code returned immediately and loaded zero tables.
+        Assertions.assertEquals(1, loadCalls[0]);
+        Assertions.assertFalse(committed[0]);
+    }
+
+    // ---- A waitCoordFinish failure in the drain loop must abort the commit: record the
+    // error and STOP draining (break, not continue): a waitCoordFinish failure already
+    // aborted the shared transaction, so no later table may be loaded, and commit must not run ----
+    @Test
+    public void testCommitTxnStopsDrainingWhenWaitCoordFinishFails() throws Exception {
+        int[] waitCalls = {0};
+        int[] loadCalls = {0};
+        boolean[] committed = {false};
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(894L);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+                loadCalls[0]++;
+            }
+
+            @Mock
+            public void commitStmt(com.starrocks.qe.ConnectContext context,
+                                   com.starrocks.sql.ast.txn.CommitStmt stmt) {
+                committed[0] = true;
+            }
+
+            @Mock
+            public void rollbackStmt(com.starrocks.qe.ConnectContext ctx,
+                                     com.starrocks.sql.ast.txn.RollbackStmt stmt) {
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public void prepareChannel(int channelId, String tableName, HttpHeaders headers,
+                                       TransactionResult resp) {
+                // all channels dispatch OK
+            }
+
+            @Mock
+            public boolean checkNeedPrepareTxn() {
+                return true;
+            }
+
+            @Mock
+            public void waitCoordFinish(TransactionResult resp) {
+                // First dispatched table succeeds (and is loaded), the second fails. The loop
+                // must then break: a third wait must never run and its table must not be loaded.
+                waitCalls[0]++;
+                if (waitCalls[0] == 2) {
+                    resp.setErrorMsg("coordinator join failed");
+                }
+            }
+
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+
+            @Mock
+            public void cancelCoordinatorOnly(String reason) {
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl2", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl3", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+        // break (not continue): only 2 waits ran (stopped at the failing one) and only the
+        // first table was loaded; the third table is never waited or loaded, and commit never runs.
+        Assertions.assertEquals(2, waitCalls[0]);
+        Assertions.assertEquals(1, loadCalls[0]);
+        Assertions.assertFalse(committed[0]);
+    }
+
+    // ---- A file_bundling table joining the multi-statement txn turns on combined txn log ----
+    @Test
+    public void testFileBundlingTableEnablesCombinedTxnLog() {
+        Deencapsulation.setField(multiTask, "txnId", 4242L);
+        TransactionState txnState = new TransactionState();
+        Assertions.assertFalse(txnState.isUseCombinedTxnLog());
+        ExplicitTxnState explicitState = new ExplicitTxnState();
+        explicitState.setTransactionState(txnState);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState getExplicitTxnState(long id) {
+                return explicitState;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public Boolean isFileBundling() {
+                return true;
+            }
+        };
+
+        Deencapsulation.invoke(multiTask, "decideCombinedTxnLogFromFirstTable", new OlapTable());
+        Assertions.assertTrue(txnState.isUseCombinedTxnLog());
+    }
+
+    // ---- A non-file_bundling table leaves the combined txn log flag untouched ----
+    @Test
+    public void testNonFileBundlingTableDoesNotEnableCombinedTxnLog() {
+        Deencapsulation.setField(multiTask, "txnId", 4243L);
+        TransactionState txnState = new TransactionState();
+        ExplicitTxnState explicitState = new ExplicitTxnState();
+        explicitState.setTransactionState(txnState);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState getExplicitTxnState(long id) {
+                return explicitState;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public Boolean isFileBundling() {
+                return false;
+            }
+        };
+
+        Deencapsulation.invoke(multiTask, "decideCombinedTxnLogFromFirstTable", new OlapTable());
+        Assertions.assertFalse(txnState.isUseCombinedTxnLog());
+    }
+
+    // ---- No transaction state yet: a file_bundling table must not blow up ----
+    @Test
+    public void testEnableCombinedTxnLogNoExplicitTxnStateIsNoop() {
+        Deencapsulation.setField(multiTask, "txnId", 4244L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState getExplicitTxnState(long id) {
+                return null;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public Boolean isFileBundling() {
+                return true;
+            }
+        };
+
+        Assertions.assertDoesNotThrow(() ->
+                Deencapsulation.invoke(multiTask, "decideCombinedTxnLogFromFirstTable", new OlapTable()));
     }
 }

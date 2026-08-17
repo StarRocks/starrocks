@@ -39,12 +39,19 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PrintableMap;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTypeDesc;
@@ -67,6 +74,8 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable {
+    private static final String MASKED_LOCATION = "***";
+
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
     // The wildcard can *only* exist as function type, the caller will always be a
@@ -159,6 +168,14 @@ public class Function implements Writable {
 
     private boolean isMetaFunction = false;
 
+    @SerializedName(value = "cloud_configuration")
+    private CloudConfiguration cloudConfiguration;
+
+    // Input format passed to the BE ("arrow" for vectorized UDFs; null = the default per-row path).
+    // See TFunction.input_type and CreateFunctionStmt.INPUT_TYPE.
+    @SerializedName(value = "inputType")
+    private String inputType;
+
     // Only used for serialization
     protected Function() {
     }
@@ -236,6 +253,15 @@ public class Function implements Writable {
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
         aggStateDesc = other.aggStateDesc;
+        inputType = other.inputType;
+    }
+
+    public void setInputType(String inputType) {
+        this.inputType = inputType;
+    }
+
+    public String getInputType() {
+        return inputType;
     }
 
     public FunctionName getFunctionName() {
@@ -277,6 +303,14 @@ public class Function implements Writable {
 
     public void setLocation(HdfsURI loc) {
         location = loc;
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
+    }
+
+    public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
+        this.cloudConfiguration = cloudConfiguration;
     }
 
     public TFunctionBinaryType getBinaryType() {
@@ -749,7 +783,11 @@ public class Function implements Writable {
         if (location != null) {
             fn.setHdfs_location(location.toString());
         }
-
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            fn.setCloud_configuration(tCloudConfiguration);
+        }
         ArrayList<TTypeDesc> result = Lists.newArrayList();
         for (Type t : argTypes) {
             result.add(TypeSerializer.toThrift(t));
@@ -766,6 +804,9 @@ public class Function implements Writable {
         if (aggStateDesc != null) {
             fn.setAgg_state_desc(TypeSerializer.toThrift(aggStateDesc));
         }
+        if (inputType != null) {
+            fn.setInput_type(inputType);
+        }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
     }
@@ -773,6 +814,47 @@ public class Function implements Writable {
     // Child classes must override this function.
     public String toSql(boolean ifNotExists) {
         return "";
+    }
+
+    protected void appendCreateHeader(StringBuilder sb, String functionTypeKeyword, boolean ifNotExists) {
+        boolean isGlobal = getFunctionName().isGlobalFunction();
+        sb.append("CREATE ");
+        if (isGlobal) {
+            sb.append("GLOBAL ");
+        }
+        if (functionTypeKeyword != null && !functionTypeKeyword.isEmpty()) {
+            sb.append(functionTypeKeyword).append(" ");
+        }
+        sb.append("FUNCTION ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS ");
+        }
+        if (!isGlobal) {
+            sb.append(dbName()).append(".");
+        }
+    }
+
+    protected static void appendPropertiesBlock(StringBuilder sb, Map<String, String> props) {
+        if (props == null || props.isEmpty()) {
+            return;
+        }
+        sb.append("PROPERTIES (\n")
+                .append(new PrintableMap<>(props, "=", true, true, true))
+                .append("\n)\n");
+    }
+
+    protected static String binaryTypeToPropertyValue(TFunctionBinaryType type) {
+        if (type == null) {
+            return null;
+        }
+        switch (type) {
+            case SRJAR:
+                return CreateFunctionStmt.TYPE_STARROCKS_JAR;
+            case PYTHON:
+                return CreateFunctionStmt.TYPE_STARROCKS_PYTHON;
+            default:
+                return null;
+        }
     }
 
     public static Function getFunction(List<Function> fns, Function desc, CompareMode mode) {
@@ -870,7 +952,35 @@ public class Function implements Writable {
         return "";
     }
 
+    public String getProperties(boolean hideLocation) {
+        if (!hideLocation) {
+            return getProperties();
+        }
+
+        String properties = getProperties();
+        if (properties == null || properties.isEmpty()) {
+            return properties;
+        }
+
+        try {
+            JsonObject propertyObject = JsonParser.parseString(properties).getAsJsonObject();
+            if (propertyObject.has(CreateFunctionStmt.FILE_KEY)) {
+                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, MASKED_LOCATION);
+            }
+            if (propertyObject.has("object_file")) {
+                propertyObject.addProperty("object_file", MASKED_LOCATION);
+            }
+            return new Gson().toJson(propertyObject);
+        } catch (RuntimeException e) {
+            return properties;
+        }
+    }
+
     public List<Comparable> getInfo(boolean isVerbose) {
+        return getInfo(isVerbose, false);
+    }
+
+    public List<Comparable> getInfo(boolean isVerbose, boolean hideLocation) {
         List<Comparable> row = Lists.newArrayList();
         if (isVerbose) {
             // signature
@@ -895,12 +1005,11 @@ public class Function implements Writable {
                 row.add("SQL");
                 row.add("NULL");
             } else {
-                TableFunction tableFunc = (TableFunction) this;
                 row.add("Table");
                 row.add("NULL");
             }
             // property
-            row.add(getProperties());
+            row.add(getProperties(hideLocation));
         } else {
             row.add(functionName());
         }

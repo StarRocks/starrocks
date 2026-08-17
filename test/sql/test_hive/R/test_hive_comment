@@ -1,0 +1,40 @@
+-- name: test_hive_table_with_comment
+create external catalog hive_catalog_${uuid0} PROPERTIES (
+    "type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_catalog_${uuid0}.test_hive_comment_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/hive_catalog_${uuid0}/test_hive_comment_db_${uuid0}"
+);
+-- result:
+-- !result
+create table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_test (
+    id int comment 'id column comment',
+    name varchar(20) comment 'name column comment'
+)
+comment 'table level comment';
+-- result:
+-- !result
+show create table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_test;
+-- result:
+[REGEX]t_comment_test\s+CREATE TABLE `t_comment_test` \(
+\s+`id` int\(11\).*COMMENT "id column comment",
+\s+`name` varchar\(80\).*COMMENT "name column comment"
+\)
+COMMENT \("table level comment"\)
+\s*
+-- !result
+drop table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_test force;
+-- result:
+-- !result
+drop database hive_catalog_${uuid0}.test_hive_comment_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_catalog_${uuid0};
+-- result:
+-- !result

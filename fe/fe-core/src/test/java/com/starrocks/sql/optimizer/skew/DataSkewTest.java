@@ -16,12 +16,14 @@ package com.starrocks.sql.optimizer.skew;
 
 import com.google.crypto.tink.subtle.Random;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,6 +35,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DataSkewTest {
+
+    @AfterEach
+    void tearDown() {
+        ConnectContext.remove();
+    }
 
     private static ColumnRefOperator createNewTestColumn() {
         return new ColumnRefOperator(Random.randInt(), IntegerType.INT, UUID.randomUUID().toString(), true);
@@ -275,6 +282,60 @@ public class DataSkewTest {
         assertTrue(candidates.isSkewed());
         assertFalse(candidates.includeNull());
         assertFalse(candidates.mcvs().isEmpty());
+    }
+
+    @Test
+    void itShouldDetectSkewWhenInaccurateStatsAndSessionVariableEnabled() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        ctx.getSessionVariable().setEnableSkewDetectWithInaccurateStats(true);
+
+        final var skewedHistogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.01)
+                .setHistogram(skewedHistogram)
+                .build();
+
+        final var stats = Statistics.buildFrom(
+                new Statistics.Builder()
+                        .setOutputRowCount(100_000)
+                        .addColumnStatistic(col, colStats)
+                        .build())
+                .setTableRowCountMayInaccurate(true)
+                .build();
+
+        assertTrue(DataSkew.isColumnSkewed(stats, colStats));
+
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
+        assertEquals(DataSkew.SkewType.SKEWED_MCV, skewInfo.type());
+    }
+
+    @Test
+    void itShouldNotDetectSkewWhenInaccurateStatsAndSessionVariableDisabled() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+
+        final var skewedHistogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.01)
+                .setHistogram(skewedHistogram)
+                .build();
+
+        final var stats = Statistics.buildFrom(
+                new Statistics.Builder()
+                        .setOutputRowCount(100_000)
+                        .addColumnStatistic(col, colStats)
+                        .build())
+                .setTableRowCountMayInaccurate(true)
+                .build();
+
+        assertFalse(DataSkew.isColumnSkewed(stats, colStats));
+
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
+        assertEquals(DataSkew.SkewType.NOT_SKEWED, skewInfo.type());
+        assertEquals(DataSkew.AdditionalInfo.INACCURATE_ROW_COUNT, skewInfo.additionalInfo());
     }
 
     private static Histogram getSkewedHistogram() {

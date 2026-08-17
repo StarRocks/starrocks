@@ -258,6 +258,11 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
                 final MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                         mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
+                if (mvContext == null) {
+                    logMVRewrite(context, this,
+                            "Skip text-based rewrite for {} because its metadata copy is unavailable", mv.getName());
+                    continue;
+                }
                 final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
@@ -303,7 +308,11 @@ public class TextMatchBasedRewriteRule extends Rule {
             logMVRewrite(context, this, "MV is not active: {}", mv.getName());
             return Pair.create(false, "MV is not active");
         }
-
+        if (mv.getRefreshMode().isIncrementalOrAuto()) {
+            String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
+            logMVRewrite(context, this, message);
+            return Pair.create(false, message);
+        }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();

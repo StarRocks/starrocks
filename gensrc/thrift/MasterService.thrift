@@ -66,6 +66,7 @@ struct TTabletInfo {
     20: optional i64 max_rowset_creation_time
     21: optional i32 primary_index_cache_expire_sec
     22: optional i32 tablet_schema_version
+    23: optional i64 flat_json_config_version
 }
 
 struct TTabletVersionPair {
@@ -94,6 +95,9 @@ struct TFinishTaskRequest {
     17: optional list<TTabletVersionPair> tablet_versions;
     18: optional list<TTabletVersionPair> tablet_publish_versions;
     19: optional Types.TSnapshotInfo snapshot_info
+    // Placeholder for external cluster snapshot feature.
+    20: optional Types.TClusterSnapshotPartitionSpec cluster_snapshot_partition_spec
+    21: optional AgentService.TRestoreTabletResult restore_tablet_result
 }
 
 struct TTablet {

@@ -1,0 +1,40 @@
+-- name: test_mv_avg_distinct_rewrite
+CREATE DATABASE IF NOT EXISTS test_mv_avg_distinct_rewrite_db;
+-- result:
+-- !result
+USE test_mv_avg_distinct_rewrite_db;
+-- result:
+-- !result
+CREATE TABLE t_avgd (
+  k INT,
+  x INT
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_avgd VALUES (1, 10), (1, 10), (1, 40);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_avgd
+REFRESH MANUAL
+AS SELECT k, sum(x) AS s, count(x) AS c FROM t_avgd GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_avgd WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT k, avg(DISTINCT x) FROM t_avgd GROUP BY k ORDER BY k;
+-- result:
+1	25.0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT k, avg(DISTINCT x) FROM t_avgd GROUP BY k ORDER BY k;
+-- result:
+1	25.0
+-- !result
+SELECT k, avg(x) FROM t_avgd GROUP BY k ORDER BY k;
+-- result:
+1	20.0
+-- !result

@@ -187,6 +187,7 @@ public abstract class StarRocksHttpTestCase {
         Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
                 "testPartition", baseIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setDataVersion(testStartVersion);
         partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
@@ -244,6 +245,7 @@ public abstract class StarRocksHttpTestCase {
         Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
                 "testPartition", baseIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setDataVersion(testStartVersion);
         partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table

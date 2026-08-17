@@ -1,8 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "Configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in shared-data clusters."
 toc_max_heading_level: 2
 sidebar_position: 20
 ---
+
+import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -25,14 +28,11 @@ v3.4.0 以降、StarRocks は共有データクラスタ内の external catalog 
 
 ### キャッシュディレクトリ
 
-- [storage_root_path](../../administration/management/BE_configuration.md#storage_root_path) （共有データクラスタでは、この項目はキャッシュされたデータが保存されるルートパスを指定するために使用されます。）
+- [storage_root_path](../../administration/configuration/BE_parameters/BE_parameters.md#storage_root_path) （共有データクラスタでは、この項目はキャッシュされたデータが保存されるルートパスを指定するために使用されます。）
 
 ### キャッシュディスクサイズ
 
-- [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
-- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
-
-共有データクラスタ内のキャッシュのディスクサイズは、`datacache_disk_size` と `starlet_star_cache_disk_size_percent` のうち大きい方の値を取ります。
+- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 
 ## Data Cache の状態を確認
 
@@ -45,12 +45,21 @@ v3.4.0 以降、StarRocks は共有データクラスタ内の external catalog 
 
   通常、キャッシュされたデータは `storage_root_path` のサブパス `datacache/` に保存されます。
 
-- Data Cache が使用できるストレージの最大割合を確認するには、次のステートメントを実行します：
+- `DataCacheMetrics` フィールドを通じて Data Cache のディスク使用上限を確認するには、次のステートメントを実行します：
 
   ```SQL
-  SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
+  SHOW BACKENDS;
+  SHOW COMPUTE NODES;
   ```
+
+## クエリが Data Cache にヒットしたかどうかの確認
+
+Query Profile 内の以下のメトリクスを分析することで、クエリが Data Cache にヒットしたかどうかを確認できます。
+
+- `CompressedBytesReadRemote`: システムがリモートストレージシステムから読み込んだデータのサイズ。
+- `IOTimeRemote`: システムがリモートストレージシステムからデータを読み取るのに費やした I/O 時間。
+
+これらの値がゼロでない場合、クエリがデータキャッシュをヒットせず、システムがリモートストレージシステムからデータを読み取らなければならなかったことを意味します。
 
 ## Data Cache の監視
 
@@ -112,21 +121,8 @@ CN ノード上でキャッシュされたデータをクリアする手順は�
 
 - クラウドネイティブテーブルに対して `datacache.enable` プロパティが `false` に設定されている場合、そのテーブルに対して Data Cache は有効になりません。
 - `datacache.partition_duration` プロパティが特定の時間範囲に設定されている場合、その時間範囲を超えたデータはキャッシュされません。
-- 共有データクラスタを v3.3 から v3.2.8 以前にダウングレードした後、Data Cache のキャッシュされたデータを再利用する場合、ディレクトリ `starlet_cache` 内の Blockfile のファイル名形式を `blockfile_{n}.{version}` から `blockfile_{n}` に手動で変更し、バージョン情報のサフィックスを削除する必要があります。v3.2.9 以降のバージョンは v3.3 のファイル名形式と互換性があるため、この操作を手動で行う必要はありません。次のシェルスクリプトを実行して名前を変更できます：
 
-```Bash
-#!/bin/bash
-
-# Replace <starlet_cache_path> with the directory of Data Cache of your cluster, for example, /usr/be/storage/starlet_cache.
-starlet_cache_path="<starlet_cache_path>"
-
-for blockfile in ${starlet_cache_path}/blockfile_*; do
-    if [ -f "$blockfile" ]; then
-        new_blockfile=$(echo "$blockfile" | cut -d'.' -f1)
-        mv "$blockfile" "$new_blockfile"
-    fi
-done
-```
+<CacheStats />
 
 ## 既知の問題
 

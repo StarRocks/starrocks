@@ -275,6 +275,146 @@ public class QeProcessorImplTest {
     }
 
     @Test
+    public void testCoordinatorOnlyQueryInfoSkipped() throws StarRocksException {
+        // Queries registered with the coordinator-only constructor (sql == null, context == null),
+        // e.g. the historical registration in executeStmtWithExecPlan, must be filtered out by
+        // getQueryStatistics() and therefore stay invisible in current_queries.
+        Coordinator mockCoord = Mockito.mock(Coordinator.class);
+        Mockito.when(mockCoord.isDone()).thenReturn(false);
+
+        QeProcessorImpl.QueryInfo info = new QeProcessorImpl.QueryInfo(mockCoord);
+        Assertions.assertNull(info.getSql());
+        Assertions.assertNull(info.getConnectContext());
+
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, info);
+
+        Map<String, QueryStatisticsItem> stats = QeProcessorImpl.INSTANCE.getQueryStatistics();
+        Assertions.assertFalse(stats.containsKey(DebugUtil.printId(queryId)));
+
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+    }
+
+    @Test
+    public void testInternalQueryVisibleWhenRegisteredWithContextAndSql() throws StarRocksException {
+        // executeStmtWithExecPlan / executeStmtWithResultQueue now register coordinator-backed internal
+        // queries (statistics collection sub-queries, metadata collection, etc.) with the ConnectContext
+        // and SQL, so they become visible in current_queries / global_current_queries.
+        Mockito.when(mockContext.isPlanning()).thenReturn(false);
+        Mockito.when(mockContext.isPending()).thenReturn(false);
+
+        Coordinator mockCoord = Mockito.mock(Coordinator.class);
+        Mockito.when(mockCoord.getFragmentInstanceInfos()).thenReturn(Lists.newArrayList());
+        Mockito.when(mockCoord.getQueryProfile()).thenReturn(new RuntimeProfile("test"));
+        Mockito.when(mockCoord.getWarehouseName()).thenReturn("default_warehouse");
+        Mockito.when(mockCoord.getResourceGroupName()).thenReturn("");
+        Mockito.when(mockCoord.isDone()).thenReturn(false);
+
+        QeProcessorImpl.QueryInfo info = new QeProcessorImpl.QueryInfo(
+                mockContext, "INSERT INTO _statistics_.column_statistics SELECT ...", mockCoord);
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, info);
+
+        Map<String, QueryStatisticsItem> stats = QeProcessorImpl.INSTANCE.getQueryStatistics();
+        String queryIdStr = DebugUtil.printId(queryId);
+        Assertions.assertTrue(stats.containsKey(queryIdStr));
+        Assertions.assertEquals("RUNNING", stats.get(queryIdStr).getExecState());
+        Assertions.assertEquals("INSERT INTO _statistics_.column_statistics SELECT ...",
+                stats.get(queryIdStr).getSql());
+
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+    }
+
+    @Test
+    public void testQueryTypeClassification() throws StarRocksException {
+        Coordinator mockCoord = Mockito.mock(Coordinator.class);
+        Mockito.when(mockCoord.getFragmentInstanceInfos()).thenReturn(Lists.newArrayList());
+        Mockito.when(mockCoord.getQueryProfile()).thenReturn(new RuntimeProfile("test"));
+        Mockito.when(mockCoord.getWarehouseName()).thenReturn("wh");
+        Mockito.when(mockCoord.getResourceGroupName()).thenReturn("");
+        Mockito.when(mockCoord.isDone()).thenReturn(false);
+
+        // Statistics connection wins over query source -> "Statistics" (covers ANALYZE collection).
+        Mockito.when(mockContext.isStatisticsConnection()).thenReturn(true);
+        Mockito.when(mockContext.getQuerySource()).thenReturn(QueryDetail.QuerySource.INTERNAL);
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(mockContext, "sql", mockCoord));
+        Assertions.assertEquals("Statistics",
+                QeProcessorImpl.INSTANCE.getQueryStatistics().get(DebugUtil.printId(queryId)).getQueryType());
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+
+        // Task-submitted query -> "Task".
+        Mockito.when(mockContext.isStatisticsConnection()).thenReturn(false);
+        Mockito.when(mockContext.getQuerySource()).thenReturn(QueryDetail.QuerySource.TASK);
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(mockContext, "sql", mockCoord));
+        Assertions.assertEquals("Task",
+                QeProcessorImpl.INSTANCE.getQueryStatistics().get(DebugUtil.printId(queryId)).getQueryType());
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+
+        // Regular user query -> "Query".
+        Mockito.when(mockContext.getQuerySource()).thenReturn(QueryDetail.QuerySource.EXTERNAL);
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(mockContext, "sql", mockCoord));
+        Assertions.assertEquals("Query",
+                QeProcessorImpl.INSTANCE.getQueryStatistics().get(DebugUtil.printId(queryId)).getQueryType());
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+    }
+
+    @Test
+    public void testCoordinatorBackedQueryVisibleWhenContextStateFinished() throws StarRocksException {
+        // Internal queries (e.g. statistics collection) reuse a ConnectContext whose last-command state may
+        // already be EOF/OK while a new coordinator-backed statement is actively running. Liveness must be
+        // taken from the coordinator (isDone), not from context.getState().isRunning(), so such queries stay
+        // visible in current_queries.
+        QueryState finishedState = new QueryState();
+        finishedState.setEof(); // isRunning() == false
+        Mockito.when(mockContext.getState()).thenReturn(finishedState);
+        Mockito.when(mockContext.isPlanning()).thenReturn(false);
+        Mockito.when(mockContext.isPending()).thenReturn(false);
+
+        Coordinator mockCoord = Mockito.mock(Coordinator.class);
+        Mockito.when(mockCoord.getFragmentInstanceInfos()).thenReturn(Lists.newArrayList());
+        Mockito.when(mockCoord.getQueryProfile()).thenReturn(new RuntimeProfile("test"));
+        Mockito.when(mockCoord.getWarehouseName()).thenReturn("wh");
+        Mockito.when(mockCoord.getResourceGroupName()).thenReturn("");
+
+        // Coordinator still running -> visible despite the finished context state.
+        Mockito.when(mockCoord.isDone()).thenReturn(false);
+        QeProcessorImpl.INSTANCE.registerQuery(queryId,
+                new QeProcessorImpl.QueryInfo(mockContext, "SELECT ...", mockCoord));
+        Assertions.assertTrue(
+                QeProcessorImpl.INSTANCE.getQueryStatistics().containsKey(DebugUtil.printId(queryId)));
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+
+        // Coordinator done -> filtered out.
+        Mockito.when(mockCoord.isDone()).thenReturn(true);
+        QeProcessorImpl.INSTANCE.registerQuery(queryId,
+                new QeProcessorImpl.QueryInfo(mockContext, "SELECT ...", mockCoord));
+        Assertions.assertFalse(
+                QeProcessorImpl.INSTANCE.getQueryStatistics().containsKey(DebugUtil.printId(queryId)));
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+    }
+
+    @Test
+    public void testGetConnectContextByQueryId() throws StarRocksException {
+        Coordinator mockCoord = Mockito.mock(Coordinator.class);
+        Mockito.when(mockCoord.isDone()).thenReturn(false);
+
+        String queryIdStr = DebugUtil.printId(queryId);
+
+        // A coordinator-backed query registered with a ConnectContext is resolvable by its query id,
+        // so KILL QUERY can target it (e.g. statistics collection / task runs).
+        QeProcessorImpl.INSTANCE.registerQuery(queryId,
+                new QeProcessorImpl.QueryInfo(mockContext, "SELECT 1", mockCoord));
+        Assertions.assertSame(mockContext, QeProcessorImpl.INSTANCE.getConnectContextByQueryId(queryIdStr));
+        // Unknown query id resolves to null.
+        Assertions.assertNull(QeProcessorImpl.INSTANCE.getConnectContextByQueryId("does-not-exist"));
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+
+        // A coordinator-only registration (no ConnectContext) is not resolvable, matching its invisibility
+        // in current_queries.
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(mockCoord));
+        Assertions.assertNull(QeProcessorImpl.INSTANCE.getConnectContextByQueryId(queryIdStr));
+        QeProcessorImpl.INSTANCE.unregisterQuery(queryId);
+    }
+
+    @Test
     public void testFromPlanningQueryStartExecTime() throws StarRocksException {
         long beforeCreate = System.currentTimeMillis();
         QeProcessorImpl.QueryInfo info =

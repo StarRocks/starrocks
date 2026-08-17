@@ -19,9 +19,15 @@
 
 #include <cmath>
 
+#include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "exprs/binary_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/time_functions.h"
+#include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_state.h"
 
 #define PI acos(-1)
 
@@ -1283,6 +1289,40 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, AbsDecimalNullableAllNullPreservesScale) {
+    constexpr int precision = 38;
+    constexpr int input_scale = 8;
+    constexpr int result_scale = 12;
+
+    auto data_column = DecimalV3Column<int128_t>::create(precision, input_scale);
+    data_column->append_default(2);
+
+    auto null_column = NullColumn::create();
+    null_column->append(1);
+    null_column->append(1);
+
+    Columns columns;
+    columns.emplace_back(NullableColumn::create(std::move(data_column), std::move(null_column)));
+
+    FunctionContext::TypeDesc return_type;
+    return_type.type = TYPE_DECIMAL128;
+    return_type.precision = precision;
+    return_type.scale = result_scale;
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context(std::vector<FunctionContext::TypeDesc>(), return_type));
+
+    ColumnPtr result = MathFunctions::abs_decimal128(ctx.get(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    ASSERT_EQ(2, result->size());
+    ASSERT_TRUE(result->is_null(0));
+    ASSERT_TRUE(result->is_null(1));
+
+    auto result_data =
+            ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(result)).get();
+    EXPECT_EQ(precision, result_data->precision());
+    EXPECT_EQ(result_scale, result_data->scale());
+}
+
 TEST_F(VecMathFunctionsTest, CotTest) {
     {
         Columns columns;
@@ -1645,7 +1685,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_int<TYPE_INT>(ctx.get(), columns).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(4, v->get_data()[0]);
     }
 
@@ -1664,7 +1704,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(9, v->get_data()[0]);
     }
 
@@ -1747,7 +1787,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_string(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(8, v->get_data()[0]);
     }
 
@@ -1764,7 +1804,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_date(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(3, v->get_data()[0]);
     }
 
@@ -1781,8 +1821,69 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_datetime(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("UTC");
+        auto state = std::make_unique<RuntimeState>(globals);
+        std::unique_ptr<FunctionContext> ctx_with_state(FunctionContext::create_test_context());
+        ctx_with_state->set_runtime_state(state.get());
+
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(2000, 1, 1, 12, 12, 12));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(std::move(col1), 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result =
+                MathFunctions::iceberg_bucket_timestamptz_datetime(ctx_with_state.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("Asia/Shanghai");
+        auto state = std::make_unique<RuntimeState>(globals);
+        std::unique_ptr<FunctionContext> ctx_with_state(FunctionContext::create_test_context());
+        ctx_with_state->set_runtime_state(state.get());
+
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(1970, 1, 1, 1, 0, 0));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(std::move(col1), 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result =
+                MathFunctions::iceberg_bucket_timestamptz_datetime(ctx_with_state.get(), columns_const).value();
+
+        Columns normalized_columns_const;
+        auto normalized_col1 = TimestampColumn::create();
+        auto normalized_col2 = Int32Column::create();
+        normalized_col1->append(TimestampValue::create(1969, 12, 31, 17, 0, 0));
+        normalized_col2->append(10);
+        auto normalized_const_col1 = ConstColumn::create(std::move(normalized_col1), 1);
+        normalized_columns_const.emplace_back(std::move(normalized_const_col1));
+        normalized_columns_const.emplace_back(std::move(normalized_col2));
+
+        std::unique_ptr<FunctionContext> utc_ctx(FunctionContext::create_test_context());
+        ColumnPtr expected = MathFunctions::iceberg_bucket_datetime(utc_ctx.get(), normalized_columns_const).value();
+
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        ASSERT_EQ(ColumnHelper::as_column<Int32Column>(expected)->get_data()[0],
+                  ColumnHelper::as_column<Int32Column>(result)->get_data()[0]);
     }
 
     {
@@ -1813,6 +1914,245 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const);
         ASSERT_EQ(result.status().message(), "Truncate to integer failed, because the result is overflow.");
     }
+}
+
+// Helper: build an ArrayColumn<float> from a vector of float vectors.
+static ColumnPtr build_float_array_column(const std::vector<std::vector<float>>& rows) {
+    auto elements = NullableColumn::create(FloatColumn::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (const auto& row : rows) {
+        for (float v : row) {
+            elements->append_datum(Datum(v));
+        }
+        offsets->append(static_cast<uint32_t>(elements->size()));
+    }
+    return ArrayColumn::create(std::move(elements), std::move(offsets));
+}
+
+// cosine_similarity: both non-const columns
+TEST_F(VecMathFunctionsTest, cosineSimilarityBasic) {
+    // base = [[1, 0, 0], [0, 1, 0]], target = [[1, 0, 0], [0, 0, 1]]
+    auto base_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}, {0, 0, 1}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f); // identical vectors
+    ASSERT_FLOAT_EQ(res[1], 0.0f); // orthogonal vectors
+}
+
+// cosine_similarity: const base, non-const target
+TEST_F(VecMathFunctionsTest, cosineSimilarityConstBase) {
+    auto base_arr = build_float_array_column({{1, 0, 0}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 3);
+    auto target_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}, {1, 1, 0}});
+
+    Columns columns{base_const, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+    ASSERT_NEAR(res[2], 1.0f / std::sqrt(2.0f), 1e-5f);
+}
+
+// cosine_similarity: non-const base, const target
+TEST_F(VecMathFunctionsTest, cosineSimilarityConstTarget) {
+    auto base_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}, {1, 1, 0}});
+    auto target_arr = build_float_array_column({{1, 0, 0}});
+    auto target_const = ConstColumn::create(std::move(target_arr), 3);
+
+    Columns columns{base_col, target_const};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+    ASSERT_NEAR(res[2], 1.0f / std::sqrt(2.0f), 1e-5f);
+}
+
+// cosine_similarity: both const columns
+TEST_F(VecMathFunctionsTest, cosineSimilarityBothConst) {
+    auto base_arr = build_float_array_column({{1, 0, 0}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 2);
+    auto target_arr = build_float_array_column({{0, 1, 0}});
+    auto target_const = ConstColumn::create(std::move(target_arr), 2);
+
+    Columns columns{base_const, target_const};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 0.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+}
+
+// cosine_similarity with isNorm=true (pre-normalized vectors)
+TEST_F(VecMathFunctionsTest, cosineSimilarityNorm) {
+    float inv_sqrt2 = 1.0f / std::sqrt(2.0f);
+    auto base_col = build_float_array_column({{1, 0, 0}, {inv_sqrt2, inv_sqrt2, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}, {inv_sqrt2, 0, inv_sqrt2}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, true>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_NEAR(res[1], 0.5f, 1e-5f);
+}
+
+TEST_F(VecMathFunctionsTest, innerProduct) {
+    auto base_col = build_float_array_column({{2, 3, -1}, {1, 2, 3}});
+    auto target_col = build_float_array_column({{4, -2, 5}, {2, 0, 1}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], -3.0f);
+    ASSERT_FLOAT_EQ(res[1], 5.0f);
+}
+
+TEST_F(VecMathFunctionsTest, innerProductConstColumns) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        auto base = ConstColumn::create(build_float_array_column({{2, 3}}), 2);
+        auto target = build_float_array_column({{4, 5}, {1, -1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_TRUE(result.ok());
+        auto* data = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+        EXPECT_FLOAT_EQ(data[0], 23.0f);
+        EXPECT_FLOAT_EQ(data[1], -1.0f);
+    }
+
+    {
+        auto base = build_float_array_column({{4, 5}, {1, -1}});
+        auto target = ConstColumn::create(build_float_array_column({{2, 3}}), 2);
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_TRUE(result.ok());
+        auto* data = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+        EXPECT_FLOAT_EQ(data[0], 23.0f);
+        EXPECT_FLOAT_EQ(data[1], -1.0f);
+    }
+}
+
+TEST_F(VecMathFunctionsTest, innerProductInvalidArguments) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        auto base = build_float_array_column({{1, 2}});
+        auto target = build_float_array_column({{1, 2}, {3, 4}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays. base array size is 1 and target array size is 2.");
+    }
+
+    {
+        auto base = NullableColumn::create(build_float_array_column({{1}}), NullColumn::create(1, 1));
+        auto target = build_float_array_column({{1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(), "inner_product does not support null values. base array has null value.");
+    }
+
+    {
+        auto elements = NullableColumn::create(FloatColumn::create(), NullColumn::create());
+        elements->append_nulls(1);
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(1);
+        auto base = ArrayColumn::create(std::move(elements), std::move(offsets));
+        auto target = build_float_array_column({{1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(), "inner_product does not support null values");
+    }
+
+    {
+        auto base = ConstColumn::create(build_float_array_column({{1, 2}}), 2);
+        auto target = build_float_array_column({{1, 2, 3}, {4, 5, 6}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays in each row. base array dimension size is 2, target "
+                  "array dimension size is 3.");
+    }
+
+    {
+        auto base = build_float_array_column({{1, 2, 3}, {4, 5, 6}});
+        auto target = ConstColumn::create(build_float_array_column({{1, 2}}), 2);
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays in each row. base array dimension size is 3, target "
+                  "array dimension size is 2.");
+    }
+}
+
+TEST_F(VecMathFunctionsTest, innerProductDiffersFromCosineForUnnormalizedVectors) {
+    auto base_col = build_float_array_column({{2, 0}});
+    auto target_col = build_float_array_column({{3, 0}});
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto inner_product = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), columns);
+    ASSERT_TRUE(inner_product.ok());
+    auto cosine_similarity = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(cosine_similarity.ok());
+
+    ASSERT_FLOAT_EQ(ColumnHelper::cast_to<TYPE_FLOAT>(inner_product.value())->get_data()[0], 6.0f);
+    ASSERT_FLOAT_EQ(ColumnHelper::cast_to<TYPE_FLOAT>(cosine_similarity.value())->get_data()[0], 1.0f);
+}
+
+// cosine_similarity: zero vector returns 0 (not NaN/inf)
+TEST_F(VecMathFunctionsTest, cosineSimilarityZeroVector) {
+    auto base_col = build_float_array_column({{0, 0, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 0.0f);
+}
+
+// cosine_similarity: tiny magnitude vectors should not produce inf/nan
+TEST_F(VecMathFunctionsTest, cosineSimilarityTinyMagnitude) {
+    float tiny = 1e-20f;
+    auto base_arr = build_float_array_column({{tiny, tiny, tiny}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 2);
+    auto target_col = build_float_array_column({{tiny, tiny, tiny}, {tiny, 0, 0}});
+
+    Columns columns{base_const, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_TRUE(std::isfinite(res[0]));
+    ASSERT_TRUE(std::isfinite(res[1]));
+    ASSERT_NEAR(res[0], 1.0f, 1e-3f); // same direction
+}
+
+// cosine_similarity: dimension mismatch should return error
+TEST_F(VecMathFunctionsTest, cosineSimilarityDimMismatch) {
+    auto base_col = build_float_array_column({{1, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_FALSE(result.ok());
 }
 
 } // namespace starrocks

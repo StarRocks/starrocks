@@ -38,6 +38,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -628,18 +629,19 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         try {
             RuntimeProfile profile = new RuntimeProfile("Load");
             RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+            java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
             summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
             summaryProfile.addInfoString(ProfileManager.START_TIME,
-                    TimeUtils.longToTimeString(loadTimeTrace.createTimeMs));
+                    TimeUtils.longToTimeStringWithTimeZone(loadTimeTrace.createTimeMs, profileZone));
             summaryProfile.addInfoString(ProfileManager.END_TIME,
-                    TimeUtils.longToTimeString(loadTimeTrace.endTimeMs.get()));
+                    TimeUtils.longToTimeStringWithTimeZone(loadTimeTrace.endTimeMs.get(), profileZone));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME,
                     DebugUtil.getPrettyStringMs(loadTimeTrace.totalCostMs()));
             summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
             summaryProfile.addInfoString(ProfileManager.QUERY_STATE, taskState.name());
             summaryProfile.addInfoString("State Message", taskStateMessage);
             summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, LOAD_TYPE_NAME);
-            summaryProfile.addInfoString("StarRocks Version",
+            summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                     String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
             summaryProfile.addInfoString("Default Db", tableRef.getDbName());
             summaryProfile.addInfoString("Table", tableRef.getTableName());
@@ -647,7 +649,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, warehouseName);
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(collectProfileCostMs.get()));
-            summaryProfile.addInfoString("IsProfileAsync", String.valueOf(true));
+            summaryProfile.addInfoString(ProfileKeyDictionary.IS_PROFILE_ASYNC, String.valueOf(true));
             summaryProfile.addInfoString("Pending Time",
                     DebugUtil.getPrettyStringMs(loadTimeTrace.pendingCostMs.get()));
             summaryProfile.addInfoString("Label", label);
@@ -795,7 +797,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
         // This transaction abort must come from outside, because run() removes the callback before abort txn.
         cancel(txnStatusChangeReason);
@@ -923,6 +925,24 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             info.setLoad_start_time(TimeUtils.longToTimeString(loadTimeTrace.startTimeMs.get()));
             info.setLoad_commit_time(TimeUtils.longToTimeString(loadTimeTrace.commitTimeMs.get()));
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs()));
+            // New BE prefers these UTC epoch-ms fields (rendered in the session zone),
+            // so the displayed column value and any predicate literal evaluated in the
+            // same session agree on the wall-clock representation.
+            long startMs = loadTimeTrace.startTimeMs.get();
+            long commitMs = loadTimeTrace.commitTimeMs.get();
+            long finishMs = endTimeMs();
+            if (loadTimeTrace.createTimeMs > 0) {
+                info.setCreate_time_ms(loadTimeTrace.createTimeMs);
+            }
+            if (startMs > 0) {
+                info.setLoad_start_time_ms(startMs);
+            }
+            if (commitMs > 0) {
+                info.setLoad_commit_time_ms(commitMs);
+            }
+            if (finishMs > 0) {
+                info.setLoad_finish_time_ms(finishMs);
+            }
 
             info.setWarehouse(warehouseName);
             info.setRuntime_details(getRuntimeDetails());

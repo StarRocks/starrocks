@@ -1,0 +1,28 @@
+-- name: test_array_map_in_predicate_reuse
+CREATE TABLE array_map_in_reuse_t (
+  id INT,
+  arr_datetime ARRAY<DATETIME>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into array_map_in_reuse_t values
+  (1, ['2024-01-15 00:00:00', '2024-02-20 00:00:00']),
+  (2, ['2024-03-10 00:00:00']),
+  (3, ['2024-01-01 00:00:00']);
+
+set enable_predicate_expr_reuse = true;
+
+WITH input AS (
+    SELECT id, ARRAY_MAP(arg -> (CAST(MONTH(arg) AS BIGINT) IN (1, 2)), arr_datetime) AS arr
+    FROM array_map_in_reuse_t
+)
+SELECT id, CAST(1 AS BIGINT) FROM input WHERE ARRAY_SUM(arr) ORDER BY id;
+
+SELECT id, CAST(1 AS BIGINT)
+FROM array_map_in_reuse_t
+WHERE ARRAY_SUM(ARRAY_MAP(arg -> (CAST(MONTH(arg) AS BIGINT) IN (1, 2)), arr_datetime))
+ORDER BY id;

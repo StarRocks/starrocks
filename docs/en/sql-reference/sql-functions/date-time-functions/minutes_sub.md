@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Subtracts specified minutes from the date, accurate to the minute."
 ---
 
 # minutes_sub

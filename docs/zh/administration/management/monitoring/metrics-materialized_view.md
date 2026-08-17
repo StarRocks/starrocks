@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+description: "Asynchronous materialized view monitoring metrics support from v3.1 onwards."
+sidebar_position: 20
 ---
 
 # 异步物化视图监控指标
@@ -35,17 +37,17 @@ scrape_configs:
 ### mv_refresh_jobs
 
 - 类型：Counter
-- 描述：物化视图刷新作业的总数。
+- 描述：物化视图触发的刷新作业总数。一个刷新作业对应一次用户发起或调度的刷新；单个作业内部可能执行多个 Task Run。每个作业在达到终止状态时计数一次。MERGED 状态的 Task Run（被合并到后续批次的子任务）不计入。
 
 ### mv_refresh_total_success_jobs
 
 - 类型：Counter
-- 描述：执行成功的物化视图刷新作业的数量。
+- 描述：执行成功的物化视图刷新作业的数量。每个作业成功时计数一次。
 
 ### mv_refresh_total_failed_jobs
 
 - 类型：Counter
-- 描述：执行失败的物化视图刷新作业的数量。
+- 描述：执行失败的物化视图刷新作业的数量。每个作业失败时计数一次。
 
 ### mv_refresh_total_empty_jobs
 
@@ -110,4 +112,48 @@ scrape_configs:
 ### mv_refresh_duration
 
 - 类型：Histogram
-- 描述：执行成功的物化视图刷新作业的持续时间。
+- 描述：刷新作业的挂钟时长，单位为毫秒。对于多批次作业，从第一个 Task Run 开始到最后一个 Task Run 完成为止计算。
+
+### mv_global_count
+
+- 类型：Gauge
+- 描述：集群中异步物化视图的当前数量，包含标签 `refresh_mode`（物化视图的刷新模式）和 `status`（`ACTIVE` 或 `INACTIVE`）。该指标始终输出，不受单个物化视图指标权限的限制。
+
+### mv_global_query_rewrite_queries_total
+
+- 类型：Counter
+- 描述：按物化视图改写结果分组的查询数量，标签 `state` 取值：`HIT`（查询被改写为使用物化视图）、`NO_HIT`（已启用改写但未使用任何物化视图）或 `DISABLED`（会话变量或 FE 配置关闭了物化视图改写）。每个查询计一次。
+
+### mv_global_query_mv_usage_total
+
+- 类型：Counter
+- 描述：物化视图被查询使用的次数，包含标签 `usage_type`（`REWRITE` 表示查询被改写为使用物化视图，`DIRECT` 表示直接查询物化视图）和 `refresh_mode`。
+### mv_global_refresh_jobs_total
+
+- 类型：Counter
+- 描述：全集群所有物化视图的刷新作业总数，带标签 `warehouse_name`。它是 `mv_refresh_jobs` 的 fleet 级聚合：每个作业在其终止 Task Run 上计一次，排除 `MERGED` run。始终输出，不受单个物化视图指标权限的限制。
+
+### mv_global_refresh_success_jobs_total
+
+- 类型：Counter
+- 描述：全集群所有物化视图执行成功的刷新作业总数，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_failed_jobs_total
+
+- 类型：Counter
+- 描述：全集群所有物化视图执行失败的刷新作业总数，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_duration
+
+- 类型：Histogram
+- 描述：物化视图刷新作业的每作业挂钟时长，单位为毫秒，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_pending_jobs
+
+- 类型：Gauge
+- 描述：全集群所有物化视图当前处于等待中的刷新作业数，按 `warehouse_name` 聚合。
+
+### mv_global_refresh_running_jobs
+
+- 类型：Gauge
+- 描述：全集群所有物化视图当前正在运行的刷新作业数，按 `warehouse_name` 聚合。

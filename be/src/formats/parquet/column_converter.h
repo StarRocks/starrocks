@@ -19,7 +19,7 @@
 
 #include "base/bit/bit_util.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
 #include "formats/parquet/types.h"

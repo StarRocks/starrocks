@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中通过时间范围或列表分区创建分区物化视图，实现增量刷新和分区级查询改写。"
 sidebar_position: 40
 ---
 

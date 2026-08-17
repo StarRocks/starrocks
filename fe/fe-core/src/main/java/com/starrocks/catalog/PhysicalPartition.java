@@ -116,6 +116,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "nextVersion")
     private long nextVersion;
 
+    // Last time this physical partition was modified by a USER write (load/DML)0 = unknown.
+    @SerializedName(value = "lastUpdateTime")
+    private volatile long lastUpdateTime = 0;
+
     @SerializedName(value = "dataVersion")
     private long dataVersion;
     @SerializedName(value = "nextDataVersion")
@@ -154,6 +158,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
     private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+
+    // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
+    //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
+    // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
+    private volatile long lastMinActiveTxnId = 0;
 
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
@@ -288,6 +297,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.lastSuccVacuumVersion.set(lastSuccVacuumVersion);
     }
 
+    public long getLastMinActiveTxnId() {
+        return lastMinActiveTxnId;
+    }
+
+    public void setLastMinActiveTxnId(long lastMinActiveTxnId) {
+        this.lastMinActiveTxnId = lastMinActiveTxnId;
+    }
+
     public long getExtraFileSize() {
         return extraFileSize.get();
     }
@@ -308,8 +325,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public void updateVersionForRestore(long visibleVersion) {
         this.setVisibleVersion(visibleVersion, System.currentTimeMillis());
         this.nextVersion = this.visibleVersion + 1;
-        LOG.info("update partition {} version for restore: visible: {}, next: {}",
-                id, visibleVersion, nextVersion);
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        LOG.info("update partition {} version for restore: visible: {}, next: {}, dataVersion: {}, nextDataVersion: {}",
+                id, visibleVersion, nextVersion, dataVersion, nextDataVersion);
     }
 
     public void updateVisibleVersion(long visibleVersion) {
@@ -337,6 +356,16 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return visibleVersionTime;
     }
 
+    public long getLastUpdateTime() {
+        return lastUpdateTime;
+    }
+
+    public void updateLastUpdateTime(long newTime) {
+        if (newTime > lastUpdateTime) {
+            lastUpdateTime = newTime;
+        }
+    }
+
     public void setVisibleVersion(long visibleVersion, long visibleVersionTime) {
         this.visibleVersion = visibleVersion;
         this.visibleVersionTime = visibleVersionTime;
@@ -357,6 +386,24 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
         Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
                 String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
+        return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
+    }
+
+    /**
+     * The latest visible base index, or null when it cannot be resolved.
+     *
+     * <p>Unlike {@link #getLatestBaseIndex()}, which fails a {@code Preconditions} check, this never
+     * throws: a physical partition can legitimately carry no base index at all, as an
+     * {@link ExternalOlapTable}'s metadata sync leaves {@code baseIndexMetaId} at -1. Read-only paths
+     * that merely display metadata use this variant so such a partition degrades to a fallback value
+     * instead of failing the whole statement. Visible indexes only, unlike
+     * {@link #getLatestIndex(long)}.
+     */
+    public MaterializedIndex getLatestBaseIndexOrNull() {
+        List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        if (indexIds == null || indexIds.isEmpty()) {
+            return null;
+        }
         return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
     }
 
@@ -642,7 +689,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         // The fe unit test need to check the selected index id without any data.
         // So if set FeConstants.runningUnitTest, we can ensure that the number of partitions is not empty,
         // And the test case can continue to execute the logic of 'select best roll up'
-        return ((visibleVersion != PARTITION_INIT_VERSION)
+        return ((dataVersion != PARTITION_INIT_VERSION && visibleVersion != PARTITION_INIT_VERSION)
                 || FeConstants.runningUnitTest);
     }
 
@@ -683,6 +730,33 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setBucketNum(int bucketNum) {
         this.bucketNum = bucketNum;
+    }
+
+    /**
+     * The number of buckets to report for this physical partition.
+     *
+     * <p>Under range distribution the tablet count is dynamic -- tablet split, merge and pre-split all
+     * change it -- while {@link RangeDistributionInfo#getBucketNum()} always answers 1 and
+     * {@code bucketNum} is only ever seeded at creation, so the count is taken from the latest visible
+     * base index instead. Rollup indexes on the same partition can hold a different number of tablets;
+     * the base index is the partition's reference layout, and it is the one that already equals
+     * {@code bucketNum} under hash distribution.
+     *
+     * <p>Every other distribution, and a range partition whose base index is unresolvable or holds no
+     * tablets, keeps the stored per-physical bucket number and falls back to the table-level
+     * distribution default.
+     *
+     * @param distributionInfo the partition's own distribution, from {@link Partition#getDistributionInfo()}; must not be null
+     */
+    public int getActualBucketNum(DistributionInfo distributionInfo) {
+        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            MaterializedIndex baseIndex = getLatestBaseIndexOrNull();
+            int tabletNum = baseIndex != null ? baseIndex.getTablets().size() : 0;
+            if (tabletNum > 0) {
+                return tabletNum;
+            }
+        }
+        return bucketNum > 0 ? bucketNum : distributionInfo.getBucketNum();
     }
 
     @Override

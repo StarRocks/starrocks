@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "base/simd/simd_utils.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "glog/logging.h"
 #include "types/logical_type.h"
 #ifdef __AVX2__

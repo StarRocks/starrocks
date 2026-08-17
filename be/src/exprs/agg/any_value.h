@@ -19,7 +19,7 @@
 
 #include "base/container/raw_container.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "exprs/function_context.h"
@@ -66,7 +66,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK(!columns[0]->is_nullable());
-        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        const auto& column = *columns[0];
         OP()(this->data(state), AggDataTypeTraits<LT>::get_row_ref(column, row_num));
     }
 
@@ -77,8 +77,7 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(!column->is_nullable());
-        const auto& input_column = down_cast<const InputColumnType&>(*column);
-        OP()(this->data(state), AggDataTypeTraits<LT>::get_row_ref(input_column, row_num));
+        OP()(this->data(state), AggDataTypeTraits<LT>::get_row_ref(*column, row_num));
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

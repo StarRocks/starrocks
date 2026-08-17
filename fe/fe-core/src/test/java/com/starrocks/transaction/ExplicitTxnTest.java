@@ -23,13 +23,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -40,33 +40,52 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class ExplicitTxnTest {
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @BeforeAll
     public static void init() throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -76,9 +95,7 @@ public class ExplicitTxnTest {
         context.setThreadLocalInfo();
         context.setGlobalStateMgr(globalStateMgr);
 
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        UtFrameUtils.setUpForPersistTest();
 
         MockedLocalMetaStore localMetastore = new MockedLocalMetaStore(globalStateMgr, globalStateMgr.getRecycleBin(), null);
         globalStateMgr.setLocalMetastore(localMetastore);
@@ -153,6 +170,22 @@ public class ExplicitTxnTest {
 
         Assertions.assertTrue(context.getState().isError());
         Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+    }
+
+    @Test
+    public void testShowStmtAllowedInExplicitTxn() {
+        // SHOW statements are read-only metadata queries and must be allowed inside an
+        // explicit transaction (regression for ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT on SHOW GRANTS / SHOW WAREHOUSES).
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setTxnId(1);
+
+        ShowGrantsStmt showGrants = new ShowGrantsStmt(new UserRef("u1", "%"), NodePosition.ZERO);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(showGrants, context));
+
+        ShowWarehousesStmt showWarehouses = new ShowWarehousesStmt(null);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(showWarehouses, context));
     }
 
     @Test
@@ -281,6 +314,79 @@ public class ExplicitTxnTest {
         LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
         LoadJob loadJob = loadMgr.getLoadJobs(label).get(0);
         Assertions.assertEquals(JobState.CANCELLED, loadJob.getState());
+    }
+
+    @Test
+    public void testPartialUpdateOnModifiedTableRejected() throws IOException, DdlException {
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<String, String>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+                return counters;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setExecutionId(new TUniqueId(10, 11));
+        context.setLastQueryId(new UUID(12L, 13L));
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        // Statement 1: a normal write marks tbl1 as modified in this explicit transaction.
+        String sql = "insert into db1.tbl1 values(1,2,3)";
+        DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt, context);
+        TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt, stmt.getOrigStmt(), context);
+        Assertions.assertFalse(context.getState().isError());
+
+        // Statement 2: a partial-update INSERT targeting the already-modified tbl1 must be rejected
+        // with ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE (5308).
+        InsertStmt partialUpdate = mock(InsertStmt.class);
+        when(partialUpdate.usePartialUpdate()).thenReturn(true);
+        when(partialUpdate.getTargetTable()).thenReturn(olapTable);
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> ExplicitTxnStatementValidator.validate(partialUpdate, context));
+        Assertions.assertTrue(e.getMessage().contains("Partial update cannot be applied to table"),
+                "unexpected message: " + e.getMessage());
+
+        // A partial update targeting a different, not-yet-modified table is allowed.
+        OlapTable otherTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db2", "tbl1");
+        InsertStmt partialUpdateOther = mock(InsertStmt.class);
+        when(partialUpdateOther.usePartialUpdate()).thenReturn(true);
+        when(partialUpdateOther.getTargetTable()).thenReturn(otherTable);
+        Assertions.assertDoesNotThrow(() -> ExplicitTxnStatementValidator.validate(partialUpdateOther, context));
     }
 
     @Test
@@ -537,5 +643,308 @@ public class ExplicitTxnTest {
         Assertions.assertEquals(0, context.getTxnId());
         Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
         Assertions.assertEquals("database 0 is not found", context.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testCommitTimeoutPassedInMilliseconds() {
+        // Regression: commitStmt() reads query_timeout (seconds) and previously passed it
+        // directly to GlobalTransactionMgr.retryCommitOnRateLimitExceeded(..., long timeoutMs),
+        // causing a 300s query_timeout to become a 300ms lock wait.
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        int queryTimeoutS = 300;
+        context.getSessionVariable().setQueryTimeoutS(queryTimeoutS);
+
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assertions.assertNotNull(db1);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState transactionState = new TransactionState(transactionId, "timeout-unit-test", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                context.getExecTimeout() * 1000L);
+        transactionState.setDbId(db1.getId());
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+
+        ExplicitTxnState.ExplicitTxnStateItem item = new ExplicitTxnState.ExplicitTxnStateItem();
+        item.setTabletCommitInfos(List.of());
+        item.setTabletFailInfos(List.of());
+        explicitTxnState.addTransactionItem(item);
+
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        context.setTxnId(transactionId);
+
+        long[] capturedTimeoutMs = {-1L};
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public VisibleStateWaiter retryCommitOnRateLimitExceeded(
+                    Database db, long txnId, List<TabletCommitInfo> commitInfos, List<TabletFailInfo> failInfos,
+                    TxnCommitAttachment attachment, long timeoutMs) throws LockTimeoutException {
+                capturedTimeoutMs[0] = timeoutMs;
+                // Short-circuit the rest of commitStmt; the exception is caught and reported as error.
+                throw new LockTimeoutException(
+                        "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
+            }
+        };
+
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals((long) queryTimeoutS * 1000L, capturedTimeoutMs[0],
+                "query_timeout (" + queryTimeoutS + "s) must be passed to retryCommitOnRateLimitExceeded "
+                        + "as milliseconds, got " + capturedTimeoutMs[0]);
+    }
+
+    @Test
+    public void testCommitWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // commitStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99999);
+
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testRollbackWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // rollbackStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99998);
+
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testBeginWithLostTransactionState() {
+        // When txnId is set but explicitTxnState was cleared (e.g., timeout cleanup),
+        // beginStmt should reset and create a new transaction instead of NPE.
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(900, 901);
+        context.setExecutionId(queryId);
+
+        // Simulate stale txnId without matching explicitTxnState
+        context.setTxnId(88888);
+
+        // BEGIN should recover by creating a new transaction
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "recovery_label"));
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertNotEquals(88888, context.getTxnId());
+        Assertions.assertTrue(context.getState().getInfoMessage().contains("'label':'recovery_label'"));
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testCleanupClearsExplicitTxnState() {
+        // Test that ConnectContext.cleanup() properly clears explicitTxnStateMap entries
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(950, 951);
+        context.setExecutionId(queryId);
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "cleanup_test_label"));
+        long txnId = context.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+        Assertions.assertNotNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+
+        // Simulate connection disconnect
+        context.cleanup();
+
+        // Verify explicitTxnState was cleaned up
+        Assertions.assertNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupExplicitTxnState() {
+        // Test that abortTimeoutTxns() cleans up timed-out explicit transaction states
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // Create a transaction state with a very short timeout (already expired)
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId();
+        TransactionState transactionState = new TransactionState(transactionId, "timeout_test_label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
+                1L); // 1ms timeout
+        transactionState.setPrepareTime(System.currentTimeMillis() - 10000); // Started 10 seconds ago
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the timed-out state was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupOrphanedNullState() {
+        // Test that abortTimeoutTxns() also cleans up entries where transactionState is null
+        // (orphaned entries from lost state, e.g., after FE leader switch)
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        long orphanTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState orphanState = new ExplicitTxnState();
+        // transactionState is null by default - simulates orphaned entry
+        globalTransactionMgr.addTransactionState(orphanTxnId, orphanState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the orphaned null-state entry was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+    }
+
+    @Test
+    public void testBeginWithStaleExplicitTxnStateClearsEntry() {
+        // Test that beginStmt clears the stale map entry when explicitTxnState exists
+        // but transactionState is null
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(960, 961);
+        context.setExecutionId(queryId);
+
+        // Add a stale entry with null transactionState
+        long staleTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState staleState = new ExplicitTxnState();
+        globalTransactionMgr.addTransactionState(staleTxnId, staleState);
+        context.setTxnId(staleTxnId);
+
+        // beginStmt should detect the lost state, clean up stale entry, and start fresh
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "stale_cleanup_label"));
+
+        // Stale entry should be removed from the map
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(staleTxnId));
+        // A new transaction should have been started
+        Assertions.assertNotEquals(0, context.getTxnId());
+        Assertions.assertNotEquals(staleTxnId, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testBeginWithLabelAlreadyUsedByAnotherSession() {
+        // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
+        // with the same label
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        ConnectContext first = new ConnectContext();
+        first.setThreadLocalInfo();
+        first.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        first.setExecutionId(new TUniqueId(970, 971));
+        TransactionStmtExecutor.beginStmt(first, new BeginStmt(NodePosition.ZERO, "duplicated_label"));
+        Assertions.assertFalse(first.getState().isError());
+        Assertions.assertNotEquals(0, first.getTxnId());
+
+        ConnectContext second = new ConnectContext();
+        second.setThreadLocalInfo();
+        second.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        second.setExecutionId(new TUniqueId(972, 973));
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> TransactionStmtExecutor.beginStmt(second, new BeginStmt(NodePosition.ZERO, "duplicated_label")));
+        Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+        // The rejected session must not be left inside a transaction
+        Assertions.assertEquals(0, second.getTxnId());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(first.getTxnId());
+        first.setTxnId(0);
+    }
+
+    @Test
+    public void testConcurrentBeginWithSameLabel() throws Exception {
+        // Regression test for the label uniqueness race: several sessions running
+        // `BEGIN WITH LABEL <same label>` at the same time must not all succeed. The uniqueness check and the
+        // registration of the explicit transaction state have to happen atomically, otherwise every session
+        // passes the check before any of them publishes its state.
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        final int concurrency = 8;
+        final int rounds = 5;
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        try {
+            for (int round = 0; round < rounds; round++) {
+                final String label = "concurrent_label_" + round;
+                CyclicBarrier barrier = new CyclicBarrier(concurrency);
+                AtomicInteger succeeded = new AtomicInteger();
+                AtomicInteger rejected = new AtomicInteger();
+                Queue<Long> succeededTxnIds = new ConcurrentLinkedQueue<>();
+
+                List<Future<?>> futures = new ArrayList<>(concurrency);
+                for (int i = 0; i < concurrency; i++) {
+                    final int seq = i;
+                    futures.add(executor.submit(() -> {
+                        ConnectContext context = new ConnectContext();
+                        context.setThreadLocalInfo();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setExecutionId(new TUniqueId(1000 + seq, 2000 + seq));
+
+                        // Line up all sessions so that they hit the label check together
+                        barrier.await(30, TimeUnit.SECONDS);
+                        try {
+                            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, label));
+                            succeeded.incrementAndGet();
+                            succeededTxnIds.add(context.getTxnId());
+                        } catch (SemanticException e) {
+                            Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+                            rejected.incrementAndGet();
+                        }
+                        return null;
+                    }));
+                }
+                for (Future<?> future : futures) {
+                    future.get(60, TimeUnit.SECONDS);
+                }
+
+                Assertions.assertEquals(1, succeeded.get(),
+                        "exactly one BEGIN WITH LABEL " + label + " should succeed");
+                Assertions.assertEquals(concurrency - 1, rejected.get());
+
+                for (Long txnId : succeededTxnIds) {
+                    globalTransactionMgr.clearExplicitTxnState(txnId);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

@@ -25,8 +25,9 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
+#include "runtime/mem_pool.h"
 
 namespace starrocks {
 
@@ -272,7 +273,7 @@ struct HashTableProbeState {
         ProbeCoroutine(std::coroutine_handle<ProbePromise> h) : handle(h) {}
         ~ProbeCoroutine() = default;
         std::coroutine_handle<ProbePromise> handle;
-        operator std::coroutine_handle<promise_type>() const { return std::move(handle); }
+        operator std::coroutine_handle<promise_type>() const { return handle; }
     };
     uint32_t match_count = 0;
     int active_coroutines = 0;
@@ -338,8 +339,8 @@ struct HashTableParam {
     long column_view_concat_bytes_limit = -1L;
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
-    const RowDescriptor* build_row_desc = nullptr;
-    const RowDescriptor* probe_row_desc = nullptr;
+    const RecordDescriptor* build_record_desc = nullptr;
+    const RecordDescriptor* probe_record_desc = nullptr;
     std::set<SlotId> build_output_slots;
     std::set<SlotId> probe_output_slots;
     std::set<SlotId> predicate_slots;

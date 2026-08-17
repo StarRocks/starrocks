@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -38,7 +38,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
 private:
     bool _is_finished = false;

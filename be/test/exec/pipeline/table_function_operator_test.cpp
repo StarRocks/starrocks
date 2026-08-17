@@ -1,6 +1,6 @@
 #include "exec/pipeline/table_function_operator.h"
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -86,7 +86,7 @@ private:
 };
 
 void TableFunctionOperatorTest::SetUp() {
-    _runtime_state.set_query_ctx(_query_ctx.get());
+    _runtime_state.set_query_ctx(_query_ctx.get(), &_query_ctx->query_runtime_state(), _query_ctx->object_pool());
 
     TTableDescriptor t_table_desc;
     t_table_desc.id = 0;

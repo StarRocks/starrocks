@@ -80,6 +80,10 @@ public final class GlobalVariable {
     public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
     public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
+    public static final String ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE =
+            "enable_reduce_cast_varchar_length_inheritance";
+    public static final String ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE =
+            "enable_reduce_cast_varchar_expr_sync_type";
 
     // ETL mode variables
     public static final String ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS = "etl_exec_enable_queue_all_workloads";
@@ -244,9 +248,14 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
 
+    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE, flag = VariableMgr.GLOBAL)
+    private static boolean enableReduceCastVarcharLengthInheritance = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE, flag = VariableMgr.GLOBAL)
+    private static boolean enableReduceCastVarcharExprSyncType = false;
+
     @VariableMgr.VarAttr(name = ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS, flag = VariableMgr.GLOBAL)
     public static boolean enableEtlExecQueueAllWorkloads = true;
-
     @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
     private static double cngroupResourceUsageFreshRatio = 0.5;
 
@@ -446,6 +455,14 @@ public final class GlobalVariable {
         cngroupResourceUsageFreshRatio = value;
     }
 
+    public static boolean isEnableReduceCastVarcharLengthInheritance() {
+        return enableReduceCastVarcharLengthInheritance;
+    }
+
+    public static void setEnableReduceCastVarcharLengthInheritance(boolean enableReduceCastVarcharLengthInheritance) {
+        GlobalVariable.enableReduceCastVarcharLengthInheritance = enableReduceCastVarcharLengthInheritance;
+    }
+
     public static double getCngroupResourceUsageFreshRatio() {
         return cngroupResourceUsageFreshRatio;
     }
@@ -472,6 +489,14 @@ public final class GlobalVariable {
 
     public static String getCngroupScheduleMode() {
         return cngroupScheduleMode;
+    }
+
+    public static boolean isEnableReduceCastVarcharExprSyncType() {
+        return enableReduceCastVarcharExprSyncType;
+    }
+
+    public static void setEnableReduceCastVarcharExprSyncType(boolean enableReduceCastVarcharExprSyncType) {
+        GlobalVariable.enableReduceCastVarcharExprSyncType = enableReduceCastVarcharExprSyncType;
     }
 
     // Don't allow create instance.

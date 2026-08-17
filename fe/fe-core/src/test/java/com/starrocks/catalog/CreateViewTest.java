@@ -147,6 +147,29 @@ public class CreateViewTest extends StarRocksTestBase  {
     }
 
     @Test
+    public void testCreateViewWithWindowFunctionIgnoreNullsWithExpression() throws Exception {
+        starRocksAssert.withTable("create table sample_data2 (\n" +
+                        "    timestamp DATETIME not null,\n" +
+                        "    username string,\n" +
+                        "    price int null\n" +
+                        ")PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");")
+                .withView("create view test_ignore_nulls_expr as select\n" +
+                        "    timestamp,\n" +
+                        "    username,\n" +
+                        "    last_value(if(price > 0, price, null) ignore nulls) over (partition by username) as price\n" +
+                        ", lead(if(price > 0, price, null) ignore nulls, 1, 0) over (partition by username) as leadValue\n" +
+                        "from sample_data2;");
+
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("test_ignore_nulls_expr");
+        Assertions.assertTrue(view instanceof View);
+        String str = ((View) view).getInlineViewDef();
+        Assertions.assertTrue(str.contains("ignore nulls"),
+                "Expected 'ignore nulls' in view def but got: " + str);
+    }
+
+    @Test
     public void createViewWithComment() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test_table1 (\n" +
                 "  `event_day` date NULL COMMENT \"\" ,\n" +
@@ -171,5 +194,74 @@ public class CreateViewTest extends StarRocksTestBase  {
         Assertions.assertEquals(1, result.size());
         String createViewSql = result.get(0).get(1);
         Assertions.assertTrue(createViewSql.contains("-- This is a comment from user"));
+    }
+
+    @Test
+    public void testDefaultViewSqlSecurity() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE security_base (\n" +
+                "  k1 int NULL,\n" +
+                "  k2 int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        String original = connectContext.getSessionVariable().getDefaultViewSqlSecurity().name();
+        try {
+            // Default is NONE: a view without a SECURITY clause is non-secure (equivalent to SECURITY NONE).
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("NONE");
+            starRocksAssert.withView("create view v_default_none as select k1 from security_base;");
+            Assertions.assertFalse(((View) starRocksAssert.getTable("test", "v_default_none")).isSecurity());
+
+            // INVOKER default: a view without a SECURITY clause becomes secure (equivalent to SECURITY INVOKER).
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("INVOKER");
+            starRocksAssert.withView("create view v_default_invoker as select k1 from security_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_default_invoker")).isSecurity());
+
+            // An explicit SECURITY NONE clause always wins over the INVOKER default.
+            starRocksAssert.withView("create view v_explicit_none security none as select k1 from security_base;");
+            Assertions.assertFalse(((View) starRocksAssert.getTable("test", "v_explicit_none")).isSecurity());
+
+            // An explicit SECURITY INVOKER clause always wins over the NONE default.
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("NONE");
+            starRocksAssert.withView(
+                    "create view v_explicit_invoker security invoker as select k1 from security_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_explicit_invoker")).isSecurity());
+        } finally {
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity(original);
+        }
+    }
+
+    @Test
+    public void testDefaultViewSqlSecurityWithReplace() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE security_replace_base (\n" +
+                "  k1 int NULL,\n" +
+                "  k2 int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        String original = connectContext.getSessionVariable().getDefaultViewSqlSecurity().name();
+        try {
+            // CREATE OR REPLACE on a brand-new view honors the INVOKER default.
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("INVOKER");
+            starRocksAssert.withView("create or replace view v_replace as select k1 from security_replace_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_replace")).isSecurity());
+
+            // Replacing the existing view while NONE is the default flips it back to non-secure.
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity("NONE");
+            starRocksAssert.withView("create or replace view v_replace as select k2 from security_replace_base;");
+            View replaced = (View) starRocksAssert.getTable("test", "v_replace");
+            Assertions.assertFalse(replaced.isSecurity());
+            Assertions.assertNotNull(replaced.getColumn("k2"));
+
+            // An explicit SECURITY INVOKER clause on REPLACE wins over the NONE default.
+            starRocksAssert.withView(
+                    "create or replace view v_replace security invoker as select k1 from security_replace_base;");
+            Assertions.assertTrue(((View) starRocksAssert.getTable("test", "v_replace")).isSecurity());
+        } finally {
+            connectContext.getSessionVariable().setDefaultViewSqlSecurity(original);
+        }
     }
 }

@@ -175,6 +175,7 @@ public class HiveMetastoreOperations {
         }
 
         HiveStorageFormat.check(properties);
+        Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
 
         List<String> partitionColNames;
         if (partitionColumns.isEmpty()) {
@@ -190,7 +191,7 @@ public class HiveMetastoreOperations {
             tableType = HiveTable.HiveTableType.EXTERNAL_TABLE;
         }
         HiveTable.Builder builder = HiveTable.builder()
-                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong())
                 .setTableName(tableName)
                 .setCatalogName(catalogName)
                 .setResourceName(toResourceName(catalogName, "hive"))
@@ -204,7 +205,9 @@ public class HiveMetastoreOperations {
                 .setTableLocation(tablePath == null ? null : tablePath.toString())
                 .setProperties(stmt.getProperties())
                 .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, PARQUET.name())))
+                .setSerdeProperties(serdeProps)
                 .setCreateTime(System.currentTimeMillis())
+                .setComment(stmt.getComment())
                 .setHiveTableType(tableType);
         Table table = builder.build();
         try {
@@ -332,7 +335,6 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String catalogName = (table).getCatalogName();
         String dbName = (table).getCatalogDBName();
         String tblName = (table).getCatalogTableName();
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()

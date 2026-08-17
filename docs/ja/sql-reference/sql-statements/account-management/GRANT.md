@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Grants roles or privileges on specific objects to users, roles, or external groups."
 toc_max_heading_level: 4
 ---
 

@@ -48,8 +48,16 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
             if (_standalone_sstable != nullptr) {
                 return Status::InternalError("more than one standalone sstable in fileset");
             }
-            _fileset_id = UniqueId::gen_uid();
-            sstable->set_fileset_id(_fileset_id);
+            // Preserve the existing fileset_id from metadata if present, to keep it
+            // consistent with what compaction txn_log records. Only generate a new
+            // random ID for truly legacy sstables (e.g., created before fileset_id
+            // was introduced).
+            if (sstable->sstable_pb().has_fileset_id()) {
+                _fileset_id = sstable->sstable_pb().fileset_id();
+            } else {
+                _fileset_id = UniqueId::gen_uid();
+                sstable->set_fileset_id(_fileset_id);
+            }
             _standalone_sstable = std::move(sstable);
         }
     }
@@ -73,8 +81,13 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
         std::string end_key = sstable->sstable_pb().range().end_key();
         _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
     } else {
-        _fileset_id = UniqueId::gen_uid();
-        sstable->set_fileset_id(_fileset_id);
+        // Preserve the existing fileset_id from metadata if present (same reason as above).
+        if (sstable->sstable_pb().has_fileset_id()) {
+            _fileset_id = sstable->sstable_pb().fileset_id();
+        } else {
+            _fileset_id = UniqueId::gen_uid();
+            sstable->set_fileset_id(_fileset_id);
+        }
         _standalone_sstable = std::move(sstable);
     }
     return Status::OK();
@@ -107,6 +120,10 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     // 0. if single standalone sstable, directly get.
     if (_standalone_sstable != nullptr) {
         DCHECK(_sstable_map.empty());
+        // Diagnostic: every multi_get on a standalone fileset queries exactly one sstable.
+        // Compared with `pindex_init_sst_cnt`, this lets us tell whether a lazy-SST-open
+        // refactor (defer Table::Open until first touch) would actually skip work.
+        TRACE_COUNTER_INCREMENT("pindex_sstables_queried_cnt", 1);
         return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
     }
     // 1. divide key_indexes into different groups according to sstables
@@ -127,6 +144,7 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
         }
     }
     // 2. multi get from each sstable
+    TRACE_COUNTER_INCREMENT("pindex_sstables_queried_cnt", sstable_key_indexes_map.size());
     for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
         RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
     }
@@ -144,6 +162,18 @@ void PersistentIndexSstableFileset::get_all_sstable_pbs(PersistentIndexSstableMe
     if (_standalone_sstable != nullptr) {
         sstable_pbs->add_sstables()->CopyFrom(_standalone_sstable->sstable_pb());
     }
+}
+
+bool PersistentIndexSstableFileset::contains_sst(const std::string& filename) const {
+    for (const auto& [key_pair, sstable] : _sstable_map) {
+        if (sstable->sstable_pb().filename() == filename) {
+            return true;
+        }
+    }
+    if (_standalone_sstable != nullptr && _standalone_sstable->sstable_pb().filename() == filename) {
+        return true;
+    }
+    return false;
 }
 
 size_t PersistentIndexSstableFileset::memory_usage() const {

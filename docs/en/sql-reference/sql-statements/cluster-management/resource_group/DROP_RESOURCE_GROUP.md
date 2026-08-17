@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP RESOURCE GROUP [IF EXISTS] drops the specified resource group."
 ---
 
 # DROP RESOURCE GROUP

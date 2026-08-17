@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "STRUCT 是复杂数据类型，可以存储不同数据类型的元素，支持字段嵌套和复杂结构。"
 ---
 
 # STRUCT

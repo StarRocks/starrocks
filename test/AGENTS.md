@@ -7,6 +7,8 @@
 
 The `test/` directory contains SQL integration tests using the SQL-tester framework. These tests verify end-to-end functionality by executing SQL statements against a running StarRocks cluster.
 
+Read [`handbook/index.md`](../handbook/index.md) first and use [`handbook/domains/sql-integration.md`](../handbook/domains/sql-integration.md) for suite selection, validation commands, and current harness gaps.
+
 ## Quick Start
 
 ### Prerequisites

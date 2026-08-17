@@ -26,6 +26,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -55,7 +57,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
@@ -98,7 +99,6 @@ import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
-import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.thrift.BackendService;
@@ -176,6 +176,10 @@ public class MockedBackend {
     private static final AtomicInteger BASE_PORT = new AtomicInteger(8000);
     private static final long PATH_HASH = 123456;
 
+    // Most-recently-created instance; allows tests to access the active MockLakeService
+    // without needing a direct reference to the MockedBackend.
+    private static volatile MockedBackend lastCreated;
+
     private final int backendId;
     private final String host;
     private final int brpcPort;
@@ -212,6 +216,7 @@ public class MockedBackend {
         pbService = new MockPBackendService();
 
         lakeService = new MockLakeService();
+        lastCreated = this;
 
         ((MockGenericPool<?>) ThriftConnectionPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ThriftConnectionPool.backendPool).register(this);
@@ -228,6 +233,14 @@ public class MockedBackend {
             }
         };
 
+    }
+
+    public MockLakeService getMockLakeService() {
+        return lakeService;
+    }
+
+    public static MockedBackend getLastCreated() {
+        return lastCreated;
     }
 
     public void setBackendService(PBackendService backendService) {
@@ -580,11 +593,6 @@ public class MockedBackend {
         }
 
         @Override
-        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
-            throw new NotImplementedException("TODO");
-        }
-
-        @Override
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             throw new NotImplementedException("TODO");
         }
@@ -624,9 +632,21 @@ public class MockedBackend {
         private final ConcurrentLinkedQueue<PublishLogVersionBatchRequest> publishLogVersionBatchRequests =
                 new ConcurrentLinkedQueue<>();
 
+        private final ConcurrentLinkedQueue<PublishVersionRequest> publishVersionRequests =
+                new ConcurrentLinkedQueue<>();
+
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+            publishVersionRequests.add(request);
             return CompletableFuture.completedFuture(null);
+        }
+
+        public ConcurrentLinkedQueue<PublishVersionRequest> getPublishVersionRequests() {
+            return publishVersionRequests;
+        }
+
+        public void clearPublishVersionRequests() {
+            publishVersionRequests.clear();
         }
 
         @Override
@@ -738,5 +758,17 @@ public class MockedBackend {
         public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
         }
+
+        @Override
+        public Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request) {
+            // Return a non-null OK response so VectorIndexBuildScheduler treats this as
+            // a successful build instead of looping/re-enqueuing on null and spamming logs.
+            BuildVectorIndexResponse response = new BuildVectorIndexResponse();
+            StatusPB pStatus = new StatusPB();
+            pStatus.statusCode = 0;
+            response.status = pStatus;
+            return CompletableFuture.completedFuture(response);
+        }
+
     }
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Reference index for asynchronous materialized view SQL statements and system views for monitoring in StarRocks."
 sidebar_position: 20
 sidebar_label: "相关参考"
 ---

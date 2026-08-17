@@ -199,7 +199,7 @@ public class SetStmtAnalyzer {
             String rgName = resolvedExpression.getStringValue();
             if (!StringUtils.isEmpty(rgName)) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(null, rgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgName);
                 }
@@ -209,7 +209,7 @@ public class SetStmtAnalyzer {
             long rgID = resolvedExpression.getLongValue();
             if (rgID > 0) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(null, rgID);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgID);
                 }
@@ -218,6 +218,22 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_FORMAT)) {
+            try {
+                SessionVariable.BinaryEncodingFormat.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_LEVEL)) {
+            try {
+                SessionVariable.BinaryEncodingLevel.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
@@ -342,6 +358,7 @@ public class SetStmtAnalyzer {
         if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
             PlanMode.fromName(resolvedExpression.getStringValue());
         }
+
 
         // check connector_sink_sort_scope
         if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SORT_SCOPE)) {

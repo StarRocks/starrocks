@@ -15,41 +15,28 @@
 #include "exec/pipeline/lookup_operator.h"
 
 #include <memory>
-#include <variant>
 
 #include "base/container/raw_container.h"
+#include "base/statusor.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
-#include "common/runtime_profile.h"
-#include "common/status.h"
-#include "common/statusor.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/scan_task.h"
+#include "compute_env/workgroup/work_group.h"
+#include "exec/lookup_stream_mgr.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/fetch_processor.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/lookup_request.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/sorting/sort_helper.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
-#include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/scan_task_queue.h"
-#include "exec/workgroup/work_group.h"
-#include "gutil/integral_types.h"
+#include "exec/pipeline/query_context.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/types_fwd_decl.h"
-#include "runtime/lookup_stream_mgr.h"
-#include "serde/column_array_serde.h"
-#include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_common.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 
 namespace starrocks::pipeline {
@@ -100,23 +87,34 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         request_chunk->append_column(std::move(col), slot_desc->id());
     }
+    // Build the row-source column from its descriptor like every other request column, so the
+    // sender and receiver agree on the serialized layout (the sender reconciles each column to the
+    // descriptor before serializing). The fetch node only emits row-position columns for non-null
+    // source rows, so the deserialized column must carry no nulls even when the descriptor is
+    // nullable -- assert that invariant below instead of forcing the type non-nullable here.
     auto slot_desc = state->desc_tbl().get_slot_descriptor(row_pos_desc->get_row_source_slot_id());
-    // row source column from fetch node won't be nullable
-    auto row_source_col = ColumnHelper::create_column(slot_desc->type(), false);
+    auto row_source_col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
     request_chunk->append_column(std::move(row_source_col), slot_desc->id());
 
     for (auto& request_ctx : _ctx->request_ctxs) {
         RETURN_IF_ERROR(request_ctx->collect_input_columns(request_chunk));
     }
+    DCHECK(!request_chunk->get_column_by_slot_id(row_pos_desc->get_row_source_slot_id())->has_null())
+            << "row source column from fetch node must not contain nulls";
     return Status::OK();
 }
 
 StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(const LookUpTaskContextPtr& ctx) {
     auto tuple_id = ctx->request_tuple_id;
     auto row_pos_desc = _parent->_row_pos_descs.at(tuple_id);
-    switch (row_pos_desc->type()) {
-    case RowPositionDescriptor::Type::ICEBERG_V3: {
+    auto row_pos_type = row_pos_desc->type();
+    switch (row_pos_type) {
+    case RowPositionDescriptor::Type::ICEBERG_V3:
         return std::make_shared<IcebergV3LookUpTask>(ctx);
+    case RowPositionDescriptor::Type::LAKE_SCAN:
+    case RowPositionDescriptor::Type::OLAP_SCAN: {
+        ASSIGN_OR_RETURN(auto adaptor, create_look_up_tablet_adaptor(row_pos_type));
+        return std::make_shared<NativeLookUpTask>(ctx, std::move(adaptor));
     }
     default:
         return Status::InternalError("unknown row position descriptor type: " + std::to_string(row_pos_desc->type()));
@@ -206,7 +204,7 @@ bool LookUpOperator::has_output() const {
 }
 
 bool LookUpOperator::is_finished() const {
-    return _is_finished && _num_running_io_tasks == 0;
+    return _is_finished || (_dispatcher->is_finished() && _num_running_io_tasks == 0);
 }
 
 bool LookUpOperator::pending_finish() const {
@@ -229,28 +227,31 @@ StatusOr<ChunkPtr> LookUpOperator::pull_chunk(RuntimeState* state) {
 Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
     for (int32_t i = 0; i < _max_io_tasks; i++) {
         auto processor = _processors[i];
+        int32_t driver_id = CurrentThread::current().get_driver_id();
 
         auto lookup_task_ctx = std::make_shared<LookUpTaskContext>();
         bool is_running = processor->is_running();
         if (!is_running &&
             _dispatcher->try_get(_driver_sequence, config::max_lookup_batch_request, lookup_task_ctx.get())) {
-            lookup_task_ctx->row_source_slot_id =
-                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_row_source_slot_id();
-            lookup_task_ctx->lookup_ref_slot_ids =
-                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_lookup_ref_slot_ids();
-            lookup_task_ctx->fetch_ref_slot_ids =
-                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_fetch_ref_slot_ids();
+            auto row_pos_desc = _row_pos_descs.at(lookup_task_ctx->request_tuple_id);
+            lookup_task_ctx->scan_id = row_pos_desc->get_scan_node_id();
+            lookup_task_ctx->row_source_slot_id = row_pos_desc->get_row_source_slot_id();
+            lookup_task_ctx->lookup_ref_slot_ids = row_pos_desc->get_lookup_ref_slot_ids();
+            lookup_task_ctx->fetch_ref_slot_ids = row_pos_desc->get_fetch_ref_slot_ids();
             lookup_task_ctx->profile = _unique_metrics.get();
             lookup_task_ctx->parent = this;
             processor->set_ctx(lookup_task_ctx);
             COUNTER_UPDATE(_submit_io_task_counter, 1);
             workgroup::ScanTask task;
-            task.workgroup = state->fragment_ctx()->workgroup();
+            task.workgroup = state->fragment_runtime_state()->workgroup();
             task.priority = OlapScanNode::compute_priority(_submit_io_task_counter->double_value());
             task.task_group = down_cast<const LookUpOperatorFactory*>(_factory)->io_task_group();
             task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
-            task.work_function = [wp = _query_ctx, this, state, idx = i, create_ts = MonotonicNanos()](auto& ctx) {
+            task.work_function = [wp = _query_ctx, this, state, idx = i, driver_id = driver_id,
+                                  create_ts = MonotonicNanos()](auto& ctx) {
                 if (auto sp = wp.lock()) {
+                    SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     auto& processor = _processors[idx];
                     [[maybe_unused]] int64_t start_time = MonotonicNanos();
                     DeferOp defer([&] {

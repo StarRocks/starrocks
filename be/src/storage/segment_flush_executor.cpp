@@ -21,7 +21,7 @@
 #include <utility>
 
 #include "base/brpc/brpc.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"

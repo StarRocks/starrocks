@@ -14,27 +14,150 @@
 
 #include "storage/lake/lake_replication_txn_manager.h"
 
-#include "agent/master_info.h"
-#include "base/debug/trace.h"
+#include <atomic>
+#include <mutex>
+
+#include "base/coding.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "cache/dynamic_cache.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/storage_define.h"
+#include "common/system/master_info.h"
+#include "common/thread/threadpool.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
-#include "gen_cpp/Types_constants.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "persistent_index_sstable.h"
+#include "platform/key_cache.h"
 #include "replication_txn_manager.h"
+#include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
+#include "storage/protobuf_file.h"
 #include "storage/segment_stream_converter.h"
-#include "util/dynamic_cache.h"
+#include "storage/tablet_schema.h"
+#include "storage/utils.h"
+#include "storage_primitive/primary_key_encoding_types.h"
+#include "types/logical_type.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {
+namespace {
+// Backlog guard for shared REPLICATE_SNAPSHOT thread pool.
+// Parallel copy is disabled when queue depth exceeds num_threads * this factor
+// to avoid adding more pressure to an already saturated pool.
+constexpr int kParallelCopyMaxQueuePerThread = 8;
+
+StatusOr<TabletMetadataPtr> load_source_standalone_tablet_metadata(const std::string& metadata_path,
+                                                                   const std::shared_ptr<FileSystem>& source_fs) {
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, metadata_path));
+    ASSIGN_OR_RETURN(auto content, input_file->read_all());
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    RETURN_IF_ERROR(ProtobufFileWithHeader::load_from_buffer(metadata.get(), content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                             /*allow_plain_protobuf_fallback=*/true));
+    normalize_tablet_metadata_after_load(metadata.get());
+    return metadata;
+}
+
+StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                               const std::string& meta_dir,
+                                                               const std::shared_ptr<FileSystem>& source_fs) {
+    const auto bundle_path = join_path(meta_dir, tablet_metadata_filename(0, version));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, bundle_path));
+    ASSIGN_OR_RETURN(auto file_size, input_file->get_size());
+
+    constexpr size_t kSizeFieldSize = sizeof(uint64_t);
+    if (file_size < kSizeFieldSize) {
+        return Status::Corruption(
+                fmt::format("Source metadata bundle {} is too small: {} bytes", bundle_path, file_size));
+    }
+
+    std::string size_field(kSizeFieldSize, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - kSizeFieldSize, size_field.data(), size_field.size()));
+    const uint64_t raw_bundle_metadata_size = decode_fixed64_le(reinterpret_cast<const uint8_t*>(size_field.data()));
+    const bool checksummed = (raw_bundle_metadata_size & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t bundle_metadata_size = raw_bundle_metadata_size & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    const size_t footer_suffix_size = kSizeFieldSize + (checksummed ? sizeof(uint32_t) : 0);
+    if (file_size < footer_suffix_size || bundle_metadata_size == 0 ||
+        bundle_metadata_size > static_cast<uint64_t>(file_size - footer_suffix_size)) {
+        return Status::Corruption(
+                fmt::format("Invalid source metadata bundle footer in {}, file_size={}, "
+                            "bundle_metadata_size={}",
+                            bundle_path, file_size, bundle_metadata_size));
+    }
+
+    const uint64_t bundle_metadata_offset = file_size - footer_suffix_size - bundle_metadata_size;
+    std::string footer(bundle_metadata_size + footer_suffix_size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(bundle_metadata_offset, footer.data(), footer.size()));
+    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(bundle_path, footer));
+
+    auto page_it = bundle->tablet_meta_pages().find(tablet_id);
+    if (page_it == bundle->tablet_meta_pages().end()) {
+        return Status::NotFound(
+                fmt::format("Tablet {} is absent from source metadata bundle {}", tablet_id, bundle_path));
+    }
+    const uint64_t offset = page_it->second.offset();
+    const uint32_t size = page_it->second.size();
+    if (offset > bundle_metadata_offset || size > bundle_metadata_offset - offset) {
+        return Status::Corruption(fmt::format("Invalid source tablet metadata page in {}, offset={}, size={}",
+                                              bundle_path, offset, size));
+    }
+
+    std::string page(size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(offset, page.data(), page.size()));
+    auto checksum_it = bundle->tablet_meta_page_checksum().find(tablet_id);
+    if (checksum_it != bundle->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, page.data(), page.size()) != checksum_it->second) {
+        return Status::Corruption(
+                fmt::format("Mismatched checksum for tablet {} metadata in {}", tablet_id, bundle_path));
+    }
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (!metadata->ParseFromArray(page.data(), page.size())) {
+        return Status::Corruption(fmt::format("Failed to parse tablet {} metadata from {}", tablet_id, bundle_path));
+    }
+    if (metadata->id() != tablet_id) {
+        return Status::Corruption(fmt::format("Tablet ID mismatch in {}, expected={}, actual={}", bundle_path,
+                                              tablet_id, metadata->id()));
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+
+    auto schema_id_it = bundle->tablet_to_schema().find(tablet_id);
+    if (schema_id_it == bundle->tablet_to_schema().end()) {
+        return Status::Corruption(
+                fmt::format("Schema mapping for tablet {} is absent from {}", tablet_id, bundle_path));
+    }
+    auto schema_it = bundle->schemas().find(schema_id_it->second);
+    if (schema_it == bundle->schemas().end()) {
+        return Status::Corruption(
+                fmt::format("Schema {} for tablet {} is absent from {}", schema_id_it->second, tablet_id, bundle_path));
+    }
+    metadata->mutable_schema()->CopyFrom(schema_it->second);
+    (*metadata->mutable_historical_schemas())[schema_id_it->second].CopyFrom(schema_it->second);
+    force_cloud_native_pk_persistent_index(metadata.get());
+
+    for (const auto& [_, historical_schema_id] : metadata->rowset_to_schema()) {
+        auto historical_schema_it = bundle->schemas().find(historical_schema_id);
+        if (historical_schema_it == bundle->schemas().end()) {
+            return Status::Corruption(fmt::format("Historical schema {} for tablet {} is absent from {}",
+                                                  historical_schema_id, tablet_id, bundle_path));
+        }
+        (*metadata->mutable_historical_schemas())[historical_schema_id].CopyFrom(historical_schema_it->second);
+    }
+    return metadata;
+}
+} // namespace
 
 #ifdef USE_STAROS
 std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id) {
@@ -95,7 +218,8 @@ std::string remove_db_id_component(const std::string& path, int64_t db_id) {
     return path.substr(0, pos + 1) + path.substr(pos + db_pattern.length());
 }
 
-Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
+Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
+                                                                ThreadPool* replicate_file_thread_pool) {
     auto src_tablet_id = request.src_tablet_id;
     auto src_visible_version = request.src_visible_version;
     auto src_db_id = request.src_db_id;
@@ -123,6 +247,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
               << ", has_full_path: " << has_full_path
               << (has_full_path ? ", src_partition_full_path: " + src_partition_full_path : "");
 
+    // step 1: validate request and locate source tablet metadata/files.
     std::vector<Version> missed_versions;
     for (auto v = data_version + 1; v <= src_visible_version; ++v) {
         missed_versions.emplace_back(v, v);
@@ -148,7 +273,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::InvalidArgument(
                     fmt::format("Full path must be S3 type (start with 's3://'), got: {}", src_partition_full_path));
         }
-        std::string src_partition_starlet_uri = convert_s3_path_to_starlet_uri(src_partition_full_path, src_tablet_id);
+        std::string src_partition_starlet_uri =
+                convert_s3_path_to_starlet_uri(src_partition_full_path, virtual_tablet_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_partition_starlet_uri", &src_partition_starlet_uri);
 
         // Append metadata and segment directory names
         src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
@@ -170,10 +297,11 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     } else {
         // Non-S3 storage type (OSS/Azure/HDFS/GFS): use RemoteStarletLocationProvider
         // Use normal mode - starlet will use normalize_path to combine sys.root with relative path
-        src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+        src_meta_dir = _remote_location_provider->metadata_root_location(virtual_tablet_id, src_db_id, src_table_id,
                                                                          src_partition_id);
-        src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+        src_data_dir = _remote_location_provider->segment_root_location(virtual_tablet_id, src_db_id, src_table_id,
                                                                         src_partition_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_meta_dir", &src_meta_dir);
 
         LOG(INFO) << "Non-S3 storage: using RemoteStarletLocationProvider, meta_dir: " << src_meta_dir
                   << ", data_dir: " << src_data_dir;
@@ -193,6 +321,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
             << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
             << ", tablet_id: " << target_tablet_id;
+
+    // step 2: build target metadata and file mappings.
 
     // `file_locations` is the mapping between source and target file locations,
     // it contains all files that need to replicate from source to target storage
@@ -234,15 +364,46 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = lake::ReplicationTxnManager::build_file_converters(_tablet_manager, request, filename_map,
-                                                                              column_unique_id_map, files_to_delete);
+    // Compute PK encoding transcode context for .del files. prepare_del_transcode_context
+    // validates PK column count/type match and rejects V2→V1 on byte-incompatible PK shapes.
+    // For V1→V2, it returns the transcode context so build_file_converters can wire up
+    // DelFileStreamConverter for .del files.
+    ASSIGN_OR_RETURN(auto del_transcode_ctx,
+                     lake::ReplicationTxnManager::prepare_del_transcode_context(*target_tablet_meta, source_schema_pb));
+
+    auto file_converters = lake::ReplicationTxnManager::build_file_converters(
+            _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
+            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
 
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;
 
+    // step 3: prepare copy mode and build per-file copy tasks.
     MonotonicStopWatch watch;
     watch.start();
-    size_t total_file_size = 0;
+    std::atomic<size_t> total_file_size{0};
+
+    ThreadPool* repl_pool = replicate_file_thread_pool;
+    bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
+    std::mutex mu;
+    std::mutex* shared_mutex = nullptr;
+    FileConverterCreatorFunc active_file_converters = file_converters;
+    if (use_parallel) {
+        LOG(INFO) << "Start parallel file copy, file_count: " << filename_map.size() << ", txn_id: " << txn_id
+                  << ", tablet_id: " << target_tablet_id << ", pool num_threads: " << repl_pool->num_threads()
+                  << ", pool active_threads: " << repl_pool->active_threads()
+                  << ", pool queued_tasks: " << repl_pool->num_queued_tasks();
+        shared_mutex = &mu;
+        active_file_converters = [&file_converters, &mu](
+                                         const std::string& file_name,
+                                         uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+            std::lock_guard lock(mu);
+            return file_converters(file_name, file_size);
+        };
+    }
+
+    std::vector<ReplicationTask> tasks;
+    tasks.reserve(filename_map.size());
     for (const auto& pair : filename_map) {
         const auto& src_file_name = pair.first;
         auto src_file_location = join_path(src_data_dir, src_file_name);
@@ -251,58 +412,115 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::Corruption("Found invalid file location, src file location: " + src_file_location);
         }
         const auto& target_file_location = it->second;
-        LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
-                  << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
-
-        // Create trace for this file replication
-        scoped_refptr<Trace> file_trace(new Trace);
-        ADOPT_TRACE(file_trace.get());
-        TRACE("Start replicate file, txn_id: $0, tablet_id: $1, src: $2, target: $3", txn_id, target_tablet_id,
-              src_file_location, target_file_location);
-        TRACE_COUNTER_INCREMENT("txn_id", txn_id);
-        TRACE_COUNTER_INCREMENT("tablet_id", target_tablet_id);
-
-        size_t final_file_size = 0;
-        auto start_ts = butil::gettimeofday_us();
-        if (is_segment(src_file_name)) {
-            // For segment files, use download_lake_segment_file which supports schema conversion
-            // via SegmentStreamConverter when column_unique_id_map is not empty.
-            // file_size might be available in segment_name_to_size_map
-            auto src_file_size = segment_name_to_size_map[src_file_name];
-            RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
-                    src_file_location, src_file_name, src_file_size, shared_src_fs, file_converters, &final_file_size));
-            // Update the segment size map with the actual converted file size
-            if (final_file_size > 0 && final_file_size != src_file_size) {
-                const auto& target_file_name = pair.second.first;
-                segment_size_changes[target_file_name] = final_file_size;
-                LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
-                          << ", target_file: " << target_file_name << ", original size: " << src_file_size
-                          << ", final size: " << final_file_size;
-            }
-        } else {
-            // For non-segment files (.del, .sst, .delvec, .cols), use streaming copy with encryption support.
-            // These files are typically small, so streaming copy is efficient and avoids an extra
-            // remote IO call to get file size (which would increase object storage IOPS cost).
-            WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-            if (config::enable_transparent_data_encryption) {
-                // Apply encryption info from filename_map to ensure file content matches metadata
-                opts.encryption_info = pair.second.second.info;
-            }
-            ASSIGN_OR_RETURN(final_file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
-                                                            nullptr, opts, 1024 * 1024));
-            // Track this file for cleanup on failure, similar to how segment files are tracked via file_converters
-            files_to_delete.push_back(target_file_location);
+        size_t src_file_size = 0;
+        auto size_it = segment_name_to_size_map.find(src_file_name);
+        if (size_it != segment_name_to_size_map.end()) {
+            src_file_size = size_it->second;
         }
-        total_file_size += final_file_size;
-        auto cost = butil::gettimeofday_us() - start_ts;
-        auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
-        TRACE("Finished replicate file, final_size: $0, cost_us: $1", final_file_size, cost);
+        bool is_seg = is_segment(src_file_name);
+        // Segments and .del files go through download_lake_file_with_converter + file_converters,
+        // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
+        bool use_converter = is_seg || is_del(src_file_name);
+        const auto& target_file_name = pair.second.first;
+        FileEncryptionInfo encryption_info;
+        if (config::enable_transparent_data_encryption) {
+            encryption_info = pair.second.second.info;
+        }
 
-        if (is_slow) {
-            LOG(INFO) << "Finished replicate src file: " << src_file_location << ", target: " << target_file_location
-                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
-                      << ", cost(s): " << cost / 1000. / 1000. << "\n"
-                      << ",trace: " << file_trace->MetricsAsJSON();
+        tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
+                            is_seg, use_converter, encryption_info]() -> Status {
+            // Fast cancel: check right before each file copy starts.
+            if (txn_id < get_master_info().min_active_txn_id) {
+                LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
+                             << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                             << ", min_active_txn_id: " << get_master_info().min_active_txn_id
+                             << ", src_file: " << src_file_name;
+                return Status::Aborted("Lake replication cancelled, transaction is aborted");
+            }
+            TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_lake_remote_storage::before_copy", nullptr);
+
+            LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
+                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
+
+            size_t final_file_size = 0;
+            auto start_ts = butil::gettimeofday_us();
+            if (use_converter) {
+                TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
+                                         &final_file_size);
+                if (final_file_size == 0) {
+                    RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
+                            src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
+                            &final_file_size));
+                }
+                if (is_seg && final_file_size > 0 && final_file_size != src_file_size) {
+                    if (shared_mutex != nullptr) {
+                        std::lock_guard lock(*shared_mutex);
+                        segment_size_changes[target_file_name] = final_file_size;
+                    } else {
+                        segment_size_changes[target_file_name] = final_file_size;
+                    }
+                    LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
+                              << ", target_file: " << target_file_name << ", original size: " << src_file_size
+                              << ", final size: " << final_file_size;
+                }
+            } else {
+                WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+                if (config::enable_transparent_data_encryption) {
+                    opts.encryption_info = encryption_info;
+                }
+                int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+                TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                         &final_file_size);
+                if (final_file_size == 0) {
+                    ASSIGN_OR_RETURN(final_file_size,
+                                     copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                      target_file_location, opts, max_retry));
+                }
+                if (shared_mutex != nullptr) {
+                    std::lock_guard lock(*shared_mutex);
+                    files_to_delete.push_back(target_file_location);
+                } else {
+                    files_to_delete.push_back(target_file_location);
+                }
+            }
+
+            total_file_size.fetch_add(final_file_size, std::memory_order_relaxed);
+            auto cost = butil::gettimeofday_us() - start_ts;
+            auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
+            if (is_slow) {
+                LOG(INFO) << "Finished replicate src file: " << src_file_location
+                          << ", target: " << target_file_location << ", txn_id: " << txn_id
+                          << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
+                          << ", cost(s): " << cost / 1000. / 1000.;
+            }
+            return Status::OK();
+        });
+    }
+    // step 4: execute tasks and collect copy metrics.
+    // Follow the ThreadPoolToken(CONCURRENT) + wait() pattern used in txn_manager.cpp.
+    if (use_parallel) {
+        auto token = repl_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        std::vector<Status> task_results(tasks.size());
+        for (size_t i = 0; i < tasks.size(); i++) {
+            auto st =
+                    token->submit_func([&task_results, i, task = std::move(tasks[i])]() { task_results[i] = task(); });
+            if (!st.ok()) {
+                task_results[i] = std::move(st);
+            }
+        }
+        token->wait();
+        for (const auto& r : task_results) {
+            if (!r.ok()) {
+                LOG(WARNING) << "Parallel file copy failed, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                             << ", pool num_threads: " << repl_pool->num_threads()
+                             << ", pool active_threads: " << repl_pool->active_threads()
+                             << ", pool queued_tasks: " << repl_pool->num_queued_tasks() << ", error: " << r;
+                return r;
+            }
+        }
+    } else {
+        for (const auto& task : tasks) {
+            RETURN_IF_ERROR(task());
         }
     }
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
@@ -311,9 +529,11 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate
+              << "MB/s, parallel: " << (use_parallel ? "true" : "false") << ", txn_id: " << txn_id
               << ", tablet_id: " << target_tablet_id;
 
+    // step 5: update metadata and write txn log.
     // Update segment sizes in tablet_metadata if there are any changes
     if (!segment_size_changes.empty()) {
         RETURN_IF_ERROR(update_tablet_metadata_segment_sizes(copied_target_tablet_meta, segment_size_changes));
@@ -342,20 +562,81 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     return Status::OK();
 }
 
+bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool) {
+    if (thread_pool == nullptr) {
+        return false;
+    }
+    const int min_file_count = std::max(0, config::lake_replication_parallel_copy_min_file_count);
+    if (min_file_count == 0) {
+        return false;
+    }
+    if (file_count < static_cast<size_t>(min_file_count)) {
+        return false;
+    }
+    const int num_threads = thread_pool->num_threads();
+    if (num_threads <= 0) {
+        return false;
+    }
+    return thread_pool->num_queued_tasks() <= num_threads * kParallelCopyMaxQueuePerThread;
+}
+
+StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
+        const std::string& src_file_location, const std::shared_ptr<FileSystem>& shared_src_fs,
+        const std::string& target_file_location, const WritableFileOptions& opts, int max_retry) {
+    ASSIGN_OR_RETURN(auto expected_size, shared_src_fs->get_file_size(src_file_location));
+
+    const size_t buff_size = std::max<size_t>(
+            std::min<size_t>(expected_size, config::lake_replication_read_buffer_size), 1 * 1024 * 1024);
+
+    max_retry = std::max(1, max_retry);
+    Status copy_status;
+    size_t final_file_size = 0;
+    for (int retry = 0; retry < max_retry; ++retry) {
+        auto res = fs::copy_file(src_file_location, shared_src_fs, target_file_location, nullptr, opts, buff_size);
+        if (!res.ok()) {
+            copy_status = res.status();
+            LOG(WARNING) << "Failed to copy file " << src_file_location << " to " << target_file_location
+                         << ", retry=" << retry << ", error: " << copy_status;
+            continue;
+        }
+        final_file_size = *res;
+        TEST_SYNC_POINT_CALLBACK("lake_replication_non_segment_copy_size", &final_file_size);
+        if (static_cast<int64_t>(final_file_size) == static_cast<int64_t>(expected_size)) {
+            return final_file_size;
+        }
+        copy_status = Status::Corruption(fmt::format("File size mismatch after copy: expected={}, actual={}, src={}",
+                                                     expected_size, final_file_size, src_file_location));
+        LOG(WARNING) << copy_status.message() << ", retry=" << retry;
+    }
+    return copy_status;
+}
+
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
         int64_t src_tablet_id, int64_t version, const std::string& meta_dir,
         const std::shared_ptr<FileSystem>& shared_src_fs) {
     LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
               << ", version: " << version << ", meta_dir: " << meta_dir;
-    auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
-    auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
-    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
-    if (!src_tablet_meta_or.ok()) {
-        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
-        return src_tablet_meta_or;
+
+#ifdef BE_TEST
+    TabletMetadataPtr injected_meta = nullptr;
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                             static_cast<void*>(&injected_meta));
+    if (injected_meta != nullptr) {
+        return injected_meta;
     }
-    return src_tablet_meta_or.value();
+#endif
+
+    const auto src_tablet_meta_path = join_path(meta_dir, tablet_metadata_filename(src_tablet_id, version));
+    auto src_tablet_meta = load_source_standalone_tablet_metadata(src_tablet_meta_path, shared_src_fs);
+    if (src_tablet_meta.ok()) {
+        return src_tablet_meta;
+    }
+    if (!src_tablet_meta.status().is_not_found()) {
+        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta.status();
+        return src_tablet_meta;
+    }
+    return load_source_bundle_tablet_metadata(src_tablet_id, version, meta_dir, shared_src_fs);
 }
 
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_meta_with_fallback(
@@ -436,15 +717,11 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids) {
     // Collect UUIDs from rowsets (segments and del files)
     for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
-        // the condition is very strict, because currently encryption meta for each segment is not bind to the segment
-        // we can only find the encryption meta by index, so the precondition is that the size of segment files
-        // is strictly equal to the size of encryption metas
-        bool has_encryption_meta = rowset.segments_size() == rowset.segment_encryption_metas_size();
-        for (size_t i = 0; i < rowset.segments_size(); ++i) {
-            const auto& segment_name = rowset.segments(i);
-            if (has_encryption_meta) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            const auto& segment_name = segment_meta.filename();
+            if (segment_meta.has_encryption_meta()) {
                 existed_filename_uuids.emplace(extract_uuid_from(segment_name),
-                                               std::make_pair(segment_name, rowset.segment_encryption_metas(i)));
+                                               std::make_pair(segment_name, segment_meta.encryption_meta()));
             } else {
                 existed_filename_uuids.emplace(extract_uuid_from(segment_name), std::make_pair(segment_name, ""));
             }
@@ -493,6 +770,21 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         }
     }
 
+    // Collect UUIDs from idg (.idx) files so a repeated full-snapshot replication reuses the
+    // already-replicated .idx (and its encryption meta) instead of re-copying it.
+    if (target_data_version_tablet_meta->has_idg_meta()) {
+        const auto& idg_meta = target_data_version_tablet_meta->idg_meta();
+        for (const auto& [_, idg_ver_pb] : idg_meta.idgs()) {
+            for (const auto& entry : idg_ver_pb.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                existed_filename_uuids.emplace(extract_uuid_from(entry.index_file()),
+                                               std::make_pair(entry.index_file(), entry.encryption_meta()));
+            }
+        }
+    }
+
     return Status::OK();
 }
 
@@ -520,56 +812,50 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     new_metadata->mutable_dcg_meta()->mutable_dcgs()->clear();
     new_metadata->mutable_sstable_meta()->Clear();
     new_metadata->mutable_delvec_meta()->Clear();
+    // Drop the target's pre-replication idg_meta. Without this the target's stale
+    // per-segment IDG (.idx) entries would be carried into the replicated metadata:
+    // their rssids no longer match the freshly replicated rowsets (dangling entries),
+    // their .idx files leak (never orphaned/vacuumed since a retained entry still
+    // "references" them), and the source's own indexes would be missing. The source's
+    // idg_meta is rebuilt below, mirroring rowsets/dcg/sstable/delvec.
+    new_metadata->mutable_idg_meta()->Clear();
 
     // deal with segments and dels
     for (const auto& src_rowset_meta : src_tablet_meta->rowsets()) {
         auto new_rowset_meta = new_metadata->add_rowsets();
         new_rowset_meta->CopyFrom(src_rowset_meta);
-        new_rowset_meta->mutable_segments()->Clear();
-        new_rowset_meta->mutable_segment_encryption_metas()->Clear();
-        new_rowset_meta->mutable_segment_size()->Clear();
         new_rowset_meta->mutable_del_files()->Clear();
-        // check if segment size is valid
-        auto segment_size_size = src_rowset_meta.segment_size_size();
-        if (segment_size_size > 0) {
-            auto segment_file_size = src_rowset_meta.segments_size();
-            // `segment_size_size` and `segment_file_size` should always be equal
-            if (UNLIKELY(segment_size_size > 0 && segment_size_size != segment_file_size)) {
-                return Status::Corruption(
-                        fmt::format("found invalid segment_size, src_tablet_id: {}, "
-                                    "rowset_id: {}, segment_size_size: {}, segment_file_size: {}",
-                                    src_tablet_id, src_rowset_meta.id(), segment_size_size, segment_file_size));
-            }
-        }
+        // Replication produces a target-local rowset; any source-cluster uid carried by
+        // CopyFrom belongs to a different uid space, so mint a fresh target uid.
+        tablet_reshard_helper::set_rowset_uid(new_rowset_meta);
 
-        // Convert rowset metadata
-        for (int i = 0; i < src_rowset_meta.segments_size(); ++i) {
-            const auto& src_segment_filename = src_rowset_meta.segments(i);
+        // Convert rowset metadata. The copied segment_metas carry over per-segment attributes
+        // (size, sort keys, num_rows, vector_index_ids, ...); rewrite only filename/encryption_meta.
+        for (int i = 0; i < src_rowset_meta.segment_metas_size(); ++i) {
+            const auto& src_seg_meta = src_rowset_meta.segment_metas(i);
+            const auto& src_segment_filename = src_seg_meta.filename();
             std::string final_segment_filename;
             ASSIGN_OR_RETURN(auto is_existed,
                              determine_final_filename(src_segment_filename, txn_id, existed_filename_uuids,
                                                       final_segment_filename, target_tablet_id, src_data_dir,
                                                       file_locations, filename_map));
-            new_rowset_meta->add_segments(final_segment_filename);
-
-            // Copy segment_size from source rowset metadata as inital value for the target rowset metadata
-            if (segment_size_size > 0) {
-                new_rowset_meta->add_segment_size(src_rowset_meta.segment_size(i));
-            }
+            auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
+            new_seg_meta->set_filename(final_segment_filename);
+            new_seg_meta->clear_encryption_meta();
 
             // Add encryption metadata for files
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
                     // segment file doesn't exist, use the newly generated encryption metadata
                     std::pair<std::string, FileEncryptionPair> pair = filename_map[src_segment_filename];
-                    new_rowset_meta->add_segment_encryption_metas(pair.second.encryption_meta);
+                    new_seg_meta->set_encryption_meta(pair.second.encryption_meta);
                 } else {
                     // segment file already exists, use the existing encryption metadata from target tablet
                     auto uuid = extract_uuid_from(src_segment_filename);
                     auto it = existed_filename_uuids.find(uuid);
                     if (it != existed_filename_uuids.end()) {
                         const std::string& existing_encryption_meta = it->second.second;
-                        new_rowset_meta->add_segment_encryption_metas(existing_encryption_meta);
+                        new_seg_meta->set_encryption_meta(existing_encryption_meta);
                     } else {
                         // should never happend
                         return Status::Corruption(fmt::format("no existing encryption metadata found for file: {}",
@@ -579,17 +865,15 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             }
 
             // build segment_name_to_size_map, record the size of source segment file
-            if (segment_size_size > 0) {
-                auto segment_size = src_rowset_meta.segment_size(i);
-                segment_name_to_size_map.emplace(src_segment_filename, segment_size);
+            if (src_seg_meta.has_size()) {
+                segment_name_to_size_map.emplace(src_segment_filename, src_seg_meta.size());
             }
         }
         // update next_rowset_id
         new_metadata->set_next_rowset_id(src_tablet_meta->next_rowset_id());
 
         // Convert dels
-        for (int i = 0; i < src_rowset_meta.del_files_size(); ++i) {
-            const DelfileWithRowsetId& src_del = src_rowset_meta.del_files(i);
+        for (const DelfileWithRowsetId& src_del : src_rowset_meta.del_files()) {
             const auto& src_del_filename = src_del.name();
             std::string final_del_filename;
             ASSIGN_OR_RETURN(auto is_existed, determine_final_filename(src_del_filename, txn_id, existed_filename_uuids,
@@ -598,6 +882,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_del = new_rowset_meta->add_del_files();
             new_del->CopyFrom(src_del);
             new_del->set_name(final_del_filename);
+            // The replicated file is produced by the download, which routes .del files through
+            // build_file_converters and may re-encode the payload (DelFileStreamConverter, PK encoding
+            // V1->V2). The source checksum describes the source bytes, so keeping it would make the
+            // target reject a perfectly valid del file. Drop it unconditionally rather than trying to
+            // predict here whether this particular file gets transcoded: absent means "not recorded"
+            // and readers skip verification, same as the shared-nothing replication path.
+            new_del->clear_crc32c();
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -621,8 +912,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     if (src_tablet_meta->has_sstable_meta()) {
         PersistentIndexSstableMetaPB* dest_meta = new_metadata->mutable_sstable_meta();
         dest_meta->CopyFrom(src_tablet_meta->sstable_meta());
-        for (int i = 0; i < dest_meta->sstables_size(); ++i) {
-            PersistentIndexSstablePB* sst = dest_meta->mutable_sstables(i);
+        for (PersistentIndexSstablePB& sst_ref : *dest_meta->mutable_sstables()) {
+            PersistentIndexSstablePB* sst = &sst_ref;
             const auto& src_sst_filename = sst->filename();
             std::string final_sst_filename;
             ASSIGN_OR_RETURN(auto is_existed, determine_final_filename(src_sst_filename, txn_id, existed_filename_uuids,
@@ -721,6 +1012,79 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         }
     }
 
+    // deal with idg_meta (per-segment Index Delta Group / .idx sidecar index files,
+    // produced by the lake ADD INDEX fast path: BITMAP / NGRAMBF / bloom_filter_columns).
+    // Mirror the sstable/dcg handling: copy the source IDG metadata, then rewrite each
+    // .idx filename (and encryption meta) and register the file for copy via
+    // determine_final_filename, so the source's fast-path indexes are actually replicated
+    // to the target. The IDG map is keyed by rssid; rowset ids and next_rowset_id are
+    // adopted verbatim from the source above (set_rowset_uid only mints a fresh 128-bit
+    // uid, not the numeric rowset id), so the source's rssid keys stay valid against the
+    // copied rowsets and need no remap. The target's own stale idg_meta was cleared above;
+    // the publish-time applier orphans its now-unreferenced .idx via collect_idg_orphan_files.
+    //
+    // Fast-schema-change caveat: when the source and target tablets assign different column
+    // unique ids to the same logical column, replication remaps the ids embedded in
+    // segment/.cols footers via build_file_converters + column_unique_id_map. The IDG entry
+    // keys (IndexKey.col_unique_id / dropped_keys) AND the col_unique_ids embedded inside the
+    // .idx payload footer -- which IndexFileReader::find(col_unique_id, index_type) and the
+    // scan probe (ScalarColumnIterator matches k.col_unique_id == opts.col_unique_id) look up
+    // by the TARGET id -- are NOT converted here (build_file_converters only rewrites
+    // is_segment()/is_cols() footers). Copying idg_meta + .idx verbatim under a divergent id
+    // space would make the replica either silently ignore the index (target id misses the
+    // source-keyed entry) or, on a unique-id collision, apply an index built for a different
+    // column and prune rows wrongly. Until the .idx footer + IDG-key remap is implemented,
+    // skip IDG replication whenever the id spaces diverge: leave idg_meta cleared (index
+    // absent on the replica, to be rebuilt on the target) rather than publishing a
+    // mismappable index. The common identical-schema CCR path (empty map) is unaffected.
+    std::unordered_map<uint32_t, uint32_t> idg_column_unique_id_map;
+    if (target_tablet_meta->has_schema()) {
+        ReplicationUtils::calc_column_unique_id_map(src_tablet_meta->schema().column(),
+                                                    target_tablet_meta->schema().column(), &idg_column_unique_id_map);
+    }
+    if (src_tablet_meta->has_idg_meta() && !idg_column_unique_id_map.empty()) {
+        LOG(WARNING) << "Lake replicate storage task, skipping IDG (.idx) index replication because source/target "
+                        "column unique ids diverge (fast schema change); the fast-path index will be absent on the "
+                        "replica and must be rebuilt on the target. target_tablet_id: "
+                     << target_tablet_id << ", txn_id: " << txn_id
+                     << ", unique_id_map size: " << idg_column_unique_id_map.size();
+    } else if (src_tablet_meta->has_idg_meta()) {
+        IndexDeltaGroupMetadataPB* dest_meta = new_metadata->mutable_idg_meta();
+        dest_meta->CopyFrom(src_tablet_meta->idg_meta());
+        for (auto& [rssid, idg_ver] : *dest_meta->mutable_idgs()) {
+            for (auto& entry : *idg_ver.mutable_entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                const auto src_idx_filename = entry.index_file();
+                std::string final_idx_filename;
+                ASSIGN_OR_RETURN(
+                        auto is_existed,
+                        determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
+                                                 target_tablet_id, src_data_dir, file_locations, filename_map));
+                entry.set_index_file(final_idx_filename);
+                // The source's encryption meta belongs to the source cluster; drop it and
+                // re-derive against the target (matching the segment handling above).
+                entry.clear_encryption_meta();
+
+                if (config::enable_transparent_data_encryption) {
+                    if (!is_existed) {
+                        // .idx file doesn't exist on target, use the newly generated encryption metadata
+                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_idx_filename];
+                        entry.set_encryption_meta(pair.second.encryption_meta);
+                    } else {
+                        // .idx file already replicated in a previous txn, reuse its existing encryption metadata
+                        auto uuid = extract_uuid_from(src_idx_filename);
+                        auto it = existed_filename_uuids.find(uuid);
+                        if (it != existed_filename_uuids.end()) {
+                            entry.set_encryption_meta(it->second.second);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     return new_metadata;
 }
 
@@ -772,33 +1136,24 @@ Status LakeReplicationTxnManager::update_tablet_metadata_segment_sizes(
     int updated_count = 0;
 
     // Iterate through all rowsets in the tablet metadata
-    for (int rowset_idx = 0; rowset_idx < tablet_metadata->rowsets_size(); ++rowset_idx) {
-        auto* rowset = tablet_metadata->mutable_rowsets(rowset_idx);
-
-        // Check if this rowset has segment_size field
-        if (rowset->segment_size_size() == 0) {
-            // No segment_size recorded, skip
-            continue;
-        }
-
-        // Verify segment_size array matches segments array
-        if (rowset->segment_size_size() != rowset->segments_size()) {
-            LOG(WARNING) << "Rowset segment_size count mismatch, rowset_id: " << rowset->id()
-                         << ", segments: " << rowset->segments_size()
-                         << ", segment_sizes: " << rowset->segment_size_size();
-            continue;
-        }
+    for (auto& rowset_ref : *tablet_metadata->mutable_rowsets()) {
+        auto* rowset = &rowset_ref;
 
         // Update segment sizes if they changed
-        for (int seg_idx = 0; seg_idx < rowset->segments_size(); ++seg_idx) {
-            const auto& segment_name = rowset->segments(seg_idx);
+        for (auto& seg_meta_ref : *rowset->mutable_segment_metas()) {
+            auto* segment_meta = &seg_meta_ref;
+            // No segment size recorded, skip
+            if (!segment_meta->has_size()) {
+                continue;
+            }
+            const auto& segment_name = segment_meta->filename();
             auto it = segment_size_changes.find(segment_name);
             if (it != segment_size_changes.end()) {
-                uint64_t old_size = rowset->segment_size(seg_idx);
+                uint64_t old_size = segment_meta->size();
                 uint64_t new_size = it->second;
 
                 if (old_size != new_size) {
-                    rowset->set_segment_size(seg_idx, new_size);
+                    segment_meta->set_size(new_size);
                     updated_count++;
 
                     LOG(INFO) << "Updated segment size in tablet_metadata, rowset_id: " << rowset->id()

@@ -12,30 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(FS_CORE_TEST_FILES
+set(FS_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    azure/azblob_uri_test.cpp
+    azure/utils_test.cpp
+    bundle_file_test.cpp
+    credential/cloud_configuration_factory_test.cpp
     encrypt_file_test.cpp
-    fs_core_test.cpp
+    file_utils_test.cpp
+    filesystem_core_test.cpp
+    fs_memory_test.cpp
+    fs_posix_test.cpp
+    fs_s3_test.cpp
+    fs_test.cpp
+    fs_registry_test.cpp
+    output_stream_wrapper_test.cpp
 )
 
-set(FS_CORE_TEST_LINK_LIBS
-    FSCore
-    IOCore
+if (NOT APPLE)
+    list(APPEND FS_TEST_FILES azure/fs_azblob_test.cpp)
+endif()
+
+set(FS_TEST_LINK_LIBS
+    FileSystem
+    IO
     Common
     Base
     Gutil
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_fs_core_test_objs OBJECT ${FS_CORE_TEST_FILES})
-target_link_libraries(starrocks_fs_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_fs_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(fs_core_test $<TARGET_OBJECTS:starrocks_fs_core_test_objs>)
-target_link_libraries(fs_core_test ${FS_CORE_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_fs_test_objs OBJECT ${FS_TEST_FILES})
+target_link_libraries(starrocks_fs_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_fs_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(fs_test fs_test_main.cpp $<TARGET_OBJECTS:starrocks_fs_test_objs>)
+target_link_libraries(fs_test ${FS_TEST_LINK_LIBS})

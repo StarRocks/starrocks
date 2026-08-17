@@ -217,7 +217,6 @@ public class DiskAndTabletLoadReBalancerTest {
         long pathHash1 = 1111L;
         long pathHash2 = 2222L;
         long pathHash3 = 3333L;
-        long pathHash4 = 4444L;
 
         SystemInfoService infoService = new SystemInfoService();
 

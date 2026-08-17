@@ -1,5 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
+description: "使用 Flink CDC 捕获 MySQL 变更数据，实时同步至 StarRocks 进行秒级更新。"
 ---
 
 # 从 MySQL 实时同步
@@ -17,7 +19,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
 :::info
 
 从 MySQL 同步至 Flink 需要使用 Flink CDC，本文使用 Flink CDC 的版本小于 3.0，因此需要借助 SMT 同步表结构。
-然而如果使用 Flink CDC 3.0，则无需借助 SMT，即可将表结构同步至 StarRocks，甚至可以同步整个 MySQL 数据库、分库分表的结构，同时也支持同步 schema change。具体的使用方式，参见[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
+然而如果使用 Flink CDC 3.0，则无需借助 SMT，即可将表结构同步至 StarRocks，甚至可以同步整个 MySQL 数据库、分库分表的结构，同时也支持同步 schema change。具体的使用方式，参见[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/)。
 
 :::
 
@@ -70,7 +72,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
       OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
       ```
 
-   2. 下载并解压 [Flink](https://flink.apache.org/downloads.html)。本示例使用 Flink 1.14.5。
+   2. 下载并解压 [Flink](https://flink.apache.org/downloads/)。本示例使用 Flink 1.14.5。
       > 说明：推荐使用 1.14 及以上版本，最低支持 1.11 版本。
 
       ```Bash
@@ -397,7 +399,7 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
    Job ID: 5ae005c4b3425d8bb13fe660260a35da
    ```
 
-2. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
+2. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-release-2.2/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
       1. Flink WebUI 界面
          ![task 拓扑](../_assets/4.9.3.png)
 
@@ -541,4 +543,4 @@ flink.starrocks.sink.properties.strip_outer_array=true
    END;
    ```
 
-更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。
+更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/data_migration/loading/synchronize_mysql_into_sr.md)。

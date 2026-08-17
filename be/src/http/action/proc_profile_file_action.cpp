@@ -22,14 +22,14 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "fmt/format.h"
 #include "http/action/profile_utils.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 

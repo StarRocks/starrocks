@@ -19,18 +19,24 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
-#include "common/config.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "gutil/stl_util.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
-#include "storage/merge_iterator.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet.h"
-#include "storage/union_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -44,6 +50,24 @@ public:
                             const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
                             const MergeConfig& cfg) = 0;
 };
+
+static bool should_release_compaction_chunk_capacity(const Chunk* chunk, MemTracker* mem_tracker) {
+    const int32_t threshold_percent = config::compaction_chunk_reset_memory_tracker_threshold_percent;
+    if (chunk == nullptr || mem_tracker == nullptr || threshold_percent < 0) {
+        return false;
+    }
+
+    int64_t limit = config::compaction_memory_limit_per_worker;
+    if (limit <= 0) {
+        return false;
+    }
+
+    return static_cast<double>(mem_tracker->consumption()) > static_cast<double>(limit) * threshold_percent / 100.0;
+}
+
+static bool should_release_compaction_chunk_capacity(const Chunk* chunk) {
+    return should_release_compaction_chunk_capacity(chunk, CurrentThread::mem_tracker());
+}
 
 template <class T>
 struct MergeEntry {
@@ -62,6 +86,8 @@ struct MergeEntry {
     // rssid_rowids will be empty, when `need_rssid_rowids` is false.
     bool need_rssid_rowids = false;
     std::vector<uint64_t> rssid_rowids;
+    // TODO: Remove slice buf
+    Buffer<Slice> _slice_buf; // used only when T == Slice
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -104,7 +130,14 @@ struct MergeEntry {
 
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
-        chunk->reset();
+        if (should_release_compaction_chunk_capacity(chunk.get())) {
+            if (chunk_pk_column != nullptr) {
+                chunk_pk_column = chunk_pk_column->clone_empty();
+            }
+            chunk = chunk->clone_empty(0);
+        } else {
+            chunk->reset();
+        }
         rssid_rowids.clear();
         auto st = Status::OK();
         if (need_rssid_rowids) {
@@ -127,7 +160,14 @@ struct MergeEntry {
             DCHECK(chunk_pk_column->size() > 0);
             DCHECK(chunk_pk_column->size() == chunk->num_rows());
             // 2. setup pk cursor
-            pk_start = reinterpret_cast<const T*>(chunk_pk_column->raw_data());
+            if constexpr (std::is_same_v<T, Slice>) {
+                ColumnHelper::build_slices(chunk_pk_column.get(), _slice_buf);
+                pk_start = _slice_buf.data();
+            } else {
+                RawDataVisitor visitor;
+                RETURN_IF_ERROR(chunk_pk_column->accept(&visitor));
+                pk_start = reinterpret_cast<const T*>(visitor.result());
+            }
             pk_cur = pk_start;
             pk_last = pk_start + chunk_pk_column->size() - 1;
             return Status::OK();
@@ -302,13 +342,13 @@ public:
         timer.stop();
         // update compaction metric
         float divided = 1000 * 1000 * 1000;
-        StarRocksMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
-        StarRocksMetrics::instance()->update_compaction_task_byte_per_second.set_value(
+        StorageMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
+        StorageMetrics::instance()->update_compaction_task_byte_per_second.set_value(
                 total_input_size / (timer.elapsed_time() / divided + 1));
-        StarRocksMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
-        StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
-        StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
-        StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
+        StorageMetrics::instance()->update_compaction_deltas_total.increment(rowsets.size());
+        StorageMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
+        StorageMetrics::instance()->update_compaction_outputs_total.increment(1);
+        StorageMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
         std::stringstream ss;
         ss << "update compaction merge finished. tablet=" << tablet.tablet_id()
            << " #key=" << schema.sort_key_idxes().size()
@@ -364,7 +404,7 @@ private:
                 return res.status();
             }
             entry.rowset_seg_id = rowset->rowset_meta()->get_rowset_seg_id();
-            entry.chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+            entry.chunk = ChunkFactory::new_chunk(schema, _chunk_size);
             entry.need_rssid_rowids = config::enable_light_pk_compaction_publish;
             if (res.value().empty()) {
                 entry.segment_itr = new_empty_iterator(schema, _chunk_size);
@@ -401,7 +441,7 @@ private:
             }
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         vector<uint32_t> column_indexes;
         std::unique_ptr<vector<RowSourceMask>> source_masks;
@@ -410,10 +450,14 @@ private:
             column_indexes = tablet_schema->sort_key_idxes();
         }
 
-        auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+        auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
         vector<uint64_t> rssid_rowids;
         while (true) {
-            chunk->reset();
+            if (should_release_compaction_chunk_capacity(chunk.get())) {
+                chunk = chunk->clone_empty(0);
+            } else {
+                chunk->reset();
+            }
             rssid_rowids.clear();
             Status status = get_next(chunk.get(), source_masks.get(), &rssid_rowids);
             if (!status.ok()) {
@@ -567,11 +611,15 @@ private:
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
             RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-            auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
-                chunk->reset();
+                if (should_release_compaction_chunk_capacity(chunk.get())) {
+                    chunk = chunk->clone_empty(0);
+                } else {
+                    chunk->reset();
+                }
                 Status status = iter->get_next(chunk.get(), source_masks.get());
                 if (!status.ok()) {
                     if (status.is_end_of_file()) {

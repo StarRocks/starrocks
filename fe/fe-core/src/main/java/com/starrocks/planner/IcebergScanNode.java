@@ -19,7 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
@@ -35,6 +35,8 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -47,6 +49,7 @@ import com.starrocks.type.Type;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.metrics.ScanReportParser;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,6 +77,8 @@ public class IcebergScanNode extends ScanNode {
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
+    private boolean enableGlobalLateMaterialization = false;
+    private boolean enableIncrementalScanRanges = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -165,10 +170,39 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
+        this.enableIncrementalScanRanges = enableIncrementalScanRanges;
         Preconditions.checkNotNull(tvrVersionRange, "tvrVersionRange id is null");
         if (tvrVersionRange.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
             return;
+        }
+
+        // Filter against the read schema (the targeted snapshot's schema for time travel), not the
+        // current native schema, so snapshot-only column names (e.g. a column before a later rename)
+        // are not dropped before IcebergMetadata calls scan.select(fieldNames).
+        Set<String> readSchemaColumnNames = icebergTable.getReadSchema().columns().stream()
+                .map(Types.NestedField::name)
+                .collect(Collectors.toSet());
+        List<String> requiredColumnNames = desc.getSlots().stream()
+                .map(slot -> slot.getColumn().getName())
+                .filter(readSchemaColumnNames::contains)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Bounded-cost statistics-scan budgets: the external ANALYZE job stashes these on the session
+        // variable so they ride the normal query path to the connector without a bespoke ANALYZE->connector
+        // channel. These variables are INVISIBLE but NOT read-only (the job must set them at runtime), so a
+        // user could SET/SET GLOBAL them; a truncated scan on an ordinary query would silently drop rows.
+        // Only honor the budget inside a statistics-collection context so a plain SELECT can never be capped.
+        long scanBytesCap = -1;
+        long scanFilesCap = -1;
+        long scanRowsCap = -1;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null && connectContext.isStatisticsConnection()) {
+            SessionVariable sessionVariable = connectContext.getSessionVariable();
+            scanBytesCap = sessionVariable.getExternalStatsScanBytesCap();
+            scanFilesCap = sessionVariable.getExternalStatsScanFilesCap();
+            scanRowsCap = sessionVariable.getExternalStatsScanRowsCap();
         }
 
         GetRemoteFilesParams params =
@@ -179,6 +213,10 @@ public class IcebergScanNode extends ScanNode {
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
                         .setUsedForDelete(usedForDelete)
+                        .setFieldNames(requiredColumnNames)
+                        .setScanBytesCap(scanBytesCap)
+                        .setScanFilesCap(scanFilesCap)
+                        .setScanRowsCap(scanRowsCap)
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
@@ -288,6 +326,10 @@ public class IcebergScanNode extends ScanNode {
         return res;
     }
 
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -332,9 +374,10 @@ public class IcebergScanNode extends ScanNode {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
             // for global dict
             output.append(explainColumnDict(prefix));
+            output.append(explainColumnAccessPath(prefix));
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
+                if (type.isComplexType() || type.isVariantType()) {
                     output.append(prefix)
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
@@ -342,7 +385,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
-            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
             requestContext.setTableVersionRange(tvrVersionRange);
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
@@ -392,6 +435,10 @@ public class IcebergScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        if (enableGlobalLateMaterialization) {
+            msg.hdfs_scan_node.setEnable_global_late_materialization(true);
+        }
+
         String sqlPredicates = getExplainString(conjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
         if (scanRangeSource != null) {
@@ -402,7 +449,23 @@ public class IcebergScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+        if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
+            tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
+        }
         bucketProperties.ifPresent(properties -> HdfsScanNode.setBucketProperties(tHdfsScanNode, properties));
+
+        setConnectorCatalogType(msg);
+    }
+
+    @Override
+    public void prepareRetry() {
+        clear();
+        reachLimit = false;
+        try {
+            setupScanRangeLocations(enableIncrementalScanRanges);
+        } catch (StarRocksException e) {
+            throw new RuntimeException("Failed to reset IcebergScanNode for retry", e);
+        }
     }
 
     @Override
@@ -430,5 +493,12 @@ public class IcebergScanNode extends ScanNode {
 
     public Set<DeleteFile> getEqualAppliedDeleteFiles() {
         return scanRangeSource.getEqualAppliedDeleteFiles();
+    }
+
+    public Optional<Long> getBaseSnapshotId() {
+        if (tvrVersionRange == null) {
+            return Optional.empty();
+        }
+        return tvrVersionRange.end();
     }
 }

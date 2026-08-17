@@ -20,7 +20,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
@@ -434,8 +434,7 @@ public:
     VectorizedInConstPredicateGeneric(const TExprNode& node)
             : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
-    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other)
-            : Predicate(other), _is_not_in(other._is_not_in), _const_input(other._const_input) {}
+    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other) = default;
 
     ~VectorizedInConstPredicateGeneric() override = default;
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the largest value from a list of one or more parameters."
 ---
 
 # greatest

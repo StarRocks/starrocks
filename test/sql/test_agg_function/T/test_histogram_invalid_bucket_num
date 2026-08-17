@@ -1,0 +1,22 @@
+-- name: test_histogram_invalid_bucket_num @sequential
+-- Regression: histogram(col, bucket_num, sample_ratio) computed
+-- column_size / bucket_num with no validation. A constant bucket_num of 0
+-- divided by zero and crashed the BE with SIGFPE (and a negative value silently
+-- mis-bucketed). The fix rejects bucket_num <= 0 with a clear error instead of
+-- crashing. bucket_num is read from a constant argument.
+CREATE TABLE t_hist (k INT, v INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_hist VALUES (1,10),(2,20),(3,30),(4,40);
+-- valid bucket_num still works
+SELECT histogram(v, 2, 1.0) FROM t_hist;
+-- a cast-wrapped constant bucket_num (cast(N as int)) is what the auto histogram
+-- statistics-collection job emits; FE validation must fold the cast and accept it
+-- rather than rejecting the legitimate query as a non-constant value
+SELECT histogram(v, cast(2 as int), 1.0) FROM t_hist;
+-- bucket_num = 0 must not crash the BE (returns an error instead of SIGFPE)
+[UC] SELECT histogram(v, 0, 1.0) FROM t_hist;
+-- negative bucket_num is rejected too
+[UC] SELECT histogram(v, -1, 1.0) FROM t_hist;
+-- BE must still be serving queries
+SELECT count(*) FROM t_hist;

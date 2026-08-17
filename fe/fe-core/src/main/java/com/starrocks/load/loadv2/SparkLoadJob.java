@@ -841,8 +841,8 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
         // collect table-level metrics after spark load job finished
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (null == db) {
@@ -866,8 +866,8 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-        super.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
+        super.afterAborted(txnState, txnStatusChangeReason);
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 

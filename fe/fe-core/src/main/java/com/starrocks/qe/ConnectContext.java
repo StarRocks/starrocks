@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -210,7 +211,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
-    protected boolean isSingleStmt = false;
+    protected boolean isMultiStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -238,6 +239,12 @@ public class ConnectContext {
 
     private boolean relationAliasCaseInsensitive = false;
 
+    // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
+    // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
+    private final Set<String> viewExpansionPath = Sets.newHashSet();
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     // Control whether to read Iceberg caches without populating/updating them for the current execution.
@@ -251,6 +258,7 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+    private StatisticsLoadBudget statisticsLoadBudget;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -283,6 +291,31 @@ public class ConnectContext {
 
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
+
+    // An optimize rewrite copies logical rows into a temporary partition and must not
+    // include unrelated schema-change shadow columns in its sink tuple.
+    private boolean optimizeRewrite = false;
+
+    // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
+    // instead of physicalPartition.getVisibleVersion() for each entry in this map.
+    // Null means no override (normal visible-version path).
+    private Map<Long, Long> scanVersionOverride = null;
+
+    public void setScanVersionOverride(Map<Long, Long> scanVersionOverride) {
+        this.scanVersionOverride = scanVersionOverride;
+    }
+
+    public Map<Long, Long> getScanVersionOverride() {
+        return scanVersionOverride;
+    }
+
+    public void setOptimizeRewrite(boolean optimizeRewrite) {
+        this.optimizeRewrite = optimizeRewrite;
+    }
+
+    public boolean isOptimizeRewrite() {
+        return optimizeRewrite;
+    }
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -370,6 +403,13 @@ public class ConnectContext {
 
     /**
      * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     * <p>
+     * Note: callers that subsequently invoke {@link #setCurrentWarehouse(String)} or
+     * {@link #setCurrentWarehouseId(long)} must re-apply
+     * {@code setEnableMaterializedViewRewrite(false)} (and any other per-context
+     * session-variable override) AFTER the warehouse switch, because setCurrentWarehouse
+     * replaces the sessionVariable with a fresh clone of the global default and silently
+     * discards earlier overrides.
      */
     public static ConnectContext buildInner() {
         ConnectContext connectContext = new ConnectContext();
@@ -893,6 +933,16 @@ public class ConnectContext {
             return;
         }
         closed = true;
+        // Clean up explicit transaction state to prevent memory leak in explicitTxnStateMap
+        if (txnId != 0) {
+            try {
+                globalStateMgr.getGlobalTransactionMgr()
+                        .clearExplicitTxnState(txnId);
+            } catch (Exception e) {
+                // Ignore exceptions during cleanup to avoid masking the original close reason
+            }
+            txnId = 0;
+        }
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -1136,7 +1186,13 @@ public class ConnectContext {
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            if (!warehouseManager.isResourceAvailable(computeResource)) {
+            // Re-acquire if the cached compute resource belongs to a different warehouse than the
+            // current session warehouse. This can happen when a query-scope warehouse hint modifies
+            // the session variable but the compute resource is not properly restored afterwards.
+            if (computeResource.getWarehouseId() != this.getCurrentWarehouseId()) {
+                this.resetComputeResource();
+                acquireComputeResource();
+            } else if (!warehouseManager.isResourceAvailable(computeResource)) {
                 if (state != null && !state.isRunning()) {
                     // if the query is not running, we can acquire a new compute resource.
                     acquireComputeResource();
@@ -1259,6 +1315,10 @@ public class ConnectContext {
         return relationAliasCaseInsensitive;
     }
 
+    public Set<String> getViewExpansionPath() {
+        return viewExpansionPath;
+    }
+
     public void setForwardTimes(int forwardTimes) {
         this.forwardTimes = forwardTimes;
     }
@@ -1281,6 +1341,14 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public StatisticsLoadBudget getStatisticsLoadBudget() {
+        return statisticsLoadBudget;
+    }
+
+    public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
+        this.statisticsLoadBudget = statisticsLoadBudget;
     }
 
     public QuerySource getQuerySource() {
@@ -1416,6 +1484,19 @@ public class ConnectContext {
     }
 
     /**
+     * Returns the session variable name that governs the timeout for the current execution context,
+     * used when building timeout-hint messages.
+     */
+    public String getTimeoutHintVariable() {
+        if (isExecLoadType()) {
+            return SessionVariable.INSERT_TIMEOUT;
+        } else if (isMetadataContext()) {
+            return SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT;
+        }
+        return SessionVariable.QUERY_TIMEOUT;
+    }
+
+    /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
      *
      * @param now : current time in milliseconds
@@ -1470,7 +1551,7 @@ public class ConnectContext {
                             tableName, tableTimeout, pendingTime);
                 } else {
                     msg = String.format("please increase the '%s' session variable, pending time:%s",
-                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                            getTimeoutHintVariable(), pendingTime);
                 }
                 errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
@@ -1897,11 +1978,11 @@ public class ConnectContext {
         listeners.clear();
     }
 
-    public boolean isSingleStmt() {
-        return isSingleStmt;
+    public boolean isMultiStmt() {
+        return isMultiStmt;
     }
 
-    public void setSingleStmt(boolean singleStmt) {
-        isSingleStmt = singleStmt;
+    public void setMultiStmt(boolean multiStmt) {
+        isMultiStmt = multiStmt;
     }
 }

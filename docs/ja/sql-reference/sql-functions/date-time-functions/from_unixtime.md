@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UNIXタイムスタンプを必要な時間形式に変換します。"
 ---
 
 # from_unixtime

@@ -47,6 +47,7 @@ import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /*
  * e.g.
@@ -116,6 +117,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         splitAggregations.forEach(c -> firstScanColumns.union(agg.getAggregations().get(c).getUsedColumns()));
         if (scan.getPredicate() != null) {
             firstScanColumns.union(scan.getPredicate().getUsedColumns());
+        }
+        // prunedPartitionPredicates columns must also be present in both scans
+        if (scan.getPrunedPartitionPredicates() != null) {
+            scan.getPrunedPartitionPredicates().forEach(p -> firstScanColumns.union(p.getUsedColumns()));
         }
 
         // Check predicate and column type constraints only for duplicated columns
@@ -226,6 +231,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         if (scan.getPredicate() != null) {
             newAggUseRefs.union(scan.getPredicate().getUsedColumns());
         }
+        // prunedPartitionPredicates columns must be remapped in the right scan
+        if (scan.getPrunedPartitionPredicates() != null) {
+            scan.getPrunedPartitionPredicates().forEach(p -> newAggUseRefs.union(p.getUsedColumns()));
+        }
         Map<ColumnRefOperator, ColumnRefOperator> refToNew = Maps.newHashMap();
 
         newAggUseRefs.getStream().forEach(k -> {
@@ -244,6 +253,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 newScanUseRefs.union(v.getUsedColumns());
             }
         });
+        // prunedPartitionPredicates columns must stay in the scan's projection to survive column pruning
+        if (scan.getPrunedPartitionPredicates() != null) {
+            scan.getPrunedPartitionPredicates().forEach(p -> newScanUseRefs.union(p.getUsedColumns()));
+        }
 
         Map<ColumnRefOperator, ScalarOperator> scanProjections = Maps.newHashMap();
         newScanUseRefs.getStream().forEach(k -> scanProjections.put(factory.getColumnRef(k), factory.getColumnRef(k)));
@@ -313,12 +326,16 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         ReplaceColumnRefRewriter refRewriter = new ReplaceColumnRefRewriter(refMapping);
+        List<ScalarOperator> newPrunedPredicates = scan.getPrunedPartitionPredicates().stream()
+                .map(refRewriter::rewrite)
+                .collect(Collectors.toList());
         LogicalOlapScanOperator newScan = LogicalOlapScanOperator.builder()
                 .withOperator(scan)
                 .setProjection(scanProjection)
                 .setColRefToColumnMetaMap(refToMeta)
                 .setColumnMetaToColRefMap(metaToRef)
                 .setPredicate(refRewriter.rewrite(scan.getPredicate()))
+                .setPrunedPartitionPredicates(newPrunedPredicates)
                 .build();
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();

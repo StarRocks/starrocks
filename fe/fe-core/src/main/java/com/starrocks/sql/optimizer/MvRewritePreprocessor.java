@@ -65,7 +65,9 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -347,7 +349,14 @@ public class MvRewritePreprocessor {
         }
     }
 
-    private static MaterializedView copyOnlyMaterializedView(MaterializedView mv, long timeoutMs) {
+    public enum MvCopyFailurePolicy {
+        SKIP_ON_COPY_FAILURE,
+        FALLBACK_TO_LIVE_MV
+    }
+
+    private static MaterializedView copyOnlyMaterializedView(MaterializedView mv,
+                                                             long timeoutMs,
+                                                             MvCopyFailurePolicy copyFailurePolicy) {
         // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
@@ -356,8 +365,14 @@ public class MvRewritePreprocessor {
         // Add a timeout to avoid waiting too long for the lock in some cases to avoid affecting query latency.
         if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ,
                 timeoutMsPerTry, TimeUnit.MILLISECONDS)) {
-            logMVPrepare("Failed to lock mv {} for copying, use mv directly", mv.getName());
-            return mv;
+            if (copyFailurePolicy == MvCopyFailurePolicy.FALLBACK_TO_LIVE_MV) {
+                logMVPrepare("Failed to lock mv {} for copying, use live mv to preserve transparent rewrite semantics",
+                        mv.getName());
+                return mv;
+            }
+            logMVPrepare("Failed to lock mv {} for copying under lock-free planning, skip this mv candidate",
+                    mv.getName());
+            return null;
         }
         try {
             MaterializedView copiedMV = new MaterializedView();
@@ -505,19 +520,25 @@ public class MvRewritePreprocessor {
                                                                  long timeoutMs) {
         if (!mv.isActive())  {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
-            return MVPlanValidationResult.invalid("MV is not active");
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.MV_INACTIVE, "MV is not active");
+        }
+        if (mv.getRefreshMode().isIncrementalOrAuto()) {
+            String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION, message);
         }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return MVPlanValidationResult.invalid(message);
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.QUERY_REWRITE_DISABLED, message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
-            return MVPlanValidationResult.invalid("MV contains extra tables besides FK-PK");
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                    "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
         final List<MvPlanContext> planContexts = force ?
@@ -527,7 +548,8 @@ public class MvRewritePreprocessor {
                         .getPlanContextIfPresent(mv, timeoutMs);
         // if mv is not in plan cache, we cannot determine whether it's valid
         if (isNoPlanAsInvalid && CollectionUtils.isEmpty(planContexts)) {
-            return MVPlanValidationResult.unknown("MV plan is not in cache, valid check is unknown");
+            return MVPlanValidationResult.unknown(MVPlanValidationResult.Reason.UNKNOWN,
+                    "MV plan is not in cache, valid check is unknown");
         }
         if (CollectionUtils.isNotEmpty(planContexts) &&
                 planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
@@ -537,7 +559,8 @@ public class MvRewritePreprocessor {
                     .map(MvPlanContext::getInvalidReason)
                     .collect(Collectors.joining(";"));
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return MVPlanValidationResult.invalid("no valid plan: " + message);
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                    "no valid plan: " + message);
         }
         return MVPlanValidationResult.valid();
     }
@@ -798,7 +821,8 @@ public class MvRewritePreprocessor {
         }
 
         MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-                mvUpdateInfo, queryTables, mvWithPlanContext.getLevel(), timeoutMs);
+                mvUpdateInfo, queryTables, mvWithPlanContext.getLevel(), timeoutMs,
+                MvCopyFailurePolicy.SKIP_ON_COPY_FAILURE);
         if (materializationContext == null) {
             logMVPrepare(connectContext, "Prepare MV {} failed to build materialization context", mv.getName());
             return;
@@ -980,7 +1004,20 @@ public class MvRewritePreprocessor {
                                                                      Set<Table> queryTables,
                                                                      int level) {
         long timeoutMs = getPrepareTimeoutMsPerMV(context.getConnectContext(), 1);
-        return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs);
+        return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs,
+                MvCopyFailurePolicy.SKIP_ON_COPY_FAILURE);
+    }
+
+    public static MaterializationContext buildMaterializationContext(OptimizerContext context,
+                                                                     MaterializedView mv,
+                                                                     MvPlanContext mvPlanContext,
+                                                                     MvUpdateInfo mvUpdateInfo,
+                                                                     Set<Table> queryTables,
+                                                                     int level,
+                                                                     MvCopyFailurePolicy copyFailurePolicy) {
+        long timeoutMs = getPrepareTimeoutMsPerMV(context.getConnectContext(), 1);
+        return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs,
+                copyFailurePolicy);
     }
 
     private static MaterializationContext buildMaterializationContext(OptimizerContext context,
@@ -989,7 +1026,8 @@ public class MvRewritePreprocessor {
                                                                       MvUpdateInfo mvUpdateInfo,
                                                                       Set<Table> queryTables,
                                                                       int level,
-                                                                      long timeoutMs) {
+                                                                      long timeoutMs,
+                                                                      MvCopyFailurePolicy copyFailurePolicy) {
         if (mvPlanContext == null) {
             logMVPrepare(context.getConnectContext(), "MV {} plan context is null", mv.getName());
             return null;
@@ -1013,7 +1051,14 @@ public class MvRewritePreprocessor {
 
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
-        MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv, timeoutMs) : mv;
+        MaterializedView copiedMV = (context.getQueryTables() != null)
+                ? copyOnlyMaterializedView(mv, timeoutMs, copyFailurePolicy)
+                : mv;
+        if (copiedMV == null) {
+            logMVPrepare(context.getConnectContext(),
+                    "MV {} cannot build materialization context because its metadata copy is unavailable", mv.getName());
+            return null;
+        }
         return buildMaterializationContext(context, copiedMV, mvPlanContext, mvUpdateInfo,
                 baseTables, intersectingTables, mvPlan, level);
     }
@@ -1159,7 +1204,11 @@ public class MvRewritePreprocessor {
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
-            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+            RangeDistributionSpec rangeSpec = DistributionSpecHelper
+                    .buildRangeDistributionSpecSkeleton(mv, columnMetaToColRefMap);
+            distributionSpec = rangeSpec != null
+                    ? rangeSpec
+                    : DistributionSpec.createAnyDistributionSpec();
         }
 
         return distributionSpec;

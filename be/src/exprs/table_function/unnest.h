@@ -21,7 +21,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/table_function/table_function.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 /**
@@ -82,6 +81,8 @@ public:
             return std::make_pair(std::move(result), col_array->offsets_column());
         }
     }
+
+    bool is_exception_safe() const override { return true; }
 
     class UnnestState : public TableFunctionState {
         /**

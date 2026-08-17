@@ -102,6 +102,21 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testTimeTravelClauseOnViewRelation() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert()
+                .withView("create view test.view_time_travel_base as select v1, v2 from test.t0", () ->
+                        analyzeFail("select v1, v2 from test.view_time_travel_base for version as of 1",
+                                "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testTimeTravelClauseOnCteRelation() {
+        analyzeFail("with cte_time_travel_base as (select v1, v2 from test.t0) " +
+                        "select v1, v2 from cte_time_travel_base for version as of 1",
+                "Unsupported relation type for temporal clauses, relation type: CTE");
+    }
+
+    @Test
     public void testIdentifierStartWithDigit() {
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select * from a.11b", 0).get(0);
         Assertions.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
@@ -611,11 +626,10 @@ public class AnalyzeSingleTest {
     public void testSetVar() {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
-        SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+        ((QueryStatement) statementBase).getQueryRelation();
         Assertions.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
-        selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assertions.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
         SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +

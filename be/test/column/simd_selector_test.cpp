@@ -17,7 +17,7 @@
 #include <limits>
 
 #include "base/testutil/parallel_test.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
 #include "types/logical_type.h"

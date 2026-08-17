@@ -101,6 +101,7 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setEnableReplicationJoin(false);
         ctx.getSessionVariable().setJoinImplementationMode("auto");
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
+        ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {
@@ -1203,7 +1204,6 @@ public class OptimizerTaskTest {
 
         ColumnRefOperator column1 = columnRefFactory.create("t1", IntegerType.INT, true);
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("k1", IntegerType.INT));
@@ -1336,7 +1336,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1399,7 +1398,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1448,7 +1446,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("k1", IntegerType.INT));
 
@@ -1504,7 +1501,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1568,7 +1564,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("k1", IntegerType.INT));
@@ -1680,7 +1675,6 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, ScalarOperator> projectMap2 = Maps.newHashMap();
         projectMap2.put(column5, column4);
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1751,7 +1745,6 @@ public class OptimizerTaskTest {
         projectMap.put(column4, add1);
         projectMap.put(column5, add2);
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2, column3);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1822,8 +1815,6 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList(column1, column3);
 
-        List<ColumnRefOperator> scan1Columns = Lists.newArrayList(column1, this.column2);
-        List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
         scan1ColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1850,7 +1841,7 @@ public class OptimizerTaskTest {
                 OptExpression.create(scan2));
 
         Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
-        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
+        optimizer.optimize(expression, new ColumnRefSet(outputColumns));
     }
 
     @Test
@@ -1905,9 +1896,6 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList(column1, column3, column5);
 
-        List<ColumnRefOperator> scan1Columns = Lists.newArrayList(column1, this.column2);
-        List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
-        List<ColumnRefOperator> scan3Columns = Lists.newArrayList(column5, this.column6);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
         scan1ColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -1947,7 +1935,7 @@ public class OptimizerTaskTest {
         OptExpression topJoin = OptExpression.create(join2,
                 join1, OptExpression.create(scan3));
         Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
-        OptExpression physicalTree = optimizer.optimize(topJoin, new ColumnRefSet(outputColumns));
+        optimizer.optimize(topJoin, new ColumnRefSet(outputColumns));
     }
 
     @Test
@@ -2018,8 +2006,6 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList(column1, column3);
 
-        List<ColumnRefOperator> scan1Columns = Lists.newArrayList(column1, this.column2);
-        List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
         scan1ColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -2136,8 +2122,6 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList(column1, column3);
 
-        List<ColumnRefOperator> scan1Columns = Lists.newArrayList(column1, this.column2);
-        List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
         scan1ColumnMap.put(column1, new Column("t1", IntegerType.INT, true));
@@ -2262,8 +2246,6 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList(column1, column3);
 
-        List<ColumnRefOperator> scan1Columns = Lists.newArrayList(column1, this.column2);
-        List<ColumnRefOperator> scan2Columns = Lists.newArrayList(column3, this.column4);
 
         Map<ColumnRefOperator, Column> scan1ColumnMap = Maps.newHashMap();
         scan1ColumnMap.put(column1, new Column("t1", IntegerType.INT, true));

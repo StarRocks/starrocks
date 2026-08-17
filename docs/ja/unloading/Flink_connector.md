@@ -1,5 +1,7 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Flink でテーブルデータを一括読み取りします。"
 ---
 
 # Flink コネクタを使用して StarRocks からデータを読み取る
@@ -32,10 +34,10 @@ Flink が提供する JDBC コネクタとは異なり、StarRocks の Flink コ
 
 | コネクタ   | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 以降       | 8    | 2.11,2.12 |
 
 ## 前提条件
 
@@ -55,7 +57,7 @@ Flink がデプロイされていること。Flink がデプロイされてい�
    OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
    ```
 
-2. お好みの [Flink パッケージ](https://flink.apache.org/downloads.html) をダウンロードして解凍します。
+2. お好みの [Flink パッケージ](https://flink.apache.org/downloads/) をダウンロードして解凍します。
 
    > **NOTE**
    >
@@ -82,7 +84,7 @@ Flink がデプロイされていること。Flink がデプロイされてい�
    Starting taskexecutor daemon on host.
    ```
 
-Flink のデプロイについては、[Flink ドキュメント](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/) の指示に従うこともできます。
+Flink のデプロイについては、[Flink ドキュメント](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation) の指示に従うこともできます。
 
 ## 始める前に
 
@@ -102,7 +104,7 @@ Flink コネクタをデプロイするには、次の手順に従います。
 
 ### ネットワーク設定
 
-Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/management/BE_configuration.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認します。
+Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認します。
 
 ## パラメータ
 
@@ -352,4 +354,4 @@ BE 設定の `scan_context_gc_interval_min`（デフォルト: 5、単位: 分�
 
 ## 次のステップ
 
-Flink が StarRocks からデータを正常に読み取った後、[Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) を使用して読み取りタスクを監視できます。例えば、WebUI の **Metrics** ページで `totalScannedRows` メトリックを表示して、正常に読み取られた行数を取得できます。また、Flink SQL を使用して、読み取ったデータに対してジョインなどの計算を行うこともできます。
+Flink が StarRocks からデータを正常に読み取った後、Flink WebUI を使用して読み取りタスクを監視できます。例えば、WebUI の **Metrics** ページで `totalScannedRows` メトリックを表示して、正常に読み取られた行数を取得できます。また、Flink SQL を使用して、読み取ったデータに対してジョインなどの計算を行うこともできます。

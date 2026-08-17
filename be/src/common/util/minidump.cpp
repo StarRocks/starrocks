@@ -28,7 +28,7 @@
 #include <sstream>
 #include <system_error>
 
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/logging.h"
 
 namespace starrocks {

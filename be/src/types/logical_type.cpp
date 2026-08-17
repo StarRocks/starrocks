@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 
@@ -313,3 +314,8 @@ const std::vector<LogicalType>& sortable_types() {
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::LogicalType>::format(const starrocks::LogicalType value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::string_view>::format(starrocks::logical_type_to_string(value), ctx);
+}

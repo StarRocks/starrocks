@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将 Base64 编码的字符串转换为 Bitmap。"
 ---
 
 # base64_to_bitmap

@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "compute_env/global_dict/parser.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
@@ -77,8 +78,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
 
             // follow SlotDescriptor is_null flag
             if (_type_is_nullable[i] && !result_columns[i]->is_nullable()) {
-                result_columns[i] =
-                        NullableColumn::create(std::move(result_columns[i]), NullColumn::create(num_rows, 0));
+                result_columns[i] = NullableColumn::create(result_columns[i], NullColumn::create(num_rows, 0));
             }
         }
         RETURN_IF_HAS_ERROR(_expr_ctxs);

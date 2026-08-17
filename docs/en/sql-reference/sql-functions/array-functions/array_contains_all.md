@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Checks whether arr1 contains all the elements of arr2, that is, whether arr2 is a subset of arr1."
 ---
 
 # array_contains_all
@@ -18,7 +19,7 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 `arr`: the two arrays to compare. This syntax checks whether `arr2` is a subset of `arr1`.
 
-The data types of elements in the two arrays must be the same. For the data types of array elements supported by StarRocks, see [ARRAY](../../../sql-reference/data-types/semi_structured/Array.md).
+The data types of elements in the two arrays must be the same. For the data types of array elements supported by StarRocks, see [ARRAY](../../data-types/semi_structured/Array.md).
 
 ## Return value
 

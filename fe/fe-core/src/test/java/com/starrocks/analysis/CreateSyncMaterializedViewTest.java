@@ -27,7 +27,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -216,7 +216,7 @@ public class CreateSyncMaterializedViewTest {
     public void testSelectFromSyncMV() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -234,7 +234,7 @@ public class CreateSyncMaterializedViewTest {
     @Test
     public void testCreateSyncMV1() throws Exception {
         String sql = "create materialized view aggregate_table_with_null as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
             // aggregate_table_with_null already existed in the db
@@ -249,7 +249,7 @@ public class CreateSyncMaterializedViewTest {
     @Test
     public void testCreateSyncMV2() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -260,7 +260,7 @@ public class CreateSyncMaterializedViewTest {
 
         // sync_mv1 already existed in the tbl1
         sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
@@ -276,7 +276,7 @@ public class CreateSyncMaterializedViewTest {
     @Test
     public void testCreateSyncMV3() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -286,7 +286,7 @@ public class CreateSyncMaterializedViewTest {
         Assertions.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
         // sync_mv1 already existed in tbl1
         sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl3 group by k1;";
-        createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
@@ -302,7 +302,7 @@ public class CreateSyncMaterializedViewTest {
     public void testCreateSyncMV_WithUpperColumn() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -338,7 +338,7 @@ public class CreateSyncMaterializedViewTest {
     public void testCreateSyncMV_WithLowerColumn() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -373,7 +373,7 @@ public class CreateSyncMaterializedViewTest {
     @Test
     public void testCreateSynchronousMVOnAnotherMV() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         Table table = getTable("test", "mocked_cloud_table");
         // Change table type to materialized view

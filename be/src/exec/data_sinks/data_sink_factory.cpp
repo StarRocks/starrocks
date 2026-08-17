@@ -1,0 +1,220 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <memory>
+#include <sstream>
+
+#include "common/logging.h"
+#include "data_sink/dictionary_cache/dictionary_cache_sink.h"
+#include "data_sink/exchange/data_stream_sender.h"
+#include "data_sink/external/blackhole_table_sink.h"
+#include "data_sink/external/export_sink.h"
+#include "data_sink/external/hive_table_sink.h"
+#include "data_sink/tablet/multi_olap_table_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
+#include "exec_primitive/data_sink.h"
+#include "gen_cpp/DataSinks_types.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/InternalService_types.h"
+#ifndef __APPLE__
+#include "data_sink/external/iceberg_table_sink.h"
+#endif
+#include "data_sink/exchange/multi_cast_data_stream_sink.h"
+#include "data_sink/external/mysql_table_sink.h"
+#include "data_sink/external/noop_sink.h"
+#include "data_sink/external/schema_table_sink.h"
+#include "data_sink/external/table_function_table_sink.h"
+#include "data_sink/result/memory_scratch_sink.h"
+#include "data_sink/result/result_sink.h"
+#include "runtime/runtime_state.h"
+
+namespace starrocks {
+
+static std::unique_ptr<DataStreamSender> create_data_stream_sink(
+        RuntimeState* state, const TDataStreamSink& data_stream_sink, const TPlanFragmentExecParams& params,
+        int32_t sender_id, const std::vector<TPlanFragmentDestination>& destinations) {
+    bool send_query_statistics_with_every_batch =
+            params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
+    bool enable_exchange_pass_through =
+            params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
+    bool enable_exchange_perf = params.__isset.enable_exchange_perf && params.enable_exchange_perf;
+
+    return std::make_unique<DataStreamSender>(state, sender_id, data_stream_sink, destinations,
+                                              send_query_statistics_with_every_batch, enable_exchange_pass_through,
+                                              enable_exchange_perf);
+}
+
+Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
+                                  const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
+                                  int32_t sender_id, const RecordDescriptor& record_desc,
+                                  std::unique_ptr<DataSink>* sink) {
+    DCHECK(sink != nullptr);
+    switch (thrift_sink.type) {
+    case TDataSinkType::DATA_STREAM_SINK: {
+        if (!thrift_sink.__isset.stream_sink) {
+            return Status::InternalError("Missing data stream sink.");
+        }
+        *sink = create_data_stream_sink(state, thrift_sink.stream_sink, params, sender_id, params.destinations);
+        break;
+    }
+    case TDataSinkType::RESULT_SINK:
+        if (!thrift_sink.__isset.result_sink) {
+            return Status::InternalError("Missing data buffer sink.");
+        }
+
+        // TODO: figure out good buffer size based on size of output row
+        *sink = std::make_unique<ResultSink>(output_exprs, thrift_sink.result_sink, 1024);
+        break;
+    case TDataSinkType::MEMORY_SCRATCH_SINK:
+        if (!thrift_sink.__isset.memory_scratch_sink) {
+            return Status::InternalError("Missing data buffer sink.");
+        }
+        *sink = std::make_unique<MemoryScratchSink>(record_desc, output_exprs, thrift_sink.memory_scratch_sink);
+        break;
+    case TDataSinkType::MYSQL_TABLE_SINK: {
+        if (!thrift_sink.__isset.mysql_table_sink) {
+            return Status::InternalError("Missing data buffer sink.");
+        }
+        // TODO: figure out good buffer size based on size of output row
+        *sink = std::make_unique<MysqlTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+
+    case TDataSinkType::EXPORT_SINK: {
+        if (!thrift_sink.__isset.export_sink) {
+            return Status::InternalError("Missing export sink sink.");
+        }
+        *sink = std::make_unique<ExportSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::OLAP_TABLE_SINK: {
+        Status status;
+        DCHECK(thrift_sink.__isset.olap_table_sink);
+        *sink = std::make_unique<OlapTableSink>(state->obj_pool(), output_exprs, &status, state);
+        RETURN_IF_ERROR(status);
+        break;
+    }
+    case TDataSinkType::MULTI_OLAP_TABLE_SINK: {
+        DCHECK(thrift_sink.__isset.multi_olap_table_sinks);
+        *sink = std::make_unique<MultiOlapTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::MULTI_CAST_DATA_STREAM_SINK: {
+        DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
+                << "Missing mcast stream sink.";
+
+        auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(state);
+        const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
+
+        for (size_t i = 0; i < thrift_mcast_stream_sink.sinks.size(); i++) {
+            const auto& sink = thrift_mcast_stream_sink.sinks[i];
+            const auto& destinations = thrift_mcast_stream_sink.destinations[i];
+            auto ret = create_data_stream_sink(state, sink, params, sender_id, destinations);
+            mcast_data_stream_sink->add_data_stream_sink(std::move(ret));
+        }
+        *sink = std::move(mcast_data_stream_sink);
+        break;
+    }
+    case TDataSinkType::SPLIT_DATA_STREAM_SINK: {
+        DCHECK(thrift_sink.__isset.split_stream_sink || thrift_sink.split_stream_sink.sinks.size() == 0)
+                << "Missing split stream sink.";
+
+        auto split_data_stream_sink = std::make_unique<SplitDataStreamSink>(state);
+        const auto& thrift_split_stream_sink = thrift_sink.split_stream_sink;
+
+        for (size_t i = 0; i < thrift_split_stream_sink.sinks.size(); i++) {
+            const auto& sink = thrift_split_stream_sink.sinks[i];
+            const auto& destinations = thrift_split_stream_sink.destinations[i];
+            auto ret = create_data_stream_sink(state, sink, params, sender_id, destinations);
+            split_data_stream_sink->add_data_stream_sink(std::move(ret));
+        }
+        *sink = std::move(split_data_stream_sink);
+        break;
+    }
+    case TDataSinkType::SCHEMA_TABLE_SINK: {
+        if (!thrift_sink.__isset.schema_table_sink) {
+            return Status::InternalError("Missing schema table sink.");
+        }
+        *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+#ifndef __APPLE__
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK: {
+        if (!thrift_sink.__isset.iceberg_table_sink) {
+            return Status::InternalError("Missing iceberg table sink");
+        }
+        *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+#else
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK: {
+        return Status::NotSupported("Iceberg table sink is disabled on macOS");
+    }
+#endif
+    case TDataSinkType::HIVE_TABLE_SINK: {
+        if (!thrift_sink.__isset.hive_table_sink) {
+            return Status::InternalError("Missing hive table sink");
+        }
+        *sink = std::make_unique<HiveTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::TABLE_FUNCTION_TABLE_SINK: {
+        if (!thrift_sink.__isset.table_function_table_sink) {
+            return Status::InternalError("Missing table function table sink");
+        }
+        *sink = std::make_unique<TableFunctionTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::BLACKHOLE_TABLE_SINK: {
+        *sink = std::make_unique<BlackHoleTableSink>(state->obj_pool());
+        break;
+    }
+    case TDataSinkType::DICTIONARY_CACHE_SINK: {
+        if (!thrift_sink.__isset.dictionary_cache_sink) {
+            return Status::InternalError("Missing dictionary cache sink");
+        }
+        if (!state->enable_pipeline_engine()) {
+            return Status::InternalError("dictionary cache only support pipeline engine");
+        }
+        *sink = std::make_unique<DictionaryCacheSink>();
+        break;
+    }
+    case TDataSinkType::NOOP_SINK: {
+        *sink = std::make_unique<NoopSink>(state->obj_pool());
+        break;
+    }
+    default:
+        std::stringstream error_msg;
+        auto i = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
+        const char* str = "Unknown data sink type ";
+
+        if (i != _TDataSinkType_VALUES_TO_NAMES.end()) {
+            str = i->second;
+        }
+        error_msg << str << " not implemented.";
+        return Status::InternalError(error_msg.str());
+    }
+
+    if (*sink != nullptr) {
+        RETURN_IF_ERROR((*sink)->init(thrift_sink, state));
+    }
+
+    return Status::OK();
+}
+
+} // namespace starrocks

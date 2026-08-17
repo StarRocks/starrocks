@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "可変長文字列型で最大長は 65533 バイト。"
 ---
 
 # STRING

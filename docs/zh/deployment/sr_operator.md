@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "使用 StarRocks Kubernetes Operator 在 Kubernetes 集群上自动化部署和管理集群。"
 ---
 
 # 使用 Operator 部署 StarRocks 集群
@@ -28,11 +30,11 @@ displayed_sidebar: docs
 
 **创建  GKE 集群**
 
-创建前，请确保已经完成所有前置工作。创建步骤，请参考[创建 GKE 集群](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster)。
+创建前，请确保已经完成所有前置工作。创建步骤，请参考[创建 GKE 集群](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster)。
 
 **创建私有 Kubernetes 集群**
 
-创建 [Kubernetes 集群](https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/)。如需快速体验本特性，则可以使用 [Minikube](https://kubernetes.io/zh-cn/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) 创建单节点 Kubernetes 集群。
+创建 [Kubernetes 集群](https://kubernetes.io/docs/)。如需快速体验本特性，则可以使用 Minikube 创建单节点 Kubernetes 集群。
 
 ### 部署 StarRocks Operator
 
@@ -247,7 +249,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 >
 > 如果配置了 CN 自动扩缩容策略，则请删除 CN 的 `replicas` 字段。
 
-Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/tasks/run-application/horizontal-pod-autoscale/)。
+Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)。
 
 如下是 StarRocks 提供的 [CN 自动扩缩策略模版](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml)。
 
@@ -265,7 +267,7 @@ Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为�
       maxReplicas: 10 # The maximum number of CNs is set to 10.
       minReplicas: 1 # The minimum number of CNs is set to 1.
       # operator creates an HPA resource based on the following field.
-      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
+      # see https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
         metrics: # Resource metrics
           - type: Resource

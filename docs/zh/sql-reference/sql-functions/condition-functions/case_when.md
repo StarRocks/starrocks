@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CASE 是条件表达式，支持简单 CASE 和搜索 CASE 两种写法。"
 ---
 
 # case

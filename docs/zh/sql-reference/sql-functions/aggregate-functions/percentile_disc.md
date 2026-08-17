@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "percentile_disc 计算百分位数，未找到匹配值时返回较大的相邻值。"
 ---
 
 # percentile_disc

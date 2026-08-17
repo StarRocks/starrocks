@@ -1,0 +1,59 @@
+-- name: test_jvm_arrow_udf @no_arrow_flight_sql
+
+-- Vectorized ("input"="arrow") Java UDFs: scalar / UDTF / UDAF receive one Apache Arrow
+-- FieldVector per argument for the whole batch, exchanged over the Arrow C Data Interface.
+
+-- Scalar: IntVector evaluate(IntVector, IntVector) -> a + b + 1
+CREATE FUNCTION arrow_add(INT, INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.example.udf.UDFArrowAdd",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "${udf_url}/starrocks-jdbc/arrow.jar"
+);
+
+-- UDTF: Integer[][] process(IntVector) -> each row emits {x, x*10}
+CREATE TABLE FUNCTION arrow_repeat(INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.example.udf.UDTFArrowRepeat",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "${udf_url}/starrocks-jdbc/arrow.jar"
+);
+
+-- UDAF (single-state): void update(State, IntVector) -> SUM(INT)
+CREATE AGGREGATE FUNCTION arrow_sum(INT)
+RETURNS BIGINT
+PROPERTIES (
+    "symbol" = "com.starrocks.example.udf.ArrowSum",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "${udf_url}/starrocks-jdbc/arrow.jar"
+);
+
+CREATE TABLE t_arrow (id INT, a INT, b INT)
+ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_arrow VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30), (4, NULL, 5), (5, 7, NULL);
+
+-- Scalar: a + b + 1, NULL when any argument is NULL
+SELECT id, arrow_add(a, b) AS r FROM t_arrow ORDER BY id;
+
+-- UDTF: each input row -> two output rows {a, a*10}; a NULL row emits no rows
+SELECT a, arrow_repeat AS r FROM t_arrow, arrow_repeat(a) ORDER BY a, r;
+
+-- UDAF global aggregation (no GROUP BY): SUM of non-null a = 13
+SELECT arrow_sum(a) AS s FROM t_arrow;
+
+-- Arrow UDAF is only supported for global / sorted aggregation; hash GROUP BY is rejected
+SELECT b, arrow_sum(a) AS s FROM t_arrow GROUP BY b ORDER BY b;
+
+DROP FUNCTION arrow_add(INT, INT);
+DROP FUNCTION arrow_repeat(INT);
+DROP FUNCTION arrow_sum(INT);
+DROP TABLE t_arrow;

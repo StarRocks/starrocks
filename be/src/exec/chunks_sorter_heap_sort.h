@@ -23,11 +23,12 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/sorting/data_segment.h"
 #include "exec/chunks_sorter.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
 #include "runtime/runtime_filter.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

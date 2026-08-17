@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ロール非アクティブ化やその他の StarRocks 権限・認可に関する一般的な質問と回答を提供します。"
 sidebar_position: 50
 ---
 
@@ -46,7 +47,7 @@ GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
 
 ## StarRocks Web Console `http://<fe_ip>:<fe_http_port>` にアクセスするために必要な権限は何ですか？
 
-ユーザーは `cluster_admin` ロールを持っている必要があります。
+ユーザーは `db_admin` と `user_admin` ロールを持っている必要があります。
 
 ## StarRocks v3.0 の前後で権限保持メカニズムはどのように変わりましたか？
 

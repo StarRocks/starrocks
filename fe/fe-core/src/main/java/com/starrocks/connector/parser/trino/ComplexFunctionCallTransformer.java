@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.type.AnyMapType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
 
 import java.util.Collections;
@@ -131,6 +132,11 @@ public class ComplexFunctionCallTransformer {
             FunctionCallExpr key = new FunctionCallExpr("array_agg", ImmutableList.of(args[0]));
             FunctionCallExpr value = new FunctionCallExpr("array_agg", ImmutableList.of(args[1]));
             return new FunctionCallExpr("map_from_arrays", ImmutableList.of(key, value));
+        } else if (functionName.equalsIgnoreCase(FunctionSet.DATE)) {
+            if (args.length != 1) {
+                throw new SemanticException("date function must have 1 argument");
+            }
+            return new CastExpr(DateType.DATE, args[0]);
         }
         return null;
     }

@@ -27,6 +27,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -42,6 +44,7 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class OptimizeJobV2Test extends DDLTestBase {
     private static final String TEST_FILE_NAME = OptimizeJobV2Test.class.getCanonicalName();
@@ -66,22 +69,22 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeParser() throws Exception {
         String stmt = "alter table testTable7 distributed by hash(v1)";
-        AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
         stmt = "alter table testTable7 primary key(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 order by (v1)";
-        alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
         stmt = "alter table testTable7 partition (t1) duplicate key(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support"));
@@ -89,7 +92,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 duplicate key(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support"));
@@ -97,7 +100,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 partition (t1) distributed by hash(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
@@ -106,7 +109,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 temporary partition (t1) distributed by hash(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support optimize temp partition"));
@@ -114,7 +117,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 partition (t1) distributed by random";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
@@ -123,7 +126,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 partition (t1) distributed by hash(v3)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
@@ -154,7 +157,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
-        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -171,12 +173,15 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
+        String rewriteColumns = olapTable.getBaseSchema().stream()
+                .filter(column -> !column.isGeneratedColumn())
+                .map(column -> "`" + column.getName() + "`")
+                .collect(Collectors.joining(", "));
         for (int i = 0; i < optimizeTasks.size(); ++i) {
             OptimizeTask optimizeTask = optimizeTasks.get(i);
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                        .getTaskRunScheduler().removeRunningTask(optimizeTask.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                        .getTaskRunScheduler().removePendingTask(optimizeTask);
+            Assertions.assertTrue(optimizeTask.getDefinition()
+                    .contains(") (" + rewriteColumns + ") select " + rewriteColumns + " from "));
+            removeTaskFromScheduler(optimizeTask);
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setTaskName(optimizeTask.getName());
             taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
@@ -210,10 +215,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // Mark all tasks SQL SUCCESS and add history
         for (OptimizeTask t : job.getOptimizeTasks()) {
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removePendingTask(t);
+            removeTaskFromScheduler(t);
             TaskRunStatus s = new TaskRunStatus();
             s.setTaskName(t.getName());
             s.setDbName(db.getFullName());
@@ -254,10 +256,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, job.getJobState());
 
         for (OptimizeTask t : job.getOptimizeTasks()) {
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removePendingTask(t);
+            removeTaskFromScheduler(t);
             TaskRunStatus s = new TaskRunStatus();
             s.setTaskName(t.getName());
             s.setDbName(db.getFullName());
@@ -642,10 +641,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
         for (OptimizeTask t : optimizeTasks) {
             t.setOptimizeTaskState(Constants.TaskRunState.PENDING);
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                    .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                    .getTaskRunScheduler().removePendingTask(t);
+            removeTaskFromScheduler(t);
         }
 
         // Trigger path: executeTask for PENDING tasks should set state to RUNNING or FAILED
@@ -728,6 +724,45 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertFalse(olapTable.existTempPartitions());
         // Verify table state is back to NORMAL
         Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+    }
+
+    private void removeTaskFromScheduler(OptimizeTask task) {
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        TaskRunScheduler trs = trm.getTaskRunScheduler();
+        if (trm.tryTaskRunLock()) {
+            try {
+                trs.removePendingTask(task);
+                trs.removeRunningTask(task.getId());
+            } finally {
+                trm.taskRunUnlock();
+            }
+        }
+    }
+
+    @Test
+    public void testReplayFinishedWithNullDistributionInfo() throws Exception {
+        // Regression: a job persisted with allPartitionOptimized=true but no distribution change
+        // (e.g. from a previously-accepted empty alter clause) must not clobber the table's
+        // defaultDistributionInfo during replay.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        Assertions.assertNotNull(olapTable.getDefaultDistributionInfo());
+
+        OptimizeJobV2 badPersistedJob = new OptimizeJobV2(
+                9999L, db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+        badPersistedJob.setJobState(JobState.FINISHED);
+        java.lang.reflect.Field allOptField = OptimizeJobV2.class.getDeclaredField("allPartitionOptimized");
+        allOptField.setAccessible(true);
+        allOptField.set(badPersistedJob, true);
+        // distributionInfo stays null - this is the corruption shape
+
+        OptimizeJobV2 replayJob = new OptimizeJobV2(
+                9999L, db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+        replayJob.replay(badPersistedJob);
+
+        Assertions.assertNotNull(olapTable.getDefaultDistributionInfo(),
+                "replay must not null out defaultDistributionInfo when persisted job has null distributionInfo");
     }
 
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {

@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
@@ -59,7 +59,6 @@
 #include "exprs/agg/window_funnel.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
 

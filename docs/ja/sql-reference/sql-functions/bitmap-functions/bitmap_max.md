@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビットマップの最大値を取得します。"
 ---
 
 # bitmap_max

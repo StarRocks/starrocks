@@ -15,6 +15,7 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -44,7 +45,9 @@ public class QueryDetailActionV2 extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String authorization = request.getAuthorizationHeader();
         String eventTimeStr = request.getSingleParameter("event_time");
         String user = request.getSingleParameter("user");

@@ -944,14 +944,14 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  25 <-> 1\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"), plan);
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE\n" +
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] MCV: [[1:1]] ESTIMATE"), plan);
     }
 
     @Test
@@ -1628,16 +1628,16 @@ public class ExpressionTest extends PlanTestBase {
     public void testStructExpression() throws Exception {
         String sql = "select struct('a', 1, 2, 10000)";
         String plan = getVerboseExplain(sql);
-        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6)>");
+        assertCContains(plan, "struct<`col1` varchar, `col2` tinyint(4), `col3` tinyint(4), `col4` smallint(6)>");
 
         sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, map{'a': 1, 'b': 2})";
         plan = getVerboseExplain(sql);
-        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
-                "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");
+        assertCContains(plan, "struct<`col1` varchar, `col2` tinyint(4), `col3` tinyint(4), `col4` smallint(6), " +
+                "`col5` array<tinyint(4)>, `col6` boolean, `col7` map<varchar,tinyint(4)>>");
 
         sql = "select named_struct('a', 1, 'b', 2)";
         plan = getVerboseExplain(sql);
-        assertCContains(plan, "struct<a tinyint(4), b tinyint(4)>");
+        assertCContains(plan, "struct<`a` tinyint(4), `b` tinyint(4)>");
 
         try {
             sql = "select named_struct('a', 1, 'b', 2, 3, 6)";
@@ -2061,5 +2061,29 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select 'abcdefg' like '%%%%efg'";
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 2> : TRUE");
+    }
+
+    @Test
+    public void testReduceCastBoundaryDateDoesNotAbortPlanning() throws Exception {
+        starRocksAssert.withTable("create table rc_t (id int, dt datetime) duplicate key(id) " +
+                "distributed by hash(id) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withTable("create table rc_t2 (id int, d date) duplicate key(id) " +
+                "distributed by hash(id) buckets 1 properties('replication_num'='1')");
+        try {
+            // Boundary date literals used to make ReduceCastRule shift past [0000-01-01, 9999-12-31]
+            // via plusDays(+/-1) and throw "Invalid date value", aborting planning of valid queries.
+            for (String sql : new String[] {
+                    "select * from rc_t where cast(dt as date) <= '9999-12-31'",
+                    "select * from rc_t where cast(dt as date) > '9999-12-31'",
+                    "select * from rc_t where cast(dt as date) = '9999-12-31'",
+                    "select * from rc_t2 where cast(d as datetime) < '0000-01-01 00:00:00'",
+                    "select * from rc_t2 where cast(d as datetime) > '9999-12-31 12:00:00'"}) {
+                String plan = getFragmentPlan(sql);
+                Assertions.assertTrue(plan.contains("rc_t"), sql + " => " + plan);
+            }
+        } finally {
+            starRocksAssert.dropTable("rc_t");
+            starRocksAssert.dropTable("rc_t2");
+        }
     }
 }

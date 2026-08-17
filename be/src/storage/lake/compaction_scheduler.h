@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/time/time.h"
 #include "common/status.h"
 #include "common/util/stack_trace_mutex.h"
 #include "compaction_task_context.h"
@@ -71,6 +72,12 @@ public:
 
     bool allow_partial_success() const;
 
+    // Whether the originating FE request asked the CN to skip persisting the txn log to object
+    // storage and instead return it inline via the RPC response. Only the aggregate/file-bundling
+    // path sets this; on the regular path it is false, meaning the CN must persist the txn log
+    // itself. The parallel compaction manager consults this to decide how to deliver the merged log.
+    bool skip_write_txnlog() const;
+
     void set_last_check_time(int64_t now) {
         std::lock_guard l(_txn_valid_check_mutex);
         _last_check_time = now;
@@ -87,6 +94,10 @@ public:
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
+    // Cache a txn log that this node produced but handed to the aggregator to persist, so that the
+    // following publish does not have to read the combined txn log back from object storage.
+    void cache_txn_log(const CompactionTaskContext& context);
+
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
     const CompactRequest* _request;
@@ -96,7 +107,7 @@ private:
     int64_t _timeout_deadline_ms;
     // compaction's last check time in second, initialized when first put into task queue,
     // used to help check whether it's valid periodically, task's in queue time is considered
-    int64_t _last_check_time;
+    int64_t _last_check_time{INT64_MAX};
     // use lock to protect _last_check_time and prevent multiple rpc called
     mutable std::mutex _txn_valid_check_mutex;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
@@ -113,6 +124,8 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    // Parallel subtask identifier. -1 means a regular, non-parallel task.
+    int32_t subtask_id = -1;
     std::string profile; // detailed execution info, such as io stats
 };
 
@@ -128,7 +141,7 @@ class CompactionScheduler {
     public:
         constexpr const static int16_t kConcurrencyRestoreTimes = 2;
 
-        explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
+        explicit Limiter(int16_t total) : _total(total), _free(total) {}
 
         // Acquire a token for doing compaction task. returns true on success and false otherwise.
         // No new compaction task should be scheduled to run if the method returned false.
@@ -150,9 +163,9 @@ class CompactionScheduler {
         // The number of tokens can be assigned to compaction tasks.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
-        int16_t _reserved;
+        int16_t _reserved{0};
         // The number of tasks that didn't encounter the Status::MemoryLimitExceeded error.
-        int64_t _success;
+        int64_t _success{0};
     };
 
     using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;
@@ -357,6 +370,7 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
     context->enqueue_time_sec = ::time(nullptr);
+    context->enqueue_time_ns = MonotonicNanos();
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -365,8 +379,10 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
     int64_t now = ::time(nullptr);
+    int64_t now_ns = MonotonicNanos();
     for (auto& context : contexts) {
         context->enqueue_time_sec = now;
+        context->enqueue_time_ns = now_ns;
         _internal_task_queues[idx]->put(std::move(context));
     }
 }

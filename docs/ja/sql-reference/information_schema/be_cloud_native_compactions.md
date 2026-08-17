@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_cloud_native_compactions テーブルは共有データクラスタの compaction トランザクション情報を提供。"
 ---
 
 # be_cloud_native_compactions

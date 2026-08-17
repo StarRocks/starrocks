@@ -1,7 +1,12 @@
 ---
 displayed_sidebar: docs
+description: "複数ワークロード（短いクエリ、アドホッククエリ、ETL等）を単一クラスターで並行実行し、リソース分離・干渉低減を実現します。"
 sidebar_position: 10
 ---
+
+import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
+import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
+import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # リソースグループ
 
@@ -39,7 +44,9 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 | パラメータ                  | 説明                                                    | 値の範囲                                                    | デフォルト |
 | -------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
 | cpu_weight                 | BE ノード上のこのリソースグループの CPU スケジューリングの重み。 | (0, `avg_be_cpu_cores`] (0 より大きい場合に有効)     | 0       |
+| cpu_weight_percent         | BE ノード上のこのリソースグループの CPU スケジューリングの重みのパーセンテージ。v4.1 以降でサポートされます。 | [0, 100] (0 より大きい場合に有効) | 0       |
 | exclusive_cpu_cores        | このリソースグループの CPU ハードアイソレーションパラメータ。          | (0, `min_be_cpu_cores - 1`] (0 より大きい場合に有効) | 0       |
+| exclusive_cpu_percent      | このリソースグループの CPU ハードアイソレーションのパーセンテージ。v4.1 以降でサポートされます。 | [0, 100] (0 より大きい場合に有効) | 0       |
 | mem_limit                  | 現在の BE ノード上でこのリソースグループがクエリに利用できるメモリの割合。 | (0, 1] (必須)               | -       |
 | mem_pool | リソースグループをグループ化して、メモリ制限を共有します。 | 文字列 | default_mem_pool |
 | spill_mem_limit_threshold  | ディスクへのスピリングをトリガーするメモリ使用量のしきい値。         | (0, 1]                                                         | 1.0     |
@@ -50,31 +57,43 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 
 #### CPU リソースパラメータ
 
-##### `cpu_weight`
+##### `cpu_weight` と `cpu_weight_percent`
 
 このパラメータは、単一の BE ノード上のリソースグループの CPU スケジューリングの重みを指定し、このグループからのタスクに割り当てられる CPU 時間の相対的なシェアを決定します。v3.3.5 以前では、これは `cpu_core_limit` と呼ばれていました。
 
-その値の範囲は (0, `avg_be_cpu_cores`] で、`avg_be_cpu_cores` はすべての BE ノードにおける CPU コアの平均数です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。`cpu_weight` または `exclusive_cpu_cores` のいずれかが 0 より大きくなければなりませんが、両方ではありません。
+CPU スケジューリングの重みは、次のいずれかのパラメータで設定できます。
+
+- `cpu_weight`: CPU スケジューリングの重みを直接設定します。値の範囲は (0, `avg_be_cpu_cores`] で、`avg_be_cpu_cores` はすべての BE ノードにおける CPU コアの平均数です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。
+- `cpu_weight_percent`: v4.1 以降でサポートされます。CPU スケジューリングの重みをパーセンテージで設定します。値の範囲は [0, 100] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。`min_be_cpu_cores * cpu_weight_percent / 100 < 1` の場合、システムはエラーを返します。ここで、`min_be_cpu_cores` はすべての BE ノードにおける CPU コアの最小数です。
+
+実行時、各 BE は自身の CPU コア数 `be_cpu_cores` に基づいて、`cpu_weight_percent` を実際の `cpu_weight` に変換します: `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`。
+
+`cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores`、`exclusive_cpu_percent` のうち、0 より大きい値を設定できるのは 1 つだけです。
 
 > **注意**
 >
 > 例えば、3 つのリソースグループ rg1、rg2、rg3 がそれぞれ cpu_weight 値 2、6、8 を持っているとします。完全に負荷がかかっている BE ノードでは、これらのグループはそれぞれ 12.5%、37.5%、50% の CPU 時間を受け取ります。ノードが完全に負荷がかかっていない場合、rg1 と rg2 が負荷を受けている間、rg3 がアイドル状態である場合、rg1 と rg2 はそれぞれ 25% と 75% の CPU 時間を受け取ります。
 
-##### `exclusive_cpu_cores`
+##### `exclusive_cpu_cores` と `exclusive_cpu_percent`
 
-このパラメータは、リソースグループの CPU ハード制限を定義します。これには 2 つの意味があります。
+このパラメータは、リソースグループの CPU ハードアイソレーションを定義します。これには 2 つの意味があります。
 
-- **専用**: `exclusive_cpu_cores` CPU コアをこのリソースグループ専用に予約し、アイドル状態でも他のグループには利用できません。
+- **専用**: 指定された数の CPU コアをこのリソースグループ専用に予約し、アイドル状態でも他のグループには利用できません。
 - **クォータ**: リソースグループをこれらの予約された CPU コアのみを使用するように制限し、他のグループから利用可能な CPU リソースを使用できないようにします。
 
-値の範囲は (0, `min_be_cpu_cores - 1`] で、`min_be_cpu_cores` はすべての BE ノードにおける CPU コアの最小数です。0 より大きい場合にのみ有効です。`cpu_weight` または `exclusive_cpu_cores` のいずれかのみが 0 より大きく設定できます。
+CPU ハードアイソレーションは、次のいずれかのパラメータで設定できます。
 
-- `exclusive_cpu_cores` が 0 より大きいリソースグループは専用リソースグループと呼ばれ、それに割り当てられた CPU コアは専用コアと呼ばれます。他のグループは共有リソースグループと呼ばれ、共有コアで実行されます。
-- すべてのリソースグループにわたる `exclusive_cpu_cores` の合計数は `min_be_cpu_cores - 1` を超えることはできません。上限は、少なくとも 1 つの共有コアを利用可能にするために設定されています。
+- `exclusive_cpu_cores`: 予約する CPU コア数を直接設定します。値の範囲は (0, `min_be_cpu_cores - 1`] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。
+- `exclusive_cpu_percent`: v4.1 以降でサポートされます。予約する CPU コア数をパーセンテージで設定します。値の範囲は [0, 100] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。`min_be_cpu_cores * exclusive_cpu_percent / 100 < 1` の場合、システムはエラーを返します。
 
-`exclusive_cpu_cores` と `cpu_weight` の関係:
+実行時、各 BE は自身の CPU コア数 `be_cpu_cores` に基づいて、`exclusive_cpu_percent` を実際の `exclusive_cpu_cores` に変換します: `exclusive_cpu_cores = be_cpu_cores * exclusive_cpu_percent / 100`。
 
-`cpu_weight` または `exclusive_cpu_cores` のいずれかのみが一度にアクティブにできます。専用リソースグループは、`cpu_weight` を介して CPU 時間のシェアを要求することなく、独自の予約された専用コアで動作します。
+- `exclusive_cpu_cores` または `exclusive_cpu_percent` が 0 より大きいリソースグループは専用リソースグループと呼ばれ、それに割り当てられた CPU コアは専用コアと呼ばれます。他のグループは共有リソースグループと呼ばれ、共有コアで実行されます。
+- すべての専用リソースグループにわたる `exclusive_cpu_cores` の合計数は `min_be_cpu_cores - 1` を超えることはできません。`exclusive_cpu_percent` を使用する場合、システムはまず `min_be_cpu_cores * exclusive_cpu_percent / 100` に基づいて CPU コア数に変換してから合計を計算します。上限は、少なくとも 1 つの共有コアを利用可能にするために設定されています。
+
+`exclusive_cpu_cores`、`exclusive_cpu_percent`、`cpu_weight`、`cpu_weight_percent` の関係:
+
+`cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores`、`exclusive_cpu_percent` のうち、一度に有効にできるのは 1 つだけです。専用リソースグループは、`cpu_weight` または `cpu_weight_percent` を介して CPU 時間のシェアを要求することなく、独自の予約された専用コアで動作します。
 
 共有リソースグループが専用リソースグループから専用コアを借りることができるかどうかを BE 設定 `enable_resource_group_cpu_borrowing` を使用して設定できます。デフォルトでは `true` に設定されており、専用グループがアイドル状態のときに共有グループが CPU リソースを借りることができます。
 
@@ -83,6 +102,8 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
+
+<ScopeParam />
 
 #### メモリリソースパラメータ
 
@@ -261,40 +282,7 @@ SET GLOBAL enable_pipeline_engine = true;
 
 次のステートメントを実行して、リソースグループを作成し、クラシファイアと関連付け、リソースグループに計算リソースを割り当てます。
 
-```SQL
-CREATE RESOURCE GROUP <group_name> 
-TO (
-    user='string', 
-    role='string', 
-    query_type in ('select'), 
-    source_ip='cidr'
-) -- クラシファイアを作成します。複数のクラシファイアを作成する場合、クラシファイアをカンマ（`,`）で区切ります。
-WITH (
-    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
-    "mem_limit" = "m%",
-    "concurrency_limit" = "INT",
-    "type" = "str" -- リソースグループのタイプ。値を normal に設定します。
-);
-```
-
-例:
-
-```SQL
-CREATE RESOURCE GROUP rg1
-TO 
-    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
-    (user='rg1_user3', source_ip='192.168.x.x/24'),
-    (user='rg1_user4'),
-    (db='db1')
-WITH (
-    'exclusive_cpu_cores' = '10',
-    'mem_limit' = '20%',
-    'big_query_cpu_second_limit' = '100',
-    'big_query_scan_rows_limit' = '100000',
-    'big_query_mem_limit' = '1073741824'
-);
-```
+<WhSyntaxExample />
 
 ### リソースグループを指定する（オプション）
 
@@ -357,12 +345,7 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 既存のリソースグループのリソースクォータを変更するには、次のステートメントを実行します。
 
-```SQL
-ALTER RESOURCE GROUP group_name WITH (
-    'cpu_core_limit' = 'INT',
-    'mem_limit' = 'm%'
-);
-```
+<WhAlterSyntax />
 
 リソースグループを削除するには、次のステートメントを実行します。
 
@@ -399,11 +382,11 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 クエリが完了した後、FE ノードの **fe.audit.log** ファイルの `ResourceGroup` フィールドを確認することで、クエリが一致したリソースグループを表示できます。
 
 - クエリがリソースグループの管理下にない場合、列の値は空の文字列 `""` です。
-- クエリがリソースグループの管理下にあるが、どのクラシファイアにも一致しない場合、列の値は空の文字列 `""` です。ただし、このクエリはデフォルトのリソースグループ `default_wg` に割り当てられます。
+- クエリがリソースグループの管理下にあるものの、どの分類器にも一致しない場合、そのクエリはデフォルトのリソースグループ `default_wg` に割り当てられます。
 
 ### リソースグループの監視
 
-リソースグループの[監視とアラート](../monitoring/Monitor_and_Alert.md)を設定できます。
+リソースグループの[監視とアラート](../monitoring/monitoring.md)を設定できます。
 
 リソースグループ関連の FE および BE メトリクスは次のとおりです。以下のすべてのメトリクスには、対応するリソースグループを示す `name` ラベルがあります。
 

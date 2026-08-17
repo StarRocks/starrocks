@@ -24,7 +24,7 @@
 #include <iterator>
 
 #include "boost/math/distributions/normal.hpp"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/helpers/serialize_helpers.hpp"

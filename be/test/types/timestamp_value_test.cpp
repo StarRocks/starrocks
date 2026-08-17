@@ -121,4 +121,34 @@ TEST(TimestampValueTest, unixTime) {
     ASSERT_EQ(1078097430000, v.to_unixtime(cctz::utc_time_zone()));
 }
 
+TEST(TimestampValueTest, from_uncommon_format_str_microsecond) {
+    // Test that from_uncommon_format_str preserves microseconds parsed from %f
+    {
+        TimestampValue ts;
+        std::string format = "%Y-%m-%dT%H:%i:%s.%f";
+        std::string value = "2026-02-09T00:15:01.535569";
+        bool result = ts.from_uncommon_format_str(format.c_str(), format.size(), value.c_str(), value.size());
+        ASSERT_TRUE(result);
+        EXPECT_EQ("2026-02-09 00:15:01.535569", ts.to_string());
+    }
+    // Test with fewer than 6 fractional digits
+    {
+        TimestampValue ts;
+        std::string format = "%Y-%m-%d %H:%i:%s.%f";
+        std::string value = "2026-02-09 12:30:45.123";
+        bool result = ts.from_uncommon_format_str(format.c_str(), format.size(), value.c_str(), value.size());
+        ASSERT_TRUE(result);
+        EXPECT_EQ("2026-02-09 12:30:45.123000", ts.to_string());
+    }
+    // Test with zero microseconds
+    {
+        TimestampValue ts;
+        std::string format = "%Y-%m-%d %H:%i:%s.%f";
+        std::string value = "2026-02-09 12:30:45.000000";
+        bool result = ts.from_uncommon_format_str(format.c_str(), format.size(), value.c_str(), value.size());
+        ASSERT_TRUE(result);
+        EXPECT_EQ("2026-02-09 12:30:45", ts.to_string());
+    }
+}
+
 } // namespace starrocks

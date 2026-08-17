@@ -14,15 +14,16 @@
 
 #include "storage/update_compaction_state.h"
 
-#include "common/config.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "common/stack_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/stack_util.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -71,6 +72,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     CHECK_MEM_LIMIT("CompactionState::_load_segments");
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
@@ -96,7 +98,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();
@@ -124,7 +126,6 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
         RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
     }
     dest = std::move(col);
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest->memory_usage();
     tracker->consume(dest->memory_usage());
 

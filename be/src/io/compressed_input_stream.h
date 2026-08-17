@@ -20,8 +20,8 @@
 #include "base/container/raw_container.h"
 #include "base/string/slice.h"
 #include "common/status.h"
-#include "io/core/input_stream.h"
-#include "io/core/seekable_input_stream.h"
+#include "io/input_stream.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks {
 class StreamDecompressor;
@@ -45,6 +45,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source_stream->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
 private:
     // Used to store the compressed data read from |_source_stream|.
@@ -93,6 +95,8 @@ public:
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _source->get_numeric_statistics();
     }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status seek(int64_t position) override { return Status::NotSupported(""); }
     StatusOr<int64_t> position() override { return Status::NotSupported(""); }

@@ -46,6 +46,10 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+if [[ -n "${STARROCKS_THIRDPARTY_ARCHIVES:-}" ]]; then
+    TP_ARCHIVES="${STARROCKS_THIRDPARTY_ARCHIVES}"
+fi
+
 mkdir -p ${TP_DIR}/src
 
 md5sum_bin=md5sum
@@ -105,7 +109,7 @@ download_func() {
             rm -f "$DESC_DIR/$FILENAME"
         else
             echo "Downloading $FILENAME from $DOWNLOAD_URL to $DESC_DIR"
-            wget --progress=dot:mega --tries=3 --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
+            wget --progress=dot:mega --tries=3 $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
             if [ "$?"x == "0"x ]; then
                 if md5sum_func $FILENAME $DESC_DIR $MD5SUM; then
                     SUCCESS=1
@@ -126,10 +130,188 @@ download_func() {
     return $SUCCESS
 }
 
+preseeded_archive_exists() {
+    local TP_ARCH=$1
+    local NAME=$TP_ARCH"_NAME"
+    local SOURCE=$TP_ARCH"_SOURCE"
+    local MD5SUM=$TP_ARCH"_MD5SUM"
+
+    if [ -r "$TP_SOURCE_DIR/${!NAME}" ]; then
+        md5sum_func "${!NAME}" "$TP_SOURCE_DIR" "${!MD5SUM}"
+        return $?
+    fi
+
+    if [ -n "${!SOURCE}" ] && [ -d "$TP_SOURCE_DIR/${!SOURCE}" ]; then
+        if [[ "${STARROCKS_TRUST_EXTRACTED_THIRDPARTY_SOURCES:-0}" != "1" ]]; then
+            echo "Found extracted source directory $TP_SOURCE_DIR/${!SOURCE}, but ${!NAME} is missing." >&2
+            echo "Provide the md5-checked archive or set STARROCKS_TRUST_EXTRACTED_THIRDPARTY_SOURCES=1 to trust extracted sources." >&2
+            return 1
+        fi
+        echo "Source ${!SOURCE} already exists."
+        return 0
+    fi
+
+    echo "Missing preseeded thirdparty input for ${TP_ARCH}: expected $TP_SOURCE_DIR/${!NAME}" >&2
+    if [ -n "${!SOURCE}" ]; then
+        echo "or extracted source directory $TP_SOURCE_DIR/${!SOURCE}" >&2
+    fi
+    return 1
+}
+
+zip_entry_paths_are_safe() {
+    local archive=$1
+    local entries
+    local entry
+
+    if ! entries=$(unzip -Z1 "${archive}"); then
+        echo "Failed to list zip entries: ${archive}" >&2
+        return 1
+    fi
+
+    while IFS= read -r entry; do
+        [[ -n "${entry}" ]] || continue
+        case "${entry}" in
+            /*|../*|*/../*|*/..|..|[A-Za-z]:*|*\\*)
+                echo "Unsafe zip entry path in ${archive}: ${entry}" >&2
+                return 1
+                ;;
+        esac
+    done <<< "${entries}"
+}
+
+safe_unzip() {
+    local archive=$1
+    shift
+
+    zip_entry_paths_are_safe "${archive}" || return 1
+    unzip -q "${archive}" "$@"
+}
+
+preseed_aws_crt_dependency() {
+    local archive_dir=$1
+    local dep
+    local extracted
+    local extracted_name
+    local aws_sdk_dir
+    local crt_dir
+    local target_name
+    local tmp_dir
+
+    if [ ! -r "${archive_dir}/aws-crt-cpp.zip" ]; then
+        echo "Missing preseeded AWS CRT archive: ${archive_dir}/aws-crt-cpp.zip" >&2
+        return 1
+    fi
+
+    if [ -z "${TP_SOURCE_DIR:-}" ] || [ -z "${AWS_SDK_CPP_SOURCE:-}" ]; then
+        echo "Missing AWS SDK source configuration for CRT preseed" >&2
+        return 1
+    fi
+
+    case "${AWS_SDK_CPP_SOURCE}" in
+        /*|*/*|*..*)
+            echo "Invalid AWS SDK source name for CRT preseed: ${AWS_SDK_CPP_SOURCE}" >&2
+            return 1
+            ;;
+    esac
+
+    aws_sdk_dir="${TP_SOURCE_DIR%/}/${AWS_SDK_CPP_SOURCE}"
+    crt_dir="${aws_sdk_dir}/crt"
+    tmp_dir="${crt_dir}/tmp"
+
+    if [ ! -d "${aws_sdk_dir}" ]; then
+        echo "Invalid AWS SDK source directory for CRT preseed: ${aws_sdk_dir}" >&2
+        return 1
+    fi
+
+    case "${crt_dir}" in
+        "${TP_SOURCE_DIR%/}"/*/crt) ;;
+        *)
+            echo "Refusing to remove unexpected CRT directory: ${crt_dir}" >&2
+            return 1
+            ;;
+    esac
+
+    if ! rm -rf "${crt_dir}" || ! mkdir -p "${tmp_dir}"; then
+        echo "Failed to prepare CRT preseed directory: ${crt_dir}" >&2
+        return 1
+    fi
+
+    if ! safe_unzip "${archive_dir}/aws-crt-cpp.zip" -d "${crt_dir}" -x '*/tests/*'; then
+        echo "Failed to unzip preseeded AWS CRT archive: ${archive_dir}/aws-crt-cpp.zip" >&2
+        return 1
+    fi
+    extracted=$(find "${crt_dir}" -maxdepth 1 -type d -name 'aws-crt-cpp-*' -print -quit)
+    if [ -z "${extracted}" ]; then
+        echo "Failed to unpack aws-crt-cpp from ${archive_dir}/aws-crt-cpp.zip" >&2
+        return 1
+    fi
+    if ! mv "${extracted}" "${crt_dir}/aws-crt-cpp"; then
+        echo "Failed to move aws-crt-cpp into ${crt_dir}" >&2
+        return 1
+    fi
+    if ! mkdir -p "${crt_dir}/aws-crt-cpp/crt"; then
+        echo "Failed to prepare aws-crt-cpp/crt under ${crt_dir}" >&2
+        return 1
+    fi
+
+    for dep in \
+        aws-c-auth \
+        aws-c-cal \
+        aws-c-common \
+        aws-c-compression \
+        aws-c-event-stream \
+        aws-c-http \
+        aws-c-io \
+        aws-c-mqtt \
+        aws-c-s3 \
+        aws-c-sdkutils \
+        aws-checksums \
+        aws-lc \
+        s2n
+    do
+        if [ ! -r "${archive_dir}/${dep}.zip" ]; then
+            echo "Missing preseeded AWS CRT archive: ${archive_dir}/${dep}.zip" >&2
+            return 1
+        fi
+
+        rm -rf "${tmp_dir:?}/${dep}"
+        mkdir -p "${tmp_dir}/${dep}"
+        if ! safe_unzip "${archive_dir}/${dep}.zip" -d "${tmp_dir}/${dep}" -x '*/tests/*'; then
+            echo "Failed to unzip preseeded AWS CRT archive: ${archive_dir}/${dep}.zip" >&2
+            return 1
+        fi
+        extracted=$(find "${tmp_dir}/${dep}" -mindepth 1 -maxdepth 1 -type d -print -quit)
+        if [ -z "${extracted}" ]; then
+            echo "Failed to unpack ${dep} from ${archive_dir}/${dep}.zip" >&2
+            return 1
+        fi
+
+        extracted_name=$(basename "${extracted}")
+        target_name=$(printf '%s' "${extracted_name}" | sed 's/-[0-9a-f]\{40\}$//')
+        if [ "${target_name}" = "s2n-tls" ]; then
+            target_name="s2n"
+        fi
+        rm -rf "${crt_dir}/aws-crt-cpp/crt/${target_name}"
+        if ! mv "${extracted}" "${crt_dir}/aws-crt-cpp/crt/${target_name}"; then
+            echo "Failed to move ${dep} into aws-crt-cpp/crt/${target_name}" >&2
+            return 1
+        fi
+    done
+
+    rm -rf "${tmp_dir}"
+}
+
 # download thirdparty archives
 echo "===== Downloading thirdparty archives..."
 for TP_ARCH in ${TP_ARCHIVES[*]}
 do
+    if [[ "${STARROCKS_SKIP_THIRDPARTY_DOWNLOAD:-0}" == "1" ]]; then
+        if ! preseeded_archive_exists "$TP_ARCH"; then
+            exit 1
+        fi
+        continue
+    fi
+
     NAME=$TP_ARCH"_NAME"
     MD5SUM=$TP_ARCH"_MD5SUM"
     if test "x$REPOSITORY_URL" = x; then
@@ -160,7 +342,8 @@ echo "===== Checking all thirdpart archives..."
 for TP_ARCH in ${TP_ARCHIVES[*]}
 do
     NAME=$TP_ARCH"_NAME"
-    if [ ! -r $TP_SOURCE_DIR/${!NAME} ]; then
+    SOURCE=$TP_ARCH"_SOURCE"
+    if [[ ! -r "${TP_SOURCE_DIR}/${!NAME}" && ( -z "${!SOURCE}" || ! -d "${TP_SOURCE_DIR}/${!SOURCE}" ) ]]; then
         echo "Failed to fetch ${!NAME}"
         exit 1
     fi
@@ -235,49 +418,99 @@ echo "===== Patching thirdparty archives..."
 ###################################################################################
 PATCHED_MARK="patched_mark"
 
+# Apply a patch file and stop the build when it does not apply.
+#
+# Without this the failure is silent: this script runs without `set -e`, so a
+# failed patch only prints, the remaining patches of the package still run,
+# PATCHED_MARK is created anyway, and the build goes on with unpatched sources.
+# Packages whose patches only change behaviour then build fine and are silently
+# missing those fixes.
+#
+# Stopping here leaves the source directory with the patches applied so far and
+# without PATCHED_MARK. A later run finds that directory, skips extraction and
+# replays the whole block, so -N is passed to keep patch from taking an already
+# applied patch for a reversed one and undoing it: with -N it reports the patch as
+# already applied and fails, instead of silently producing a source tree that
+# misses the patches which had succeeded before.
+#
+# Usage mirrors the patch call it replaces, with the patch file as last argument:
+#   apply_patch -p1 "${TP_PATCH_DIR}/foo.patch"
+apply_patch() {
+    local patch_file="${@: -1}"
+    local patch_options=("${@:1:$#-1}")
+
+    if [ ! -r "${patch_file}" ]; then
+        echo "Patch file is missing: ${patch_file}" >&2
+        exit 1
+    fi
+
+    if ! patch -N "${patch_options[@]}" < "${patch_file}"; then
+        echo "Failed to apply patch ${patch_file} in ${PWD}" >&2
+        echo "That source directory is partially patched now, remove it so the next run re-extracts it." >&2
+        exit 1
+    fi
+}
+
 # glog patch
-cd $TP_SOURCE_DIR/$GLOG_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
-    patch -p1 < $TP_PATCH_DIR/glog-0.3.3-vlog-double-lock-bug.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.3.3-for-starrocks2.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.3.3-remove-unwind-dependency.patch
-    # patch Makefile.am to make autoreconf work
-    patch -p0 < $TP_PATCH_DIR/glog-0.3.3-makefile.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$GLOG_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$GLOG_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.3.3-vlog-double-lock-bug.patch
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.3.3-for-starrocks2.patch
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.3.3-remove-unwind-dependency.patch
+        # patch Makefile.am to make autoreconf work
+        apply_patch -p0 $TP_PATCH_DIR/glog-0.3.3-makefile.patch
+        touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.4.0-add-handler-after-output-log.patch
+        touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.7.1.patch
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
+        apply_patch -p1 $TP_PATCH_DIR/glog-0.7.1-lwp.patch
+        apply_patch -p0 $TP_PATCH_DIR/glog-0.7.1-no-hidden.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $GLOG_SOURCE"
 fi
-if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-remove-unwind-dependency.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-add-handler-after-output-log.patch
-    touch $PATCHED_MARK
+
+# googletest patch
+if [[ -d $TP_SOURCE_DIR/$GTEST_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$GTEST_SOURCE
+    if [ ! -f $PATCHED_MARK ]; then
+        apply_patch -p1 $TP_PATCH_DIR/googletest-1.10.0-gcc15.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $GTEST_SOURCE"
 fi
-if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
-    patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
-    patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
-    patch -p0 < $TP_PATCH_DIR/glog-0.7.1-no-hidden.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $GLOG_SOURCE"
 
 # re2 patch
-cd $TP_SOURCE_DIR/$RE2_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p1 < $TP_PATCH_DIR/re2-2022-12-01.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$RE2_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$RE2_SOURCE
+    if [ ! -f $PATCHED_MARK ]; then
+        apply_patch -p1 $TP_PATCH_DIR/re2-2022-12-01.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $RE2_SOURCE"
 fi
-cd -
-echo "Finished patching $RE2_SOURCE"
 
 # libevent patch
-cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p1 < $TP_PATCH_DIR/libevent_on_free_cb.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$LIBEVENT_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
+    if [ ! -f $PATCHED_MARK ]; then
+        apply_patch -p1 $TP_PATCH_DIR/libevent_on_free_cb.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $LIBEVENT_SOURCE"
 fi
-cd -
-echo "Finished patching $LIBEVENT_SOURCE"
 
 # thrift patch
 # cd $TP_SOURCE_DIR/$THRIFT_SOURCE
@@ -288,231 +521,297 @@ echo "Finished patching $LIBEVENT_SOURCE"
 # cd -
 # echo "Finished patching $THRIFT_SOURCE"
 
-cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
-    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
-    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$ROCKSDB_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
+        apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
+        apply_patch -p1 $TP_PATCH_DIR/rocksdb-6.22.1-gcc14-extra.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $ROCKSDB_SOURCE"
 fi
-cd -
-echo "Finished patching $ROCKSDB_SOURCE"
 
 # brpc patch to disable shared library
-cd $TP_SOURCE_DIR/$BRPC_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
-    patch -p1 < $TP_PATCH_DIR/brpc-0.9.5.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$BRPC_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$BRPC_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/brpc-0.9.5.patch
+        touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/brpc-0.9.7.patch
+        touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.3.0.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.3.0-2479.patch
+        touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
+        apply_patch $TP_PATCH_DIR/brpc-1.9.0.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $BRPC_SOURCE"
 fi
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
-    patch -p1 < $TP_PATCH_DIR/brpc-0.9.7.patch
-    touch $PATCHED_MARK
-fi
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
-    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
-    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
-    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
-    touch $PATCHED_MARK
-fi
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
-    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $BRPC_SOURCE"
 
 # s2 patch to disable shared library
-cd $TP_SOURCE_DIR/$S2_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0.patch
-    # replace uint64 with uint64_t to make compiler happy
-    patch -p0 < $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
-    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$S2_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$S2_SOURCE
+    if [ ! -f $PATCHED_MARK ]; then
+        apply_patch -p1 $TP_PATCH_DIR/s2geometry-0.9.0.patch
+        # replace uint64 with uint64_t to make compiler happy
+        apply_patch -p0 $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
+        apply_patch -p1 $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
+        apply_patch -p1 $TP_PATCH_DIR/s2geometry-0.9.0-no-install-testing.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $S2_SOURCE"
 fi
-cd -
-echo "Finished patching $S2_SOURCE"
 
 # ryu patch to detailed description
-cd $TP_SOURCE_DIR/$RYU_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p1 < $TP_PATCH_DIR/ryu.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$RYU_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$RYU_SOURCE
+    if [ ! -f $PATCHED_MARK ]; then
+        apply_patch -p1 $TP_PATCH_DIR/ryu.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $RYU_SOURCE"
 fi
-cd -
-echo "Finished patching $RYU_SOURCE"
-
-# patch boost-1.75.0 diff
-cd $TP_SOURCE_DIR/$BOOST_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p1 < $TP_PATCH_DIR/boost-1.75.0.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $BOOST_SOURCE"
 
 # patch protobuf-3.5.1
-cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $PROTOBUF_SOURCE == "protobuf-3.5.1" ]; then
-    patch -p1 < $TP_PATCH_DIR/protobuf-3.5.1.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$PROTOBUF_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $PROTOBUF_SOURCE == "protobuf-3.5.1" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/protobuf-3.5.1.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $PROTOBUF_SOURCE"
 fi
-cd -
-echo "Finished patching $PROTOBUF_SOURCE"
 
 # patch tcmalloc_hook
-cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" ]; then
-    patch -p1 < $TP_PATCH_DIR/tcmalloc_hook.patch
-    patch -p1 < $TP_PATCH_DIR/gperftools_20251105.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/tcmalloc_hook.patch
+        apply_patch -p1 $TP_PATCH_DIR/gperftools_20251105.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $GPERFTOOLS_SOURCE"
 fi
-cd -
-echo "Finished patching $GPERFTOOLS_SOURCE"
 
 # patch librdkafka
-cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.11.0" ]; then
-    patch -p0 < $TP_PATCH_DIR/librdkafka.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.11.0" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/librdkafka.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $LIBRDKAFKA_SOURCE"
 fi
-cd -
-echo "Finished patching $LIBRDKAFKA_SOURCE"
 
 # patch roaring-bitmap
-cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
-    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $CROARINGBITMAP_SOURCE"
 fi
-cd -
-echo "Finished patching $CROARINGBITMAP_SOURCE"
 
 # patch pulsar
-cd $TP_SOURCE_DIR/$PULSAR_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-client-cpp-3.3.0" ]; then
-    patch -p1 < $TP_PATCH_DIR/pulsar.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$PULSAR_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$PULSAR_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-client-cpp-3.3.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/pulsar.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $PULSAR_SOURCE"
 fi
-cd -
-echo "Finished patching $PULSAR_SOURCE"
 
 # patch mariadb-connector-c-3.2.5
-cd $TP_SOURCE_DIR/$MARIADB_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
-    patch -p0 < $TP_PATCH_DIR/mariadb-connector-c-3.2.5-for-starrocks-static-link.patch
-    touch $PATCHED_MARK
-    echo "Finished patching $MARIADB_SOURCE"
-fi
-if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.14" ]; then
-    patch -p1 < $TP_PATCH_DIR/mariadb-connector-c-3.1.14-gcc14.patch
-    touch $PATCHED_MARK
-    echo "Finished patching $MARIADB_SOURCE"
+if [[ -d $TP_SOURCE_DIR/$MARIADB_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/mariadb-connector-c-3.2.5-for-starrocks-static-link.patch
+        touch $PATCHED_MARK
+        echo "Finished patching $MARIADB_SOURCE"
+    fi
+    if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.1.14" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/mariadb-connector-c-3.1.14-gcc14.patch
+        touch $PATCHED_MARK
+        echo "Finished patching $MARIADB_SOURCE"
+    fi
 fi
 
 # patch aws-sdk-cpp
-cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
-    if [ ! -f prefetch_crt_dep_ok ]; then
-        # make prefetch_crt_dependency.sh less chatty
-        patch -p1 < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-quiet-unzip-dependencies.patch || true
-        bash ./prefetch_crt_dependency.sh
-        touch prefetch_crt_dep_ok
+if [[ -d $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+    if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
+        if [ ! -f prefetch_crt_dep_ok ]; then
+            # make prefetch_crt_dependency.sh less chatty, cosmetic only, so this
+            # one stays optional instead of going through apply_patch
+            patch -p1 < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-quiet-unzip-dependencies.patch || true
+            if [[ -n "${STARROCKS_AWS_CRT_ARCHIVES_DIR:-}" ]]; then
+                preseed_aws_crt_dependency "${STARROCKS_AWS_CRT_ARCHIVES_DIR}"
+            else
+                bash ./prefetch_crt_dependency.sh
+            fi
+            touch prefetch_crt_dep_ok
+        fi
+        if [ ! -f $PATCHED_MARK ]; then
+            apply_patch -p1 $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
+            touch $PATCHED_MARK
+        fi
     fi
-    if [ ! -f $PATCHED_MARK ]; then
-        patch -p1  < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
-        touch $PATCHED_MARK
-    fi
+    cd -
+    echo "Finished patching $AWS_SDK_CPP_SOURCE"
 fi
-cd -
-echo "Finished patching $AWS_SDK_CPP_SOURCE"
 
 # patch jemalloc_hook
-cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
-    patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
-    patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
-    patch -p0 < $TP_PATCH_DIR/jemalloc_nodump.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$JEMALLOC_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/jemalloc_hook.patch
+        apply_patch -p0 $TP_PATCH_DIR/jemalloc_nallocx.patch
+        apply_patch -p0 $TP_PATCH_DIR/jemalloc_nodump.patch
+        touch $PATCHED_MARK
+    fi
+    # Patches added after PATCHED_MARK was introduced carry their own mark: a
+    # source directory unpacked by an older revision already has PATCHED_MARK,
+    # so the block above never runs there and the build would keep the unpatched
+    # sources. Replaying that block instead is not an option, apply_patch passes
+    # -N and stops on the patches which are already applied.
+    if [ ! -f $PATCHED_MARK.usable_size_minimal_tsd ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/jemalloc_malloc_usable_size_minimal_tsd.patch
+        touch $PATCHED_MARK.usable_size_minimal_tsd
+    fi
+    cd -
+    echo "Finished patching $JEMALLOC_SOURCE"
 fi
-cd -
-echo "Finished patching $JEMALLOC_SOURCE"
 
 # patch streamvbyte
-cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $STREAMVBYTE_SOURCE = "streamvbyte-0.5.1" ]; then
-    patch -p1 < $TP_PATCH_DIR/streamvbyte.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $STREAMVBYTE_SOURCE = "streamvbyte-0.5.1" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/streamvbyte.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $STREAMVBYTE_SOURCE"
 fi
-cd -
-echo "Finished patching $STREAMVBYTE_SOURCE"
 
 # patch hyperscan
-cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
-    patch -p1 < $TP_PATCH_DIR/hyperscan-5.4.0.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$HYPERSCAN_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.4.0.patch
+        touch $PATCHED_MARK
+    elif [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.3.0.aarch64" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.3.0.aarch64.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $HYPERSCAN_SOURCE"
 fi
-cd -
-echo "Finished patching $HYPERSCAN_SOURCE"
 
 # patch vpack
-cd $TP_SOURCE_DIR/$VPACK_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
-    patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $VPACK_SOURCE"
 fi
-cd -
-echo "Finished patching $VPACK_SOURCE"
 
 # patch avro-c and avro-cpp
-cd $TP_SOURCE_DIR/$AVRO_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
-    # c patches
+if [[ -d $TP_SOURCE_DIR/$AVRO_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
-    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.patch
-    cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
+    if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
+        # c patches
+        cd $TP_SOURCE_DIR/$AVRO_SOURCE
+        apply_patch -p1 $TP_PATCH_DIR/avro-1.12.0.c.patch
+        cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
 
-    # c++ patches
-    patch -p1 < $TP_PATCH_DIR/avro-1.12.0.cpp.patch
-    touch $PATCHED_MARK
+        # c++ patches
+        apply_patch -p1 $TP_PATCH_DIR/avro-1.12.0.cpp.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $AVRO_SOURCE-c"
 fi
-cd -
-echo "Finished patching $AVRO_SOURCE-c"
 
 # patch serdes
-cd $TP_SOURCE_DIR/$SERDES_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
-    patch -p0 < $TP_PATCH_DIR/libserdes-7.3.1.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$SERDES_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$SERDES_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/libserdes-7.3.1.patch
+        touch $PATCHED_MARK
+    fi
+    echo "Finished patching $SERDES_SOURCE"
+    cd -
 fi
-echo "Finished patching $SERDES_SOURCE"
-cd -
 
 # patch sasl2
-cd $TP_SOURCE_DIR/$SASL_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
-    patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
-    patch -p1 < $TP_PATCH_DIR/sasl2-gcc14.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$SASL_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$SASL_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/sasl2-add-k5support-link.patch
+        apply_patch -p1 $TP_PATCH_DIR/sasl2-gcc14.patch
+        # Keep md5.h ANSI prototypes enabled for the compilers StarRocks uses.
+        apply_patch -p1 $TP_PATCH_DIR/sasl2-makemd5-prototypes.patch
+        touch $PATCHED_MARK
+    fi
+    echo "Finished patching $SASL_SOURCE"
+    cd -
 fi
-echo "Finished patching $SASL_SOURCE"
-cd -
 
-cd $TP_SOURCE_DIR/$RAPIDJSON_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $RAPIDJSON_SOURCE = "rapidjson-1.1.0" ]; then
-    patch -p1 < $TP_PATCH_DIR/rapidjson-gcc14.patch
-    touch $PATCHED_MARK
+if [[ -d $TP_SOURCE_DIR/$RAPIDJSON_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$RAPIDJSON_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $RAPIDJSON_SOURCE = "rapidjson-1.1.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/rapidjson-gcc14.patch
+        touch $PATCHED_MARK
+    fi
+    echo "Finished patching $RAPIDJSON_SOURCE"
+    cd -
 fi
-echo "Finished patching $RAPIDJSON_SOURCE"
-cd -
+
+# patch opentelemetry
+if [[ -d $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $OPENTELEMETRY_SOURCE = "opentelemetry-cpp-1.9.1" ]; then
+        # thrift 0.24.0 dropped <boost/numeric/conversion/cast.hpp> from
+        # TTransportException.h, which used to drag in <unistd.h>. The jaeger
+        # exporter calls ::close via THRIFT_CLOSESOCKET, so include it directly.
+        apply_patch -p1 $TP_PATCH_DIR/opentelemetry-cpp-1.9.1-thrift-0.24-unistd.patch
+        touch $PATCHED_MARK
+    fi
+    echo "Finished patching $OPENTELEMETRY_SOURCE"
+    cd -
+fi
 
 # patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-19.0.1" ] ; then
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-24.0.0" ] ; then
+        # Allow reading parquet files with Hive-style optional MAP keys.
+        # The other arrow-19.0.1 patches are obsolete on 24.0.0: zstd 1.5.7 is
+        # already upstream; thrift is provided via the system build (-DThrift_SOURCE=SYSTEM);
+        # the flight-types reorder and the macOS libtool-version check are fixed upstream.
+        apply_patch -p1 $TP_PATCH_DIR/arrow-24.0.0-parquet-map-key.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -523,7 +822,7 @@ fi
 if [[ -d $TP_SOURCE_DIR/$BZIP_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BZIP_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $BZIP_SOURCE == "bzip2-1.0.8" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/bzip2-1.0.8.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/bzip2-1.0.8.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -534,7 +833,7 @@ fi
 if [[ -d $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $BITSHUFFLE_SOURCE == "bitshuffle-0.5.1" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/bitshuffle-0.5.1.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/bitshuffle-0.5.1.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -545,7 +844,7 @@ fi
 if [[ -d $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $FLATBUFFERS_SOURCE == "flatbuffers-1.10.0" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/flat-buffers-1.10.0-no-stringop-overread.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/flat-buffers-1.10.0-no-stringop-overread.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -556,8 +855,8 @@ fi
 if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
     if [ ! -f "$PATCHED_MARK" ] ; then
-        patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
-        patch -p0 < "$TP_PATCH_DIR/clucene-no-hidden.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/clucene-gcc14.patch"
+        apply_patch -p0 "$TP_PATCH_DIR/clucene-no-hidden.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -568,9 +867,9 @@ fi
 if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$POCO_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-ca.patch"
-        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-zero-copy.patch"
-        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-keep-alive.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/poco-1.12.5-ca.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/poco-1.12.5-zero-copy.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/poco-1.12.5-keep-alive.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -582,11 +881,11 @@ fi
 if [[ -d $TP_SOURCE_DIR/$BREAK_PAD_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2022.07.12" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/breakpad-2022.07.12.patch"
         touch "$PATCHED_MARK"
     fi
     if [ ! -f "$PATCHED_MARK" ] && [[ $BREAK_PAD_SOURCE == "breakpad-2024.02.16" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/breakpad-2024.02.16.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/breakpad-2024.02.16.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -597,7 +896,7 @@ fi
 if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$AZURE_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $AZURE_SOURCE == "azure-storage-files-shares_12.12.0" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/azure-storage-files-shares_12.12.0.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/azure-storage-files-shares_12.12.0.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -608,8 +907,8 @@ fi
 if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$CCTZ_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
-        patch -p1 < "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -621,9 +920,9 @@ fi
 # libhdfs is build by -fhidden. we need access hidden symbol getJNIEnv
 if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
-    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.2-src" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src.patch"
-        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src-jni-crash.patch"
+    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.3-src" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/hadoop-3.4.3-src.patch"
+        apply_patch -p1 "$TP_PATCH_DIR/hadoop-3.4.3-src-jni-crash.patch"
         touch "$PATCHED_MARK"
     fi
     cd -

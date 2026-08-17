@@ -146,6 +146,8 @@ public class IcebergMetadataScanNode extends ScanNode {
         tHdfsScanNode.setMetadata_table_type(metadataTableType.name());
 
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

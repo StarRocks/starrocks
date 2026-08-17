@@ -18,15 +18,19 @@
 
 #include <memory>
 
+#include "base/brpc/disposable_closure.h"
+#include "base/brpc/ref_count_closure.h"
+#include "base/status_fmt.hpp"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
+#include "column/serde/column_array_serde.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fetch_processor.h"
-#include "exec/pipeline/lookup_request.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "serde/column_array_serde.h"
-#include "util/brpc_stub_cache.h"
-#include "util/disposable_closure.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -39,58 +43,54 @@ std::string BatchUnit::debug_string() const {
 }
 
 Status FetchTask::submit(RuntimeState* state) {
-    if (is_local()) {
-        return _submit_local_task(state);
-    } else {
-        return _submit_remote_task(state);
-    }
-}
-
-Status FetchTask::_submit_local_task(RuntimeState* state) {
-    _ctx->callback = [ctx = _ctx](const Status& status) {
-        DeferOp defer([&]() { ctx->unit->finished_request_num++; });
-        if (!status.ok()) {
-            LOG(WARNING) << "local fetch request failed, error: " << status.to_string();
-            ctx->processor->_set_io_task_status(status);
-            return;
-        }
-    };
-    LookUpRequestContextPtr request = std::make_shared<LocalLookUpRequestContext>(_ctx);
-    return _ctx->processor->_local_dispatcher->add_request(std::move(request));
+    return _submit_remote_task(state);
 }
 
 Status FetchTask::_submit_remote_task(RuntimeState* state) {
     const auto source_id = _ctx->source_node_id;
     const auto& request_chunk = _ctx->request_chunk;
 
-    auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
-    const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
-    closure->addSuccessHandler([this, closure, host = node_info->host, port = node_info->brpc_port](
+    auto closure = std::make_unique<DisposableClosure<PLookUpResponse, FetchTaskContextPtr>>(_ctx);
+    // The RPC callback can outlive queue ownership when the source finishes early.
+    auto self = shared_from_this();
+    auto processor = _ctx->processor.lock();
+    DCHECK(processor != nullptr);
+    const auto* node_info = processor->_nodes_info->find_node(source_id);
+    DCHECK(node_info != nullptr);
+    RETURN_IF(node_info == nullptr,
+              Status::InternalError(fmt::format("Failed to find node info for source_id: {}", source_id)));
+    closure->addSuccessHandler([self, done = closure.get(), host = node_info->host, port = node_info->brpc_port](
                                        const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
-        DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
-                   << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
+        auto processor = ctx->processor.lock();
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
+            return;
+        }
+        DLOG(INFO) << "[GLM] receive a response, finished request num: " << unit->finished_request_num
+                   << ", total request num: " << unit->total_request_num
                    << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
+            if (++unit->finished_request_num == unit->total_request_num) {
                 VLOG_ROW << "[GLM] all request finished, notify fetch processor, total_request_num: "
-                         << ctx->unit->total_request_num << ", " << (void*)ctx->processor;
+                         << unit->total_request_num;
             }
-            _is_done = true;
+            self->_is_done = true;
         });
-        COUNTER_UPDATE(ctx->processor->_rpc_count, 1);
-        COUNTER_UPDATE(ctx->processor->_network_timer, MonotonicNanos() - ctx->send_ts);
+        COUNTER_UPDATE(processor->_rpc_count, 1);
+        COUNTER_UPDATE(processor->_network_timer, MonotonicNanos() - ctx->send_ts);
 
         if (resp.status().status_code() != TStatusCode::OK) {
             auto msg = fmt::format("fetch request failed, error: {}, host: {}, port: {}", resp.status().DebugString(),
                                    host, port);
             LOG(WARNING) << msg;
-            ctx->processor->_set_io_task_status(Status::InternalError(msg));
+            processor->_set_io_task_status(Status::InternalError(msg));
             return;
         }
-        DLOG(INFO) << "[GLM] receive a response, response size: " << closure->cntl.response_attachment().size();
-        if (closure->cntl.response_attachment().size() > 0) {
-            SCOPED_TIMER(ctx->processor->_deserialize_timer);
-            butil::IOBuf& io_buf = closure->cntl.response_attachment();
+        DLOG(INFO) << "[GLM] receive a response, response size: " << done->cntl.response_attachment().size();
+        if (done->cntl.response_attachment().size() > 0) {
+            SCOPED_TIMER(processor->_deserialize_timer);
+            butil::IOBuf& io_buf = done->cntl.response_attachment();
             raw::RawString buffer;
 
             for (size_t i = 0; i < resp.columns_size(); i++) {
@@ -99,7 +99,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                     auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),
                                            pcolumn.data_size());
                     LOG(WARNING) << msg;
-                    ctx->processor->_set_io_task_status(Status::InternalError(msg));
+                    processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
                 buffer.resize(pcolumn.data_size());
@@ -107,18 +107,18 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                 if (UNLIKELY(size != pcolumn.data_size())) {
                     auto msg = fmt::format("iobuf read {} != expected {}", size, pcolumn.data_size());
                     LOG(WARNING) << msg;
-                    ctx->processor->_set_io_task_status(Status::InternalError(msg));
+                    processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
                 int32_t slot_id = pcolumn.slot_id();
-                const SlotDescriptor* slot_desc = ctx->processor->_slot_id_to_desc.at(slot_id);
+                const SlotDescriptor* slot_desc = processor->_slot_id_to_desc.at(slot_id);
                 auto column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
                 const uint8_t* buff = reinterpret_cast<const uint8_t*>(buffer.data());
                 auto ret = serde::ColumnArraySerde::deserialize(buff, buff + buffer.size(), column.get());
                 if (!ret.ok()) {
                     auto msg = fmt::format("deserialize column error, slot_id: {}", slot_id);
                     LOG(WARNING) << msg;
-                    ctx->processor->_set_io_task_status(Status::InternalError(msg));
+                    processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
                 DCHECK(!ctx->response_columns.contains(slot_id));
@@ -128,15 +128,21 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
     });
 
-    closure->addFailureHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+    closure->addFailureHandler([self](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+        auto processor = ctx->processor.lock();
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
+            return;
+        }
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
-                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)ctx->processor;
+            if (++unit->finished_request_num == unit->total_request_num) {
+                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)processor.get();
             }
-            _is_done = true;
+            self->_is_done = true;
         });
+        processor->_set_io_task_status(Status::InternalError(rpc_error_msg));
         LOG(WARNING) << "fetch request failed, error: " << rpc_error_msg;
-        ctx->processor->_set_io_task_status(Status::InternalError(rpc_error_msg));
     });
 
     closure->cntl.Reset();
@@ -147,42 +153,101 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     p_query_id.set_hi(state->query_id().hi);
     p_query_id.set_lo(state->query_id().lo);
     *request.mutable_query_id() = std::move(p_query_id);
-    request.set_lookup_node_id(_ctx->processor->_target_node_id);
+    request.set_lookup_node_id(processor->_target_node_id);
     request.set_request_tuple_id(_ctx->request_tuple_id);
     {
-        SCOPED_TIMER(_ctx->processor->_serialize_timer);
-        size_t max_serialize_size = 0;
-        for (const auto& column : request_chunk->columns()) {
-            max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);
-        }
+        SCOPED_TIMER(processor->_serialize_timer);
 
-        _ctx->processor->_serialize_buffer.clear();
-        _ctx->processor->_serialize_buffer.resize(max_serialize_size);
-
-        uint8_t* buff = reinterpret_cast<uint8_t*>(_ctx->processor->_serialize_buffer.data());
-        uint8_t* begin = buff;
+        // The remote LookUp receiver rebuilds every request column purely from its slot descriptor via
+        // ColumnHelper::create_column(type, slot_desc->is_nullable()) and then deserializes the raw,
+        // non-self-describing ColumnArraySerde bytes into it. So the bytes serialized here must match
+        // the receiver's descriptor-driven layout. A projection above the FETCH may conservatively
+        // widen a preserved-side row-position column's descriptor to nullable while the column produced
+        // here is still non-nullable; serializing the non-nullable layout then overruns the receiver's
+        // nullable column (issue #75222). Reconcile each column to its declared descriptor nullability
+        // before serializing. These are row-position columns built only for non-null source rows, so a
+        // nullable descriptor only ever wraps a null-free column (the receiver asserts no nulls).
+        std::vector<std::pair<SlotId, ColumnPtr>> serialize_columns;
+        serialize_columns.reserve(request_chunk->get_slot_id_to_index_map().size());
         for (const auto& [slot_id, idx] : request_chunk->get_slot_id_to_index_map()) {
             if (slot_id == FetchProcessor::kPositionColumnSlotId) {
                 // we don't need to send position column to remote node
                 continue;
             }
+            ColumnPtr column = request_chunk->get_column_by_index(idx);
+            auto* slot_desc = state->desc_tbl().get_slot_descriptor(slot_id);
+            if (slot_desc != nullptr && slot_desc->is_nullable() != column->is_nullable()) {
+                size_t num_rows = column->size();
+                column = ColumnHelper::update_column_nullable(slot_desc->is_nullable(), std::move(column), num_rows);
+            }
+            serialize_columns.emplace_back(slot_id, std::move(column));
+        }
+
+        size_t max_serialize_size = 0;
+        for (const auto& [_, column] : serialize_columns) {
+            max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);
+        }
+
+        processor->_serialize_buffer.clear();
+        processor->_serialize_buffer.resize(max_serialize_size);
+
+        uint8_t* buff = reinterpret_cast<uint8_t*>(processor->_serialize_buffer.data());
+        uint8_t* begin = buff;
+        for (const auto& [slot_id, column] : serialize_columns) {
             auto p_column = request.add_request_columns();
             p_column->set_slot_id(slot_id);
-            const auto& column = request_chunk->get_column_by_index(idx);
             uint8_t* start = buff;
             ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column, buff));
             p_column->set_data_size(buff - start);
         }
         size_t actual_serialize_size = buff - begin;
-        closure->cntl.request_attachment().append(_ctx->processor->_serialize_buffer.data(), actual_serialize_size);
+        closure->cntl.request_attachment().append(processor->_serialize_buffer.data(), actual_serialize_size);
     }
-    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)_ctx->processor
-               << ", unit: " << _ctx->unit->debug_string();
+    auto unit = _ctx->unit.lock();
+    auto unit_debug_string = unit != nullptr ? unit->debug_string() : std::string("BatchUnit <expired>");
+    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)processor.get()
+               << ", unit: " << unit_debug_string;
     _ctx->send_ts = MonotonicNanos();
-    auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
-    stub->lookup(&closure->cntl, &request, &closure->result, closure);
+    auto* query_execution_services = state->query_execution_services();
+    auto stub = query_execution_services->rpc->brpc_stub_cache->get_stub(node_info->host, node_info->brpc_port);
+    if (stub == nullptr) {
+        auto msg = fmt::format("Connect {}:{} failed.", node_info->host, node_info->brpc_port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
+    auto done = closure.release();
+    stub->lookup(&done->cntl, &request, &done->result, done);
 
     return Status::OK();
+}
+
+void LookUpCloseTask::submit(RuntimeState* state) {
+    auto* query_execution_services = state->query_execution_services();
+    auto stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_host, _port);
+    if (stub == nullptr) {
+        auto msg = fmt::format("Connect {}:{} failed.", _host, _port);
+        LOG(WARNING) << msg;
+        return;
+    }
+    PLookUpCloseRequest request;
+    request.set_lookup_node_id(_target_node_id);
+    PUniqueId p_query_id;
+    p_query_id.set_hi(state->query_id().hi);
+    p_query_id.set_lo(state->query_id().lo);
+    *request.mutable_query_id() = std::move(p_query_id);
+
+    auto* closure = new DisposableClosure<PLookUpCloseResponse, int>(0);
+    closure->addFailureHandler([](int ctx, std::string_view rpc_error_msg) noexcept {
+        LOG(WARNING) << "lookup close rpc failed:" << rpc_error_msg;
+    });
+    closure->addSuccessHandler([](int ctx, const PLookUpCloseResponse& resp) noexcept {
+        if (resp.status().status_code() != TStatusCode::OK) {
+            LOG(WARNING) << "lookup close failed, error: " << resp.status().DebugString();
+        }
+    });
+    closure->cntl.set_timeout_ms(state->query_options().query_timeout * 1000);
+    stub->lookup_close(&closure->cntl, &request, &closure->result, closure);
 }
 
 } // namespace starrocks::pipeline

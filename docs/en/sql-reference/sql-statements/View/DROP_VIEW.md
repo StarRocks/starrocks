@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP VIEW is used to drop a logical view VIEW"
 ---
 
 # DROP VIEW

@@ -37,7 +37,7 @@
 #include <cmath>
 #include <type_traits>
 
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -85,6 +85,19 @@ struct TypeEncodingTraits<type, PLAIN_ENCODING, Slice> {
     }
     static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
         *decoder = new BinaryPlainPageDecoder<type>(data);
+        return Status::OK();
+    }
+};
+
+// Same as PLAIN_ENCODING for strings, but the page's offset trailer is delta-encoded.
+template <LogicalType type>
+struct TypeEncodingTraits<type, PLAIN_ENCODING_DELTA_OFFSET, Slice> {
+    static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
+        *builder = new BinaryPlainPageBuilder(opts, /*delta_offset=*/true);
+        return Status::OK();
+    }
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BinaryPlainPageDecoder<type>(data, /*delta_offset=*/true);
         return Status::OK();
     }
 };
@@ -139,7 +152,7 @@ struct TypeEncodingTraits<type, DICT_ENCODING, CppType> {
 };
 
 template <>
-struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, typename CppTypeTraits<TYPE_DATE_V1>::CppType> {
+struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, StorageCppType<TYPE_DATE_V1>> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new FrameOfReferencePageBuilder<TYPE_DATE_V1>(opts);
         return Status::OK();
@@ -176,7 +189,7 @@ struct TypeEncodingTraits<type, PREFIX_ENCODING, Slice> {
 };
 
 template <LogicalType field_type, EncodingTypePB encoding_type>
-struct EncodingTraits : TypeEncodingTraits<field_type, encoding_type, typename CppTypeTraits<field_type>::CppType> {
+struct EncodingTraits : TypeEncodingTraits<field_type, encoding_type, StorageCppType<field_type>> {
     static const LogicalType type = field_type;
     static const EncodingTypePB encoding = encoding_type;
 };
@@ -267,10 +280,12 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<TYPE_CHAR, DICT_ENCODING>();
     _add_map<TYPE_CHAR, PLAIN_ENCODING>();
+    _add_map<TYPE_CHAR, PLAIN_ENCODING_DELTA_OFFSET>();
     _add_map<TYPE_CHAR, PREFIX_ENCODING, true>();
 
     _add_map<TYPE_VARCHAR, DICT_ENCODING>();
     _add_map<TYPE_VARCHAR, PLAIN_ENCODING>();
+    _add_map<TYPE_VARCHAR, PLAIN_ENCODING_DELTA_OFFSET>();
     _add_map<TYPE_VARCHAR, PREFIX_ENCODING, true>();
 
     _add_map<TYPE_BOOLEAN, RLE>();

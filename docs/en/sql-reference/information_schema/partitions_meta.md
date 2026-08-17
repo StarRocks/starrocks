@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "partitions_meta provides information about partitions of tables."
 ---
 
 # partitions_meta
@@ -24,7 +25,7 @@ The following fields are provided in `partitions_meta`:
 | PARTITION_KEY                 | Partition key of the partition.                              |
 | PARTITION_VALUE               | Partition value of the partition (e.g., `Range` or `List`).  |
 | DISTRIBUTION_KEY              | Distribution key of the partition.                           |
-| BUCKETS                       | Number of buckets in the partition.                          |
+| BUCKETS                       | Number of buckets in the partition. For a table with range distribution, this is the actual number of tablets in the partition's base index, which changes as tablets are split and merged. A rollup index in the same partition can have a different number of tablets. |
 | REPLICATION_NUM               | Replication number of the partition.                         |
 | STORAGE_MEDIUM                | Storage medium of the partition.                             |
 | COOLDOWN_TIME                 | Cooldown time of the partition.                              |
@@ -41,3 +42,5 @@ The following fields are provided in `partitions_meta`:
 | STORAGE_SIZE                  | Storage size of the partition.                               |
 | METADATA_SWITCH_VERSION       | Metadata switch version of the partition.                    |
 | TABLET_BALANCED               | Whether the tablet distribution is balanced in the partition. |
+| LAST_UPDATE_TIME              | The last time the partition was modified by a user write (load / INSERT / DELETE / UPDATE). |
+| LAST_ACCESS_TIME              | The last time the partition was read by a user statement: a query, `INSERT ... SELECT`, `INSERT OVERWRITE`, CTAS, primary-key `UPDATE`/`DELETE`, materialized view refresh, or `EXPORT`. Reads issued by internal statistics collection are excluded. Currently kept in FE memory only (not persisted); aggregated across FEs at query time. |

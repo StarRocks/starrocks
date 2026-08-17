@@ -77,6 +77,18 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("refreshMode")
     public String refreshMode = "";
 
+    // For pinned PCT batches: base-table identifier -> frozen Iceberg snapshot id.
+    // Serialized into information_schema.task_runs.EXTRA_MESSAGE for post-mortem debugging.
+    @SerializedName("pinnedSnapshotIdMap")
+    private Map<String, Long> pinnedSnapshotIdMap = Maps.newHashMap();
+
+    // For IVM refreshes: per base table ("catalog.db.tbl"), the consumed TVR version range
+    // {start, end} and the matching snapshot commit times in epoch millis (empty when unresolvable).
+    @SerializedName("imvSourceVersionRange")
+    private Map<String, Map<String, String>> imvSourceVersionRange = Maps.newHashMap();
+    @SerializedName("imvSourceTimestampRange")
+    private Map<String, Map<String, String>> imvSourceTimestampRange = Maps.newHashMap();
+
     public MVTaskRunExtraMessage() {
     }
 
@@ -206,6 +218,33 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public void setAdaptivePartitionRefreshNumber(int adaptivePartitionRefreshNumber) {
         this.adaptivePartitionRefreshNumber = adaptivePartitionRefreshNumber;
+    }
+
+    public Map<String, Long> getPinnedSnapshotIdMap() {
+        return pinnedSnapshotIdMap;
+    }
+
+    public void setPinnedSnapshotIdMap(Map<String, Long> pinnedSnapshotIdMap) {
+        this.pinnedSnapshotIdMap = MvUtils.shrinkToSize(pinnedSnapshotIdMap,
+                Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    public Map<String, Map<String, String>> getImvSourceVersionRange() {
+        return imvSourceVersionRange;
+    }
+
+    public void setImvSourceVersionRange(Map<String, Map<String, String>> imvSourceVersionRange) {
+        this.imvSourceVersionRange = MvUtils.shrinkToSize(imvSourceVersionRange,
+                Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    public Map<String, Map<String, String>> getImvSourceTimestampRange() {
+        return imvSourceTimestampRange;
+    }
+
+    public void setImvSourceTimestampRange(Map<String, Map<String, String>> imvSourceTimestampRange) {
+        this.imvSourceTimestampRange = MvUtils.shrinkToSize(imvSourceTimestampRange,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     @Override

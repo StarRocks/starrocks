@@ -99,9 +99,20 @@ public:
         // [b/2] == r means round half to up.
         // carry depends on sign of a^b.
         Type carry = ((a ^ b) >> (sizeof(Type) * 8 - 1)) | 1;
-        Type abs_b = std::abs(b);
-        Type abs_r = std::abs(r);
-        bool need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;
+        bool need_carry = false;
+        if constexpr (std::is_same_v<Type, int128_t>) {
+            uint128_t abs_b = abs_as_uint128(b);
+            uint128_t abs_r = abs_as_uint128(r);
+            need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;
+        } else if constexpr (std::is_same_v<Type, int256_t>) {
+            Type abs_b = starrocks::abs(b);
+            Type abs_r = starrocks::abs(r);
+            need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;
+        } else {
+            Type abs_b = std::abs(b);
+            Type abs_r = std::abs(r);
+            need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;
+        }
         *c += carry & -Type(need_carry);
         return false;
     }

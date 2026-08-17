@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP STORAGE VOLUME は、ストレージボリュームを削除します。"
 ---
 
 # DROP STORAGE VOLUME

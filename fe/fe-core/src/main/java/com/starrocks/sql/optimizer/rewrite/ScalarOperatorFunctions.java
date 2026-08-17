@@ -37,6 +37,9 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -44,8 +47,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
@@ -66,6 +72,7 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -241,24 +248,130 @@ public class ScalarOperatorFunctions {
     }
 
     public static class HashFunctions {
+        private static final int XX_HASH32_SEED = 0;
+        private static final long XX_HASH64_SEED = 0;
         private static final long XX_HASH3_64_SEED = 0;
+        private static final int XX_HASH32_PRIME1 = 0x9E3779B1;
+        private static final int XX_HASH32_PRIME2 = 0x85EBCA77;
+        private static final int XX_HASH32_PRIME3 = 0xC2B2AE3D;
+        private static final int XX_HASH32_PRIME4 = 0x27D4EB2F;
+        private static final int XX_HASH32_PRIME5 = 0x165667B1;
+
+        public static int hash32(String value, int seed) {
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
+            return xxHash32(data, seed);
+        }
 
         public static long hash64(String value, long seed) {
-            byte[] data = value.getBytes();
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
+            LongHashFunction hasher = LongHashFunction.xx(seed);
+            return hasher.hashBytes(data, 0, data.length);
+        }
+
+        public static long hash3_64(String value, long seed) {
+            byte[] data = value.getBytes(StandardCharsets.UTF_8);
             LongHashFunction hasher = LongHashFunction.xx3(seed);
             return hasher.hashBytes(data, 0, data.length);
         }
+
+        private static int xxHash32(byte[] data, int seed) {
+            int offset = 0;
+            int hash;
+
+            if (data.length >= 16) {
+                int limit = data.length - 16;
+                int v1 = seed + XX_HASH32_PRIME1 + XX_HASH32_PRIME2;
+                int v2 = seed + XX_HASH32_PRIME2;
+                int v3 = seed;
+                int v4 = seed - XX_HASH32_PRIME1;
+
+                do {
+                    v1 = round(v1, readIntLE(data, offset));
+                    offset += 4;
+                    v2 = round(v2, readIntLE(data, offset));
+                    offset += 4;
+                    v3 = round(v3, readIntLE(data, offset));
+                    offset += 4;
+                    v4 = round(v4, readIntLE(data, offset));
+                    offset += 4;
+                } while (offset <= limit);
+
+                hash = Integer.rotateLeft(v1, 1) + Integer.rotateLeft(v2, 7) + Integer.rotateLeft(v3, 12)
+                        + Integer.rotateLeft(v4, 18);
+            } else {
+                hash = seed + XX_HASH32_PRIME5;
+            }
+
+            hash += data.length;
+
+            while (offset <= data.length - 4) {
+                hash += readIntLE(data, offset) * XX_HASH32_PRIME3;
+                hash = Integer.rotateLeft(hash, 17) * XX_HASH32_PRIME4;
+                offset += 4;
+            }
+
+            while (offset < data.length) {
+                hash += (data[offset] & 0xFF) * XX_HASH32_PRIME5;
+                hash = Integer.rotateLeft(hash, 11) * XX_HASH32_PRIME1;
+                offset++;
+            }
+
+            hash ^= hash >>> 15;
+            hash *= XX_HASH32_PRIME2;
+            hash ^= hash >>> 13;
+            hash *= XX_HASH32_PRIME3;
+            hash ^= hash >>> 16;
+            return hash;
+        }
+
+        private static int round(int accumulator, int input) {
+            accumulator += input * XX_HASH32_PRIME2;
+            accumulator = Integer.rotateLeft(accumulator, 13);
+            accumulator *= XX_HASH32_PRIME1;
+            return accumulator;
+        }
+
+        private static int readIntLE(byte[] data, int offset) {
+            return (data[offset] & 0xFF) | ((data[offset + 1] & 0xFF) << 8) | ((data[offset + 2] & 0xFF) << 16)
+                    | ((data[offset + 3] & 0xFF) << 24);
+        }
+    }
+
+    @ConstantFunction(name = "xx_hash32", argTypes = {VARCHAR}, returnType = INT)
+    public static ConstantOperator xxHash32(ConstantOperator... input) {
+        Preconditions.checkArgument(input.length > 0);
+        int hashValue = HashFunctions.XX_HASH32_SEED;
+        for (ConstantOperator constantOperator : input) {
+            if (constantOperator.isNull()) {
+                return ConstantOperator.createNull(IntegerType.INT);
+            }
+            hashValue = HashFunctions.hash32(constantOperator.getVarchar(), hashValue);
+        }
+        return ConstantOperator.createInt(hashValue);
+    }
+
+    @ConstantFunction(name = "xx_hash64", argTypes = {VARCHAR}, returnType = BIGINT)
+    public static ConstantOperator xxHash64(ConstantOperator... input) {
+        Preconditions.checkArgument(input.length > 0);
+        long hashValue = HashFunctions.XX_HASH64_SEED;
+        for (ConstantOperator constantOperator : input) {
+            if (constantOperator.isNull()) {
+                return ConstantOperator.createNull(IntegerType.BIGINT);
+            }
+            hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
+        }
+        return ConstantOperator.createBigint(hashValue);
     }
 
     @ConstantFunction(name = "xx_hash3_64", argTypes = {VARCHAR}, returnType = BIGINT)
-    public static ConstantOperator xxHash64(ConstantOperator... input) {
+    public static ConstantOperator xxHash3_64(ConstantOperator... input) {
         Preconditions.checkArgument(input.length > 0);
         long hashValue = HashFunctions.XX_HASH3_64_SEED;
         for (ConstantOperator constantOperator : input) {
             if (constantOperator.isNull()) {
                 return ConstantOperator.createNull(IntegerType.BIGINT);
             }
-            hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
+            hashValue = HashFunctions.hash3_64(constantOperator.getVarchar(), hashValue);
         }
         return ConstantOperator.createBigint(hashValue);
     }
@@ -527,30 +640,52 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
-        if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
-            LocalDateTime ldt;
-            try {
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
-            } catch (DateTimeParseException e) {
-                // If parsing fails, it can be re-parsed from the position of the successful prefix string.
-                // This way datetime string can use incomplete format
-                // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
-                        .parse(dateStr.substring(0, e.getErrorIndex())));
+        boolean allowThrowException = ConnectContext.get() != null
+                && SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+        try {
+            if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
+                LocalDateTime ldt;
+                try {
+                    ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                } catch (DateTimeParseException e) {
+                    // If parsing fails, it can be re-parsed from the position of the successful prefix string.
+                    // This way datetime string can use incomplete format
+                    // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
+                    ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                            .parse(dateStr.substring(0, e.getErrorIndex())));
+                }
+                return ConstantOperator.createDatetimeOrNull(ldt);
+            } else {
+                LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                return ConstantOperator.createDatetimeOrNull(ld.atTime(0, 0, 0));
             }
-            return ConstantOperator.createDatetimeOrNull(ldt);
-        } else {
-            LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
-            return ConstantOperator.createDatetimeOrNull(ld.atTime(0, 0, 0));
+        } catch (DateTimeParseException e) {
+            if (allowThrowException) {
+                throw new StarRocksPlannerException("Fail to parse date", ErrorType.USER_ERROR);
+            } else {
+                throw e;
+            }
         }
     }
 
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
-                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
-        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), DateType.DATE);
+        boolean allowThrowException = ConnectContext.get() != null
+                && SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+        try {
+            LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                    StringUtils.strip(date.getVarchar(), "\r\n\t ")));
+            return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), DateType.DATE);
+        } catch (DateTimeParseException e) {
+            if (allowThrowException) {
+                throw new StarRocksPlannerException("Fail to parse date", ErrorType.USER_ERROR);
+            } else {
+                throw e;
+            }
+        }
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
@@ -1185,10 +1320,19 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createLargeInt(first.getLargeInt().multiply(second.getLargeInt()));
     }
 
+    private static ConstantOperator handleDivisionByZero(Type type) {
+        if (ConnectContext.get() != null
+                && SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            throw new StarRocksPlannerException("Division by zero", ErrorType.USER_ERROR);
+        }
+        return ConstantOperator.createNull(type);
+    }
+
     @ConstantFunction(name = "divide", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator divideDouble(ConstantOperator first, ConstantOperator second) {
         if (second.getDouble() == 0.0) {
-            return ConstantOperator.createNull(FloatType.DOUBLE);
+            return handleDivisionByZero(FloatType.DOUBLE);
         }
         return ConstantOperator.createDouble(first.getDouble() / second.getDouble());
     }
@@ -1202,40 +1346,55 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator divideDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
-            return ConstantOperator.createNull(second.getType());
+            return handleDivisionByZero(second.getType());
         }
         return createDecimalConstant(first.getDecimal().divide(second.getDecimal()));
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator intDivideTinyInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getTinyInt() == 0) {
+            return handleDivisionByZero(IntegerType.TINYINT);
+        }
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() / second.getTinyInt()));
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator intDivideSmallInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getSmallint() == 0) {
+            return handleDivisionByZero(IntegerType.SMALLINT);
+        }
         return ConstantOperator.createSmallInt((short) (first.getSmallint() / second.getSmallint()));
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator intDivideInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getInt() == 0) {
+            return handleDivisionByZero(IntegerType.INT);
+        }
         return ConstantOperator.createInt(first.getInt() / second.getInt());
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator intDivideBigint(ConstantOperator first, ConstantOperator second) {
+        if (second.getBigint() == 0) {
+            return handleDivisionByZero(IntegerType.BIGINT);
+        }
         return ConstantOperator.createBigint(first.getBigint() / second.getBigint());
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator intDivideLargeInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getLargeInt().equals(BigInteger.ZERO)) {
+            return handleDivisionByZero(IntegerType.LARGEINT);
+        }
         return ConstantOperator.createLargeInt(first.getLargeInt().divide(second.getLargeInt()));
     }
 
     @ConstantFunction(name = "mod", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator modTinyInt(ConstantOperator first, ConstantOperator second) {
         if (second.getTinyInt() == 0) {
-            return ConstantOperator.createNull(IntegerType.TINYINT);
+            return handleDivisionByZero(IntegerType.TINYINT);
         }
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() % second.getTinyInt()));
     }
@@ -1243,7 +1402,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator modSMALLINT(ConstantOperator first, ConstantOperator second) {
         if (second.getSmallint() == 0) {
-            return ConstantOperator.createNull(IntegerType.SMALLINT);
+            return handleDivisionByZero(IntegerType.SMALLINT);
         }
         return ConstantOperator.createSmallInt((short) (first.getSmallint() % second.getSmallint()));
     }
@@ -1251,7 +1410,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator modInt(ConstantOperator first, ConstantOperator second) {
         if (second.getInt() == 0) {
-            return ConstantOperator.createNull(IntegerType.INT);
+            return handleDivisionByZero(IntegerType.INT);
         }
         return ConstantOperator.createInt(first.getInt() % second.getInt());
     }
@@ -1259,15 +1418,15 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator modBigInt(ConstantOperator first, ConstantOperator second) {
         if (second.getBigint() == 0) {
-            return ConstantOperator.createNull(IntegerType.BIGINT);
+            return handleDivisionByZero(IntegerType.BIGINT);
         }
         return ConstantOperator.createBigint(first.getBigint() % second.getBigint());
     }
 
     @ConstantFunction(name = "mod", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
-        if (second.getLargeInt().equals(new BigInteger("0"))) {
-            return ConstantOperator.createNull(IntegerType.LARGEINT);
+        if (second.getLargeInt().equals(BigInteger.ZERO)) {
+            return handleDivisionByZero(IntegerType.LARGEINT);
         }
         return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
@@ -1281,7 +1440,7 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator modDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
-            return ConstantOperator.createNull(first.getType());
+            return handleDivisionByZero(first.getType());
         }
 
         return createDecimalConstant(first.getDecimal().remainder(second.getDecimal()));
@@ -1516,6 +1675,89 @@ public class ScalarOperatorFunctions {
                 StringUtils.replace(value.getVarchar(), target.getVarchar(), replacement.getVarchar()));
     }
 
+    @ConstantFunction(name = "regexp_replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator regexpReplace(ConstantOperator value, ConstantOperator pattern,
+                                                 ConstantOperator replacement) {
+        String patternText = pattern.getVarchar();
+        if (patternText.isEmpty()) {
+            throw new IllegalArgumentException("empty regex falls back to BE");
+        }
+
+        final Pattern compiled;
+        try {
+            compiled = Pattern.compile(patternText, Pattern.DOTALL);
+        } catch (PatternSyntaxException e) {
+            throw new IllegalArgumentException("invalid regex falls back to BE", e);
+        }
+
+        boolean globalMode = !patternText.startsWith("^") && !patternText.endsWith("$");
+        String replaced = regexpReplaceWithBERewrite(value.getVarchar(), compiled, replacement.getVarchar(), globalMode);
+        return ConstantOperator.createVarchar(replaced);
+    }
+
+    private static String regexpReplaceWithBERewrite(String input, Pattern pattern, String rewrite, boolean globalMode) {
+        Matcher matcher = pattern.matcher(input);
+        if (!matcher.find()) {
+            return input;
+        }
+
+        StringBuilder result = new StringBuilder(input.length());
+        int lastEnd = 0;
+        do {
+            int start = matcher.start();
+            int end = matcher.end();
+            if (start == end) {
+                if (globalMode && start == input.length()) {
+                    break;
+                }
+                throw new IllegalArgumentException("zero-length regex match falls back to BE");
+            }
+            result.append(input, lastEnd, start);
+            appendBEStyleRegexRewrite(result, rewrite, matcher);
+            lastEnd = end;
+            if (!globalMode) {
+                break;
+            }
+        } while (matcher.find());
+
+        result.append(input, lastEnd, input.length());
+        return result.toString();
+    }
+
+    private static void appendBEStyleRegexRewrite(StringBuilder out, String rewrite, Matcher matcher) {
+        for (int i = 0; i < rewrite.length(); i++) {
+            char ch = rewrite.charAt(i);
+            if (ch != '\\') {
+                out.append(ch);
+                continue;
+            }
+
+            if (i + 1 >= rewrite.length()) {
+                throw new IllegalArgumentException("dangling replacement escape falls back to BE");
+            }
+
+            char next = rewrite.charAt(++i);
+            if (next == '\\') {
+                out.append('\\');
+                continue;
+            }
+
+            if (next >= '0' && next <= '9') {
+                int group = next - '0';
+                if (group > matcher.groupCount()) {
+                    throw new IllegalArgumentException("replacement group falls back to BE");
+                }
+                String groupValue = matcher.group(group);
+                if (groupValue != null) {
+                    out.append(groupValue);
+                }
+                continue;
+            }
+
+            throw new IllegalArgumentException("unsupported replacement escape falls back to BE");
+        }
+    }
+
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
@@ -1634,4 +1876,3 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createTinyInt((byte) value.getDatetime().getSecond());
     }
 }
-

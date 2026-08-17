@@ -33,6 +33,7 @@
 #include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/util/debug_util.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
@@ -42,7 +43,6 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 class Chunk;
@@ -72,8 +72,8 @@ Status ParquetFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ParquetFileWriter::close() {
-    CommitResult result{
+FileCommitResult ParquetFileWriter::close() {
+    FileCommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
@@ -162,9 +162,9 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
+FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
     DCHECK(meta_data != nullptr);
-    FileWriter::FileStatistics file_statistics;
+    FileStatistics file_statistics;
     file_statistics.record_count = meta_data->num_rows();
 
     if (!has_field_id) {
@@ -264,7 +264,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::
         fields.push_back(std::move(node));
     }
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
 }
 
 Status ParquetFileWriter::init() {
@@ -375,7 +375,7 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
     auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
     auto types = ColumnEvaluator::types(*_column_evaluators);
     auto async_output_stream =
-            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
                                                       std::move(column_evaluators), _compression_type, _parsed_options,

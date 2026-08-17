@@ -22,10 +22,14 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
+import com.starrocks.planner.FetchNode;
+import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SplitCastDataSink;
 import com.starrocks.planner.SplitCastPlanFragment;
@@ -74,6 +78,7 @@ public class ExecutionDAG {
 
     private final JobSpec jobSpec;
     private final List<ExecutionFragment> fragments;
+    private final List<ExecutionFragment> preExecutedFragments;
     private ExecutionFragment captureVersionFragment = null;
     private final Map<PlanFragmentId, ExecutionFragment> idToFragment;
 
@@ -104,6 +109,7 @@ public class ExecutionDAG {
     private ExecutionDAG(JobSpec jobSpec) {
         this.jobSpec = jobSpec;
         this.fragments = Lists.newArrayList();
+        this.preExecutedFragments = Lists.newArrayList();
         this.idToFragment = Maps.newHashMap();
         this.instanceIdToInstance = Maps.newHashMap();
     }
@@ -112,6 +118,7 @@ public class ExecutionDAG {
         ExecutionDAG executionDAG = new ExecutionDAG(jobSpec);
 
         executionDAG.attachFragments(jobSpec.getFragments());
+        executionDAG.attachPreExecutedFragments(jobSpec.getPreExecutedFragments());
 
         return executionDAG;
     }
@@ -124,8 +131,19 @@ public class ExecutionDAG {
         }
     }
 
+    private void attachPreExecutedFragments(List<PlanFragment> preExecutedPlanFragments) {
+        for (PlanFragment planFragment : preExecutedPlanFragments) {
+            ExecutionFragment fragment = new ExecutionFragment(this, planFragment, fragments.size());
+            preExecutedFragments.add(fragment);
+        }
+    }
+
     ExecutionFragment getCaptureVersionFragment() {
         return captureVersionFragment;
+    }
+
+    List<ExecutionFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
     }
 
     public Set<TUniqueId> getInstanceIds() {
@@ -202,6 +220,12 @@ public class ExecutionDAG {
         // `queue` contains the fragments need to visit its in-edges.
         inDegrees.put(root, 0);
         queue.add(root);
+
+        for (ExecutionFragment fragment : preExecutedFragments) {
+            inDegrees.put(fragment, 0);
+            queue.add(fragment);
+        }
+
         while (!queue.isEmpty()) {
             ExecutionFragment fragment = queue.poll();
             for (int i = 0; i < fragment.childrenSize(); i++) {
@@ -226,12 +250,19 @@ public class ExecutionDAG {
             throw new StarRocksPlannerException("Some fragments do not belong to the fragment tree",
                     ErrorType.INTERNAL_ERROR);
         }
+        int numOutputFragments = 0;
+        List<List<ExecutionFragment>> groups = Lists.newArrayList();
+        if (!preExecutedFragments.isEmpty()) {
+            List<ExecutionFragment> group = new ArrayList<>(preExecutedFragments.size());
+            group.addAll(preExecutedFragments);
+            groups.add(group);
+            numOutputFragments += group.size();
+        }
+        
 
         // Compute fragment groups by BFS.
         // `queue` contains the fragments whose in-degree is zero.
         queue.add(root);
-        List<List<ExecutionFragment>> groups = Lists.newArrayList();
-        int numOutputFragments = 0;
         while (!queue.isEmpty()) {
             int groupSize = queue.size();
             List<ExecutionFragment> group = new ArrayList<>(groupSize);
@@ -288,6 +319,15 @@ public class ExecutionDAG {
         }
     }
 
+    public void preparePreExecutedFragments() {
+        PreExecutionFragmentBuilder builder = new PreExecutionFragmentBuilder(fragments);
+        builder.build(this);
+        for (ExecutionFragment fragment : preExecutedFragments) {
+            fragments.add(fragment);
+            idToFragment.put(fragment.getFragmentId(), fragment);
+        }
+    }
+
     /**
      * Do the finalize work after all the fragment instances have already been added to the DAG, including:
      *
@@ -314,6 +354,8 @@ public class ExecutionDAG {
         for (ExecutionFragment fragment : fragments) {
             connectFragmentToDestFragments(fragment);
         }
+
+        computeFetchFragmentForLookUpNode();
 
         workerIdToNumInstances = fragments.stream()
                 .flatMap(fragment -> fragment.getInstances().stream())
@@ -413,6 +455,49 @@ public class ExecutionDAG {
         } else {
             connectNormalFragmentToDestFragments(execFragment);
         }
+    }
+
+    // Compute fetch fragments for each lookup node
+    private void computeFetchFragmentForLookUpNode() {
+
+        if (preExecutedFragments.isEmpty()) {
+            return;
+        }
+
+        // collect all look-up fragments
+        Map<PlanNodeId, ExecutionFragment> lookUpFragments = Maps.newHashMap();
+        Map<PlanNodeId, List<ExecutionFragment>> peerFragments = Maps.newHashMap();
+
+        for (ExecutionFragment fragment : preExecutedFragments) {
+            final List<PlanNode> nodes = fragment.getPlanFragment().collectNodes();
+            final List<PlanNode> lookUpNodes = nodes.stream().filter(n -> n instanceof LookUpNode).toList();
+            for (PlanNode lookUpNode : lookUpNodes) {
+                lookUpFragments.put(lookUpNode.getId(), fragment);
+            }
+        }
+
+        for (ExecutionFragment fragment : fragments) {
+            final List<PlanNode> nodes = fragment.getPlanFragment().collectNodes();
+            final List<PlanNode> fetchNodes = nodes.stream().filter(n -> n instanceof FetchNode).toList();
+            for (PlanNode fetchNode : fetchNodes) {
+                final PlanNodeId targetNodeId = ((FetchNode) fetchNode).getTargetNodeId();
+                peerFragments.computeIfAbsent(targetNodeId, n -> Lists.newArrayList());
+                peerFragments.get(targetNodeId).add(fragment);
+            }
+        }
+
+        final Set<Map.Entry<PlanNodeId, ExecutionFragment>> entries = lookUpFragments.entrySet();
+        for (Map.Entry<PlanNodeId, ExecutionFragment> entry : entries) {
+            final ExecutionFragment lookUpFragment = entry.getValue();
+            final PlanNodeId lookUpKeyId = entry.getKey();
+            int numPeerFragment;
+            final List<ExecutionFragment> fragments = peerFragments.get(lookUpKeyId);
+            numPeerFragment = fragments.stream().mapToInt(fragment -> fragment.getInstances().size()).sum();
+            final Map<Integer, Integer> numFetchersPerLookUp = lookUpFragment.getNumFetchersPerLookUp();
+            numFetchersPerLookUp.putIfAbsent(lookUpKeyId.asInt(), 0);
+            numFetchersPerLookUp.compute(lookUpKeyId.asInt(), (k, v) -> v + numPeerFragment);
+        }
+
     }
 
     private boolean needScheduleByLocalBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {

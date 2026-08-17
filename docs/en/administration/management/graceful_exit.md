@@ -1,5 +1,7 @@
 ---
+sidebar_position: 130
 displayed_sidebar: docs
+description: "From v3.3 onwards, StarRocks supports Graceful Exit."
 ---
 
 # Graceful Exit

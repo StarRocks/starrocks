@@ -77,16 +77,12 @@ jobs:
       - name: Get PR Details
         if: steps.check_lint.outputs.result == 'true'
         id: pr_details
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = '${{ steps.pr_number.outputs.pr_number }}';
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
-            core.setOutput('base_sha', pr.base.sha);
+        run: |
+          # Use HEAD^1 (first parent of the synthetic merge commit) as the base SHA.
+          # pr.base.sha from the GitHub API can be stale when the PR branch hasn't
+          # recently merged from main, causing changed-files to detect all main
+          # commits since the branch point as "PR changes".
+          echo "base_sha=$(git rev-parse HEAD^1)" >> $GITHUB_OUTPUT
 
       - name: Get Changed Files
         if: steps.check_lint.outputs.result == 'true'

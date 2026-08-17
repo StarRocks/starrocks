@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列の最左の文字のASCII値を返します。"
 ---
 
 # ascii

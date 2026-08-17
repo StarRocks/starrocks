@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HLL 値のセットを連結して返します。"
 ---
 
 # hll_union

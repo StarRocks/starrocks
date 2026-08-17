@@ -1,0 +1,239 @@
+-- name: test_udaf_cache @no_arrow_flight_sql @sequential
+
+set enable_profile=true;
+set enable_async_profile=false;
+
+update information_schema.be_configs set value=false where name="enable_pipeline_driver_parallel_prepare";
+
+-- Create a shared isolation UDAF for cache testing
+CREATE AGGREGATE FUNCTION sumbigint_cache_shared(bigint)
+RETURNS bigint
+PROPERTIES (
+  "symbol" = "Sumbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FSumbigint.jar",
+  "isolation" = "shared"
+);
+
+-- Create a private isolation UDAF for testing that cache is NOT used
+CREATE AGGREGATE FUNCTION sumbigint_cache_private(bigint)
+RETURNS bigint
+PROPERTIES (
+  "symbol" = "Sumbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FSumbigint.jar",
+  "isolation" = "private"
+);
+
+-- Create a shared isolation window function for cache testing
+CREATE AGGREGATE FUNCTION sumbigint_window(bigint)
+RETURNS bigint
+PROPERTIES (
+  "analytic" = "true",
+  "symbol" = "Windowbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FWindowbigint.jar",
+  "isolation" = "shared"
+);
+
+-- Create a private isolation window function for testing that cache is NOT used
+CREATE AGGREGATE FUNCTION sumbigint_window_private(bigint)
+RETURNS bigint
+PROPERTIES (
+  "analytic" = "true",
+  "symbol" = "Windowbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FWindowbigint.jar",
+  "isolation" = "private"
+);
+
+CREATE TABLE t_udaf_cache (c0 int, c1 bigint, c2 bigint) distributed by hash(c0) buckets 4 properties("replication_num"="1");
+
+-- 10000 rows: c0 = group key (0-99), c1 = value (1-10000)
+INSERT INTO t_udaf_cache SELECT generate_series % 100, generate_series, cast(rand()*100 as int)  FROM table(generate_series(1, 10000));
+
+-- ============================================================
+-- Test 1: enable_cache_udaf = false — correctness only, no cache
+-- ============================================================
+set enable_cache_udaf=false;
+
+-- group-by: every group must satisfy sumbigint == builtin sum
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+-- non-group-by: global sumbigint must equal global builtin sum
+select assert_true(sumbigint_cache_shared(c1) = sum(c1)) from t_udaf_cache;
+
+-- ============================================================
+-- Test 2: enable_cache_udaf = true, shared isolation
+-- First query populates cache; second and third hit cache
+-- ============================================================
+set enable_cache_udaf=true;
+
+-- first query: correctness + populates cache
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(populate_count > 0 and hit_count > 0), assert_true((select count(1) from t) > 0) from t;
+
+-- second query: correctness + hits cache (group-by)
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(hit_count > 0 and populate_count = 0), assert_true((select count(1) from t) > 0) from t;
+
+-- third query: correctness + hits cache (non-group-by)
+select assert_true(sumbigint_cache_shared(c1) = sum(c1)) from t_udaf_cache;
+
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(hit_count > 0 and populate_count = 0), assert_true((select count(1) from t) > 0) from t;
+
+-- ============================================================
+-- Test 3: enable_cache_udaf = true, private isolation
+-- Cache must NOT be used; results must still be correct
+-- ============================================================
+
+-- group-by correctness
+with cte as (
+    SELECT sumbigint_cache_private(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+-- non-group-by correctness
+select assert_true(sumbigint_cache_private(c1) = sum(c1)) from t_udaf_cache;
+
+-- no cache counters in profile (private isolation bypasses cache)
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true((hit_count is null or hit_count = 0) and (populate_count is null or populate_count = 0)) from t;
+
+-- ============================================================
+-- Test 4: Window function correctness + cache
+-- ============================================================
+
+-- first window query: correctness + populates cache
+with cte as (
+    SELECT sumbigint_window(c1) OVER (PARTITION BY c2 ORDER BY c0) sum0, sum(c1) OVER (PARTITION BY c2 ORDER BY c0) sum1 FROM t_udaf_cache
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(populate_count > 0 and hit_count > 0), assert_true((select count(1) from t) > 0) from t;
+
+-- second window query: correctness + hits cache
+with cte as (
+    SELECT sumbigint_window(c1) OVER (PARTITION BY c2 ORDER BY c0) sum0, sum(c1) OVER (PARTITION BY c2 ORDER BY c0) sum1 FROM t_udaf_cache
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(hit_count > 0 and populate_count = 0), assert_true((select count(1) from t) > 0) from t;
+
+-- ============================================================
+-- Test 5: Window function with private isolation
+-- Cache must NOT be used; results must still be correct
+-- ============================================================
+
+with cte as (
+    SELECT sumbigint_window_private(c1) OVER (ORDER BY c0) sum0, sum(c1) OVER (ORDER BY c0) sum1 FROM t_udaf_cache
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+-- no cache counters in profile
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true((hit_count is null or hit_count = 0) and (populate_count is null or populate_count = 0)) from t;
+
+-- ============================================================
+-- Test 6: Cache disabled after cache was populated — no cache activity
+-- ============================================================
+set enable_cache_udaf=false;
+
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true((hit_count is null or hit_count = 0) and (populate_count is null or populate_count = 0)) from t;
+
+-- ============================================================
+-- Cleanup
+-- ============================================================
+DROP TABLE t_udaf_cache;
+DROP FUNCTION sumbigint_cache_shared(bigint);
+DROP FUNCTION sumbigint_cache_private(bigint);
+DROP FUNCTION sumbigint_window(bigint);
+DROP FUNCTION sumbigint_window_private(bigint);
+
+set enable_profile=false;
+set enable_cache_udaf=false;

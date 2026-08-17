@@ -1,0 +1,225 @@
+-- name: testIcebergV3DefaultValueCreateTable
+-- Test case 1: Create iceberg table with default value for a column
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value/${uuid0}"
+);
+
+create database ice_def_hadoop${uuid0}.ice_def_db${uuid0};
+
+-- Create table with format-version 3 and default values
+create table ice_def_hadoop${uuid0}.ice_def_db${uuid0}.default_value_test (
+    id int,
+    name string,
+    age int default "18",
+    score double default "100.0"
+) properties (
+    "format-version" = "3"
+);
+
+-- Test case 4: Show create table should display default values
+function: assert_query_contains("show create table ice_def_hadoop${uuid0}.ice_def_db${uuid0}.default_value_test", 'age` int(11) DEFAULT "18"')
+
+-- Test case 4: Desc table should show default values
+desc ice_def_hadoop${uuid0}.ice_def_db${uuid0}.default_value_test;
+
+drop catalog ice_def_hadoop${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: testIcebergV3DefaultValueInsertAndRead
+-- Test case 5: Insert data without specifying column value, should use default value
+-- Test case 6: Read old data after schema change, missing column should use default value
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_insert/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_insert${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_insert/${uuid0}"
+);
+
+create database ice_def_insert${uuid0}.ice_def_db${uuid0};
+
+-- Create table with format-version 3
+create table ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+
+-- Insert initial data
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test values (1, 'alice');
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test values (2, 'bob');
+
+-- Test case 2: Add column with default value using alter table
+alter table ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test add column age int default "20";
+
+-- Show create table after adding column
+function: assert_query_contains("show create table ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test", 'age` int(11) DEFAULT "20"')
+
+-- Test case 6: Read old data, new column should use default value
+select * from ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test order by id;
+
+-- Insert new data without specifying age column
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test (id, name) values (3, 'charlie');
+
+-- Insert new data with explicit age value
+insert into ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test values (4, 'david', 25);
+
+-- Test case 5: Check inserted data, missing column should use default value
+select * from ice_def_insert${uuid0}.ice_def_db${uuid0}.insert_test order by id;
+
+drop catalog ice_def_insert${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_insert/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: testIcebergV3DefaultValueAlterColumn
+-- Test case 3: Alter table to modify default value of existing column
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_alter/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_alter${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_alter/${uuid0}"
+);
+
+create database ice_def_alter${uuid0}.ice_def_db${uuid0};
+
+-- Create table with format-version 3 and default value
+create table ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test (
+    id int,
+    name string,
+    status string default 'active'
+) properties (
+    "format-version" = "3"
+);
+
+-- Insert data with default status
+insert into ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test (id, name) values (1, 'item1');
+
+-- Show current state
+select * from ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test;
+
+-- Test case 3: Modify default value of existing column
+alter table ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test modify column status string default "inactive";
+
+-- Show create table after modifying default value
+function: assert_query_contains("show create table ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test", 'status` varchar(1073741824) DEFAULT "inactive"')
+
+-- Insert new data, should use new default value
+insert into ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test (id, name) values (2, 'item2');
+
+-- Check data - old data should keep original default, new data should use new default
+select * from ice_def_alter${uuid0}.ice_def_db${uuid0}.alter_test order by id;
+
+drop catalog ice_def_alter${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_alter/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: testIcebergV3DefaultValueMultipleTypes
+-- Test default values with different data types
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_types/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_types${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_types/${uuid0}"
+);
+
+create database ice_def_types${uuid0}.ice_def_db${uuid0};
+
+-- Create table with various default value types
+create table ice_def_types${uuid0}.ice_def_db${uuid0}.types_test (
+    id int,
+    int_col int default "100",
+    bigint_col bigint default "1000000",
+    float_col float default "1.5",
+    double_col double default "3.14159",
+    string_col string default 'default_string',
+    bool_col boolean default "true"
+) properties (
+    "format-version" = "3"
+);
+
+-- Show create table
+function: assert_query_contains("show create table ice_def_types${uuid0}.ice_def_db${uuid0}.types_test", 'int_col` int(11) DEFAULT "100"')
+function: assert_query_contains("show create table ice_def_types${uuid0}.ice_def_db${uuid0}.types_test", 'double_col` double DEFAULT "3.14159"')
+
+-- Insert data only for id column
+insert into ice_def_types${uuid0}.ice_def_db${uuid0}.types_test (id) values (1);
+
+-- Insert data with some columns specified
+insert into ice_def_types${uuid0}.ice_def_db${uuid0}.types_test (id, int_col, string_col) values (2, 200, 'custom_string');
+
+-- Check all default values are applied correctly
+select * from ice_def_types${uuid0}.ice_def_db${uuid0}.types_test order by id;
+
+drop catalog ice_def_types${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_types/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: testIcebergV3DefaultValueSchemaEvolution
+-- Test case 6: Schema evolution with default values - reading old data after adding column
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_schema${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0}"
+);
+
+create database ice_def_schema${uuid0}.ice_def_db${uuid0};
+
+-- Create initial table without default value column
+create table ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test (
+    id int,
+    value int
+) properties (
+    "format-version" = "3"
+);
+
+-- Insert initial data
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test values (1, 100);
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test values (2, 200);
+
+-- Read initial data
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+
+-- Add column with default value
+alter table ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test add column bonus double default "50.5";
+
+-- Test case 6: Read old data, new column should be filled with default value
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+
+-- Insert new row without specifying bonus
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test (id, value) values (3, 300);
+
+-- Insert new row with explicit bonus
+insert into ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test values (4, 400, 99.9);
+
+-- Check all data
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+
+-- Add another column with default value
+alter table ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test add column category string default 'normal';
+
+-- Test case 6: Read after multiple schema changes
+select * from ice_def_schema${uuid0}.ice_def_db${uuid0}.schema_test order by id;
+
+drop catalog ice_def_schema${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null

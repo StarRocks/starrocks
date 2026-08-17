@@ -17,7 +17,9 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.mv.ivm.MVIVMTestBase;
@@ -31,7 +33,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AlterMaterializedViewTest extends MVTestBase {
     @BeforeAll
@@ -49,23 +54,17 @@ public class AlterMaterializedViewTest extends MVTestBase {
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
         Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
 
-        // change refresh mode from auto to incremental
+        // alter auto -> incremental: rejected (cross-mode ALTER not supported)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode from incremental to auto
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, false);
+            alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from auto to full
+        // alter auto -> auto: rejected (AUTO is hidden from users at the analyzer level)
         {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
+            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
+            alterMaterializedView(alterStmt, true);
+            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
     }
 
@@ -87,12 +86,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
         }
-        // change refresh mode to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
     }
 
     @Test
@@ -101,75 +94,23 @@ public class AlterMaterializedViewTest extends MVTestBase {
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
 
-        // change refresh mode from auto to incremental
+        // alter incremental -> incremental: no-op success
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from incremental to auto
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode from auto to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-    }
-
-    @Test
-    public void testChangeMVRefreshMode4() throws Exception {
-        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-
-        // change refresh mode from auto to incremental
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode from incremental to auto
+        // alter incremental -> auto: rejected (AUTO is hidden from users)
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
             alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from auto to full
+        // alter incremental -> pct: rejected (cross-mode ALTER not supported)
         {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-    }
-
-    @Test
-    public void testChangeMVRefreshMode5() throws Exception {
-        String query = "SELECT id, count(data) over (partition by date)  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-
-        // change refresh mode from auto to incremental
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
+            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"pct\")";
             alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to auto
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
     }
 
@@ -191,12 +132,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
         }
-        // change refresh mode from auto to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-        }
     }
 
     @Test
@@ -216,12 +151,6 @@ public class AlterMaterializedViewTest extends MVTestBase {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
-        }
-        // change refresh mode to full
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"full\")";
-            alterMaterializedView(alterStmt, false);
-            Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
         }
     }
 
@@ -282,6 +211,52 @@ public class AlterMaterializedViewTest extends MVTestBase {
             String alterStmt = "alter materialized view test_mv1 active";
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+        }
+    }
+
+    @Test
+    public void testCreateMVWithAutoRefreshModeRejected() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW `auto_rejected_mv` REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\"refresh_mode\" = \"auto\") " +
+                "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        Exception ex = Assertions.assertThrows(Exception.class,
+                () -> starRocksAssert.withMaterializedView(ddl));
+        Assertions.assertTrue(ex.getMessage().contains("refresh_mode"),
+                "expected refresh_mode error, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testAlterMVRefreshModeToAutoRejected() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+
+        String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
+        alterMaterializedView(alterStmt, true);
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+    public void testLegacyIncrementalAlterRejected() throws Exception {
+        String mvName = "legacy_incremental_alter_mv";
+        starRocksAssert.withMaterializedView("create materialized view test." + mvName + "\n" +
+                "distributed by hash(deptno) buckets 3\n" +
+                "refresh manual\n" +
+                "as select deptno, sum(salary) as total_salary from emps group by deptno;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", mvName);
+            mv.getRefreshScheme().setType(MaterializedViewRefreshType.INCREMENTAL);
+
+            AlterMaterializedViewStmt statement =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                            "alter materialized view " + mvName + " inactive", connectContext);
+            AlterJobException exception = Assertions.assertThrows(AlterJobException.class,
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(statement));
+            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                    exception.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test." + mvName);
         }
     }
 
@@ -465,5 +440,98 @@ public class AlterMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(3, mv.getColumns().size());
 
         alterMVDropColumn(dropStmt, true);
+    }
+
+    @Test
+    public void testDropColumnOnUnionMV() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1_union\n" +
+                "(\n" +
+                "    id int,\n" +
+                "    a int,\n" +
+                "    b int\n" +
+                ")\n" +
+                "DUPLICATE KEY(`id`)" +
+                "DISTRIBUTED BY HASH (id) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE base_t2_union\n" +
+                "(\n" +
+                "    id int,\n" +
+                "    a int,\n" +
+                "    b int\n" +
+                ")\n" +
+                "DUPLICATE KEY(`id`)" +
+                "DISTRIBUTED BY HASH (id) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_union_test\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, a, b FROM base_t1_union UNION ALL SELECT id, a, b FROM base_t2_union;");
+
+        // DROP COLUMN on a UNION MV should fail with a clear error, not ClassCastException
+        String dropStmt = "alter materialized view mv_union_test drop column b";
+        alterMVDropColumn(dropStmt, true);
+
+        // ADD COLUMN on a UNION MV should also fail with a clear error
+        String addStmt = "alter materialized view mv_union_test add column cnt as count(a)";
+        alterMVAddColumn(addStmt, true);
+    }
+
+    @Test
+    public void testMVColumnUniqueIdNoDuplicateAfterMultipleAddColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl_uid\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    v1 int, \n" +
+                "    v2 int, \n" +
+                "    v3 int \n" +
+                ")\n" +
+                "DUPLICATE KEY(`k1`)" +
+                "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_uid_test\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, sum(v1) from base_tbl_uid group by k1;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "mv_uid_test");
+
+        // Verify initial columns have valid unique ids (not -1)
+        List<Column> initialColumns = mv.getBaseSchema();
+        Assertions.assertEquals(2, initialColumns.size());
+        for (Column col : initialColumns) {
+            Assertions.assertTrue(col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "Column " + col.getName() + " should have a valid unique id, but got " + col.getUniqueId());
+        }
+
+        // First ADD COLUMN
+        String addStmt1 = "alter materialized view mv_uid_test add column v2_col as v2";
+        alterMVAddColumn(addStmt1, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertEquals(3, mv.getColumns().size());
+
+        // Second ADD COLUMN
+        String addStmt2 = "alter materialized view mv_uid_test add column v3_col as v3";
+        alterMVAddColumn(addStmt2, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertEquals(4, mv.getColumns().size());
+
+        // Verify all column unique ids are valid and unique (no duplicates)
+        List<Column> allColumns = mv.getBaseSchema();
+        Set<Integer> uniqueIds = new HashSet<>();
+        for (Column col : allColumns) {
+            Assertions.assertTrue(col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "Column " + col.getName() + " should have a valid unique id, but got " + col.getUniqueId());
+            Assertions.assertTrue(uniqueIds.add(col.getUniqueId()),
+                    "Duplicate column unique id " + col.getUniqueId() + " found for column " + col.getName());
+        }
+        Assertions.assertEquals(4, uniqueIds.size());
     }
 }

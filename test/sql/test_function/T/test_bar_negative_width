@@ -1,0 +1,27 @@
+-- name: test_bar_negative_width
+-- description: bar() read width/min/max into an unsigned size_t, so a negative width (BIGINT)
+--              wrapped to SIZE_MAX and slipped past the `width > 0` guard, driving an unbounded
+--              std::string append loop -> BE memory exhaustion / hang (DoS). Read signed and
+--              also bound the width. A negative or zero width, and an absurdly large width, must
+--              now return a clean error; valid widths (incl. negative value ranges) still render.
+--              The unbounded-growth case itself is intentionally NOT exercised here (it would
+--              exhaust memory and ignores cancellation).
+
+CREATE DATABASE IF NOT EXISTS test_bar_negative_width_db;
+USE test_bar_negative_width_db;
+
+CREATE TABLE t_bar (v INT) DUPLICATE KEY(v)
+DISTRIBUTED BY HASH(v) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO t_bar VALUES (0), (50), (100);
+
+-- negative width: clean error (was: wrapped to SIZE_MAX -> unbounded growth / hang)
+SELECT length(bar(v, 0, 100, -1)) FROM t_bar;
+-- zero width: clean error
+SELECT length(bar(v, 0, 100, 0)) FROM t_bar;
+-- absurdly large width: clean error (bounded to avoid OOM)
+SELECT length(bar(v, 0, 100, 100000000000)) FROM t_bar;
+
+-- valid width still renders a bar
+SELECT bar(5, 0, 10, 20);
+-- valid render over a negative value range (signed read keeps this correct)
+SELECT length(bar(-5, -10, 0, 20));

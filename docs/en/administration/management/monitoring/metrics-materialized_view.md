@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
+description: "From v3.1 onwards, StarRocks supports metrics for asynchronous materialized views."
 ---
 
 # Monitoring Metrics for Asynchronous Materialized Views
@@ -35,17 +37,17 @@ scrape_configs:
 ### mv_refresh_jobs
 
 - Type: Counter
-- Description: Total number of refresh jobs of the materialized view.
+- Description: Total number of refresh jobs triggered for the materialized view. A refresh job corresponds to one user-initiated or scheduled refresh; a single job may execute multiple task runs internally. Each job is counted once when it reaches a terminal state. MERGED task runs (sub-tasks merged into a later batch) are not counted.
 
 ### mv_refresh_total_success_jobs
 
 - Type: Counter
-- Description: Number of successful refresh jobs of the materialized view.
+- Description: Number of refresh jobs that completed successfully. Counted once per job.
 
 ### mv_refresh_total_failed_jobs
 
 - Type: Counter
-- Description: Number of failed refresh jobs of the materialized view.
+- Description: Number of refresh jobs that failed. Counted once per job.
 
 ### mv_refresh_total_empty_jobs
 
@@ -110,4 +112,48 @@ scrape_configs:
 ### mv_refresh_duration
 
 - Type: Histogram
-- Description: Duration of the successful materialized view refresh jobs.
+- Description: Wall-clock duration of refresh jobs, in milliseconds. For multi-batch jobs, measured from the first task run start to the final task run completion.
+
+### mv_global_count
+
+- Type: Gauge
+- Description: Current number of asynchronous materialized views in the cluster, with labels `refresh_mode` (the materialized view's refresh mode) and `status` (`ACTIVE` or `INACTIVE`). This metric is always emitted, regardless of the per-materialized-view metrics privilege.
+
+### mv_global_query_rewrite_queries_total
+
+- Type: Counter
+- Description: Number of queries grouped by materialized view rewrite outcome, with label `state`: `HIT` (the query was rewritten to use a materialized view), `NO_HIT` (rewrite was enabled but no materialized view was used), or `DISABLED` (materialized view rewrite was disabled by the session variable or the FE configuration). Counted once per query.
+
+### mv_global_query_mv_usage_total
+
+- Type: Counter
+- Description: Number of times materialized views are used by queries, with labels `usage_type` (`REWRITE` if a query was rewritten to use the materialized view, or `DIRECT` if a query reads the materialized view directly) and `refresh_mode`.
+### mv_global_refresh_jobs_total
+
+- Type: Counter
+- Description: Total number of materialized view refresh jobs across all materialized views, with label `warehouse_name`. This is the fleet-level aggregate of `mv_refresh_jobs`: counted once per job on its terminal task run, excluding `MERGED` runs. Always emitted, regardless of the per-materialized-view metrics privilege.
+
+### mv_global_refresh_success_jobs_total
+
+- Type: Counter
+- Description: Total number of successful materialized view refresh jobs across all materialized views, by `warehouse_name`.
+
+### mv_global_refresh_failed_jobs_total
+
+- Type: Counter
+- Description: Total number of failed materialized view refresh jobs across all materialized views, by `warehouse_name`.
+
+### mv_global_refresh_duration
+
+- Type: Histogram
+- Description: Per-job wall-clock duration of materialized view refresh jobs, in milliseconds, by `warehouse_name`.
+
+### mv_global_refresh_pending_jobs
+
+- Type: Gauge
+- Description: Current number of pending materialized view refresh jobs across all materialized views, aggregated by `warehouse_name`.
+
+### mv_global_refresh_running_jobs
+
+- Type: Gauge
+- Description: Current number of running materialized view refresh jobs across all materialized views, aggregated by `warehouse_name`.

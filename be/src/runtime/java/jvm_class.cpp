@@ -1,0 +1,75 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "runtime/java/jvm_class.h"
+
+#include <string>
+#include <utility>
+
+#include "base/status.h"
+#include "runtime/java/jni_env.h"
+
+namespace starrocks {
+namespace {
+
+Status jni_exception_status(JNIEnv* env, const std::string& message) {
+    if (!env->ExceptionCheck()) {
+        return Status::OK();
+    }
+    env->ExceptionDescribe();
+    env->ExceptionClear();
+    return Status::InternalError(message);
+}
+
+} // namespace
+
+StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        return Status::InternalError("couldn't get a JNIEnv");
+    }
+    // get default constructor
+    jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
+    if (constructor == nullptr) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        return Status::InternalError("couldn't found default constructor for Java Object");
+    }
+    auto local_ref = env->NewObject((jclass)_clazz.handle(), constructor);
+    RETURN_IF_ERROR(jni_exception_status(env, "JNI Exception"));
+    JavaGlobalRef global_ref(env->NewGlobalRef(local_ref));
+    env->DeleteLocalRef(local_ref);
+    return std::move(global_ref);
+}
+
+StatusOr<jobject> JVMClass::newLocalInstance() const {
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        return Status::InternalError("couldn't get a JNIEnv");
+    }
+    // get default constructor
+    jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
+    if (constructor == nullptr) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        return Status::InternalError("couldn't found default constructor for Java Object");
+    }
+    auto res = env->NewObject((jclass)_clazz.handle(), constructor);
+    RETURN_IF_ERROR(jni_exception_status(env, "JNI Exception"));
+    return res;
+}
+
+} // namespace starrocks

@@ -18,9 +18,9 @@
 #include <unordered_map>
 
 #include "common/status.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

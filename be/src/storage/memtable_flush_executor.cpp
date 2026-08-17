@@ -36,7 +36,9 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/system/cpu_info.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
@@ -197,7 +199,7 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
 // Used in shared-data mode
 Status MemTableFlushExecutor::init_for_lake_table(const std::vector<DataDir*>& data_dirs) {
     int max_threads = calc_max_threads_for_lake_table(data_dirs);
-    return ThreadPoolBuilder("lake_memtable_flush") // mem table flush
+    return ThreadPoolBuilder("lake_mt_flush") // mem table flush
             .set_min_threads(0)
             .set_max_threads(max_threads)
             .build(&_flush_pool);

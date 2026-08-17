@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "セキュリティインテグレーションで外部認証システム（LDAP・OAuth等）と StarRocks を統合してユーザー認証を行います。"
 sidebar_position: 20
 ---
 
@@ -40,9 +41,10 @@ PROPERTIES (
     "authentication_ldap_simple_server_host" = "",
     "authentication_ldap_simple_server_port" = "",
     "authentication_ldap_simple_bind_base_dn" = "",
-    "authentication_ldap_simple_user_search_attr" = ""
+    "authentication_ldap_simple_user_search_attr" = "",
     "authentication_ldap_simple_bind_root_dn" = "",
     "authentication_ldap_simple_bind_root_pwd" = "",
+    "authentication_ldap_simple_bind_dn_pattern" = "",
     "authentication_ldap_simple_ssl_conn_allow_insecure" = "{true | false}",
     "authentication_ldap_simple_ssl_conn_trust_store_path" = "",
     "authentication_ldap_simple_ssl_conn_trust_store_pwd" = "",
@@ -74,13 +76,13 @@ PROPERTIES (
 
 ##### authentication_ldap_simple_bind_base_dn
 
-- 必須: はい
-- 説明: クラスターが検索する LDAP ユーザーの基本識別名 (DN)。
+- 必須: いいえ
+- 説明: クラスターが検索する LDAP ユーザーの基本識別名 (DN)。検索バインドモードを使用する場合は必須です。ダイレクトバインドモード（`authentication_ldap_simple_bind_dn_pattern` を設定する場合）では不要です。
 
 ##### authentication_ldap_simple_user_search_attr
 
-- 必須: はい
-- 説明: LDAP サービスにログインするために使用されるユーザーの属性。例: `uid`。
+- 必須: いいえ
+- 説明: LDAP サービスにログインするために使用されるユーザーの属性。例: `uid`。検索バインドモードを使用する場合は必須です。
 
 :::note
 
@@ -97,13 +99,18 @@ PROPERTIES (
 
 ##### authentication_ldap_simple_bind_root_dn
 
-- 必須: はい
-- 説明: LDAP サービスの管理者 DN。
+- 必須: いいえ
+- 説明: LDAP サービスの管理者 DN。検索バインドモードを使用する場合は必須です。
 
 ##### authentication_ldap_simple_bind_root_pwd
 
-- 必須: はい
-- 説明: LDAP サービスの管理者パスワード。
+- 必須: いいえ
+- 説明: LDAP サービスの管理者パスワード。検索バインドモードを使用する場合は必須です。
+
+##### authentication_ldap_simple_bind_dn_pattern
+
+- 必須: いいえ
+- 説明: ダイレクトバインド認証の DN パターン。ユーザー名のプレースホルダーとして `${USER}` を使用します。パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@domain` のような UPN 形式はサポートされていません。例: `uid=${USER},ou=People,dc=example,dc=com`。複数のパターンはセミコロンで区切ることができ、システムは成功するまで各パターンを順番に試行します。このパラメータを設定すると、検索ステップがスキップされ、構築した DN で直接バインドされるため、`authentication_ldap_simple_bind_base_dn`、`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_bind_root_dn`、`authentication_ldap_simple_bind_root_pwd` は不要です。
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 

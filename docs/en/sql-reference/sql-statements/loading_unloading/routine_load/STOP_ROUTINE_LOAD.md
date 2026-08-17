@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "STOP ROUTINE LOAD stops a Routine Load job."
 ---
 
 # STOP ROUTINE LOAD

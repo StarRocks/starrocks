@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 50
+description: "FAQ for common StarRocks privilege and authorization questions, including role activation issues."
 ---
 
 # Privilege FAQ
@@ -46,7 +47,7 @@ The statement above is equivalent to `GRANT select_priv ON db.* TO <user_identit
 
 ## What privileges are required to access the StarRocks Web Console `http://<fe_ip>:<fe_http_port>`?
 
-The user must have the `cluster_admin` role.
+The user must have the `db_admin` and `user_admin` roles.
 
 ## How did the privilege retention mechanism change before and after StarRocks v3.0?
 
