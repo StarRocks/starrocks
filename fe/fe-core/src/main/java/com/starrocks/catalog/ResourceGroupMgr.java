@@ -180,19 +180,10 @@ public class ResourceGroupMgr implements Writable {
             validateExclusiveCpuCoresInlock(
                     wg.getNormalizedExclusiveCpuCores(), wg.getExclusiveCpuPercent(), wg.getWarehouses(), wg);
 
-            if (needReplace) {
-                // Log a DELETE WAL entry so BEs and journal-replay followers learn the old version
-                // is gone, but use a no-op snapshot callback — the snapshot update will be done
-                // atomically together with the CREATE entry below (single volatile write).
-                ResourceGroup oldWg = snapshot.byName.get(wg.getName());
-                ResourceGroup oldWgForOp =
-                        GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(oldWg), ResourceGroup.class);
-                oldWgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
-                ResourceGroupOpEntry deleteOp =
-                        new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, oldWgForOp);
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logResourceGroupOp(deleteOp, wal -> { /* snapshot updated atomically below */ });
-                resourceGroupOps.add(deleteOp.toThrift());
+            if (!wg.hasDefaultMemPool() && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
+                throw new DdlException(
+                        "Property `mem_limit` must be equal for all resource groups using the mem_pool [" +
+                                wg.getMemPool() + "].");
             }
 
             wg.normalizeCpuWeight();
@@ -211,10 +202,19 @@ public class ResourceGroupMgr implements Writable {
                 classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
 
-            if (!wg.hasDefaultMemPool() && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
-                throw new DdlException(
-                        "Property `mem_limit` must be equal for all resource groups using the mem_pool [" +
-                                wg.getMemPool() + "].");
+            if (needReplace) {
+                // Log a DELETE WAL entry so BEs and journal-replay followers learn the old version
+                // is gone, but use a no-op snapshot callback — the snapshot update will be done
+                // atomically together with the CREATE entry below (single volatile write).
+                ResourceGroup oldWg = snapshot.byName.get(wg.getName());
+                ResourceGroup oldWgForOp =
+                        GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(oldWg), ResourceGroup.class);
+                oldWgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+                ResourceGroupOpEntry deleteOp =
+                        new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, oldWgForOp);
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logResourceGroupOp(deleteOp, wal -> { /* snapshot updated atomically below */ });
+                resourceGroupOps.add(deleteOp.toThrift());
             }
 
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
@@ -257,7 +257,9 @@ public class ResourceGroupMgr implements Writable {
         if (wg.hasDefaultMemPool()) {
             return true;
         }
-        return snapshot.byName.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+        return snapshot.byName.entrySet().stream().allMatch(entry ->
+                !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+                entry.getKey().equals(wg.getName()) ||
                 wg.getMemLimit().equals(entry.getValue().getMemLimit()));
     }
 
