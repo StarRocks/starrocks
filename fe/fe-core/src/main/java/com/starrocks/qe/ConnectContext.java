@@ -287,6 +287,12 @@ public class ConnectContext {
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
 
+    // Upper bound on the entries the diagnostics area below keeps, so that it stays bounded for
+    // the lifetime of the connection whatever a statement records into it. The value is the
+    // MySQL default for max_error_count, and the entries kept are the first ones, as MySQL does
+    // once the limit is reached.
+    private static final int MAX_WARNING_COUNT = 64;
+
     // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
     // by the most recent statement that generated any, so they can be read back via
     // SHOW WARNINGS / SHOW ERRORS. Cleared at the start of the next statement, except for SET,
@@ -1966,7 +1972,13 @@ public class ConnectContext {
         return listeners;
     }
 
+    // Every failure path replaces the buffer before recording its error (StmtExecutor.execute and
+    // ConnectProcessor.recordPreExecutionFailureDiagnostics), so the error a client just received
+    // in the ERR packet is never the entry dropped once the limit is reached.
     public void addWarning(QueryWarning warning) {
+        if (warnings.size() >= MAX_WARNING_COUNT) {
+            return;
+        }
         this.warnings.add(warning);
     }
 
