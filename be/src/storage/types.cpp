@@ -34,6 +34,7 @@
 
 #include "storage/types.h"
 
+#include "geo/geo_types.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
@@ -1114,6 +1115,44 @@ template <>
 struct ScalarTypeInfoImpl<TYPE_VARBINARY> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static const LogicalType type = TYPE_VARBINARY;
     static const int32_t size = TypeTraits<TYPE_VARBINARY>::size;
+};
+
+template <>
+struct ScalarTypeInfoImpl<TYPE_GEOMETRY> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static const LogicalType type = TYPE_GEOMETRY;
+    static const int32_t size = TypeTraits<TYPE_GEOMETRY>::size;
+
+    static Status from_string(void* buf, const std::string& scan_key) {
+        // Accept WKT input, encode as geometry binary, copy into pre-allocated slice buffer.
+        // Follows the same copy-into-existing-slice pattern as ScalarTypeInfoImpl<TYPE_VARCHAR>.
+        GeoParseStatus geo_status;
+        std::unique_ptr<GeoShape> shape(GeoShape::from_wkt(scan_key.data(), scan_key.size(), &geo_status));
+        if (shape == nullptr) {
+            return Status::InvalidArgument("invalid WKT geometry string");
+        }
+        std::string encoded;
+        shape->encode_to(&encoded);
+        size_t value_len = encoded.size();
+        if (value_len > get_olap_string_max_length()) {
+            return Status::InternalError(
+                    fmt::format("encoded geometry too large ({}), max is {}", value_len,
+                                get_olap_string_max_length()));
+        }
+        auto slice = unaligned_load<Slice>(buf);
+        memory_copy(slice.data, encoded.data(), value_len);
+        slice.size = value_len;
+        unaligned_store<Slice>(buf, slice);
+        return Status::OK();
+    }
+
+    static std::string to_string(const void* src) {
+        const auto* slice = reinterpret_cast<const Slice*>(src);
+        std::unique_ptr<GeoShape> shape(GeoShape::from_encoded(slice->data, slice->size));
+        if (shape == nullptr) {
+            return "<invalid geometry>";
+        }
+        return shape->as_wkt();
+    }
 };
 
 void (*ScalarTypeInfoImpl<TYPE_CHAR>::set_to_max)(void*) = nullptr;

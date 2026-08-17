@@ -73,6 +73,7 @@ public class TypeDeserializer {
             case JSON -> PrimitiveType.JSON;
             case FUNCTION -> PrimitiveType.FUNCTION;
             case VARIANT -> PrimitiveType.VARIANT;
+            case GEOMETRY -> PrimitiveType.GEOMETRY;
             default -> PrimitiveType.INVALID_TYPE;
         };
     }

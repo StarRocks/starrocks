@@ -46,6 +46,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <sstream>
 
@@ -561,5 +562,56 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
     return false;
 }
 #endif
+
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
+                      double* max_x, double* max_y) {
+    if (shape == nullptr) return false;
+
+    auto update = [&](const S2Point& pt) {
+        S2LatLng ll(pt);
+        double x = ll.lng().degrees();
+        double y = ll.lat().degrees();
+        if (x < *min_x) *min_x = x;
+        if (y < *min_y) *min_y = y;
+        if (x > *max_x) *max_x = x;
+        if (y > *max_y) *max_y = y;
+    };
+
+    *min_x = *min_y = std::numeric_limits<double>::max();
+    *max_x = *max_y = std::numeric_limits<double>::lowest();
+
+    switch (shape->type()) {
+    case GEO_SHAPE_POINT: {
+        const auto* pt = static_cast<const GeoPoint*>(shape);
+        update(*pt->point());
+        break;
+    }
+    case GEO_SHAPE_LINE_STRING: {
+        const auto* line = static_cast<const GeoLine*>(shape);
+        for (int i = 0; i < line->polyline()->num_vertices(); ++i) {
+            update(line->polyline()->vertex(i));
+        }
+        break;
+    }
+    case GEO_SHAPE_POLYGON: {
+        const auto* poly = static_cast<const GeoPolygon*>(shape);
+        for (int i = 0; i < poly->polygon()->num_loops(); ++i) {
+            const S2Loop* loop = poly->polygon()->loop(i);
+            for (int j = 0; j < loop->num_vertices(); ++j) {
+                update(loop->vertex(j));
+            }
+        }
+        break;
+    }
+    case GEO_SHAPE_CIRCLE:
+        // GeoCircle does not expose its cap publicly; skip indexing circles.
+        // Spatial queries on circle-typed geometries will fall back to full scan.
+        return false;
+    default:
+        return false;
+    }
+
+    return *min_x <= *max_x;
+}
 
 } // namespace starrocks

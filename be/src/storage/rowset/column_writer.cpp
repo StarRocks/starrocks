@@ -443,6 +443,13 @@ Status ScalarColumnWriter::init() {
         }
     }
 #endif
+    if (_opts.need_gist_index) {
+        DCHECK(_opts.tablet_index.count(GIST) > 0);
+        auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(GIST));
+        std::string index_path = _opts.standalone_index_file_paths.at(GIST);
+        GiSTIndexWriter::create(tablet_index, index_path, &_gist_index_writer);
+        RETURN_IF_ERROR(_gist_index_writer->init());
+    }
     return Status::OK();
 }
 
@@ -583,6 +590,13 @@ Status ScalarColumnWriter::write_inverted_index() {
     return Status::OK();
 }
 
+Status ScalarColumnWriter::write_gist_index(uint64_t* index_size) {
+    if (_gist_index_writer != nullptr) {
+        return _gist_index_writer->finish(index_size);
+    }
+    return Status::OK();
+}
+
 // write a data page into file and update ordinal index
 Status ScalarColumnWriter::_write_data_page(Page* page) {
     PagePointer pp;
@@ -690,6 +704,10 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
+    // Feed geometry data to the GiST index writer before converting to raw bytes
+    if (_gist_index_writer != nullptr) {
+        RETURN_IF_ERROR(_gist_index_writer->append(column));
+    }
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
             is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;

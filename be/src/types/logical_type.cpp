@@ -66,6 +66,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "ANY_STRUCT") return TYPE_STRUCT;
     if (upper_type_str == "ANY_MAP") return TYPE_MAP;
     if (upper_type_str == "VARIANT") return TYPE_VARIANT;
+    if (upper_type_str == "GEOMETRY") return TYPE_GEOMETRY;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
     return TYPE_UNKNOWN;
 }
@@ -156,6 +157,8 @@ const char* logical_type_to_string(LogicalType type) {
         return "VARBINARY";
     case TYPE_VARIANT:
         return "VARIANT";
+    case TYPE_GEOMETRY:
+        return "GEOMETRY";
     }
     return "";
 }
@@ -290,6 +293,7 @@ public:
         _data[TYPE_DECIMAL256] = TYPE_DECIMAL256;
         _data[TYPE_INT256] = TYPE_INT256;
         _data[TYPE_VARIANT] = TYPE_VARIANT;
+        _data[TYPE_GEOMETRY] = TYPE_GEOMETRY;
     }
     LogicalType get_logical_type(LogicalType field_type) { return _data[field_type]; }
 

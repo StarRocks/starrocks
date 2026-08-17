@@ -1,0 +1,147 @@
+-- name: test_window_geo
+
+CREATE TABLE geo_window (
+    id     INT NOT NULL,
+    region VARCHAR(32),
+    geom   GEOMETRY
+) ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO geo_window VALUES
+    -- Region A: 3 nearby points (dense cluster) + 1 far point (noise)
+    (1,  'A', ST_MakePoint(0.0,   0.0)),
+    (2,  'A', ST_MakePoint(0.001, 0.0)),    -- ~111m from (1)
+    (3,  'A', ST_MakePoint(0.0,   0.001)),  -- ~111m from (1)
+    (4,  'A', ST_MakePoint(10.0,  10.0)),   -- far outlier
+    -- Region B: exactly 2 clusters of 2 points each
+    (5,  'B', ST_MakePoint(0.0,   0.0)),
+    (6,  'B', ST_MakePoint(0.001, 0.001)),  -- near (5)
+    (7,  'B', ST_MakePoint(5.0,   5.0)),
+    (8,  'B', ST_MakePoint(5.001, 5.001)),  -- near (7)
+    -- Region C: single point (always noise for DBSCAN, cluster 0 for KMeans)
+    (9,  'C', ST_MakePoint(1.0,   1.0)),
+    -- Region D: NULL geometry
+    (10, 'D', NULL);
+
+-- -----------------------------------------------------------------------
+-- ST_ClusterDBSCAN
+-- eps = 200m (0.002°), minpoints = 2
+-- Region A: points 1,2,3 form cluster 0; point 4 is noise (NULL)
+-- -----------------------------------------------------------------------
+SELECT id, region,
+       ST_ClusterDBSCAN(geom, 200.0, 2)
+           OVER (PARTITION BY region
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+           AS cluster_id
+FROM geo_window
+WHERE region = 'A'
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- Region B: two separate clusters (both dense with minpoints=2)
+-- Points (5,6) → cluster 0, points (7,8) → cluster 1
+-- -----------------------------------------------------------------------
+SELECT id,
+       ST_ClusterDBSCAN(geom, 200.0, 2)
+           OVER (PARTITION BY region
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+           AS cluster_id
+FROM geo_window
+WHERE region = 'B'
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- Region C: single point is noise (NULL) with minpoints=2
+-- -----------------------------------------------------------------------
+SELECT id,
+       ST_ClusterDBSCAN(geom, 200.0, 2)
+           OVER (PARTITION BY region
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+           AS cluster_id
+FROM geo_window
+WHERE region = 'C'
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- NULL geometry is excluded from clustering (treated as noise)
+-- -----------------------------------------------------------------------
+SELECT id,
+       ST_ClusterDBSCAN(geom, 200.0, 2)
+           OVER (PARTITION BY region
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+           AS cluster_id
+FROM geo_window
+WHERE region = 'D'
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- Cluster IDs are non-negative integers for cluster members
+-- -----------------------------------------------------------------------
+SELECT COUNT(*) AS num_clustered
+FROM (
+    SELECT ST_ClusterDBSCAN(geom, 200.0, 2)
+               OVER (PARTITION BY region
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+               AS cluster_id
+    FROM geo_window
+    WHERE region = 'A'
+) t
+WHERE cluster_id IS NOT NULL;
+
+-- -----------------------------------------------------------------------
+-- ST_ClusterKMeans (k=2) — all points always get a non-NULL cluster ID
+-- -----------------------------------------------------------------------
+SELECT id,
+       ST_ClusterKMeans(geom, 2)
+           OVER (PARTITION BY region
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+           IS NOT NULL AS has_cluster
+FROM geo_window
+WHERE region = 'A'
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- KMeans with k=1: all points in one cluster
+-- -----------------------------------------------------------------------
+SELECT DISTINCT
+       ST_ClusterKMeans(geom, 1)
+           OVER (PARTITION BY region
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+           AS cluster_id
+FROM geo_window
+WHERE region = 'A';
+
+-- -----------------------------------------------------------------------
+-- KMeans k=4 on region B (4 points → 4 clusters of 1 each, or groups)
+-- All 4 results should be non-null
+-- -----------------------------------------------------------------------
+SELECT COUNT(*) AS cnt
+FROM (
+    SELECT ST_ClusterKMeans(geom, 2)
+               OVER (PARTITION BY region
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+               AS cluster_id
+    FROM geo_window
+    WHERE region = 'B'
+) t
+WHERE cluster_id IS NOT NULL;
+
+-- -----------------------------------------------------------------------
+-- DBSCAN with very large eps → all valid points in one cluster
+-- -----------------------------------------------------------------------
+SELECT COUNT(DISTINCT cluster_id) AS num_clusters
+FROM (
+    SELECT ST_ClusterDBSCAN(geom, 2000000.0, 2)
+               OVER (PARTITION BY region
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+               AS cluster_id
+    FROM geo_window
+    WHERE region = 'A'
+) t
+WHERE cluster_id IS NOT NULL;
+
+-- -----------------------------------------------------------------------
+-- Cleanup
+-- -----------------------------------------------------------------------
+DROP TABLE geo_window;

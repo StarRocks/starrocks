@@ -63,6 +63,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.GeometryType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -211,6 +212,67 @@ public class FunctionSet {
     public static final String ST_POLYGONFROMTEXT = "st_polygonfromtext";
     public static final String ST_X = "st_x";
     public static final String ST_Y = "st_y";
+
+    // Geometry functions (GEOMETRY type — PostGIS-compatible):
+    public static final String ST_GEOM_FROM_TEXT = "st_geomfromtext";
+    public static final String ST_GEOM_FROM_WKB = "st_geomfromwkb";
+    public static final String ST_MAKE_POINT = "st_makepoint";
+    public static final String ST_AS_TEXT = "st_astext";
+    public static final String ST_AS_WKB = "st_aswkb";
+    public static final String ST_WITHIN = "st_within";
+    // Accessors
+    public static final String ST_X_GEOM = "st_x";
+    public static final String ST_Y_GEOM = "st_y";
+    public static final String ST_GEOMETRY_TYPE = "st_geometrytype";
+    public static final String ST_SRID = "st_srid";
+    public static final String ST_IS_VALID = "st_isvalid";
+    public static final String ST_IS_EMPTY = "st_isempty";
+    public static final String ST_NDIMS = "st_ndims";
+    public static final String ST_NPOINTS = "st_npoints";
+    public static final String ST_NUM_GEOMETRIES = "st_numgeometries";
+    // Measurements
+    public static final String ST_DISTANCE_GEOM = "st_distance";
+    public static final String ST_LENGTH = "st_length";
+    public static final String ST_AREA = "st_area";
+    public static final String ST_PERIMETER = "st_perimeter";
+    // Predicates
+    public static final String ST_INTERSECTS = "st_intersects";
+    public static final String ST_DISJOINT = "st_disjoint";
+    public static final String ST_EQUALS = "st_equals";
+    public static final String ST_COVERS = "st_covers";
+    public static final String ST_COVERED_BY = "st_coveredby";
+    public static final String ST_TOUCHES = "st_touches";
+    // Constructors
+    public static final String ST_ENVELOPE = "st_envelope";
+    public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_MAKE_LINE = "st_makeline";
+    public static final String ST_POINT_GEOM = "st_point";
+    // Output
+    public static final String ST_AS_GEOJSON = "st_asgeojson";
+    // Geospatial window (analytic) functions
+    public static final String ST_CLUSTER_DBSCAN = "st_clusterdbscan";
+    public static final String ST_CLUSTER_KMEANS = "st_clusterkmeans";
+
+    // Additional accessors (PostGIS parity)
+    public static final String ST_DIMENSION = "st_dimension";
+    public static final String ST_START_POINT = "st_startpoint";
+    public static final String ST_END_POINT = "st_endpoint";
+    public static final String ST_POINT_N = "st_pointn";
+    public static final String ST_IS_CLOSED = "st_isclosed";
+    public static final String ST_IS_RING = "st_isring";
+    public static final String ST_IS_SIMPLE = "st_issimple";
+    public static final String ST_NUM_INTERIOR_RINGS = "st_numinteriorrings";
+    public static final String ST_EXTERIOR_RING = "st_exteriorring";
+    // Additional predicates (PostGIS parity)
+    public static final String ST_OVERLAPS = "st_overlaps";
+    public static final String ST_CROSSES = "st_crosses";
+    public static final String ST_DWITHIN = "st_dwithin";
+    // Additional constructors (PostGIS parity)
+    public static final String ST_GEOM_FROM_GEOJSON = "st_geomfromgeojson";
+    public static final String ST_BUFFER = "st_buffer";
+    public static final String ST_CONVEX_HULL = "st_convexhull";
+    public static final String ST_SIMPLIFY = "st_simplify";
+    public static final String ST_DISTANCE_SPHERE_GEOM = "st_distancesphere";
 
     // String functions
     public static final String APPEND_TRAILING_CHAR_IF_ABSENT = "append_trailing_char_if_absent";
@@ -829,6 +891,8 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .add(FunctionSet.SESSION_NUMBER)
+            .add("st_clusterdbscan")
+            .add("st_clusterkmeans")
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -1539,6 +1603,14 @@ public class FunctionSet {
         // Ntile
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(IntegerType.BIGINT), IntegerType.BIGINT, IntegerType.BIGINT));
+        // ST_ClusterDBSCAN: (GEOMETRY, DOUBLE eps, INT minpoints) → INT (nullable, NULL=noise)
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(ST_CLUSTER_DBSCAN,
+                Lists.newArrayList(GeometryType.GEOMETRY, FloatType.DOUBLE, IntegerType.INT),
+                IntegerType.INT, IntegerType.INT));
+        // ST_ClusterKMeans: (GEOMETRY, INT k) → INT
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(ST_CLUSTER_KMEANS,
+                Lists.newArrayList(GeometryType.GEOMETRY, IntegerType.INT),
+                IntegerType.INT, IntegerType.INT));
         // Allocate session
         addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
                 Lists.newArrayList(IntegerType.BIGINT, IntegerType.INT), IntegerType.BIGINT, IntegerType.BIGINT));

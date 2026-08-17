@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
+import com.starrocks.common.GiSTIndexParams;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
@@ -143,6 +144,8 @@ public class IndexAnalyzer {
             checkNgramBloomFilterIndexValid(column, properties, keysType);
         } else if (indexType == IndexDef.IndexType.VECTOR) {
             checkVectorIndexValid(column, properties, keysType);
+        } else if (indexType == IndexDef.IndexType.GIST) {
+            checkGiSTIndexValid(column, properties, keysType);
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
         }
@@ -366,6 +369,20 @@ public class IndexAnalyzer {
                 .collect(Collectors.toMap(entry -> entry.getKey().toLowerCase(), entry -> entry.getValue().toLowerCase()));
         properties.clear();
         properties.putAll(lowerProperties);
+    }
+
+    /**
+     * Validate that a GIST index is being applied to a GEOMETRY column.
+     */
+    public static void checkGiSTIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
+        if (!column.getType().isGeometryType()) {
+            throw new SemanticException(
+                    "The GIST index can only be built on a column of type GEOMETRY. Invalid column: "
+                            + column.getName());
+        }
+        String nodeCapacity = properties.getOrDefault(
+                GiSTIndexParams.IndexParamsKey.NODE_CAPACITY.name().toLowerCase(), "50");
+        GiSTIndexParams.IndexParamsKey.NODE_CAPACITY.check(nodeCapacity);
     }
 
     private static void addDefaultVectorProperties(Map<String, String> properties,

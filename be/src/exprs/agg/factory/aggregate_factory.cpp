@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "exprs/agg/window_geo.h"
+
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -118,6 +120,14 @@ AggregateFunctionPtr AggregateFactory::MakePercentRankWindowFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
     return new NtileWindowFunction();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeClusterDBSCANWindowFunction() {
+    return new ClusterDBSCANWindowFunction();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeClusterKMeansWindowFunction() {
+    return new ClusterKMeansWindowFunction();
 }
 
 static AggregateFunctionPtr get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,

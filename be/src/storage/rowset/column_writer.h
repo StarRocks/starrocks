@@ -47,6 +47,7 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
+#include "storage/index/gist/gist_index_writer.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -80,6 +81,7 @@ struct ColumnWriterOptions {
     bool need_bloom_filter = false;
     bool need_vector_index = false;
     bool need_inverted_index = false;
+    bool need_gist_index = false;
 
     std::unordered_map<IndexType, std::string> standalone_index_file_paths;
     std::unordered_map<IndexType, TabletIndex> tablet_index;
@@ -177,6 +179,8 @@ public:
 
     virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
 
+    virtual Status write_gist_index(uint64_t* index_size) { return Status::OK(); }
+
     virtual ordinal_t get_next_rowid() const = 0;
 
     // only invalid in the case of global_dict is not nullptr
@@ -231,6 +235,7 @@ public:
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
     Status write_inverted_index() override;
+    Status write_gist_index(uint64_t* index_size) override;
 
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
@@ -306,6 +311,7 @@ private:
 #ifndef __APPLE__
     std::unique_ptr<InvertedWriter> _inverted_index_builder;
 #endif
+    std::unique_ptr<GiSTIndexWriter> _gist_index_writer;
 
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;

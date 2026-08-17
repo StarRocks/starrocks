@@ -1,0 +1,312 @@
+-- name: test_postgis_functions
+CREATE TABLE geo_postgis (
+    id   INT NOT NULL,
+    geom GEOMETRY
+) ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO geo_postgis VALUES
+    (1,  ST_GeomFromText('POINT (1.5 2.5)')),
+    (2,  ST_GeomFromText('POINT (5 5)')),
+    (3,  ST_GeomFromText('POINT (0 0)')),
+    (4,  ST_GeomFromText('LINESTRING (0 0, 5 0, 5 5)')),
+    (5,  ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')),
+    (6,  ST_GeomFromText('POLYGON ((20 20, 30 20, 30 30, 20 30, 20 20))')),
+    (7,  NULL);
+-- result:
+-- !result
+SELECT id, ST_X(geom), ST_Y(geom) FROM geo_postgis WHERE id IN (1,2,3) ORDER BY id;
+-- result:
+1	1.5	2.5
+2	5.0	5.0
+3	0.0	0.0
+-- !result
+SELECT ST_X(geom) IS NULL FROM geo_postgis WHERE id = 4;
+-- result:
+1
+-- !result
+SELECT id, ST_GeometryType(geom) FROM geo_postgis WHERE id IN (1,4,5) ORDER BY id;
+-- result:
+1	ST_Point
+4	ST_LineString
+5	ST_Polygon
+-- !result
+SELECT DISTINCT ST_SRID(geom) FROM geo_postgis WHERE geom IS NOT NULL;
+-- result:
+4326
+-- !result
+SELECT id, ST_IsValid(geom) FROM geo_postgis WHERE id IN (1,4,5) ORDER BY id;
+-- result:
+1	1
+4	1
+5	1
+-- !result
+SELECT id, ST_IsEmpty(geom) FROM geo_postgis ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	1
+-- !result
+SELECT DISTINCT ST_NDims(geom) FROM geo_postgis WHERE geom IS NOT NULL;
+-- result:
+2
+-- !result
+SELECT id, ST_NPoints(geom) FROM geo_postgis WHERE id IN (1,4,5) ORDER BY id;
+-- result:
+1	1
+4	3
+5	4
+-- !result
+SELECT DISTINCT ST_NumGeometries(geom) FROM geo_postgis WHERE geom IS NOT NULL;
+-- result:
+1
+-- !result
+SELECT ST_Distance(ST_GeomFromText('POINT (1 1)'), ST_GeomFromText('POINT (1 1)'));
+-- result:
+0.0
+-- !result
+SELECT ST_Distance(geom, ST_GeomFromText('POINT (1 1)')) IS NULL
+FROM geo_postgis WHERE id = 4;
+-- result:
+1
+-- !result
+SELECT ST_Length(ST_GeomFromText('LINESTRING (0 0, 1 0)')) > 110000;
+-- result:
+1
+-- !result
+SELECT ST_Length(geom) IS NULL FROM geo_postgis WHERE id = 1;
+-- result:
+1
+-- !result
+SELECT ST_Area(ST_GeomFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))')) > 0;
+-- result:
+1
+-- !result
+SELECT ST_Area(geom) FROM geo_postgis WHERE id = 1;
+-- result:
+0.0
+-- !result
+SELECT ST_Perimeter(ST_GeomFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))')) > 0;
+-- result:
+1
+-- !result
+SELECT ST_Perimeter(geom) FROM geo_postgis WHERE id = 1;
+-- result:
+0.0
+-- !result
+SELECT ST_Intersects(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))')
+);
+-- result:
+1
+-- !result
+SELECT ST_Intersects(
+    ST_GeomFromText('POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))'),
+    ST_GeomFromText('POLYGON ((10 10, 20 10, 20 20, 10 20, 10 10))')
+);
+-- result:
+0
+-- !result
+SELECT ST_Intersects(ST_GeomFromText('POINT (5 5)'), ST_GeomFromText('POINT (5 5)'));
+-- result:
+1
+-- !result
+SELECT ST_Intersects(ST_GeomFromText('POINT (1 1)'), ST_GeomFromText('POINT (2 2)'));
+-- result:
+0
+-- !result
+SELECT ST_Intersects(NULL, ST_GeomFromText('POINT (1 1)'));
+-- result:
+None
+-- !result
+SELECT ST_Disjoint(
+    ST_GeomFromText('POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))'),
+    ST_GeomFromText('POLYGON ((10 10, 20 10, 20 20, 10 20, 10 10))')
+);
+-- result:
+1
+-- !result
+SELECT ST_Disjoint(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+);
+-- result:
+0
+-- !result
+SELECT ST_Equals(ST_GeomFromText('POINT (5 5)'), ST_GeomFromText('POINT (5 5)'));
+-- result:
+1
+-- !result
+SELECT ST_Equals(ST_GeomFromText('POINT (5 5)'), ST_GeomFromText('POINT (5 6)'));
+-- result:
+0
+-- !result
+SELECT ST_Equals(NULL, ST_GeomFromText('POINT (1 1)'));
+-- result:
+None
+-- !result
+SELECT ST_Covers(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+);
+-- result:
+1
+-- !result
+SELECT ST_Covers(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (20 20)')
+);
+-- result:
+0
+-- !result
+SELECT ST_CoveredBy(
+    ST_GeomFromText('POINT (5 5)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+-- result:
+1
+-- !result
+SELECT ST_CoveredBy(
+    ST_GeomFromText('POINT (20 20)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+-- result:
+0
+-- !result
+SELECT ST_CoveredBy(
+    ST_GeomFromText('POINT (5 5)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+) = ST_Covers(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+);
+-- result:
+1
+-- !result
+SELECT ST_Touches(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+);
+-- result:
+0
+-- !result
+SELECT ST_Contains(
+    ST_Envelope(ST_GeomFromText('LINESTRING (2 3, 7 8)')),
+    ST_GeomFromText('POINT (2 3)')
+);
+-- result:
+1
+-- !result
+SELECT ST_Contains(
+    ST_Envelope(ST_GeomFromText('LINESTRING (2 3, 7 8)')),
+    ST_GeomFromText('POINT (7 8)')
+);
+-- result:
+1
+-- !result
+SELECT ST_Covers(
+    ST_Envelope(ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+-- result:
+1
+-- !result
+SELECT ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_Centroid(ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'))
+);
+-- result:
+1
+-- !result
+SELECT ST_GeometryType(ST_Centroid(geom)) FROM geo_postgis WHERE id IN (1,4,5) ORDER BY id;
+-- result:
+ST_Point
+ST_Point
+ST_Point
+-- !result
+SELECT ST_GeometryType(ST_MakeLine(
+    ST_GeomFromText('POINT (0 0)'),
+    ST_GeomFromText('POINT (5 5)')
+));
+-- result:
+ST_LineString
+-- !result
+SELECT ST_MakeLine(
+    ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+) IS NULL;
+-- result:
+1
+-- !result
+SELECT ST_AsText(ST_Point(3.0, 4.0));
+-- result:
+POINT (3 4)
+-- !result
+SELECT ST_X(ST_Point(7.5, -2.1));
+-- result:
+7.5
+-- !result
+SELECT ST_AsGeoJSON(ST_GeomFromText('POINT (1 2)')) LIKE '%"type":"Point"%';
+-- result:
+1
+-- !result
+SELECT ST_AsGeoJSON(ST_GeomFromText('LINESTRING (0 0, 1 1)')) LIKE '%"type":"LineString"%';
+-- result:
+1
+-- !result
+SELECT ST_AsGeoJSON(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))')) LIKE '%"type":"Polygon"%';
+-- result:
+1
+-- !result
+SELECT ST_AsGeoJSON(NULL) IS NULL;
+-- result:
+1
+-- !result
+SELECT
+    ST_X(NULL) IS NULL,
+    ST_Y(NULL) IS NULL,
+    ST_GeometryType(NULL) IS NULL,
+    ST_SRID(NULL) IS NULL,
+    ST_IsValid(NULL) IS NULL,
+    ST_NDims(NULL) IS NULL,
+    ST_NPoints(NULL) IS NULL,
+    ST_NumGeometries(NULL) IS NULL;
+-- result:
+1	1	1	1	1	1	1	1
+-- !result
+SELECT
+    ST_Distance(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_Length(NULL) IS NULL,
+    ST_Area(NULL) IS NULL,
+    ST_Perimeter(NULL) IS NULL;
+-- result:
+1	1	1	1
+-- !result
+SELECT
+    ST_Intersects(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_Disjoint(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_Equals(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_Covers(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_CoveredBy(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_Touches(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL;
+-- result:
+1	1	1	1	1	1
+-- !result
+SELECT
+    ST_Envelope(NULL) IS NULL,
+    ST_Centroid(NULL) IS NULL,
+    ST_MakeLine(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_AsGeoJSON(NULL) IS NULL;
+-- result:
+1	1	1	1
+-- !result
+DROP TABLE geo_postgis;
+-- result:
+-- !result

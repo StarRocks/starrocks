@@ -988,6 +988,77 @@ vectorized_functions = [
     [120014, "ST_Contains", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "GeoFunctions::st_contains",
      "GeoFunctions::st_contains_prepare", "GeoFunctions::st_contains_close"],
 
+    # geometry functions (GEOMETRY type — PostGIS-compatible WKB storage)
+    [120015, "ST_GeomFromText", False, False, "GEOMETRY", ["VARCHAR"], "GeometryFunctions::st_geom_from_text"],
+    [120016, "ST_GeometryFromText", False, False, "GEOMETRY", ["VARCHAR"], "GeometryFunctions::st_geom_from_text"],
+    [120017, "ST_GeomFromWKB", False, False, "GEOMETRY", ["VARBINARY"], "GeometryFunctions::st_geom_from_wkb"],
+    [120018, "ST_MakePoint", False, False, "GEOMETRY", ["DOUBLE", "DOUBLE"], "GeometryFunctions::st_make_point"],
+    [120019, "ST_AsText", False, False, "VARCHAR", ["GEOMETRY"], "GeometryFunctions::st_as_text"],
+    [120020, "ST_AsWKT", False, False, "VARCHAR", ["GEOMETRY"], "GeometryFunctions::st_as_text"],
+    [120021, "ST_AsWKB", False, False, "VARBINARY", ["GEOMETRY"], "GeometryFunctions::st_as_wkb"],
+    [120022, "ST_Contains", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"], "GeometryFunctions::st_contains",
+     "GeometryFunctions::st_contains_prepare", "GeometryFunctions::st_contains_close"],
+    [120023, "ST_Within", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"], "GeometryFunctions::st_within"],
+
+    # PostGIS-compatible GEOMETRY accessor functions
+    [120024, "ST_X",            False, False, "DOUBLE",   ["GEOMETRY"],            "GeometryFunctions::st_x_geom"],
+    [120025, "ST_Y",            False, False, "DOUBLE",   ["GEOMETRY"],            "GeometryFunctions::st_y_geom"],
+    [120026, "ST_GeometryType", False, False, "VARCHAR",  ["GEOMETRY"],            "GeometryFunctions::st_geometry_type"],
+    [120027, "ST_SRID",         False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_srid"],
+    [120028, "ST_IsValid",      False, False, "BOOLEAN",  ["GEOMETRY"],            "GeometryFunctions::st_is_valid"],
+    [120029, "ST_IsEmpty",      False, False, "BOOLEAN",  ["GEOMETRY"],            "GeometryFunctions::st_is_empty"],
+    [120030, "ST_NDims",        False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_ndims"],
+    [120031, "ST_NPoints",      False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_npoints"],
+    [120032, "ST_NumPoints",    False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_npoints"],
+    [120033, "ST_NumGeometries",False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_num_geometries"],
+
+    # PostGIS-compatible GEOMETRY measurement functions
+    [120034, "ST_Distance",     False, False, "DOUBLE",   ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_distance_geom"],
+    [120035, "ST_Length",       False, False, "DOUBLE",   ["GEOMETRY"],            "GeometryFunctions::st_length"],
+    [120036, "ST_Area",         False, False, "DOUBLE",   ["GEOMETRY"],            "GeometryFunctions::st_area"],
+    [120037, "ST_Perimeter",    False, False, "DOUBLE",   ["GEOMETRY"],            "GeometryFunctions::st_perimeter"],
+
+    # PostGIS-compatible GEOMETRY predicate functions
+    [120038, "ST_Intersects",   False, False, "BOOLEAN",  ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_intersects"],
+    [120039, "ST_Disjoint",     False, False, "BOOLEAN",  ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_disjoint"],
+    [120040, "ST_Equals",       False, False, "BOOLEAN",  ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_equals"],
+    [120041, "ST_Covers",       False, False, "BOOLEAN",  ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_covers"],
+    [120042, "ST_CoveredBy",    False, False, "BOOLEAN",  ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_covered_by"],
+    [120043, "ST_Touches",      False, False, "BOOLEAN",  ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_touches"],
+
+    # PostGIS-compatible GEOMETRY constructor/transform functions
+    [120044, "ST_Envelope",     False, False, "GEOMETRY", ["GEOMETRY"],            "GeometryFunctions::st_envelope"],
+    [120045, "ST_Centroid",     False, False, "GEOMETRY", ["GEOMETRY"],            "GeometryFunctions::st_centroid"],
+    [120046, "ST_MakeLine",     False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],"GeometryFunctions::st_make_line"],
+    [120047, "ST_Point",        False, False, "GEOMETRY", ["DOUBLE", "DOUBLE"],    "GeometryFunctions::st_point_geom"],
+
+    # PostGIS-compatible GEOMETRY output functions
+    [120048, "ST_AsGeoJSON",    False, False, "VARCHAR",  ["GEOMETRY"],            "GeometryFunctions::st_as_geojson"],
+
+    # PostGIS parity — additional accessors
+    [120049, "ST_Dimension",        False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_dimension"],
+    [120050, "ST_StartPoint",       False, False, "GEOMETRY", ["GEOMETRY"],            "GeometryFunctions::st_start_point"],
+    [120051, "ST_EndPoint",         False, False, "GEOMETRY", ["GEOMETRY"],            "GeometryFunctions::st_end_point"],
+    [120052, "ST_PointN",           False, False, "GEOMETRY", ["GEOMETRY", "INT"],     "GeometryFunctions::st_point_n"],
+    [120053, "ST_IsClosed",         False, False, "BOOLEAN",  ["GEOMETRY"],            "GeometryFunctions::st_is_closed"],
+    [120054, "ST_IsRing",           False, False, "BOOLEAN",  ["GEOMETRY"],            "GeometryFunctions::st_is_ring"],
+    [120055, "ST_IsSimple",         False, False, "BOOLEAN",  ["GEOMETRY"],            "GeometryFunctions::st_is_simple"],
+    [120056, "ST_NumInteriorRings", False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_num_interior_rings"],
+    [120057, "ST_NumInteriorRing",  False, False, "INT",      ["GEOMETRY"],            "GeometryFunctions::st_num_interior_rings"],
+    [120058, "ST_ExteriorRing",     False, False, "GEOMETRY", ["GEOMETRY"],            "GeometryFunctions::st_exterior_ring"],
+
+    # PostGIS parity — additional predicates
+    [120059, "ST_Overlaps",    False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],           "GeometryFunctions::st_overlaps"],
+    [120060, "ST_Crosses",     False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],           "GeometryFunctions::st_crosses"],
+    [120061, "ST_DWithin",     False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY", "DOUBLE"], "GeometryFunctions::st_dwithin"],
+
+    # PostGIS parity — additional constructors
+    [120062, "ST_GeomFromGeoJSON", False, False, "GEOMETRY", ["VARCHAR"],                    "GeometryFunctions::st_geom_from_geojson"],
+    [120063, "ST_Buffer",          False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],         "GeometryFunctions::st_buffer"],
+    [120064, "ST_ConvexHull",      False, False, "GEOMETRY", ["GEOMETRY"],                   "GeometryFunctions::st_convex_hull"],
+    [120065, "ST_Simplify",        False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],         "GeometryFunctions::st_simplify"],
+    [120066, "ST_DistanceSphere",  False, False, "DOUBLE",   ["GEOMETRY", "GEOMETRY"],       "GeometryFunctions::st_distance_sphere_geom"],
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],

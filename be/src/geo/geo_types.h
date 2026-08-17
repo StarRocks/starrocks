@@ -219,4 +219,9 @@ public:
 
 #endif
 
+// Compute the axis-aligned bounding box of any GeoShape.
+// Returns false if the shape is null or has no vertices.
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
+                      double* max_x, double* max_y);
+
 } // namespace starrocks

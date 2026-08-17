@@ -361,6 +361,10 @@ public abstract class Type implements Cloneable {
         return isScalarType(PrimitiveType.VARIANT);
     }
 
+    public boolean isGeometryType() {
+        return isScalarType(PrimitiveType.GEOMETRY);
+    }
+
     public boolean isPercentile() {
         return isScalarType(PrimitiveType.PERCENTILE);
     }

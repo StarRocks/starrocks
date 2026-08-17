@@ -592,7 +592,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING (BITMAP | GIN | NGRAMBF | VECTOR)
+    : USING (BITMAP | GIN | NGRAMBF | VECTOR | GIST)
     ;
 
 showTableStatement
@@ -3211,6 +3211,7 @@ baseType
     | PERCENTILE
     | JSON
     | VARIANT
+    | GEOMETRY
     | VARBINARY typeParameter?
     | BINARY typeParameter?
     ;

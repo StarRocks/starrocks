@@ -1,0 +1,174 @@
+-- name: test_postgis_parity
+
+CREATE TABLE geo_parity (id INT NOT NULL, geom GEOMETRY)
+ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO geo_parity VALUES
+    (1,  ST_GeomFromText('POINT (3.5 7.25)')),
+    (2,  ST_GeomFromText('LINESTRING (0 0, 5 0, 5 5)')),
+    (3,  ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')),
+    (4,  NULL);
+
+-- -----------------------------------------------------------------------
+-- ST_Dimension
+-- -----------------------------------------------------------------------
+SELECT id, ST_Dimension(geom) FROM geo_parity WHERE geom IS NOT NULL ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- ST_StartPoint / ST_EndPoint
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_StartPoint(geom)) FROM geo_parity WHERE id = 2;
+SELECT ST_AsText(ST_EndPoint(geom))   FROM geo_parity WHERE id = 2;
+-- non-linestring returns NULL
+SELECT ST_StartPoint(geom) IS NULL FROM geo_parity WHERE id = 1;
+SELECT ST_StartPoint(geom) IS NULL FROM geo_parity WHERE id = 3;
+
+-- -----------------------------------------------------------------------
+-- ST_PointN
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_PointN(geom, 2)) FROM geo_parity WHERE id = 2;
+-- out-of-bounds
+SELECT ST_PointN(geom, 99) IS NULL FROM geo_parity WHERE id = 2;
+
+-- -----------------------------------------------------------------------
+-- ST_IsClosed / ST_IsRing / ST_IsSimple
+-- -----------------------------------------------------------------------
+SELECT id, ST_IsClosed(geom)  FROM geo_parity WHERE geom IS NOT NULL ORDER BY id;
+SELECT id, ST_IsSimple(geom)  FROM geo_parity WHERE geom IS NOT NULL ORDER BY id;
+SELECT id, ST_IsRing(geom)    FROM geo_parity WHERE geom IS NOT NULL ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- ST_NumInteriorRings / ST_ExteriorRing
+-- -----------------------------------------------------------------------
+SELECT ST_NumInteriorRings(geom) FROM geo_parity WHERE id = 3;
+SELECT ST_NumInteriorRings(geom) IS NULL FROM geo_parity WHERE id = 1;
+SELECT ST_GeometryType(ST_ExteriorRing(geom)) FROM geo_parity WHERE id = 3;
+
+-- -----------------------------------------------------------------------
+-- ST_Overlaps
+-- -----------------------------------------------------------------------
+SELECT ST_Overlaps(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))')
+);
+-- Contained polygon does NOT overlap (one contains the other)
+SELECT ST_Overlaps(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))')
+);
+SELECT ST_Overlaps(NULL, ST_GeomFromText('POINT (1 1)'));
+
+-- -----------------------------------------------------------------------
+-- ST_Crosses
+-- -----------------------------------------------------------------------
+SELECT ST_Crosses(
+    ST_GeomFromText('LINESTRING (0 5, 10 5)'),
+    ST_GeomFromText('LINESTRING (5 0, 5 10)')
+);
+
+-- -----------------------------------------------------------------------
+-- ST_DWithin
+-- -----------------------------------------------------------------------
+-- Points ~111m apart — within 200m
+SELECT ST_DWithin(
+    ST_GeomFromText('POINT (0 0)'),
+    ST_GeomFromText('POINT (0.001 0)'),
+    200.0
+);
+-- Points ~111km apart — NOT within 100m
+SELECT ST_DWithin(
+    ST_GeomFromText('POINT (0 0)'),
+    ST_GeomFromText('POINT (1 0)'),
+    100.0
+);
+SELECT ST_DWithin(NULL, ST_GeomFromText('POINT (1 1)'), 100.0);
+
+-- -----------------------------------------------------------------------
+-- ST_GeomFromGeoJSON
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_GeomFromGeoJSON('{"type":"Point","coordinates":[3.5,7.25]}'));
+SELECT ST_AsText(ST_GeomFromGeoJSON('{"type":"LineString","coordinates":[[0,0],[1,1],[2,0]]}'));
+SELECT ST_GeomFromGeoJSON('{"type":"MultiPolygon","coordinates":[]}') IS NULL;
+SELECT ST_GeomFromGeoJSON(NULL) IS NULL;
+
+-- -----------------------------------------------------------------------
+-- ST_Buffer
+-- -----------------------------------------------------------------------
+-- Buffer of a point contains the original point
+SELECT ST_Contains(
+    ST_Buffer(ST_GeomFromText('POINT (5 5)'), 0.1),
+    ST_GeomFromText('POINT (5 5)')
+);
+SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('POINT (0 0)'), 0.01));
+SELECT ST_Buffer(NULL, 0.01) IS NULL;
+SELECT ST_Buffer(ST_GeomFromText('POINT (0 0)'), -1.0) IS NULL;
+
+-- -----------------------------------------------------------------------
+-- ST_ConvexHull
+-- -----------------------------------------------------------------------
+SELECT ST_GeometryType(ST_ConvexHull(geom)) FROM geo_parity WHERE id = 3;
+-- Convex hull of a point is a point
+SELECT ST_GeometryType(ST_ConvexHull(ST_GeomFromText('POINT (1 2)')));
+-- Convex hull contains the original polygon
+SELECT ST_Covers(
+    ST_ConvexHull(ST_GeomFromText('POLYGON ((0 0, 10 0, 5 10, 0 0))')),
+    ST_GeomFromText('POINT (5 5)')
+);
+SELECT ST_ConvexHull(NULL) IS NULL;
+
+-- -----------------------------------------------------------------------
+-- ST_Simplify
+-- -----------------------------------------------------------------------
+-- Collinear middle point should be removed with large tolerance
+SELECT ST_NPoints(ST_Simplify(ST_GeomFromText('LINESTRING (0 0, 5 0.0001, 10 0)'), 0.001));
+-- Zero tolerance preserves all points
+SELECT ST_NPoints(ST_Simplify(ST_GeomFromText('LINESTRING (0 0, 5 3, 10 0)'), 0.0));
+SELECT ST_Simplify(NULL, 0.01) IS NULL;
+
+-- -----------------------------------------------------------------------
+-- ST_DistanceSphere alias
+-- -----------------------------------------------------------------------
+SELECT ABS(ST_DistanceSphere(
+    ST_GeomFromText('POINT (2.35 48.85)'),
+    ST_GeomFromText('POINT (-0.12 51.51)')
+) - ST_Distance(
+    ST_GeomFromText('POINT (2.35 48.85)'),
+    ST_GeomFromText('POINT (-0.12 51.51)')
+)) < 1.0;
+
+-- -----------------------------------------------------------------------
+-- GeoJSON round-trip: AsGeoJSON → GeomFromGeoJSON → AsText
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_GeomFromGeoJSON(ST_AsGeoJSON(ST_GeomFromText('POINT (3.5 7.25)'))));
+
+-- -----------------------------------------------------------------------
+-- NULL propagation for all new functions
+-- -----------------------------------------------------------------------
+SELECT
+    ST_Dimension(NULL) IS NULL,
+    ST_StartPoint(NULL) IS NULL,
+    ST_EndPoint(NULL) IS NULL,
+    ST_IsClosed(NULL) IS NULL,
+    ST_IsRing(NULL) IS NULL,
+    ST_IsSimple(NULL) IS NULL,
+    ST_NumInteriorRings(NULL) IS NULL,
+    ST_ExteriorRing(NULL) IS NULL;
+
+SELECT
+    ST_Overlaps(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_Crosses(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL,
+    ST_DWithin(NULL, ST_GeomFromText('POINT (1 1)'), 100.0) IS NULL;
+
+SELECT
+    ST_ConvexHull(NULL) IS NULL,
+    ST_Buffer(NULL, 0.01) IS NULL,
+    ST_Simplify(NULL, 0.01) IS NULL,
+    ST_GeomFromGeoJSON(NULL) IS NULL,
+    ST_DistanceSphere(NULL, ST_GeomFromText('POINT (1 1)')) IS NULL;
+
+-- -----------------------------------------------------------------------
+-- Cleanup
+-- -----------------------------------------------------------------------
+DROP TABLE geo_parity;

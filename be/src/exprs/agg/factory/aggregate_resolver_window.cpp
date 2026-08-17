@@ -16,6 +16,7 @@
 
 #include "exprs/agg/factory/aggregate_factory.hpp"  // for AggregateFactory
 #include "exprs/agg/factory/aggregate_resolver.hpp" // for AggregateFuncRes...
+#include "exprs/agg/window_geo.h"                   // for geo clustering window functions
 #include "types/logical_type.h"                     // for TYPE_BIGINT, Pri...
 #include "types/logical_type_infra.h"               // for type_dispatch_all
 
@@ -65,6 +66,16 @@ void AggregateFuncResolver::register_window() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("row_number", true,
                                                             AggregateFactory::MakeRowNumberWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("ntile", true, AggregateFactory::MakeNtileWindowFunction());
+
+    // Geospatial clustering window functions
+    // ST_ClusterDBSCAN(GEOMETRY, eps DOUBLE, minpoints INT) → INT (nullable)
+    // ClusterDBSCANState is the third template arg required by add_aggregate_mapping
+    // (used to generate the nullable wrapper; DBSCAN outputs NULL for noise points)
+    add_aggregate_mapping<TYPE_GEOMETRY, TYPE_INT, ClusterDBSCANState>(
+            "st_clusterdbscan", true, AggregateFactory::MakeClusterDBSCANWindowFunction());
+    // ST_ClusterKMeans(GEOMETRY, k INT) → INT
+    add_aggregate_mapping_notnull<TYPE_GEOMETRY, TYPE_INT>("st_clusterkmeans", true,
+                                                           AggregateFactory::MakeClusterKMeansWindowFunction());
 
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>(
             "session_number", true, AggregateFactory::MakeSessionNumberWindowFunction<TYPE_BIGINT>());

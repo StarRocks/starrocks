@@ -24,6 +24,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.GeometryType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -212,6 +213,7 @@ public class TypeParser {
             case "PERCENTILE" -> PercentileType.PERCENTILE;
             case "JSON" -> JsonType.JSON;
             case "VARIANT" -> VariantType.VARIANT;
+            case "GEOMETRY" -> GeometryType.GEOMETRY;
             case "FUNCTION" -> FunctionType.FUNCTION;
             case "UNKNOWN_TYPE" -> UnknownType.UNKNOWN_TYPE;
             default -> null;

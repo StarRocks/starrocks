@@ -120,6 +120,13 @@ struct TypeDescriptor {
         return res;
     }
 
+    static TypeDescriptor create_geometry_type() {
+        TypeDescriptor res;
+        res.type = TYPE_GEOMETRY;
+        res.len = MAX_VARCHAR_LENGTH; // WKB is variable-length binary
+        return res;
+    }
+
     static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;

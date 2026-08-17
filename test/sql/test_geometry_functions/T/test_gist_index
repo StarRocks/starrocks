@@ -1,0 +1,84 @@
+-- name: test_gist_index
+
+-- -----------------------------------------------------------------------
+-- DDL: CREATE TABLE with inline GiST index
+-- -----------------------------------------------------------------------
+CREATE TABLE geo_indexed (
+    id   INT NOT NULL,
+    name VARCHAR(64),
+    location GEOMETRY,
+    INDEX idx_location (location) USING GIST PROPERTIES("node_capacity" = "10")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+-- -----------------------------------------------------------------------
+-- DDL: CREATE INDEX after the fact (ALTER TABLE path)
+-- -----------------------------------------------------------------------
+CREATE TABLE geo_indexed2 (
+    id       INT NOT NULL,
+    location GEOMETRY
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+CREATE INDEX idx_loc2 ON geo_indexed2(location) USING GIST;
+
+-- -----------------------------------------------------------------------
+-- Error: GIST index on non-GEOMETRY column should fail
+-- -----------------------------------------------------------------------
+CREATE TABLE geo_bad_idx (
+    id INT NOT NULL,
+    name VARCHAR(64),
+    INDEX idx_bad (name) USING GIST
+) ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- -----------------------------------------------------------------------
+-- Error: invalid node_capacity
+-- -----------------------------------------------------------------------
+CREATE TABLE geo_bad_cap (
+    id INT NOT NULL,
+    location GEOMETRY,
+    INDEX idx_cap (location) USING GIST PROPERTIES("node_capacity" = "2")
+) ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- -----------------------------------------------------------------------
+-- DML + spatial queries via GiST-indexed table
+-- -----------------------------------------------------------------------
+INSERT INTO geo_indexed VALUES
+    (1, 'origin',  ST_MakePoint(0.0, 0.0)),
+    (2, 'inside',  ST_GeomFromText('POINT (5 5)')),
+    (3, 'outside', ST_GeomFromText('POINT (20 20)')),
+    (4, 'edge',    ST_GeomFromText('POINT (10 10)')),
+    (5, 'poly',    ST_GeomFromText('POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))'));
+
+-- Spatial filter — candidate rows from GiST + exact geometry check
+SELECT id, name, ST_AsText(location)
+FROM geo_indexed
+WHERE ST_Contains(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))'), location)
+ORDER BY id;
+
+-- ST_Within (inverse of ST_Contains)
+SELECT id, name
+FROM geo_indexed
+WHERE ST_Within(location, ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))'))
+ORDER BY id;
+
+-- NULL location is never returned by spatial predicates
+INSERT INTO geo_indexed VALUES (6, 'null_geom', NULL);
+SELECT id FROM geo_indexed WHERE location IS NULL ORDER BY id;
+SELECT id FROM geo_indexed
+WHERE ST_Contains(ST_GeomFromText('POLYGON ((0 0,100 0,100 100,0 100,0 0))'), location)
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- Cleanup
+-- -----------------------------------------------------------------------
+DROP TABLE geo_indexed;
+DROP TABLE geo_indexed2;

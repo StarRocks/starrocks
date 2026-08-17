@@ -105,7 +105,8 @@ enum TPrimitiveType {
   VARBINARY,
   DECIMAL256,
   INT256,
-  VARIANT
+  VARIANT,
+  GEOMETRY
 }
 
 enum TTypeNodeType {

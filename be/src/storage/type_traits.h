@@ -206,6 +206,10 @@ struct CppTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
 };
 template <>
+struct CppTypeTraits<TYPE_GEOMETRY> {
+    using CppType = Slice;
+};
+template <>
 struct CppTypeTraits<TYPE_ARRAY> {
     using CppType = Collection;
 };

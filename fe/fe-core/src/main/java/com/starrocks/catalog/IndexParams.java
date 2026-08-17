@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.GiSTIndexParams;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.NgramBfIndexParamsKey;
@@ -102,6 +103,14 @@ public class IndexParams {
                 false, false, "english", null);
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.RERANK, false, false,
                 "false", null);
+
+        /* GiST Spatial Index */
+        // common
+        register(builder, IndexType.GIST, IndexParamType.COMMON, GiSTIndexParams.CommonIndexParamKey.INDEX_TYPE,
+                false, true, "RTREE", null);
+        // index
+        register(builder, IndexType.GIST, IndexParamType.INDEX, GiSTIndexParams.IndexParamsKey.NODE_CAPACITY,
+                false, true, "50", null);
 
         /* NGramFilter */
         // index

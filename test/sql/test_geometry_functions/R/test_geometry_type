@@ -1,0 +1,137 @@
+-- name: test_geometry_type
+CREATE TABLE geo_test (
+    id INT NOT NULL,
+    name VARCHAR(64),
+    location GEOMETRY,
+    area GEOMETRY
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO geo_test VALUES
+    (1, 'point_a',  ST_GeomFromText('POINT (1.5 2.5)'),   NULL),
+    (2, 'point_b',  ST_GeomFromText('POINT (5.0 5.0)'),   ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')),
+    (3, 'polygon',  ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'), NULL),
+    (4, 'line',     ST_GeomFromText('LINESTRING (0 0, 5 5, 10 0)'), NULL),
+    (5, 'origin',   ST_MakePoint(0.0, 0.0), NULL),
+    (6, 'far',      ST_MakePoint(100.0, 100.0), NULL);
+-- result:
+-- !result
+SELECT id, ST_AsText(location) AS wkt
+FROM geo_test
+ORDER BY id;
+-- result:
+1	POINT (1.5 2.5)
+2	POINT (5 5)
+3	POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))
+4	LINESTRING (0 0, 5 5, 10 0)
+5	POINT (0 0)
+6	POINT (100 100)
+-- !result
+SELECT ST_AsText(ST_MakePoint(3.0, 4.0));
+-- result:
+POINT (3 4)
+-- !result
+SELECT ST_AsText(ST_GeomFromText('POINT (7 8)'));
+-- result:
+POINT (7 8)
+-- !result
+SELECT ST_AsText(ST_GeomFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'));
+-- result:
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+-- !result
+SELECT ST_AsText(ST_GeomFromWKB(ST_AsWKB(ST_GeomFromText('POINT (9 10)'))));
+-- result:
+POINT (9 10)
+-- !result
+SELECT ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+);
+-- result:
+1
+-- !result
+SELECT ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (20 20)')
+);
+-- result:
+0
+-- !result
+SELECT ST_Within(
+    ST_GeomFromText('POINT (5 5)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+-- result:
+1
+-- !result
+SELECT ST_Within(
+    ST_GeomFromText('POINT (20 20)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+-- result:
+0
+-- !result
+SELECT id, name, ST_AsText(location)
+FROM geo_test
+WHERE ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    location
+)
+ORDER BY id;
+-- result:
+2	point_b	POINT (5 5)
+5	origin	POINT (0 0)
+-- !result
+SELECT id, ST_AsText(location), ST_AsText(area)
+FROM geo_test
+WHERE area IS NULL
+ORDER BY id;
+-- result:
+1	POINT (1.5 2.5)	None
+3	POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))	None
+4	LINESTRING (0 0, 5 5, 10 0)	None
+5	POINT (0 0)	None
+6	POINT (100 100)	None
+-- !result
+SELECT ST_AsText(NULL);
+-- result:
+None
+-- !result
+SELECT ST_Contains(NULL, ST_GeomFromText('POINT (1 1)'));
+-- result:
+None
+-- !result
+SELECT ST_Contains(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'), NULL);
+-- result:
+None
+-- !result
+SELECT ST_GeomFromText('NOT_VALID_WKT') IS NULL;
+-- result:
+1
+-- !result
+SELECT ST_GeomFromText('') IS NULL;
+-- result:
+1
+-- !result
+CREATE TABLE geo_points AS
+SELECT id, name, location FROM geo_test WHERE location IS NOT NULL ORDER BY id;
+-- result:
+-- !result
+SELECT id, ST_AsText(location) FROM geo_points ORDER BY id;
+-- result:
+1	POINT (1.5 2.5)
+2	POINT (5 5)
+3	POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))
+4	LINESTRING (0 0, 5 5, 10 0)
+5	POINT (0 0)
+6	POINT (100 100)
+-- !result
+DROP TABLE geo_test;
+-- result:
+-- !result
+DROP TABLE geo_points;
+-- result:
+-- !result

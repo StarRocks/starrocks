@@ -321,6 +321,7 @@ public class TypeFactory {
                     .add(CharType.CHAR)
                     .add(VarcharType.VARCHAR)
                     .add(VarbinaryType.VARBINARY)
+                    .add(GeometryType.GEOMETRY)
                     // Date types
                     .add(DateType.DATE)
                     .add(DateType.DATETIME)

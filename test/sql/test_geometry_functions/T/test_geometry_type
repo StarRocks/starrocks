@@ -1,0 +1,120 @@
+-- name: test_geometry_type
+
+-- -----------------------------------------------------------------------
+-- DDL: GEOMETRY column type in CREATE TABLE
+-- -----------------------------------------------------------------------
+CREATE TABLE geo_test (
+    id INT NOT NULL,
+    name VARCHAR(64),
+    location GEOMETRY,
+    area GEOMETRY
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+-- -----------------------------------------------------------------------
+-- DML: INSERT using ST_GeomFromText (WKT input)
+-- -----------------------------------------------------------------------
+INSERT INTO geo_test VALUES
+    (1, 'point_a',  ST_GeomFromText('POINT (1.5 2.5)'),   NULL),
+    (2, 'point_b',  ST_GeomFromText('POINT (5.0 5.0)'),   ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')),
+    (3, 'polygon',  ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'), NULL),
+    (4, 'line',     ST_GeomFromText('LINESTRING (0 0, 5 5, 10 0)'), NULL),
+    (5, 'origin',   ST_MakePoint(0.0, 0.0), NULL),
+    (6, 'far',      ST_MakePoint(100.0, 100.0), NULL);
+
+-- -----------------------------------------------------------------------
+-- SELECT: basic type and ST_AsText output
+-- -----------------------------------------------------------------------
+SELECT id, ST_AsText(location) AS wkt
+FROM geo_test
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- SELECT: ST_MakePoint creates a GEOMETRY
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_MakePoint(3.0, 4.0));
+
+-- -----------------------------------------------------------------------
+-- SELECT: ST_GeomFromText / ST_AsText round-trip (no table)
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_GeomFromText('POINT (7 8)'));
+SELECT ST_AsText(ST_GeomFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))'));
+
+-- -----------------------------------------------------------------------
+-- SELECT: ST_AsWKB returns non-null bytes, round-trip via ST_GeomFromWKB
+-- -----------------------------------------------------------------------
+SELECT ST_AsText(ST_GeomFromWKB(ST_AsWKB(ST_GeomFromText('POINT (9 10)'))));
+
+-- -----------------------------------------------------------------------
+-- SELECT: ST_Contains — point inside polygon
+-- -----------------------------------------------------------------------
+SELECT ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (5 5)')
+);
+
+-- -----------------------------------------------------------------------
+-- SELECT: ST_Contains — point outside polygon
+-- -----------------------------------------------------------------------
+SELECT ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeomFromText('POINT (20 20)')
+);
+
+-- -----------------------------------------------------------------------
+-- SELECT: ST_Within — symmetric inverse of ST_Contains
+-- -----------------------------------------------------------------------
+SELECT ST_Within(
+    ST_GeomFromText('POINT (5 5)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+
+SELECT ST_Within(
+    ST_GeomFromText('POINT (20 20)'),
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))')
+);
+
+-- -----------------------------------------------------------------------
+-- SELECT: spatial filter in WHERE clause
+-- -----------------------------------------------------------------------
+SELECT id, name, ST_AsText(location)
+FROM geo_test
+WHERE ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    location
+)
+ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- NULL handling
+-- -----------------------------------------------------------------------
+SELECT id, ST_AsText(location), ST_AsText(area)
+FROM geo_test
+WHERE area IS NULL
+ORDER BY id;
+
+SELECT ST_AsText(NULL);
+SELECT ST_Contains(NULL, ST_GeomFromText('POINT (1 1)'));
+SELECT ST_Contains(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'), NULL);
+
+-- -----------------------------------------------------------------------
+-- Invalid WKT returns NULL
+-- -----------------------------------------------------------------------
+SELECT ST_GeomFromText('NOT_VALID_WKT') IS NULL;
+SELECT ST_GeomFromText('') IS NULL;
+
+-- -----------------------------------------------------------------------
+-- CTAS: CREATE TABLE AS SELECT with GEOMETRY column
+-- -----------------------------------------------------------------------
+CREATE TABLE geo_points AS
+SELECT id, name, location FROM geo_test WHERE location IS NOT NULL ORDER BY id;
+
+SELECT id, ST_AsText(location) FROM geo_points ORDER BY id;
+
+-- -----------------------------------------------------------------------
+-- Cleanup
+-- -----------------------------------------------------------------------
+DROP TABLE geo_test;
+DROP TABLE geo_points;

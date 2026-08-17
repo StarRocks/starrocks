@@ -233,6 +233,9 @@ public:
 
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
+    static AggregateFunctionPtr MakeClusterDBSCANWindowFunction();
+    static AggregateFunctionPtr MakeClusterKMeansWindowFunction();
+
     template <LogicalType LT, bool ignoreNulls>
     static AggregateFunctionPtr MakeFirstValueWindowFunction() {
         return new FirstValueWindowFunction<LT, ignoreNulls>();

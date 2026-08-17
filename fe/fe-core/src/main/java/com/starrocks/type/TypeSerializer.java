@@ -101,6 +101,8 @@ public class TypeSerializer {
                 return TPrimitiveType.BINARY;
             case VARBINARY:
                 return TPrimitiveType.VARBINARY;
+            case GEOMETRY:
+                return TPrimitiveType.GEOMETRY;
             case UNKNOWN_TYPE:
                 return TPrimitiveType.INVALID_TYPE;
             default:

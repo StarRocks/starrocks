@@ -123,6 +123,7 @@ enum IndexType {
     INDEX_UNKNOWN = 2;
     NGRAMBF = 3;
     VECTOR = 4;
+    GIST = 5;
 }
 
  message ReplicationTxnMetaPB {
