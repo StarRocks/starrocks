@@ -65,10 +65,18 @@ StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, 
     if (dict_bytes.size == 0) {
         return Status::InvalidArgument("cannot build shared ZSTD ddict from empty bytes");
     }
-    const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_auto : ZSTD_dct_rawContent;
+    // The `trained` flag is the persisted contract (ColumnMetaPB field 36), so honor it
+    // exactly: ZSTD_dct_fullDict rejects bytes that are not a structured dictionary
+    // instead of quietly reinterpreting them as raw content, which would turn wrong
+    // metadata into a decode failure somewhere further away.
+    const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_fullDict : ZSTD_dct_rawContent;
     ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type,
                                               ZSTD_defaultCMem);
     if (d == nullptr) {
+        if (trained) {
+            return Status::Corruption(
+                    "the dictionary page is marked as a trained ZSTD dictionary but is not one");
+        }
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
     }
     return std::unique_ptr<ZstdDDict>(new ZstdDDict(d));

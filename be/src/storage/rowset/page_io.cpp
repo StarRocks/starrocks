@@ -266,7 +266,8 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
     // not reference a dictionary decodes the same either way, so this is safe for
     // plain pages and for value-dictionary pages in the same column.
     if (opts.dict != nullptr) {
-        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict));
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict,
+                                               config::enable_zstd_compression_dict_ctx_cache));
     } else {
         RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
     }

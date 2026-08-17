@@ -34,9 +34,19 @@
 
 #include "base/compression/block_compression.h"
 
+// ZDICT_trainFromBuffer, used to build a real trained dictionary for the loader test.
+// Header layout follows zstd_dict.cpp (flat on macOS/Homebrew, subdirectories for the
+// Linux thirdparty install).
+#ifdef STARROCKS_MACOS_USE_FLAT_INCLUDES
+#include <zdict.h>
+#else
+#include <zstd/zdict.h>
+#endif
+
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <set>
 #include <thread>
 
 #include "base/compression/compression_context_pool_singletons.h"
@@ -788,13 +798,15 @@ static void run_multi_dict_interleave(bool use_ctx_cache) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
-    // Three different dictionaries + matching bodies.
+    // One more dictionary than the cache has slots (kDictDCtxCacheSize == 4), so a
+    // full round is guaranteed to evict, whatever the thread's slots held before.
     struct Arm {
         std::string sample, body, compressed;
         std::unique_ptr<compression::ZstdDDict> ddict;
     };
-    std::vector<Arm> arms(3);
-    for (int i = 0; i < 3; i++) {
+    constexpr int kArms = 5;
+    std::vector<Arm> arms(kArms);
+    for (int i = 0; i < kArms; i++) {
         for (int k = 0; k < 300; k++) {
             arms[i].sample += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " ";
         }
@@ -813,8 +825,10 @@ static void run_multi_dict_interleave(bool use_ctx_cache) {
         arms[i].compressed.resize(out.size);
     }
     // Every dictionary must have a distinct identity, which is what the cache keys on.
-    ASSERT_NE(arms[0].ddict->id(), arms[1].ddict->id());
-    ASSERT_NE(arms[1].ddict->id(), arms[2].ddict->id());
+    std::set<uint64_t> ids;
+    for (const auto& arm : arms) {
+        ASSERT_TRUE(ids.insert(arm.ddict->id()).second);
+    }
 
     // A clean no-dict reference to compare the interleaved no-dict work against.
     std::string plain = generate_str(4000);
@@ -823,10 +837,10 @@ static void run_multi_dict_interleave(bool use_ctx_cache) {
     ASSERT_TRUE(codec->compress(plain, &pc).ok());
     plain_c.resize(pc.size);
 
-    // Interleave: dict 0, 1, 2, 0, ... plus no-dict in between. More rounds than
-    // the cache has slots, so entries really do get evicted and re-loaded.
+    // Interleave: dict 0..4, then round again, plus no-dict in between. Five
+    // identities against four slots means each round evicts and re-loads.
     for (int round = 0; round < 25; round++) {
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < kArms; i++) {
             std::string got(arms[i].body.size(), '\0');
             Slice g(got);
             ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get(), use_ctx_cache).ok())
@@ -840,14 +854,22 @@ static void run_multi_dict_interleave(bool use_ctx_cache) {
     }
 }
 
+// Run on a fresh thread: the cache is thread-local, so on a thread another test has
+// already used, "evicted" could mean "replaced an entry that test left behind" and the
+// coverage would depend on test order.
+static void run_multi_dict_interleave_on_fresh_thread(bool use_ctx_cache) {
+    std::thread t([use_ctx_cache] { run_multi_dict_interleave(use_ctx_cache); });
+    t.join();
+}
+
 TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
-    run_multi_dict_interleave(/*use_ctx_cache=*/true);
+    run_multi_dict_interleave_on_fresh_thread(/*use_ctx_cache=*/true);
 }
 
 // Same, with the context cache turned off: every page then goes through the shared
 // pool, which must load the dictionary per call and drop it again on return.
 TEST_F(BlockCompressionTest, dict_pooled_ctx_multi_dict_and_pool_isolation) {
-    run_multi_dict_interleave(/*use_ctx_cache=*/false);
+    run_multi_dict_interleave_on_fresh_thread(/*use_ctx_cache=*/false);
 }
 
 // A page that fails to decompress leaves the context in an undefined state, so the
@@ -931,6 +953,43 @@ TEST_F(BlockCompressionTest, dict_builders_reject_bad_input) {
     std::string sample = generate_str(64 * 1024);
     ASSERT_TRUE(compression::ZstdCDict::create(Slice(sample), 3).ok());
     ASSERT_TRUE(compression::ZstdDDict::create(Slice(sample)).ok());
+}
+
+// ColumnMetaPB.zstd_compression_dict_trained says what the dictionary bytes are, and
+// the loader has to honor it rather than sniff: a raw-content sample that is loaded as
+// "trained" must be refused here, not silently reinterpreted and then fail somewhere
+// further away with a decode error that no longer points at the metadata.
+TEST_F(BlockCompressionTest, trained_flag_decides_how_the_dictionary_is_loaded) {
+    std::vector<std::string> corpus;
+    std::string flat;
+    std::vector<size_t> sizes;
+    for (int i = 0; i < 512; i++) {
+        std::string s = "{\"level\":\"INFO\",\"id\":" + std::to_string(i) + ",\"msg\":\"recurring phrase " +
+                        std::to_string(i % 40) + "\"}";
+        flat += s;
+        sizes.push_back(s.size());
+    }
+    std::string trained(16 * 1024, '\0');
+    size_t trained_size = ZDICT_trainFromBuffer(trained.data(), trained.size(), flat.data(), sizes.data(),
+                                                static_cast<unsigned>(sizes.size()));
+    ASSERT_FALSE(ZDICT_isError(trained_size)) << ZDICT_getErrorName(trained_size);
+    trained.resize(trained_size);
+
+    // a real ZDICT dictionary loads as trained, and also as raw content (the bytes are
+    // just bytes to the raw-content loader) -- what matters is that trained=true works.
+    ASSERT_TRUE(compression::ZstdDDict::create(Slice(trained), /*trained=*/true).ok());
+    ASSERT_TRUE(compression::ZstdDDict::create(Slice(trained), /*trained=*/false).ok());
+
+    // bytes that are not a structured dictionary are rejected when claimed to be one.
+    std::string raw = generate_str(64 * 1024);
+    ASSERT_TRUE(compression::ZstdDDict::create(Slice(raw), /*trained=*/false).ok());
+    auto bad = compression::ZstdDDict::create(Slice(raw), /*trained=*/true);
+    ASSERT_FALSE(bad.ok());
+    ASSERT_TRUE(bad.status().is_corruption()) << bad.status().to_string();
+
+    // and a truncated dictionary -- right magic, nothing behind it -- is refused too.
+    std::string truncated = trained.substr(0, 8);
+    ASSERT_FALSE(compression::ZstdDDict::create(Slice(truncated), /*trained=*/true).ok());
 }
 
 } // namespace starrocks
