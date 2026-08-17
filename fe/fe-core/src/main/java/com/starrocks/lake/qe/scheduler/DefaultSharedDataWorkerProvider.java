@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
@@ -112,8 +113,10 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
+            // Keep the full warehouse worker id list, including ids missing from cluster info, so backup
+            // routing can still treat those ids as primaries and choose a healthy buddy for them.
             return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, computeResource,
-                    blacklistBackupRoutingPolicy);
+                    blacklistBackupRoutingPolicy, computeNodeIds);
         }
     }
 
@@ -129,8 +132,17 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     /**
      * List of the compute node ids, used to select buddy node in case some of the nodes are not available.
+     * Lazily built from {@link #warehouseWorkerIds} on first use.
      */
     protected ImmutableList<Long> allComputeNodeIds;
+
+    /**
+     * Warehouse worker ids captured at snapshot time, including ids that did not resolve to a
+     * {@link ComputeNode} in {@link #id2ComputeNode}. An unresolved id must stay a member of this set so
+     * that {@code selectBackupWorker} still treats it as an eligible primary and routes it to a healthy
+     * buddy, instead of refusing to substitute at all.
+     */
+    private final ImmutableSet<Long> warehouseWorkerIds;
 
     private final Set<Long> selectedWorkerIds;
 
@@ -150,6 +162,15 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                            ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
                                            ComputeResource computeResource,
                                            BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
+        this(id2ComputeNode, availableID2ComputeNode, computeResource, blacklistBackupRoutingPolicy,
+                id2ComputeNode.keySet());
+    }
+
+    private DefaultSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
+                                           ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
+                                           ComputeResource computeResource,
+                                           BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy,
+                                           Collection<Long> warehouseWorkerIds) {
         this.id2ComputeNode = id2ComputeNode;
         this.availableID2ComputeNode = availableID2ComputeNode;
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
@@ -157,6 +178,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         this.computeResource = computeResource;
         this.blacklistBackupRoutingPolicy = Preconditions.checkNotNull(blacklistBackupRoutingPolicy,
                 "blacklistBackupRoutingPolicy");
+        this.warehouseWorkerIds = ImmutableSet.copyOf(warehouseWorkerIds);
     }
 
     @Override
@@ -269,14 +291,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
      * Uses reservoir sampling (k=1) in a single pass to avoid allocating a list per call.
      */
     protected long selectBackupWorkerRandom(long workerId) {
-        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+        if (availableID2ComputeNode.isEmpty() || !warehouseWorkerIds.contains(workerId)) {
             return -1;
         }
         if (allComputeNodeIds == null) {
             createAvailableIdList();
         }
-        Preconditions.checkNotNull(allComputeNodeIds);
-        Preconditions.checkState(allComputeNodeIds.contains(workerId));
 
         int eligibleCount = 0;
         long chosen = -1;
@@ -297,14 +317,12 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
      * Tries the next id in the sorted list after {@code workerId} (circular), returning the first eligible buddy.
      */
     protected long selectBackupWorkerCircular(long workerId) {
-        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
+        if (availableID2ComputeNode.isEmpty() || !warehouseWorkerIds.contains(workerId)) {
             return -1;
         }
         if (allComputeNodeIds == null) {
             createAvailableIdList();
         }
-        Preconditions.checkNotNull(allComputeNodeIds);
-        Preconditions.checkState(allComputeNodeIds.contains(workerId));
 
         int startPos = allComputeNodeIds.indexOf(workerId);
         int attempts = allComputeNodeIds.size();
@@ -353,7 +371,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     }
 
     protected void createAvailableIdList() {
-        List<Long> ids = new ArrayList<>(id2ComputeNode.keySet());
+        List<Long> ids = new ArrayList<>(warehouseWorkerIds);
         Collections.sort(ids);
         this.allComputeNodeIds = ImmutableList.copyOf(ids);
     }
