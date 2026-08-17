@@ -599,7 +599,7 @@ Status Analytor::finish_process(RuntimeState* state) {
     _input_eos = true;
     RETURN_IF_ERROR((this->*_process_impl)(state));
     _is_sink_complete.store(true, std::memory_order_release);
-    return Status::OK();
+    return _check_has_error();
 }
 
 std::string Analytor::debug_string() const {
