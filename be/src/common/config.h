@@ -2200,6 +2200,11 @@ CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
 // Read when a builder is created, so a runtime change applies to later builds only.
 CONF_mBool(enable_vector_index_cache_on_build, "false");
 
+// Physical backend used when building cosine HNSW Flat and IVF indexes. "l2"
+// preserves the historical index format. Quantized HNSW cosine indexes always
+// use "inner_product".
+CONF_String_enum(vector_index_cosine_backend, "l2", "l2,inner_product");
+
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");
 
@@ -2229,6 +2234,13 @@ CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 // Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
 // ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
 CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
+// When a filtered top-k vector index search returns fewer rows than the candidate bitmap can supply,
+// rescore the candidates exactly to fill the result up to k. Disabled by default because the exact
+// rescan can be expensive. This count gate does not apply to range searches, where fewer results can
+// legitimately mean that no more candidates satisfy the requested radius. A runtime update applies
+// to subsequent searches.
+CONF_mBool(enable_vector_index_topk_underfill_fallback, "false");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat

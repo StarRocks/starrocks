@@ -19,6 +19,7 @@
 #include <boost/algorithm/string.hpp>
 #include <iostream>
 #include <memory>
+#include <string>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -54,6 +55,9 @@ static const std::string NBITS_PQ = "nbits_pq";
 namespace starrocks {
 StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& tablet_index,
                                             const std::map<std::string, std::string>& query_params);
+
+// Resolve the physical backend used to build a logical cosine index.
+std::string resolve_vector_index_cosine_backend(const tenann::IndexMeta& meta);
 
 // Compute the effective ef_search for a single segment.
 //

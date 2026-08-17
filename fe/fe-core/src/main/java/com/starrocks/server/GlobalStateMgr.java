@@ -69,6 +69,7 @@ import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.PartitionAccessTimeMgr;
+import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
@@ -414,6 +415,7 @@ public class GlobalStateMgr {
     private final TabletStatMgr tabletStatMgr;
 
     private final PartitionAccessTimeMgr partitionAccessTimeMgr;
+    private final PartitionAccessTimePersister partitionAccessTimePersister;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -762,6 +764,7 @@ public class GlobalStateMgr {
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
         this.partitionAccessTimeMgr = new PartitionAccessTimeMgr();
+        this.partitionAccessTimePersister = new PartitionAccessTimePersister();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -1938,6 +1941,9 @@ public class GlobalStateMgr {
 
         portConnectivityChecker.start();
         tabletStatMgr.start();
+        // Runs on every FE: each flushes its own recorded partition access times; the leader additionally
+        // loads the read-path baseline and GCs the internal table.
+        partitionAccessTimePersister.start();
         // load and export job label cleaner thread
         labelCleaner.start();
         // ES state store

@@ -19,7 +19,7 @@ VARCHAR STRING_AGG([DISTINCT] expr, delimiter
 
 ## Parameters
 
-- `expr`: the values to concatenate, with null values ignored. It must evaluate to VARCHAR. You can optionally specify `DISTINCT` to eliminate duplicate values from the output string. If you want to concatenate multiple `expr` directly, use [concat](../string-functions/concat.md) or [concat_ws](../string-functions/concat_ws.md) to specify formats.
+- `expr`: the values to concatenate, with null values ignored. It must evaluate to VARCHAR. You can optionally specify `DISTINCT` to eliminate duplicate values from the output string. If you want to concatenate multiple `expr` directly, use [concat](./concat.md) or [concat_ws](./concat_ws.md) to specify formats.
 - `delimiter`: the **required** separator used to concatenate non-null values from different rows. It must be of VARCHAR type. To eliminate the separator, specify an empty string `''`.
 - Items in ORDER BY can be unsigned integers (starting from 1), column names, or normal expressions. The results are sorted in ascending order by default. You can also explicitly specify the ASC keyword. If you want to sort results in descending order, add the DESC keyword to the name of the column you are sorting.
 

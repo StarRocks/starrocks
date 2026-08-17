@@ -226,10 +226,15 @@ struct RowsetOwnership {
 };
 
 // True iff a rowset's metadata shape permits per-segment ownership pruning:
-// (a) no partial-compaction cursor, (b) every segment has sort-key bounds. Each
-// SegmentMetadataPB is self-contained (filename/size/shared/bundle_file_offset travel
-// with it), so bundled rowsets prune uniformly with any other.
-bool can_prune_rowset_segments(const RowsetMetadataPB& rowset);
+// (a) no partial-compaction cursor, (b) every segment has sort-key bounds, (c) those bounds are at
+// |sort_key_arity|, the tablet's CURRENT sort-key arity, so they are comparable with the new
+// tablets' ranges. Each SegmentMetadataPB is self-contained
+// (filename/size/shared/bundle_file_offset travel with it), so bundled rowsets prune uniformly with
+// any other.
+//
+// |sort_key_arity| == 0 means "cannot tell" (a schema carrying no sort key at all, e.g. synthetic
+// metadata) and skips (c) rather than rejecting every rowset.
+bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_arity);
 
 // Computes per-segment ownership of a pruneable rowset against the new tablets'
 // ranges. Fail-closed: returns non-OK (caller degrades the whole rowset to

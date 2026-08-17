@@ -361,4 +361,45 @@ TEST(ChooseInvertedIndexQueryTypeTest, all_branches) {
     EXPECT_EQ(QT::EQUAL_QUERY, choose_inverted_index_query_type(true, false, IGN, "foobar").value());
 }
 
+namespace {
+
+PredicateTree make_or_tree(const std::vector<const ColumnPredicate*>& predicates) {
+    PredicateOrNode disjunction;
+    for (const auto* pred : predicates) {
+        disjunction.add_child(PredicateColumnNode(pred));
+    }
+    PredicateAndNode root;
+    root.add_child(std::move(disjunction));
+    return PredicateTree::create(std::move(root));
+}
+
+} // namespace
+
+// A column with no surviving predicate is prunable.
+TEST(RemainingPredicatesRequireColumnTest, column_absent) {
+    PredicateTree tree;
+    EXPECT_FALSE(remaining_predicates_require_column(tree, /*cid=*/7));
+}
+
+// An OR-resident predicate is invisible to the immediate map but still reads the column per row.
+TEST(RemainingPredicatesRequireColumnTest, ordinary_predicate_inside_or) {
+    std::unique_ptr<ColumnPredicate> ordinary(new_column_eq_predicate(get_type_info(TYPE_INT), /*cid=*/7, "1"));
+    std::unique_ptr<ColumnPredicate> sibling(new_column_eq_predicate(get_type_info(TYPE_INT), /*cid=*/8, "2"));
+    auto tree = make_or_tree({ordinary.get(), sibling.get()});
+
+    EXPECT_TRUE(remaining_predicates_require_column(tree, /*cid=*/7));
+}
+
+// A fallback predicate selects rows from its pre-loaded bitmap, so it alone does not keep the column.
+TEST_F(InvertedIndexFallbackPredicateTest, fallback_only_inside_or) {
+    std::unique_ptr<ColumnExprPredicate> wrapped(make_wrapped(/*cid=*/7));
+    roaring::Roaring bitmap;
+    std::vector<rowid_t> rowids;
+    InvertedIndexFallbackPredicate fallback(wrapped.get(), std::move(bitmap), &rowids);
+    std::unique_ptr<ColumnPredicate> sibling(new_column_eq_predicate(get_type_info(TYPE_INT), /*cid=*/8, "2"));
+    auto tree = make_or_tree({&fallback, sibling.get()});
+
+    EXPECT_FALSE(remaining_predicates_require_column(tree, /*cid=*/7));
+}
+
 } // namespace starrocks
