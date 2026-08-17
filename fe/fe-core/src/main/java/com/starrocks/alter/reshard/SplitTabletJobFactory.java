@@ -557,8 +557,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 // map and compares mutable row counts, so as a key it works only because tablet hashes
                 // are id-based and both loops see the same object references. A list needs neither
                 // accident, and costs nothing here.
-                record IndexPlans(MaterializedIndex index, Map<Long, Integer> baseline,
-                                  Map<Long, Integer> withEarly) {
+                record IndexPlans(long physicalPartitionId, MaterializedIndex index,
+                                  Map<Long, Integer> baseline, Map<Long, Integer> withEarly) {
                 }
                 List<IndexPlans> plans = new ArrayList<>();
                 long baselineTopology = 0L;
@@ -571,7 +571,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                                 "Invalid tablet_reshard_target_size: " + clauseTargetSize);
                         Map<Long, Integer> baseline =
                                 planIndexSplits(oldIndex, clauseTargetSize, EarlySplitPolicy.disabled());
-                        plans.add(new IndexPlans(oldIndex, baseline,
+                        plans.add(new IndexPlans(physicalPartition.getId(), oldIndex, baseline,
                                 planIndexSplits(oldIndex, clauseTargetSize, policy)));
                         baselineTopology += replacementTabletCount(oldIndex, baseline);
                     }
@@ -580,13 +580,20 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 // Pass 2: spend only what the complete baseline leaves. The baseline itself is never
                 // trimmed — a purely size-driven plan may exceed the cap, exactly as today.
                 long earlyBudget = Config.tablet_reshard_max_parallel_tablets - baselineTopology;
-                Map<Long, Map<Long, Integer>> chosen = new LinkedHashMap<>();
+                // Keyed by PHYSICAL PARTITION id and then index id, not by index id alone: every
+                // physical partition of a table initializes its indexes with the same index-meta id
+                // (LocalMetastore: "initially, index id and index meta id are the same"), so a single
+                // index-id key would let each partition overwrite the previous one's plan and the
+                // materialization pass would apply one partition's tablet ids to another's index --
+                // producing identical tablets instead of the requested split.
+                Map<Long, Map<Long, Map<Long, Integer>>> chosen = new LinkedHashMap<>();
                 for (IndexPlans plan : plans) {
                     MaterializedIndex oldIndex = plan.index();
                     long delta = replacementTabletCount(oldIndex, plan.withEarly())
                             - replacementTabletCount(oldIndex, plan.baseline());
                     if (delta > 0 && delta <= earlyBudget) {
-                        chosen.put(oldIndex.getId(), plan.withEarly());
+                        chosen.computeIfAbsent(plan.physicalPartitionId(), k -> new LinkedHashMap<>())
+                                .put(oldIndex.getId(), plan.withEarly());
                         earlyBudget -= delta;
                     } else {
                         if (delta > 0) {
@@ -600,7 +607,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                                     oldIndex.getId(), db.getFullName(), table.getName(), delta, earlyBudget,
                                     Config.tablet_reshard_max_parallel_tablets);
                         }
-                        chosen.put(oldIndex.getId(), plan.baseline());
+                        chosen.computeIfAbsent(plan.physicalPartitionId(), k -> new LinkedHashMap<>())
+                                .put(oldIndex.getId(), plan.baseline());
                     }
                 }
 
@@ -609,7 +617,9 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex :
                             physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                        Map<Long, Integer> splitCounts = chosen.getOrDefault(oldIndex.getId(), Map.of());
+                        Map<Long, Integer> splitCounts = chosen
+                                .getOrDefault(physicalPartition.getId(), Map.of())
+                                .getOrDefault(oldIndex.getId(), Map.of());
                         if (splitCounts.isEmpty()) {
                             continue;
                         }

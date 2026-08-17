@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
@@ -427,6 +428,44 @@ public class SplitTabletJobEarlyTest {
         assertThrows(StarRocksException.class,
                 () -> new SplitTabletJobFactory(db, table, clause, 8).createTabletReshardJob(),
                 "an explicitly listed under-threshold tablet is not split, cn notwithstanding");
+    }
+
+    @Test
+    public void everyPhysicalPartitionKeepsItsOwnSplitPlan() throws Exception {
+        // Every physical partition of a table initializes its indexes with the SAME index-meta id
+        // (LocalMetastore: "initially, index id and index meta id are the same"). A plan map keyed by
+        // index id alone therefore lets the second partition overwrite the first, and materialization
+        // then looks up the surviving plan with the other partition's tablet ids, matches nothing, and
+        // silently emits identical tablets instead of the requested split.
+        setTabletDataSizes(20L << 30);
+        Partition logical = table.getPartitions().iterator().next();
+        PhysicalPartition first = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex firstIndex = first.getLatestBaseIndex();
+
+        // Same index id as the first partition's base index — that collision is the point.
+        MaterializedIndex secondIndex = new MaterializedIndex(firstIndex.getId(),
+                MaterializedIndex.IndexState.NORMAL, firstIndex.getShardGroupId());
+        PhysicalPartition second = new PhysicalPartition(
+                GlobalStateMgr.getCurrentState().getNextId(), logical.getId(), secondIndex);
+        long secondTabletId = GlobalStateMgr.getCurrentState().getNextId();
+        LakeTablet secondTablet = new LakeTablet(secondTabletId);
+        secondTablet.setDataSize(20L << 30);
+        secondIndex.addTablet(secondTablet, new TabletMeta(db.getId(), table.getId(), second.getId(),
+                firstIndex.getId(), TStorageMedium.HDD, true), false);
+        logical.addSubPartition(second);
+        try {
+            TabletReshardJob job =
+                    new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
+            // Both partitions hold one 20 GiB tablet, so each must split into two by the size rule
+            // alone. Keyed by index id only, one partition's plan is lost and the total is 2.
+            assertEquals(4L, job.getParallelTablets(),
+                    "each physical partition must keep its own split plan");
+        } finally {
+            for (Tablet t : new ArrayList<>(secondIndex.getTablets())) {
+                secondIndex.removeTablet(t.getId());
+            }
+            logical.removeSubPartition(second.getId());
+        }
     }
 
     @Test
