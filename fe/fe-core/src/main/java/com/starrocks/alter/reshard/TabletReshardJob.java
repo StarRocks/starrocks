@@ -29,6 +29,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /*
  * TabletReshardJob is for tablet splitting and merging.
@@ -111,6 +113,19 @@ public abstract class TabletReshardJob implements Writable {
     @SerializedName(value = "warehouseId")
     protected Long warehouseId;
 
+    // Transactions that were opened only to reserve identifiers/metadata for the operation that is
+    // synchronously waiting for this job, and that provably have not started writing yet. Excluding
+    // them from the CLEANING watermark wait breaks the wait cycle where CLEANING waits for the
+    // caller's transaction while the caller waits for this job.
+    //
+    // Deliberately NOT persisted, and cleared as soon as the caller stops waiting
+    // (clearCleanupExcludedTransactionIds): the exclusion is only sound while the transaction is
+    // known not to be writing. Once the caller proceeds -- or the leader changes and the caller is
+    // gone -- CLEANING must go back to waiting for that transaction, otherwise it could unregister
+    // the resharding tablets while the transaction is still writing to the old ones.
+    // volatile + concurrent set: written by the submitting session thread, read by the reshard daemon.
+    protected volatile Set<Long> cleanupExcludedTransactionIds;
+
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -135,6 +150,34 @@ public abstract class TabletReshardJob implements Writable {
      */
     public void setWarehouseId(long warehouseId) {
         this.warehouseId = warehouseId;
+    }
+
+    /**
+     * Exclude a known-not-yet-writing transaction from this job's cleanup watermark wait, for as
+     * long as its owner is synchronously waiting for this job. Callers must set this before the job
+     * is admitted, and must call {@link #clearCleanupExcludedTransactionIds()} the moment they stop
+     * waiting -- see the field comment for why the exclusion cannot outlive that window.
+     */
+    public void addCleanupExcludedTransactionId(long transactionId) {
+        if (cleanupExcludedTransactionIds == null) {
+            cleanupExcludedTransactionIds = ConcurrentHashMap.newKeySet();
+        }
+        cleanupExcludedTransactionIds.add(transactionId);
+    }
+
+    /**
+     * Drop every cleanup-wait exclusion, so CLEANING waits for those transactions again. Called
+     * once the waiting caller is about to proceed (its transaction may start writing at any moment)
+     * or has given up on this job.
+     */
+    public void clearCleanupExcludedTransactionIds() {
+        if (cleanupExcludedTransactionIds != null) {
+            cleanupExcludedTransactionIds.clear();
+        }
+    }
+
+    protected Set<Long> getCleanupExcludedTransactionIds() {
+        return cleanupExcludedTransactionIds == null ? Set.of() : cleanupExcludedTransactionIds;
     }
 
     /**

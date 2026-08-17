@@ -226,6 +226,37 @@ public class PartitionSampleGrouperTest {
     }
 
     @Test
+    public void dynamicOverwriteUsesTemporaryTransactionScopedPartitionNames() {
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        SampleSet samples = sampleSetOf(List.of(tuple(Variant.of(DateType.DATE, "2026-05-26"))));
+
+        AddPartitionClause clause = new AddPartitionClause(null, null, null, true);
+        PartitionDesc desc = mock(PartitionDesc.class);
+        when(desc.getPartitionName()).thenReturn("txn42_p20260526");
+        clause.setResolvedPartitionDescList(List.of(desc));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            analyzerUtils.when(() -> AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                            eq(table), eq(List.of(List.of("2026-05-26"))), eq(true), eq("txn42")))
+                    .thenReturn(clause);
+
+            List<PartitionSamples> out = PartitionSampleGrouper.groupTemporary(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, 42L);
+
+            assertEquals(1, out.size());
+            assertEquals("txn42_p20260526", out.get(0).partitionName());
+            assertFalse(out.get(0).existsInCatalog());
+            assertTrue(out.get(0).analyzedClause().isTempPartition());
+            analyzerUtils.verify(() -> AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                    eq(table), eq(List.of(List.of("2026-05-26"))), eq(true), eq("txn42")), times(1));
+        }
+    }
+
+    @Test
     public void singlePartitionValueProducesOneGroup() {
         Column dateCol = new Column("d", DateType.DATE);
         OlapTable table = stubTable(List.of(dateCol));

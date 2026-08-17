@@ -114,23 +114,63 @@ final class PreSplitFlow {
 
     static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
                                       LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context, -1L);
+    }
+
+    /**
+     * Samples a dynamic overwrite before its write starts, pre-creates the predicted
+     * transaction-scoped temporary partitions, and splits those temporary partitions.
+     */
+    static void runDynamicOverwriteFlow(Database database, OlapTable table, Prepared prepared,
+                                        LoadKind loadKind, BooleanSupplier shouldAbort,
+                                        ConnectContext context, long overwriteTransactionId) {
+        if (!table.getPartitionInfo().isPartitioned()
+                || !Boolean.TRUE.equals(table.supportedAutomaticPartition())
+                || overwriteTransactionId <= 0) {
+            return;
+        }
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
+                overwriteTransactionId);
+    }
+
+    private static void runMultiPartitionFlow(
+            Database database, OlapTable table, Prepared prepared, LoadKind loadKind,
+            BooleanSupplier shouldAbort, ConnectContext context, long overwriteTransactionId) {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         SampleSet samples = runDataTierSampler(table, prepared, loadKind);
         if (samples == null) {
             return;
         }
-        List<PartitionSamples> groups = PartitionSampleGrouper.group(
-                samples, table, context, database.getId(), prepared.estimatedBytes());
+        List<PartitionSamples> groups = overwriteTransactionId > 0
+                ? PartitionSampleGrouper.groupTemporary(
+                        samples, table, context, database.getId(), prepared.estimatedBytes(),
+                        overwriteTransactionId)
+                : PartitionSampleGrouper.group(
+                        samples, table, context, database.getId(), prepared.estimatedBytes());
         if (groups.isEmpty()) {
             return;
         }
-        PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                database, table, groups, activeComputeNodeCount, context, prepared.computeResource());
+        PreSplitOutcome outcome = overwriteTransactionId > 0
+                ? TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
+                        database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
+                        overwriteTransactionId)
+                : TabletPreSplitCoordinator.submitForPartitionsCombined(
+                        database, table, groups, activeComputeNodeCount, context, prepared.computeResource());
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
-            TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
-                    loadKind, table, submittedCombined.combinedJob(), shouldAbort);
+            try {
+                TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                        loadKind, table, submittedCombined.combinedJob(), shouldAbort);
+            } finally {
+                // The await is fail-safe: on timeout / abort it returns while the job may still be
+                // pre-CLEANING, and the caller then goes on to plan and write with the very
+                // transaction CLEANING was told to ignore. Revoking the exclusion here keeps the
+                // watermark wait honest for exactly the window the transaction was idle -- worst
+                // case CLEANING now waits for the load, which is the pre-existing behaviour for
+                // every other in-flight transaction.
+                submittedCombined.combinedJob().clearCleanupExcludedTransactionIds();
+            }
         }
     }
 

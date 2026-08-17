@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -69,6 +70,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -194,10 +196,17 @@ public class InsertOverwriteJobRunner {
     private void doLoad() throws Exception {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         createTempPartitions();
+        preSplitDynamicOverwriteTempPartitions();
         prepareInsert();
         executeInsert();
         doCommit(false);
         transferTo(InsertOverwriteJobState.OVERWRITE_SUCCESS);
+    }
+
+    void preSplitDynamicOverwriteTempPartitions() {
+        if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(insertStmt, context, job.getTxnId());
+        }
     }
 
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {
@@ -580,34 +589,15 @@ public class InsertOverwriteJobRunner {
 
     /**
      * Drop temp partitions for dynamic overwrite during GC.
-     * Handles three scenarios:
-     * 1. Normal execution: get temp partition names from TransactionState
-     * 2. After FE restart: identify temp partitions by prefix "txn{txnId}_"
-     * 3. Cancelled before prepare: no temp partitions to clean up
+     * Combines names recorded in transaction state with a catalog prefix scan. The latter is needed
+     * both after FE restart and when pre-split created a temporary partition before the BE reported it
+     * through the dynamic-partition RPC.
      */
     private void gcDropDynamicOverwriteTempPartitions(OlapTable targetTable, Set<Tablet> sourceTablets,
                                                       boolean isReplay) {
-        List<String> tmpPartitionNames = Lists.newArrayList();
-        if (!isReplay) {
-            if (insertStmt != null && job.getTxnId() > 0) {
-                // Normal execution: get temp partition names from TransactionState
-                tmpPartitionNames = gcGetTempPartitionNamesFromTxnState(targetTable);
-            } else if (job.getTxnId() > 0) {
-                // After FE restart: identify temp partitions by prefix "txn{txnId}_"
-                String tempPartitionPrefix = "txn" + job.getTxnId() + "_";
-                tmpPartitionNames = targetTable.getTempPartitions().stream()
-                        .map(Partition::getName)
-                        .filter(name -> name.startsWith(tempPartitionPrefix))
-                        .collect(Collectors.toList());
-                gcUpdateTmpPartitionIds(targetTable, tmpPartitionNames);
-                LOG.info("dynamic overwrite job {} (FE restarted) drop temp partitions with prefix '{}': {}",
-                        job.getJobId(), tempPartitionPrefix, tmpPartitionNames);
-            } else {
-                // Cancelled before prepare: no temp partitions to clean up
-                LOG.info("dynamic overwrite job {} cancelled before prepare phase, no temp partitions to clean up",
-                        job.getJobId());
-            }
-        }
+        List<String> tmpPartitionNames = isReplay
+                ? Lists.newArrayList()
+                : getDynamicOverwriteTempPartitions(targetTable);
 
         for (String partitionName : tmpPartitionNames) {
             Partition partition = targetTable.getPartition(partitionName, true);
@@ -616,6 +606,36 @@ public class InsertOverwriteJobRunner {
                 targetTable.dropTempPartition(partitionName, true);
             }
         }
+    }
+
+    List<String> getDynamicOverwriteTempPartitions(OlapTable targetTable) {
+        if (job.getTxnId() <= 0) {
+            // Cancelled before prepare: no temp partitions to clean up
+            LOG.info("dynamic overwrite job {} cancelled before prepare phase, no temp partitions to clean up",
+                    job.getJobId());
+            return List.of();
+        }
+
+        Set<String> tmpPartitionNames = new LinkedHashSet<>();
+        if (insertStmt != null) {
+            try {
+                tmpPartitionNames.addAll(gcGetTempPartitionNamesFromTxnState(targetTable));
+            } catch (Exception e) {
+                LOG.warn("failed to get temp partitions from transaction {} for dynamic overwrite job {}",
+                        job.getTxnId(), job.getJobId(), e);
+            }
+        }
+
+        String tempPartitionPrefix = "txn" + job.getTxnId() + "_";
+        targetTable.getTempPartitions().stream()
+                .map(Partition::getName)
+                .filter(name -> name.startsWith(tempPartitionPrefix))
+                .forEach(tmpPartitionNames::add);
+        List<String> allPartitionNames = new ArrayList<>(tmpPartitionNames);
+        gcUpdateTmpPartitionIds(targetTable, allPartitionNames);
+        LOG.info("dynamic overwrite job {} drop temp partitions with prefix '{}': {}",
+                job.getJobId(), tempPartitionPrefix, allPartitionNames);
+        return allPartitionNames;
     }
 
     // Wait until the load transaction of a dynamic overwrite job is no longer running,
@@ -797,6 +817,11 @@ public class InsertOverwriteJobRunner {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
 
+            // The replacement above promoted every temporary partition transaction state knows
+            // about. Anything left under the transaction prefix was pre-created by pre-split for
+            // a partition the load never wrote, so drop it here, still under the table WRITE lock.
+            dropUnusedDynamicOverwriteTempPartitions(targetTable);
+
             if (!isReplay) {
                 // Only the log entry and schema-update bump need the table WRITE lock. The
                 // remaining post-commit work (force-delete marks, row-count stats, colocation
@@ -903,6 +928,30 @@ public class InsertOverwriteJobRunner {
             // log an error if post-commit work failed, insert overwrite already succeeded
             LOG.error("insert overwrite post-commit work failed for dbId:{}, tableId:{}, the job still succeeds",
                     dbId, tableId, e);
+        }
+    }
+
+    /**
+     * Sampling and the actual load use separate source snapshots. If rows for a sampled partition
+     * disappear before the load starts, its pre-created temporary partition is never registered in
+     * transaction state and therefore is not promoted. Drop every transaction-scoped temporary
+     * partition left after the successful replacement.
+     */
+    void dropUnusedDynamicOverwriteTempPartitions(OlapTable targetTable) {
+        if (!job.isDynamicOverwrite() || job.getTxnId() <= 0) {
+            return;
+        }
+        String tempPartitionPrefix = "txn" + job.getTxnId() + "_";
+        List<String> unusedPartitionNames = targetTable.getTempPartitions().stream()
+                .map(Partition::getName)
+                .filter(name -> name.startsWith(tempPartitionPrefix))
+                .toList();
+        for (String partitionName : unusedPartitionNames) {
+            targetTable.dropTempPartition(partitionName, true);
+        }
+        if (!unusedPartitionNames.isEmpty()) {
+            LOG.info("dynamic overwrite job {} dropped unused pre-split temp partitions: {}",
+                    job.getJobId(), unusedPartitionNames);
         }
     }
 

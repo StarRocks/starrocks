@@ -89,6 +89,22 @@ public final class PartitionSampleGrouper {
      */
     public static List<PartitionSamples> group(SampleSet samples, OlapTable table, ConnectContext ctx,
                                                long dbId, long totalFileBytes) {
+        return group(samples, table, ctx, dbId, totalFileBytes, false, null);
+    }
+
+    /**
+     * Dynamic-overwrite variant. Resolves sampled values to transaction-scoped temporary
+     * partitions using the same naming convention as the runtime auto-partition RPC.
+     */
+    public static List<PartitionSamples> groupTemporary(
+            SampleSet samples, OlapTable table, ConnectContext ctx, long dbId, long totalFileBytes,
+            long transactionId) {
+        return group(samples, table, ctx, dbId, totalFileBytes, true, "txn" + transactionId);
+    }
+
+    private static List<PartitionSamples> group(
+            SampleSet samples, OlapTable table, ConnectContext ctx, long dbId, long totalFileBytes,
+            boolean temporaryPartition, String partitionNamePrefix) {
         List<Tuple> partitionSourceTuples = samples.getPartitionSourceTuples();
         if (partitionSourceTuples.isEmpty()) {
             // Sampler did not project partition source columns (target was unpartitioned).
@@ -150,7 +166,8 @@ public final class PartitionSampleGrouper {
         // own locking later.
         Map<String, MergedGroup> byPartitionName = new LinkedHashMap<>();
         for (RawGroup rawGroup : rawGroups.values()) {
-            AnalyzedClauseEntry entry = analyzeOnce(table, rawGroup.formattedValues, ctx);
+            AnalyzedClauseEntry entry = analyzeOnce(
+                    table, rawGroup.formattedValues, ctx, temporaryPartition, partitionNamePrefix);
             if (entry == null) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.INVALID_PARTITION_VALUE);
                 continue;
@@ -196,7 +213,9 @@ public final class PartitionSampleGrouper {
                 long estimatedBytes = sampleRowCount == 0 ? 0L :
                         Math.round((double) group.rows.size() / sampleRowCount * totalFileBytes);
 
-                Partition partition = table.getPartition(group.partitionName);
+                Partition partition = temporaryPartition
+                        ? table.getPartition(group.partitionName, true)
+                        : table.getPartition(group.partitionName);
                 if (partition == null) {
                     resolved.add(new PartitionSamples(
                             group.formattedValues, group.partitionName, false,
@@ -273,11 +292,12 @@ public final class PartitionSampleGrouper {
      * value. Returns {@code null} if the analyzer rejects the value (caller
      * counts under {@link SkipReason#INVALID_PARTITION_VALUE}).
      */
-    private static AnalyzedClauseEntry analyzeOnce(OlapTable table, List<String> formattedValues,
-                                                   ConnectContext ctx) {
+    private static AnalyzedClauseEntry analyzeOnce(
+            OlapTable table, List<String> formattedValues, ConnectContext ctx,
+            boolean temporaryPartition, String partitionNamePrefix) {
         try {
             AddPartitionClause clause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
-                    table, Collections.singletonList(formattedValues), false, null);
+                    table, Collections.singletonList(formattedValues), temporaryPartition, partitionNamePrefix);
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
             analyzer.analyze(ctx, clause);
             List<PartitionDesc> resolved = clause.getResolvedPartitionDescList();

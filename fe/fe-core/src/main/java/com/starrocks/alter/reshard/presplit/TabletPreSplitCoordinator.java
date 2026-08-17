@@ -590,6 +590,29 @@ public final class TabletPreSplitCoordinator {
     public static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
             int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource) {
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, false, -1L);
+    }
+
+    /**
+     * Dynamic-overwrite counterpart that creates and resolves transaction-scoped temporary
+     * partitions. The already-open overwrite transaction has not started writing, so it is
+     * excluded from the reshard job's cleanup watermark wait to avoid a synchronous wait cycle.
+     */
+    public static PreSplitOutcome submitForTemporaryPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            long overwriteTransactionId) {
+        Preconditions.checkArgument(overwriteTransactionId > 0,
+                "overwriteTransactionId must be positive, was %s", overwriteTransactionId);
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, true, overwriteTransactionId);
+    }
+
+    private static PreSplitOutcome submitForPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            boolean temporaryPartition, long cleanupExcludedTransactionId) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
@@ -614,7 +637,8 @@ public final class TabletPreSplitCoordinator {
         for (PartitionSamples entry : partitionSamplesList) {
             PreSplitMetrics.recordPartitionCounted();
             PreSplitOutcome perPartition = planOnePartition(
-                    database, table, entry, sortKey, activeComputeNodeCount, ctx, oldTabletIdToRanges);
+                    database, table, entry, sortKey, activeComputeNodeCount, ctx, temporaryPartition,
+                    oldTabletIdToRanges);
             perPartitionResults.add(perPartition);
         }
 
@@ -634,6 +658,9 @@ public final class TabletPreSplitCoordinator {
             // load specifies a different `warehouse` property.
             if (loadComputeResource != null) {
                 combinedJob.setWarehouseId(loadComputeResource.getWarehouseId());
+            }
+            if (cleanupExcludedTransactionId > 0) {
+                combinedJob.addCleanupExcludedTransactionId(cleanupExcludedTransactionId);
             }
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
             return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
@@ -662,13 +689,17 @@ public final class TabletPreSplitCoordinator {
     private static PreSplitOutcome planOnePartition(
             Database database, OlapTable table, PartitionSamples entry, List<Column> sortKey,
             int activeComputeNodeCount, ConnectContext ctx,
+            boolean temporaryPartition,
             Map<Long, List<TabletRange>> oldTabletIdToRanges) {
         try {
             if (!entry.existsInCatalog()) {
                 // Cheap pre-check: if the partition raced into the catalog since the grouper
                 // snapshot, skip the addPartitions call and record ALREADY_EXISTS. addPartitions
                 // would otherwise silently dedupe — we want the metric to attribute correctly.
-                if (table.getPartition(entry.partitionName()) != null) {
+                Partition existingPartition = temporaryPartition
+                        ? table.getPartition(entry.partitionName(), true)
+                        : table.getPartition(entry.partitionName());
+                if (existingPartition != null) {
                     PreSplitMetrics.recordPreCreate(PreSplitMetrics.PreCreateResult.ALREADY_EXISTS);
                 } else {
                     try {
@@ -690,7 +721,8 @@ public final class TabletPreSplitCoordinator {
 
             // Brief intensive READ lock for post-create re-resolve. Lock is acquired BEFORE the
             // try block so a throw from the lock call does not run the finally release.
-            ResolvedPartition resolved = resolveUnderReadLock(database, table, entry.partitionName());
+            ResolvedPartition resolved = resolveUnderReadLock(database, table, entry.partitionName(),
+                    temporaryPartition);
             if (resolved == null) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
                 return new PreSplitOutcome.Skipped(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
@@ -731,11 +763,14 @@ public final class TabletPreSplitCoordinator {
      * and return the discovered oldTabletId. Returns {@code null} when any
      * eligibility check fails (caller maps to PARTITION_NOT_ELIGIBLE_POST_CREATE).
      */
-    private static ResolvedPartition resolveUnderReadLock(Database database, OlapTable table, String partitionName) {
+    private static ResolvedPartition resolveUnderReadLock(Database database, OlapTable table, String partitionName,
+                                                          boolean temporaryPartition) {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
         try {
-            Partition partition = table.getPartition(partitionName);
+            Partition partition = temporaryPartition
+                    ? table.getPartition(partitionName, true)
+                    : table.getPartition(partitionName);
             if (partition == null) {
                 return null;
             }
