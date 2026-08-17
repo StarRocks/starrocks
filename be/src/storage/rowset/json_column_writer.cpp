@@ -314,6 +314,7 @@ Status FlatJsonColumnWriter::finish() {
         }
     }
 
+    _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();
 }
 
