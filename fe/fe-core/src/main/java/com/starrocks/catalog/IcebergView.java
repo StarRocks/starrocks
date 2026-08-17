@@ -46,7 +46,7 @@ public class IcebergView extends ConnectorView {
             if (Strings.isNullOrEmpty(name.getCatalog()) &&
                     Strings.isNullOrEmpty(name.getDb()) &&
                     cteRelationNames.contains(name.getTbl())) {
-                return;
+                continue;
             }
 
             // iceberg view query statement with external catalog which created by starrocks must have catalog name
