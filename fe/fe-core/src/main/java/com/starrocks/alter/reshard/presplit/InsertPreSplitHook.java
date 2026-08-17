@@ -85,6 +85,24 @@ public final class InsertPreSplitHook {
         }
     }
 
+    /**
+     * Runs the dynamic-overwrite variant after its transaction has been opened but before the
+     * load is replanned and starts writing. Fail-safe like {@link #maybeRunPreSplit}: any failure
+     * leaves the runtime auto-partition path to create or reuse the temporary partitions.
+     */
+    public static void maybeRunDynamicOverwritePreSplit(
+            InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId) {
+        try {
+            if (!passesDynamicOverwritePreFilters(insertStmt, context, overwriteTransactionId)) {
+                return;
+            }
+            tryRunEligibleInsert(insertStmt, context, overwriteTransactionId);
+        } catch (Throwable unexpected) {
+            LOG.warn("Sample-Based Tablet Pre-Split (dynamic INSERT OVERWRITE) hook failed; "
+                    + "proceeding without pre-split", unexpected);
+        }
+    }
+
     private static void tryRunPreSplit(StatementBase parsedStmt, ConnectContext context)
             throws AccessDeniedException {
         if (!(parsedStmt instanceof InsertStmt insertStmt)) {
@@ -93,6 +111,12 @@ public final class InsertPreSplitHook {
         if (!passesCommonPreFilters(insertStmt, context)) {
             return;
         }
+        tryRunEligibleInsert(insertStmt, context, -1L);
+    }
+
+    private static void tryRunEligibleInsert(
+            InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId)
+            throws AccessDeniedException {
         SelectRelation selectRelation = extractSelectRelation(insertStmt);
         if (selectRelation == null) {
             return;
@@ -125,8 +149,13 @@ public final class InsertPreSplitHook {
         if (prepared == null) {
             return;
         }
-        PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
-                prepared, source.loadKind(), context::isKilled, context);
+        if (overwriteTransactionId > 0) {
+            PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+                    prepared, source.loadKind(), context::isKilled, context, overwriteTransactionId);
+        } else {
+            PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
+                    prepared, source.loadKind(), context::isKilled, context);
+        }
     }
 
     private static boolean passesCommonPreFilters(InsertStmt insertStmt, ConnectContext context) {
@@ -146,10 +175,38 @@ public final class InsertPreSplitHook {
         if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
             return false;
         }
-        if (insertStmt.getProperties() != null && !insertStmt.getProperties().isEmpty()) {
+        return !carriesLoadProperties(insertStmt);
+    }
+
+    /**
+     * Whether the statement was written with a {@code PROPERTIES(...)} clause, which can change the
+     * row set the load writes (max_filter_ratio, strict_mode, ...) relative to what the sampler saw.
+     *
+     * <p>Deliberately not {@code getProperties().isEmpty()}: {@code InsertAnalyzer#analyzeProperties}
+     * fills that map with the session defaults for max_filter_ratio / strict_mode / timeout, so after
+     * analysis it is never empty. {@link #passesCommonPreFilters} runs before analysis and would not
+     * notice, but {@link #passesDynamicOverwritePreFilters} runs after it and would reject every
+     * statement. Both ask the parse-time question so the two gates cannot drift apart.
+     */
+    private static boolean carriesLoadProperties(InsertStmt insertStmt) {
+        return !insertStmt.getUserSpecifiedPropertyKeys().isEmpty();
+    }
+
+    private static boolean passesDynamicOverwritePreFilters(
+            InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId) {
+        if (!insertStmt.isDynamicOverwrite() || !insertStmt.hasOverwriteJob() || overwriteTransactionId <= 0) {
             return false;
         }
-        return true;
+        if (insertStmt.isExplain() && !ExplainLevel.ANALYZE.equals(insertStmt.getExplainLevel())) {
+            return false;
+        }
+        if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
+            return false;
+        }
+        if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
+            return false;
+        }
+        return !carriesLoadProperties(insertStmt);
     }
 
     /**
