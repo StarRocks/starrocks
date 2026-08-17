@@ -367,8 +367,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         partitionInfo.add(distributionKeyAsString(table, distributionInfo));
-        partitionInfo.add(physicalPartition.getBucketNum() > 0 ?
-                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
+        partitionInfo.add(physicalPartition.getActualBucketNum(distributionInfo));
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
@@ -411,8 +410,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
-        partitionInfo.add(physicalPartition.getBucketNum() > 0 ?
-                physicalPartition.getBucketNum() : partition.getDistributionInfo().getBucketNum()); // Buckets
+        partitionInfo.add(physicalPartition.getActualBucketNum(partition.getDistributionInfo())); // Buckets
         partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
         long storageSize = physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize();
         partitionInfo.add(new ByteSizeValue(storageSize)); // StorageSize
