@@ -45,7 +45,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -64,68 +63,59 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
-    private final int earlyBound;
+    private int earlyBound = -1;
 
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
         this.db = db;
         this.table = table;
         this.splitTabletClause = splitTabletClause;
-        // Resolved here, not while planning: the resolution goes through the warehouse availability
-        // probe, which reaches StarMgr, and planning holds a table lock that publish waits on.
-        this.earlyBound = TabletReshardUtils.earlySplitBound(
-                TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
     }
 
     /**
-     * Split plan for one index: {@code oldTabletId -> requested child count}, allocating NO tablet id.
+     * Tablet count the early rule may not carry an index past, resolved lazily and at most once.
      *
-     * <p>{@code earlyTarget} is the smaller target an under-provisioned index may aim at, or 0 to
-     * disable the rule. {@code bound} is the tablet count the early rule may not carry the index past;
-     * it is the auto-merge parallelism floor, so an index the early rule widened is never one that
-     * merge would immediately narrow again.
+     * <p>Resolved here rather than while planning because it goes through the warehouse availability
+     * probe, which reaches StarMgr, and planning holds a table read lock that publish waits on.
+     * Resolved on demand rather than in the constructor because the statements that name their own
+     * tablets, or their own target size, never consult it and must not pay for a round trip they do
+     * not use -- the merge side keeps the same property.
+     */
+    private int earlyBound() {
+        if (earlyBound < 0) {
+            earlyBound = TabletReshardUtils.earlySplitBound(
+                    TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
+        }
+        return earlyBound;
+    }
+
+    /**
+     * Split plan for one index: {@code oldTabletId -> child count}, in the index's own tablet order.
      *
-     * <p>The early rule fires only where the size rule declines to split. That ordering is load
-     * bearing: a BE split is all-or-nothing — when the segment key distribution cannot produce exactly
-     * the requested number of boundaries it publishes an identical tablet instead — so asking for more
-     * children than today's rule would can turn a split that succeeds into one that does nothing.
+     * <p>While the index holds fewer tablets than {@code bound}, a tablet the size rule declines to
+     * split may still split toward {@code earlyTarget} ({@code 0} disables that). {@code bound} is the
+     * auto-merge parallelism floor: merge acts strictly above it, so an index widened only up to it is
+     * never one merge would immediately narrow again. Headroom stops the walk from passing the bound.
+     *
+     * <p>The early rule fires only where the size rule declines. That ordering is load bearing: a BE
+     * split is all-or-nothing, so asking for more children than the size rule would can turn a split
+     * that succeeds into one that publishes an identical tablet and does nothing.
      */
     @VisibleForTesting
     static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long clauseTargetSize,
             long earlyTarget, int bound) {
-        int tabletCount = index.getTablets().size();
-        boolean early = earlyTarget > 0 && tabletCount < bound;
-        int headroom = early ? bound - tabletCount : 0;
-
-        // Snapshot id+size together. LakeTablet.dataSize is volatile and updated lock-free by the
-        // background stat collector, so re-reading it (once to sort, again to size the split) risks a
-        // value that changes between the two reads, and sorting on the live list risks ArrayList.sort
-        // seeing an inconsistent comparator mid-sort.
-        record SizedTablet(long id, long dataSize) {
-        }
-        List<SizedTablet> tablets = new ArrayList<>(index.getTablets().size());
-        for (Tablet tablet : index.getTablets()) {
-            tablets.add(new SizedTablet(tablet.getId(), tablet.getDataSize(true)));
-        }
-        if (early) {
-            // Spend the headroom on the biggest tablets first. Sort the snapshot, stably, so equal
-            // sizes keep the range order that merge grouping and index reconstruction depend on.
-            tablets.sort(Comparator.comparingLong(SizedTablet::dataSize).reversed());
-        }
-
+        int headroom = earlyTarget > 0 ? Math.max(0, bound - index.getTablets().size()) : 0;
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
-        for (SizedTablet tablet : tablets) {
-            int k = TabletReshardUtils.calcSplitCount(tablet.dataSize(), clauseTargetSize);
-            if (k <= 1 && early && headroom > 0) {
-                k = Math.min(TabletReshardUtils.calcSplitCount(tablet.dataSize(), earlyTarget),
-                        headroom + 1);
+        for (Tablet tablet : index.getTablets()) {
+            long dataSize = tablet.getDataSize(true);
+            int k = TabletReshardUtils.calcSplitCount(dataSize, clauseTargetSize);
+            if (k <= 1 && headroom > 0) {
+                k = Math.min(TabletReshardUtils.calcSplitCount(dataSize, earlyTarget), headroom + 1);
             }
             if (k <= 1) {
                 continue;
             }
-            splitCounts.put(tablet.id(), k);
-            if (early) {
-                headroom = Math.max(0, headroom - (k - 1));
-            }
+            headroom = Math.max(0, headroom - (k - 1));
+            splitCounts.put(tablet.getId(), k);
         }
         return splitCounts;
     }
@@ -502,8 +492,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                         // tablet_reshard_target_size must be greater than 0
                         Preconditions.checkState(clauseTargetSize > 0,
                                 "Invalid tablet_reshard_target_size: " + clauseTargetSize);
-                        Map<Long, Integer> splitCounts =
-                                planIndexSplits(oldIndex, clauseTargetSize, earlyTarget, earlyBound);
+                        Map<Long, Integer> splitCounts = planIndexSplits(oldIndex, clauseTargetSize,
+                                earlyTarget, earlyTarget > 0 ? earlyBound() : 0);
                         if (splitCounts.isEmpty()) {
                             continue;
                         }

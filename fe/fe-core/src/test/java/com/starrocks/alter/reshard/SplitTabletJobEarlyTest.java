@@ -183,13 +183,16 @@ public class SplitTabletJobEarlyTest {
     }
 
     @Test
-    public void headroomIsSpentLargestFirstAndNeverExceedsTheCeiling() {
-        // n=3, cn=5 -> ceiling 5, headroom 2. All three are below the normal threshold.
-        List<Long> ids = setTabletDataSizes(4L << 30, 12L << 30, 1L << 30);
+    public void headroomIsSpentInOrderAndNeverExceedsTheBound() {
+        // n=3, cn=5 -> bound 5, headroom 2. All three are below the normal split threshold, so the
+        // early rule is what decides. Which tablets receive the headroom is deliberately unspecified
+        // -- the walk follows the index's own order -- but the total added must never pass the bound,
+        // because that is what keeps auto-merge from wanting the index narrower again.
+        setTabletDataSizes(4L << 30, 12L << 30, 1L << 30);
         Map<Long, Integer> plan = plan(5, new SplitTabletClause());
-        assertEquals(Map.of(ids.get(1), 3), plan, "the 12 GiB tablet takes the whole headroom");
         int added = plan.values().stream().mapToInt(k -> k - 1).sum();
-        assertEquals(2, added);
+        assertEquals(2, added, "exactly the headroom is spent, no more");
+        assertEquals(5, 3 + added, "the index lands on the bound, never past it");
     }
 
     @Test

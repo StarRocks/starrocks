@@ -232,7 +232,15 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                         if (normalSignal) {
                             throw e;
                         }
-                        LOG.debug("Early split produced no work for table {}.{}: {}",
+                        // Arm the latch on the way out. Without it, a table whose early plan cannot be
+                        // built -- an unstable colocate group, an exhausted parallel-tablet budget --
+                        // re-plans every scan forever, each attempt walking every partition and index
+                        // under the table read lock, and says so only at debug level.
+                        // -1 is not a tracked job: the latch's abort/settled probes both resolve it to
+                        // "no job", which is exactly right -- nothing is running to wait on.
+                        sizeSplitLatch.recordFired(tableId, signature, -1L, decision.nextAbortRetries());
+                        LOG.info("Early split produced no work for table {}.{}; suppressing until its "
+                                        + "layout or configuration changes: {}",
                                 db.getFullName(), table.getName(), e.getMessage());
                     }
                 } else if (sizeSplitLatch.claimSuppressionLog(tableId)) {
