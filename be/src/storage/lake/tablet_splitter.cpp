@@ -25,7 +25,6 @@
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
 #include "column/schema.h"
-#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "storage/base/short_key_index.h"
 #include "storage/chunk_helper.h"
@@ -1119,35 +1118,60 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
                                                   const TabletMetadataPtr& tablet_metadata, int32_t split_count,
                                                   std::vector<TabletRangeInfo>* split_ranges,
                                                   int32_t colocate_column_count) {
+    if (split_count < 2) {
+        return Status::InvalidArgument("Invalid split count, it is less than 2");
+    }
     if (!tablet_metadata->has_sstable_meta() || tablet_metadata->sstable_meta().sstables().empty()) {
         return Status::InvalidArgument("Cloud-native PK index has no SSTs to sample");
     }
 
-    size_t total_bytes = 0;
-    for (const auto& sstable : tablet_metadata->sstable_meta().sstables()) {
-        total_bytes += sstable.filesize();
-    }
-    constexpr size_t kSamplesPerSplit = 32;
-    const size_t target_sample_count = std::max<size_t>(split_count * kSamplesPerSplit, split_count);
-    size_t sample_interval = std::max<size_t>(1, total_bytes / target_sample_count);
-    if (config::pk_index_sstable_sample_interval_bytes > 0) {
-        sample_interval = std::min<size_t>(sample_interval, config::pk_index_sstable_sample_interval_bytes);
-    }
+    // Sampling is scoped to THIS tablet's range, not to the SSTs' own extent: a tablet produced by an
+    // earlier split inherits its parent's whole sstable_meta, because the SST files stay shared until
+    // MERGE rewrites them privately. A density derived from the files would therefore land only the
+    // child's key-space fraction of the samples inside its own range, and the strict-interior filter in
+    // get_tablet_split_ranges_from_pk_index_samples_impl could drop below split_count even for a child
+    // that holds plenty of rows -- silently pinning it at the identical-tablet fallback forever.
+    auto tablet_schema = TabletSchema::create(tablet_metadata->schema());
+    ASSIGN_OR_RETURN(auto tablet_sst_range,
+                     TabletRangeHelper::create_sst_seek_range_from(tablet_metadata->range(), tablet_schema));
 
-    std::vector<std::string> encoded_samples;
-    auto* block_cache = tablet_manager->update_mgr()->block_cache();
+    std::vector<const PersistentIndexSstablePB*> overlapping_sstables;
+    size_t overlapping_bytes = 0;
     for (const auto& sstable_pb : tablet_metadata->sstable_meta().sstables()) {
         if (!sstable_pb.has_range() || sstable_pb.range().start_key().empty() || sstable_pb.range().end_key().empty()) {
             return Status::Corruption(fmt::format("PK-index SST {} has no usable key range", sstable_pb.filename()));
         }
-        encoded_samples.push_back(sstable_pb.range().start_key());
-        encoded_samples.push_back(sstable_pb.range().end_key());
+        if (tablet_sst_range.has_overlap(sstable_pb.range())) {
+            overlapping_sstables.push_back(&sstable_pb);
+            overlapping_bytes += sstable_pb.filesize();
+        }
+    }
+    if (overlapping_sstables.empty()) {
+        return Status::InvalidArgument("No PK-index SST overlaps the tablet range");
+    }
+
+    constexpr size_t kSamplesPerSplit = 32;
+    const size_t target_sample_count = static_cast<size_t>(split_count) * kSamplesPerSplit;
+
+    std::vector<std::string> encoded_samples;
+    auto* block_cache = tablet_manager->update_mgr()->block_cache();
+    for (const auto* sstable_pb : overlapping_sstables) {
+        encoded_samples.push_back(sstable_pb->range().start_key());
+        encoded_samples.push_back(sstable_pb->range().end_key());
+        // Weight each SST's share of the sample budget by its size, so the quantiles picked downstream
+        // stay data-volume weighted the way the previous byte-interval sampling made them. Within one
+        // SST the samples are spread evenly over the part of its index that lies in the tablet range.
+        const size_t sst_sample_count =
+                overlapping_bytes == 0
+                        ? target_sample_count
+                        : std::max<size_t>(1, target_sample_count * sstable_pb->filesize() / overlapping_bytes);
         ASSIGN_OR_RETURN(
                 auto sstable,
                 PersistentIndexSstable::new_sstable(
-                        sstable_pb, tablet_manager->sst_location(tablet_metadata->id(), sstable_pb.filename()),
+                        *sstable_pb, tablet_manager->sst_location(tablet_metadata->id(), sstable_pb->filename()),
                         block_cache ? block_cache->cache() : nullptr, false, nullptr, tablet_metadata, tablet_manager));
-        RETURN_IF_ERROR(sstable->sample_data_keys(&encoded_samples, sample_interval));
+        RETURN_IF_ERROR(sstable->sample_data_keys(&encoded_samples, Slice(tablet_sst_range.seek_key),
+                                                  Slice(tablet_sst_range.stop_key), sst_sample_count));
     }
 
     return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,

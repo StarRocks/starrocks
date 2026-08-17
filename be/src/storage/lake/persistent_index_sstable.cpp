@@ -332,12 +332,13 @@ Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_
     return _sst->sample_keys(keys, sample_interval_bytes);
 }
 
-Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, const Slice& seek_key,
+                                                const Slice& stop_key, size_t max_samples) const {
     if (_sst == nullptr) {
         return Status::InvalidArgument("SSTable is not initialized");
     }
     std::vector<std::string> separators;
-    RETURN_IF_ERROR(_sst->sample_keys(&separators, sample_interval_bytes));
+    RETURN_IF_ERROR(_sst->sample_keys_in_range(&separators, seek_key, stop_key, max_samples));
 
     sstable::ReadOptions options;
     options.fill_cache = false;
