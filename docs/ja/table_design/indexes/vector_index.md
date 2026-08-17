@@ -116,6 +116,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **説明**: ベクターインデックスのメトリックタイプ（測定関数）。有効な値:
   - `l2_distance`: ユークリッド距離。値が小さいほど、類似性が高くなります。
   - `cosine_similarity`: コサイン類似度。値が大きいほど、類似性が高くなります。
+  - `inner_product`: 内積。値が大きいほど類似性が高くなります。コサイン類似度とは異なり、内積はベクトルの大きさを保持します。正確な計算には `inner_product`、ベクターインデックスによる top-k または範囲クエリには `approx_inner_product` を使用します。
 
 ##### is_vector_normed
 
@@ -277,18 +278,21 @@ LIMIT 10
     - `<vector_index_distance_func>` の関数名要件:
       - `metric_type` が `l2_distance` の場合、関数名は `approx_l2_distance` でなければなりません。
       - `metric_type` が `cosine_similarity` の場合、関数名は `approx_cosine_similarity` でなければなりません。
+      - `metric_type` が `inner_product` の場合、関数名は `approx_inner_product` でなければなりません。
     - `<vector_index_distance_func>` のパラメータ要件:
       - カラムのうちの一つ `constant_array` は、ベクターインデックス `dim` と一致する次元を持つ定数 `ARRAY<FLOAT>` でなければなりません。
       - もう一つのカラム `vector_column` は、ベクターインデックスに対応するカラムでなければなりません。
   - ORDER の方向要件:
     - `metric_type` が `l2_distance` の場合、順序は `ASC` でなければなりません。
     - `metric_type` が `cosine_similarity` の場合、順序は `DESC` でなければなりません。
+    - `metric_type` が `inner_product` の場合、順序は `DESC` でなければなりません。
   - `LIMIT N` 句が必要です。
 - **述語要件:**
   - すべての述語は `<vector_index_distance_func>` 式でなければならず、`AND` と比較演算子（`>` または `<`）を使用して結合されます。比較演算子の方向は `ASC`/`DESC` の順序と一致している必要があります。具体的には:
   - 要件 1:
     - `metric_type` が `l2_distance` の場合: `col_ref <= constant`。
     - `metric_type` が `cosine_similarity` の場合: `col_ref >= constant`。
+    - `metric_type` が `inner_product` の場合: `col_ref >= constant`。定数には負の値も指定できます。
     - ここで、`col_ref` は `<vector_index_distance_func>(vector_column, constant_array)` の結果を指し、`FLOAT` または `DOUBLE` 型にキャストできます。例:
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`

@@ -139,7 +139,7 @@ public class AnalyzeVectorIndexDMLTest {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(id)\n" +
                 "DISTRIBUTED BY HASH(id) BUCKETS 1";
-        analyzeFail(sql, "Value of `METRIC_TYPE` must be in [l2_distance, cosine_similarity]");
+        analyzeFail(sql, "inner_product");
 
         sql = "CREATE TABLE vector_t1 (\n" +
                 "    id bigint(20) NOT NULL,\n" +
