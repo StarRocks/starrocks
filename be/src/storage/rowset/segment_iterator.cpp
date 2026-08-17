@@ -3300,17 +3300,22 @@ Status SegmentIterator::_evaluate_late_materialize_read_other_columns(vector<row
         current_columns.emplace_back(col);
 
         col->resize(0);
+        ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
         {
             SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
             // for dict column, no matter it's global or local
             // we should get its local dict values in predicate evaluation which is same as next_batch
             // because the corresponding predicates are already rewritten by local dictionary
-            ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
             cur_iter->reserve_col(chunk_size, col);
             RETURN_IF_ERROR(cur_iter->fetch_values_by_rowid_for_predicate_evaluate(*ordinals, col));
         }
         if (ordinals->size() != col->size()) {
-            return Status::Corruption("_predicate_evaluate_late_materialize col size not equal to ordinal col size");
+            // Name the column and the iterator: which iterator short-read is the whole diagnosis here,
+            // and the message is all a production incident leaves behind.
+            return Status::Corruption(
+                    strings::Substitute("_predicate_evaluate_late_materialize col size not equal to ordinal col size: "
+                                        "column_id=$0 iterator=$1 ordinals=$2 col=$3",
+                                        current_column_id, cur_iter->name(), ordinals->size(), col->size()));
         }
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
 
