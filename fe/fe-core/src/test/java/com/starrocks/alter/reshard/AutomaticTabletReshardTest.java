@@ -32,18 +32,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AutomaticTabletReshardTest {
-    // A JMockit @Mock for a static method must itself be static, so it cannot capture a local of the
-    // enclosing test method; what those mocks record lives here instead. Reset before each test.
-    private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
-    private static final AtomicLong RECORDED_RANGES_SIG = new AtomicLong();
-
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     private static Database db;
@@ -83,16 +75,14 @@ public class AutomaticTabletReshardTest {
             }
         };
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().clearSizeSplitLatchForTest();
-        NODE_COUNT_RESOLUTIONS.set(0);
-        RECORDED_RANGES_SIG.set(0L);
     }
 
     @Test
     void testTriggerTabletReshardFailed() {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause splitTabletClause) throws StarRocksException {
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+                    throws StarRocksException {
                 throw new StarRocksException("Create tablet reshard job failed");
             }
         };
@@ -106,8 +96,8 @@ public class AutomaticTabletReshardTest {
     void testTriggerTabletReshardSuccess() {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause splitTabletClause) throws StarRocksException {
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+                    throws StarRocksException {
                 TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
                         new TabletReshardJobMgrTest.TestNormalTabletReshardJob(1L, TabletReshardJob.JobType.SPLIT_TABLET);
                 job.setTableId(table.getId());
@@ -167,8 +157,8 @@ public class AutomaticTabletReshardTest {
         boolean[] splitCalled = {false};
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause splitTabletClause) throws StarRocksException {
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+                    throws StarRocksException {
                 splitCalled[0] = true;
                 return new TabletReshardJobMgrTest.TestNormalTabletReshardJob(2L, TabletReshardJob.JobType.SPLIT_TABLET);
             }
@@ -254,8 +244,4 @@ public class AutomaticTabletReshardTest {
         assertTrue(mgr.hasSizeSplitLatch(table.getId()),
                 "falling through to merge must not erase a live early signal's suppression");
     }
-
-
-
-
 }

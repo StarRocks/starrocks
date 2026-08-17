@@ -145,17 +145,13 @@ public class TabletStatMgr extends FrontendDaemon {
                 boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
                         && olapTable.isCloudNativeTableOrMaterializedView()
                         && olapTable.isRangeDistribution();
-                // One probed resolution per eligible table, exactly as before.
+                // One resolution per eligible table, feeding both the merge floor and the early bound.
                 int computeNodeCount = reshardEligible
                         ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
-                // Merge acts strictly above this floor, so an index at or below it is one merge will
-                // not narrow -- which makes the same value the right bound for widening it early.
                 int parallelismFloor = computeNodeCount == 0 ? 0
                         : TabletReshardUtils.parallelismFloor(
                                 computeNodeCount, Config.tablet_reshard_max_split_count);
-                // min() with the node count keeps a single-node warehouse, whose floor is 2, from
-                // reporting its one tablet as under-provisioned.
-                int earlyBound = Math.min(computeNodeCount, parallelismFloor);
+                int earlyBound = TabletReshardUtils.earlySplitBound(computeNodeCount);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -173,10 +169,9 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
                                 // inside an admitted job, so the floor holds even for manual size-based merges.
                                 boolean eligibleForMerge = tablets.size() > parallelismFloor;
-                                // Symmetrically, only an index still below the early-split ceiling
-                                // contributes the early signal. That ceiling sits at or below the merge
-                                // floor, so no index can be under-provisioned and mergeable at the same
-                                // time and the two rules cannot pull one index back and forth.
+                                // The early bound sits at or below the merge floor, so no index can be
+                                // under-provisioned and mergeable at once: the two rules can never pull
+                                // one index back and forth.
                                 boolean underProvisioned = tablets.size() < earlyBound;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets

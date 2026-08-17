@@ -459,20 +459,6 @@ public class WarehouseManager implements Writable {
         return acquireComputeResource(CRAcquireContext.of(warehouse.getId()));
     }
 
-    /**
-     * The table's background compute resource, resolved WITHOUT the availability probe that
-     * {@link #acquireComputeResource} performs. That probe reaches StarMgr
-     * (isResourceAvailable -> getAliveComputeNodes -> getAllComputeNodeIds), so it must not run on a
-     * path that holds a table lock.
-     *
-     * <p>For sizing hints only: it makes no claim that the warehouse is usable, so it must not be used
-     * anywhere admission depends on availability. A build with CN groups overrides this to return the
-     * table's exact recorded background CN group instead of the warehouse's first worker group.
-     */
-    public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-        return WarehouseComputeResource.of(getBackgroundWarehouse(tableId).getId());
-    }
-
     public long getWarehouseResumeTime(long warehouseId) {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             Warehouse warehouse = idToWh.get(warehouseId);

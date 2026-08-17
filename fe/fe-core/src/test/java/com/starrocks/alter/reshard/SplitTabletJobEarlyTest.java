@@ -37,8 +37,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,7 +59,6 @@ public class SplitTabletJobEarlyTest {
     private static OlapTable table;
     private long savedTarget;
     private long savedMinSplit;
-    private long savedMaxParallel;
     private boolean savedEnableEarly;
 
     @BeforeAll
@@ -82,7 +79,6 @@ public class SplitTabletJobEarlyTest {
     public void setUp() {
         savedTarget = Config.tablet_reshard_target_size;
         savedMinSplit = Config.tablet_reshard_min_split_size;
-        savedMaxParallel = Config.tablet_reshard_max_parallel_tablets;
         savedEnableEarly = Config.tablet_reshard_enable_early_split;
         Config.tablet_reshard_target_size = 10L << 30;
         Config.tablet_reshard_min_split_size = 2L << 30;
@@ -109,7 +105,6 @@ public class SplitTabletJobEarlyTest {
         }
         Config.tablet_reshard_target_size = savedTarget;
         Config.tablet_reshard_min_split_size = savedMinSplit;
-        Config.tablet_reshard_max_parallel_tablets = savedMaxParallel;
         Config.tablet_reshard_enable_early_split = savedEnableEarly;
     }
 
@@ -142,19 +137,16 @@ public class SplitTabletJobEarlyTest {
 
     /**
      * Mirrors what the factory computes per job: the early rule is off when disabled by config, when
-     * the statement names an explicit target size, or when the warehouse has no usable node; the bound
-     * is the auto-merge floor, clamped by the node count so a single-node warehouse widens nothing.
+     * the statement names an explicit target size, or when the warehouse has no usable node.
      */
     private Map<Long, Integer> plan(int computeNodeCount, SplitTabletClause clause) {
         boolean explicitTarget = clause.getProperties() != null
                 && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
         long earlyTarget = Config.tablet_reshard_enable_early_split && !explicitTarget
-                ? Math.min(Config.tablet_reshard_min_split_size, Config.tablet_reshard_target_size) : 0L;
-        int bound = computeNodeCount == 0 ? 0
-                : Math.min(computeNodeCount, TabletReshardUtils.parallelismFloor(
-                        computeNodeCount, Config.tablet_reshard_max_split_count));
+                ? TabletReshardUtils.earlySplitTargetSize() : 0L;
         return Deencapsulation.invoke(SplitTabletJobFactory.class, "planIndexSplits",
-                baseIndex(), clause.getTabletReshardTargetSize(), earlyTarget, bound);
+                baseIndex(), clause.getTabletReshardTargetSize(), earlyTarget,
+                TabletReshardUtils.earlySplitBound(computeNodeCount));
     }
 
     /** Base index gets one tablet of earlyOnlySize; a second visible index gets one of normalSize. */
@@ -170,20 +162,6 @@ public class SplitTabletJobEarlyTest {
         rollup.addTablet(tablet, new TabletMeta(db.getId(), table.getId(), partition.getId(),
                 rollupIndexId, TStorageMedium.HDD, true));
         partition.createRollupIndex(rollup);
-    }
-
-    /** Captures every INFO event logged by SplitTabletJobFactory while attached. */
-    private static final class CapturingAppender extends AbstractAppender {
-        private final List<String> messages = new ArrayList<>();
-
-        CapturingAppender() {
-            super("early-split-deferral-capture", null, null, false, null);
-        }
-
-        @Override
-        public void append(LogEvent event) {
-            messages.add(event.getMessage().getFormattedMessage());
-        }
     }
 
     @Test
@@ -265,7 +243,7 @@ public class SplitTabletJobEarlyTest {
     @Test
     public void manualSplitWithoutPropertiesKeepsTheEarlyRule() {
         // AstBuilder#visitSplitTabletClause always hands over a non-null map, empty when the statement
-        // carried no PROPERTIES clause at all; capturePolicy must not read "non-null" as "explicit".
+        // carried no PROPERTIES clause at all; the factory must not read "non-null" as "explicit".
         List<Long> ids = setTabletDataSizes(3L << 30);
         SplitTabletClause clause = new SplitTabletClause(null, null, new HashMap<>());
         clause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
@@ -279,17 +257,12 @@ public class SplitTabletJobEarlyTest {
         assertTrue(plan(8, new SplitTabletClause()).isEmpty());
     }
 
-
-
-
-
-
     @Test
     public void anEligibleEarlyPlanIsMaterializedIntoAJob() throws Exception {
         // The one POSITIVE end-to-end test: every other test above suppresses, refuses or bypasses the
         // early path, so only this one drives the real factory from clause to materialized job.
         setTabletDataSizes(3L << 30);
-        // The factory resolves the node count itself now, so stub the resolver rather than injecting.
+        // The factory resolves the node count itself, so stub the resolver.
         new MockUp<TabletReshardUtils>() {
             @Mock
             public static int safeComputeNodeCountForTable(long tableId) {
@@ -308,7 +281,6 @@ public class SplitTabletJobEarlyTest {
         // AstBuilder#visitSplitTabletClause produces for `ALTER TABLE t SPLIT TABLET` with no
         // PROPERTIES: getProperties() returns a new empty HashMap, never null.
         setTabletDataSizes(3L << 30);
-        // The factory resolves the node count itself now, so stub the resolver rather than injecting.
         new MockUp<TabletReshardUtils>() {
             @Mock
             public static int safeComputeNodeCountForTable(long tableId) {
@@ -409,26 +381,9 @@ public class SplitTabletJobEarlyTest {
                 return 0;
             }
         };
-        // 3-arg constructor: resolves its own count, gets 0, disables the early rule.
+        // The factory resolves its own count, gets 0, and disables the early rule.
         TabletReshardJob job =
                 new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
         assertEquals(10L, job.getParallelTablets(), "only the 100 GiB tablet splits");
-    }
-
-    @Test
-    public void aResolvableWarehouseGetsTheEarlyPlanThroughTheThreeArgConstructor() throws Exception {
-        // Symmetrical to anUnavailableWarehouseFallsBackToTheNormalRule: that test only proves the
-        // 3-arg ctor forwards SOME count; this one proves the forwarded count is actually usable, i.e.
-        // the early rule fires exactly as it would through the 4-arg ctor with a literal 8.
-        setTabletDataSizes(3L << 30);
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                return 8;
-            }
-        };
-        TabletReshardJob job =
-                new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
-        assertEquals(2L, job.getParallelTablets(), "the resolved count must enable the early rule");
     }
 }

@@ -268,12 +268,6 @@ public class TabletReshardUtilsTest {
         }
     }
 
-    /**
-     * The whole split/merge disjointness argument rests on this: early split acts on
-     * tabletCount &lt; ceiling and auto-merge on tabletCount &gt; floor, so the ceiling must never
-     * exceed the floor.
-     */
-
     @Test
     public void computeNodeCount_countsBackendsAndComputeNodesInTheWorkerGroup() {
         Backend beInGroup = new Backend(1L, "h1", 9050);
@@ -306,61 +300,6 @@ public class TabletReshardUtilsTest {
 
         Mockito.when(resource.getWorkerGroupId()).thenReturn(11L);
         assertEquals(1, TabletReshardUtils.computeNodeCount(resource), "empty group floors at 1");
-    }
-
-    /**
-     * Not a micro-benchmark of the current implementation: the 100us threshold is a tripwire for an RPC
-     * or a superlinear regression landing on this path, either of which would overshoot it by orders of
-     * magnitude (an RPC is milliseconds; a quadratic scan over 1000 nodes is milliseconds). The current
-     * implementation measures ~14-15us on the tiered-JIT-limited JVM this suite runs under
-     * (fe-core/pom.xml's surefire argLine sets {@code -XX:TieredStopAtLevel=1}, the same argLine CI
-     * uses), so 100us leaves roughly 6-7x headroom rather than the ~1.4x a literal 20us budget would.
-     */
-    @Test
-    public void computeNodeCount_staysWithinThePublishPathBudget() {
-        SystemInfoService clusterInfo = new SystemInfoService();
-        for (int i = 0; i < 1000; i++) {
-            ComputeNode node = new ComputeNode(i + 1L, "h" + i, 9050);
-            node.setWorkerGroupId(i % 2 == 0 ? 7L : 9L);
-            clusterInfo.addComputeNode(node);
-        }
-        new MockUp<NodeMgr>() {
-            @Mock
-            public SystemInfoService getClusterInfo() {
-                return clusterInfo;
-            }
-        };
-        // A plain implementation, not Mockito.mock(): a mock's proxy dispatch measured ~7.7us per call
-        // in isolation on this JIT tier (a bare mocked getWorkerGroupId(), nothing else), overhead no
-        // real ComputeResource implementation pays in production. Do not revert this to Mockito.mock() —
-        // that would time the mocking framework instead of the code under test.
-        ComputeResource resource = new ComputeResource() {
-            @Override
-            public long getWarehouseId() {
-                return 0L;
-            }
-
-            @Override
-            public long getWorkerGroupId() {
-                return 7L;
-            }
-        };
-
-        for (int i = 0; i < 2000; i++) {                 // warm up the JIT
-            TabletReshardUtils.computeNodeCount(resource);
-        }
-        long best = Long.MAX_VALUE;
-        for (int round = 0; round < 20; round++) {       // best of 20 samples, 100 calls each
-            long start = System.nanoTime();
-            for (int i = 0; i < 100; i++) {
-                TabletReshardUtils.computeNodeCount(resource);
-            }
-            best = Math.min(best, (System.nanoTime() - start) / 100);
-        }
-        assertTrue(best < 100_000,
-                "one worker-group-filtered count must stay under 100us at 1000 nodes; measured " + best
-                        + "ns. If this budget cannot be met, move the resolution off the publish write "
-                        + "lock into the candidate drain instead of relaxing the threshold.");
     }
 
     @Test

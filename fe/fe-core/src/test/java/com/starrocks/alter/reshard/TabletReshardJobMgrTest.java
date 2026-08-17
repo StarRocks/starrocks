@@ -879,7 +879,6 @@ public class TabletReshardJobMgrTest {
         long base = TabletReshardJobMgr.splitPlanSignature(max, early);
 
         long savedMin = Config.tablet_reshard_min_split_size;
-        long savedCap = Config.tablet_reshard_max_parallel_tablets;
         boolean savedFlag = Config.tablet_reshard_enable_early_split;
         try {
             Config.tablet_reshard_min_split_size = savedMin * 2;
@@ -895,7 +894,6 @@ public class TabletReshardJobMgrTest {
             Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early * 8), "early count");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;
-            Config.tablet_reshard_max_parallel_tablets = savedCap;
             Config.tablet_reshard_enable_early_split = savedFlag;
         }
     }

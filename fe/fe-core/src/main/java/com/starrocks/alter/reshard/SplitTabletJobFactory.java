@@ -64,10 +64,16 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
+    private final int earlyBound;
+
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
         this.db = db;
         this.table = table;
         this.splitTabletClause = splitTabletClause;
+        // Resolved here, not while planning: the resolution goes through the warehouse availability
+        // probe, which reaches StarMgr, and planning holds a table lock that publish waits on.
+        this.earlyBound = TabletReshardUtils.earlySplitBound(
+                TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
     }
 
     /**
@@ -479,14 +485,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 }
 
                 long clauseTargetSize = splitTabletClause.getTabletReshardTargetSize();
-                // An index narrower than this cannot be narrowed further by auto-merge, which acts only
-                // above the same floor -- so widening up to it can never start a split/merge tug of war.
-                // min() with the node count keeps a single-node warehouse, whose floor is 2, from
-                // splitting for a parallelism it does not have.
-                int computeNodeCount = TabletReshardUtils.safeComputeNodeCountForTable(table.getId());
-                int earlyBound = computeNodeCount == 0 ? 0
-                        : Math.min(computeNodeCount, TabletReshardUtils.parallelismFloor(
-                                computeNodeCount, Config.tablet_reshard_max_split_count));
                 // An explicit target size in the statement means the caller asked for exactly that;
                 // the early rule stays out of it.
                 long earlyTarget = Config.tablet_reshard_enable_early_split

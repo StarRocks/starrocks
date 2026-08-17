@@ -120,7 +120,6 @@ public class TabletReshardUtils {
         return target > 0 && calcSplitCount(dataSize, target) > 1;
     }
 
-
     /*
      * Return value > 1 if need split
      * Return value = 1 if not need split
@@ -190,7 +189,7 @@ public class TabletReshardUtils {
      * (TabletPreSplitCoordinator#selectTabletCount requires maxSplitCount >= 2), so no floor applies.
      *
      * <p>Public because TabletStatMgr derives the auto-merge floor from a node count it resolves once
-     * per scan, and the early-split bound is derived from the same value.
+     * per scan.
      */
     @VisibleForTesting
     public static int parallelismFloor(int computeNodeCount, int maxSplitCount) {
@@ -198,6 +197,19 @@ public class TabletReshardUtils {
             return 1;
         }
         return Math.max(2, Math.min(computeNodeCount, maxSplitCount));
+    }
+
+    /**
+     * Tablet count the early-split rule may not carry an index past, or 0 when the node count could
+     * not be resolved. It is the auto-merge parallelism floor, because merge acts strictly above that
+     * floor: an index the early rule widened is therefore never one merge would immediately narrow
+     * again. min() with the node count keeps a single-node warehouse, whose floor is 2, from widening
+     * for a parallelism it does not have.
+     */
+    public static int earlySplitBound(int computeNodeCount) {
+        return computeNodeCount == 0 ? 0
+                : Math.min(computeNodeCount,
+                        parallelismFloor(computeNodeCount, Config.tablet_reshard_max_split_count));
     }
 
     /**

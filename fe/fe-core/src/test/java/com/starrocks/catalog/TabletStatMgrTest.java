@@ -661,61 +661,13 @@ public class TabletStatMgrTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
     }
 
-    /** Runs one tablet-stat cycle over such a table and returns the early signal it emitted. */
-    // Runs one scan with the leader flag under test and reports whether the reshard work ran at all:
-    // a resolution count of 0 means the eligibility gate short-circuited before the node-count probe.
-    private int runScanAndCountNodeCountResolutions(boolean leader) {
-        NODE_COUNT_RESOLUTIONS.set(0);
-        STUBBED_NODE_COUNT.set(4);
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public boolean isLeader() {
-                return leader;
-            }
-        };
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                NODE_COUNT_RESOLUTIONS.incrementAndGet();
-                return STUBBED_NODE_COUNT.get();
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-            }
-        };
-        int savedMaxSplitCount = Config.tablet_reshard_max_split_count;
-        Config.tablet_reshard_max_split_count = 1024;
-        try {
-            registerRangeDistributionTable(5L << 30);
-            new TabletStatMgr().runAfterCatalogReady();
-        } finally {
-            Config.tablet_reshard_max_split_count = savedMaxSplitCount;
-        }
-        return NODE_COUNT_RESOLUTIONS.get();
-    }
-
-    @Test
-    public void aFollowerResolvesNoNodeCount() {
-        // TabletStatMgr runs on every FE, but reshard is leader-only. Without this, every follower
-        // would resolve a compute-node count per eligible table on every scan, and the probe behind
-        // that resolution reaches StarMgr.
-        assertEquals(0, runScanAndCountNodeCountResolutions(false),
-                "a follower must not resolve a compute-node count");
-    }
-
-    @Test
-    public void aLeaderResolvesTheNodeCountOnce() {
-        // The companion to the above: the same fixture on a leader must reach the probe exactly once,
-        // so the follower case above is demonstrably about the leader flag and not about the fixture
-        // failing to reach the code at all.
-        assertEquals(1, runScanAndCountNodeCountResolutions(true),
-                "a leader must resolve the compute-node count exactly once per eligible table");
-    }
-
-    private long runScanAndCaptureEarlySignal(int stubbedNodeCount, long... tabletSizes) {
+    /**
+     * Runs one tablet-stat cycle over such a table as the given FE role and returns the early signal it
+     * emitted, or -1 when no candidate was emitted at all. NODE_COUNT_RESOLUTIONS then holds how many
+     * times the scan resolved a compute-node count; 0 means the eligibility gate short-circuited before
+     * the probe.
+     */
+    private long runScan(boolean leader, int stubbedNodeCount, long... tabletSizes) {
         long[] captured = {-1L};
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
         NODE_COUNT_RESOLUTIONS.set(0);
@@ -723,7 +675,7 @@ public class TabletStatMgrTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public boolean isLeader() {
-                return true;
+                return leader;
             }
         };
         new MockUp<TabletReshardUtils>() {
@@ -757,11 +709,30 @@ public class TabletStatMgrTest {
     }
 
     @Test
+    public void aFollowerResolvesNoNodeCount() {
+        // TabletStatMgr runs on every FE, but reshard is leader-only. Without this, every follower
+        // would resolve a compute-node count per eligible table on every scan, and the probe behind
+        // that resolution reaches StarMgr.
+        runScan(false, 4, 5L << 30);
+        assertEquals(0, NODE_COUNT_RESOLUTIONS.get(), "a follower must not resolve a compute-node count");
+    }
+
+    @Test
+    public void aLeaderResolvesTheNodeCountOnce() {
+        // The companion to the above: the same fixture on a leader must reach the probe exactly once,
+        // so the follower case above is demonstrably about the leader flag and not about the fixture
+        // failing to reach the code at all.
+        runScan(true, 4, 5L << 30);
+        assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
+                "a leader must resolve the compute-node count exactly once per eligible table");
+    }
+
+    @Test
     public void emitsTheEarlySignalOnlyForUnderProvisionedIndexes() {
         // 4 compute nodes -> early ceiling 4; an index holding 3 tablets sits below it. The largest is
         // neither the first nor the last the scan walks, so a fold that keeps the wrong one of them
         // cannot land on the right answer by accident.
-        assertEquals(5L << 30, runScanAndCaptureEarlySignal(4, 3L << 30, 5L << 30, 4L << 30));
+        assertEquals(5L << 30, runScan(true, 4, 3L << 30, 5L << 30, 4L << 30));
         assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
                 "the merge floor and the early ceiling must derive from ONE probed sample per table");
     }
@@ -769,7 +740,7 @@ public class TabletStatMgrTest {
     @Test
     public void emitsNoEarlySignalWhenTheIndexIsAtTheCeiling() {
         // 2 compute nodes -> early ceiling 2, and the index already holds 2 tablets.
-        assertEquals(0L, runScanAndCaptureEarlySignal(2, 5L << 30, 5L << 30));
+        assertEquals(0L, runScan(true, 2, 5L << 30, 5L << 30));
     }
 
     @Test
@@ -777,12 +748,12 @@ public class TabletStatMgrTest {
         // 1 compute node -> early ceiling min(1, floor 2) = 1, so even a one-tablet index is already at
         // it. This is the one live-warehouse tablet count where the ceiling and the merge floor differ,
         // so it is what keeps the ceiling from being replaced by the floor already in scope.
-        assertEquals(0L, runScanAndCaptureEarlySignal(1, 5L << 30));
+        assertEquals(0L, runScan(true, 1, 5L << 30));
     }
 
     @Test
     public void emitsNoEarlySignalWhenTheNodeCountIsUnavailable() {
-        assertEquals(0L, runScanAndCaptureEarlySignal(0, 5L << 30),
+        assertEquals(0L, runScan(true, 0, 5L << 30),
                 "an unresolved node count keeps the merge floor at 0 and emits no early signal");
     }
 }
