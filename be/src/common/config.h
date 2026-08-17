@@ -1618,6 +1618,12 @@ CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
+// When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
+// verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with
+// Corruption instead of erasing the wrong primary keys. Del files written before the checksum
+// existed (or by the replication path, which cannot compute it) carry none and are always accepted.
+// Writing the checksum is unconditional; this only controls verification, as an escape hatch.
+CONF_mBool(lake_enable_del_file_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
@@ -2208,6 +2214,11 @@ CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
 // is queried immediately, to skip the first read-back from disk/object storage.
 // Read when a builder is created, so a runtime change applies to later builds only.
 CONF_mBool(enable_vector_index_cache_on_build, "false");
+
+// Physical backend used when building cosine HNSW Flat and IVF indexes. "l2"
+// preserves the historical index format. Quantized HNSW cosine indexes always
+// use "inner_product".
+CONF_String_enum(vector_index_cosine_backend, "l2", "l2,inner_product");
 
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");

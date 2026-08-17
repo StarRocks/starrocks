@@ -116,6 +116,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Description**: Metric type (measurement function) of the vector index. Valid values:
   - `l2_distance`: Euclidean distance. The smaller the value, the higher the similarity.
   - `cosine_similarity`: Cosine similarity. The larger the value, the higher the similarity.
+  - `inner_product`: Inner product. The larger the value, the higher the similarity. Unlike cosine similarity, inner product preserves vector magnitude. Use `inner_product` for exact evaluation and `approx_inner_product` for vector-index top-k or range queries.
 
 ##### is_vector_normed
 
@@ -125,7 +126,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 
 ##### index_build_threshold
 
-- **Default**: 10000 (determined by the BE configuration item [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold))
+- **Default**: 10000 (determined by the BE configuration item [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold))
 - **Required**: No
 - **Description**: Row-count threshold that triggers the vector index build. If the number of rows written is smaller than this threshold, the vector index is not built and searches fall back to brute-force scan. It must be an integer greater than or equal to `1`. For IVFPQ indexes, the value must also be greater than or equal to `nlist`, because IVFPQ k-means training requires at least `nlist` vectors. DDL statements that violate this constraint are rejected.
 
@@ -135,7 +136,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Required**: No
 - **Description**: Index build mode for shared-data clusters. Valid values:
   - `sync`: Builds the index during data writes. Queries can use the index immediately, at the cost of higher load latency.
-  - `async`: Builds the index in the background after the write finishes. Until the build completes, queries over the affected segments automatically fall back to brute-force search. Use [`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) to select the build warehouse and [`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) to control load-tail dispatch delay.
+  - `async`: Builds the index in the background after the write finishes. Until the build completes, queries over the affected segments automatically fall back to brute-force search. Use [`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) to select the build warehouse and [`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) to control load-tail dispatch delay.
 
 ##### M
 
@@ -276,18 +277,21 @@ To use vector index in queries, all the following requirements must be met:
     - Function name requirements for `<vector_index_distance_func>`:
       - If `metric_type` is `l2_distance`, the function name must be `approx_l2_distance`.
       - If `metric_type` is `cosine_similarity`, the function name must be `approx_cosine_similarity`.
+      - If `metric_type` is `inner_product`, the function name must be `approx_inner_product`.
     - Parameter requirements for `<vector_index_distance_func>`:
       - One of the column `constant_array` must be a constant `ARRAY<FLOAT>` with dimensions matching the vector index `dim`.
       - The other column `vector_column` must be the column corresponding to the vector index.
   - ORDER direction requirements:
     - If `metric_type` is `l2_distance`, the order must be `ASC`.
     - If `metric_type` is `cosine_similarity`, the order must be `DESC`.
+    - If `metric_type` is `inner_product`, the order must be `DESC`.
   - A `LIMIT N` clause is required.
 - **Predicate Requirements:**
   - All predicates must be `<vector_index_distance_func>` expressions, combined using `AND` and comparison operators (`>` or `<`). The comparison operator direction must align with the `ASC`/`DESC` order. Specifically:
   - Requirement 1:
     - If `metric_type` is `l2_distance`: `col_ref <= constant`.
     - If `metric_type` is `cosine_similarity`: `col_ref >= constant`.
+    - If `metric_type` is `inner_product`: `col_ref >= constant`. The constant can be negative.
     - Here, `col_ref` refers to the result of `<vector_index_distance_func>(vector_column, constant_array)` and can be cast to `FLOAT` or `DOUBLE` types, for example:
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`

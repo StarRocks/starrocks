@@ -250,6 +250,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 RETURN_IF_ERROR(res);
                 _sub_readers->emplace_back(std::move(res).value());
             }
+            // Flat JSON segments written before the root footprint was persisted have a zero root
+            // value even though their child readers have valid footprints. Recover the aggregate
+            // at read time so compaction can size chunks correctly for existing data.
+            if (_is_flat_json && _total_mem_footprint == 0) {
+                for (const auto& sub_reader : *_sub_readers) {
+                    _total_mem_footprint += sub_reader->total_mem_footprint();
+                }
+            }
             return Status::OK();
         }
         return Status::OK();

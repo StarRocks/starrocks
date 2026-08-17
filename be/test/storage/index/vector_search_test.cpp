@@ -1076,9 +1076,8 @@ VectorSearchOptionPtr make_vector_search_opt(int slot_id, int num_columns, const
 }
 } // namespace
 
-// Cosine similarity path covers the cosine branch of _setup_brute_force_fallback
-// (is_cosine_similarity = true) and the cosine branch of
-// _compute_brute_force_distances (query_norm precompute + per-row dot/norm_v).
+// Cosine similarity path covers metric resolution in _setup_brute_force_fallback and the cosine
+// branch of _compute_brute_force_distances (query_norm precompute + per-row dot/norm_v).
 TEST_F(BruteForceVectorFallbackTest, test_brute_force_cosine_similarity) {
     std::vector<int64_t> ids = {1, 2, 3};
     std::vector<std::vector<float>> vectors = {
@@ -1120,6 +1119,50 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_cosine_similarity) {
     EXPECT_FLOAT_EQ(distances->get_data()[0], 1.0f);
     EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
     EXPECT_NEAR(distances->get_data()[2], 1.0f / std::sqrt(3.0f), 1e-6);
+
+    chunk_iter->close();
+}
+
+TEST_F(BruteForceVectorFallbackTest, test_brute_force_inner_product) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {10.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 0.0f},
+            {-1.0f, 0.0f, 0.0f},
+    };
+    auto schema = build_read_schema_with_metric("inner_product");
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors, schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {2.0f, 0.0f, 0.0f});
+    opt->vector_distance_column_name = "__vector_approx_inner_product";
+    opt->result_order = 1;
+    opt->vector_range = -1.0;
+    opt->has_vector_range = true;
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = opt;
+
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    ASSERT_OK(chunk_iter->get_next(chunk.get(), &rowids));
+    ASSERT_EQ(chunk->num_rows(), 2);
+
+    auto scores = chunk->get_column_by_slot_id(opt->vector_slot_id);
+    ASSERT_NE(scores, nullptr);
+    const auto* values = down_cast<const FloatColumn*>(scores.get());
+    ASSERT_EQ(values->size(), 2);
+    EXPECT_FLOAT_EQ(values->get_data()[0], 20.0f);
+    EXPECT_FLOAT_EQ(values->get_data()[1], 2.0f);
 
     chunk_iter->close();
 }
@@ -2398,7 +2441,7 @@ TEST_F(VectorResidualPrefilterTest, sparse_ratio_short_circuits_search) {
 }
 
 TEST_F(VectorResidualPrefilterTest, cosine_metric_survives_exact_rescan) {
-    // Regression for the PRE-path metric bug: is_cosine_similarity used to be initialized ONLY by
+    // Regression for the PRE-path metric bug: the logical metric used to be initialized ONLY by
     // _setup_brute_force_fallback (the BRUTE route), so the exact-rescan paths reached from PRE (the
     // cardinality short-circuit and the under-return count gate) scored a cosine index as L2.
     //

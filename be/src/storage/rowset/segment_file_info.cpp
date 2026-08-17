@@ -26,6 +26,9 @@ void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta) {
     if (!file.encryption_meta.empty()) {
         file_meta->set_encryption_meta(file.encryption_meta);
     }
+    if (file.crc32c.has_value()) {
+        file_meta->set_crc32c(file.crc32c.value());
+    }
 }
 
 void SegmentFileInfo::to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const {

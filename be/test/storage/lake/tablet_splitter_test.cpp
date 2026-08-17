@@ -1240,33 +1240,55 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
         add_bigint_seg(&rs, 0, 1, "s0");
         return rs;
     };
-    EXPECT_TRUE(can_prune_rowset_segments(make_pruneable()));
+    EXPECT_TRUE(can_prune_rowset_segments(make_pruneable(), /*sort_key_arity=*/1));
 
     {
         auto rs = make_pruneable();
         rs.mutable_segment_metas(0)->set_bundle_file_offset(0); // bundled segment is pruneable
-        EXPECT_TRUE(can_prune_rowset_segments(rs));
+        EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (a) ok
     {
         auto rs = make_pruneable();
         rs.set_next_compaction_offset(1);
-        EXPECT_FALSE(can_prune_rowset_segments(rs));
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (b)
     {
         auto rs = make_pruneable();
         rs.add_segment_metas(); // extra segment lacking sort-key bounds
-        EXPECT_FALSE(can_prune_rowset_segments(rs));
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (c) missing bound on extra segment
     {
         auto rs = make_pruneable();
         rs.mutable_segment_metas(0)->clear_sort_key_max();
-        EXPECT_FALSE(can_prune_rowset_segments(rs));
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (c) missing bound
     {
         auto rs = make_pruneable();
         rs.mutable_segment_metas(0)->set_shared(true);
-        EXPECT_TRUE(can_prune_rowset_segments(rs));
+        EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (d) ok
+    {
+        // (e) bounds narrower than the current sort key (a rowset written before a metadata-only
+        // trailing sort-key ADD): not comparable with the new tablets' ranges, so not pruneable.
+        // See ComputeOwnership_narrowSegmentBoundMissesTheSiblingThatOwnsItsBoundaryRows for what
+        // pruning on them would cost.
+        auto rs = make_pruneable();
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
+        // arity 0 == "cannot tell" (a schema carrying no sort key at all) skips the check.
+        EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/0));
+    }
+    {
+        // (e) is per rowset: one narrow segment disqualifies its whole rowset, since ownership is
+        // computed per rowset.
+        TuplePB wide_bound = make_bigint_tuple_pb(5);
+        *wide_bound.add_values() = make_bigint_tuple_pb(5).values(0);
+        auto rs = make_pruneable(); // s0's bounds are arity 1
+        auto* s1 = rs.add_segment_metas();
+        s1->set_filename("s1");
+        *s1->mutable_sort_key_min() = wide_bound;
+        *s1->mutable_sort_key_max() = wide_bound;
+        EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
+    }
 }
 
 TEST(TabletSplitterTest, ComputeOwnership_exclusive_segment_becomes_private) {
@@ -2130,6 +2152,287 @@ TEST(TabletSplitterTest, BuildSegmentsFromRowsets_NullTabletManagerSkipsLoader) 
     ASSERT_EQ(1u, segments.size());
     EXPECT_TRUE(segments[0].sort_key_samples.empty());
     EXPECT_EQ(0, segments[0].sort_key_sample_row_interval);
+}
+
+// =============================================================================
+// Segment-derived boundaries are projected onto the CURRENT sort key
+// =============================================================================
+//
+// A metadata-only trailing sort-key key-column ADD (FE
+// SchemaChangeHandler#tryCreateMetadataOnlyTrailingKeyAddJob -- e.g. `ALTER TABLE agg_range ADD
+// COLUMN k2 INT`, which an AGG table promotes to a key column) widens the tablet's sort key and
+// reprojects every EXISTING tablet range bound with a trailing NULL sentinel, but deliberately does
+// not rewrite the data: the rowsets keep their historical, narrower schema, so their
+// sort_key_min/sort_key_max stay one column short.
+//
+// Emitting such a tuple as a new tablet's range bound is unrecoverable: RangeRouter::_validate_range
+// rejects every subsequent load ("upper_bound value size is not equal to column size") and
+// TabletRangeHelper::create_seek_range_from rejects every read of a rowset written at the new arity
+// ("Unexpected number of values in TabletRangePB bound value, expected at least: 2, actual: 1").
+
+static VariantPB make_null_int_variant_pb() {
+    DatumVariant dv(get_type_info(LogicalType::TYPE_INT), Datum());
+    VariantPB pb;
+    dv.to_proto(&pb);
+    return pb;
+}
+
+// [k1, NULL] -- a bigint prefix bound lifted onto the (k1, k2) sort key. This is the shape the FE's
+// TrailingSortKeyRangeReprojection stamps onto every pre-existing tablet range.
+static TuplePB make_bigint_null_tuple_pb(int64_t k1) {
+    TuplePB t;
+    *t.add_values() = make_bigint_variant_pb(k1);
+    *t.add_values() = make_null_int_variant_pb();
+    return t;
+}
+
+// A tablet in the post-trailing-key-add state: current sort key is (k1 BIGINT, k2 INT), the parent
+// range is at arity 2, but every rowset was written before the ADD and carries arity-1
+// sort_key_min/sort_key_max. |parent_bounds_arity1| reproduces an ALREADY corrupted tablet whose own
+// range bounds were never reprojected.
+// Returns a MUTABLE handle (not TabletMetadataPtr, which is shared_ptr<const TabletMetadataPB>):
+// the tests below tweak the schema / segment metas after building. It converts implicitly wherever a
+// TabletMetadataPtr is expected.
+static std::shared_ptr<TabletMetadataPB> make_trailing_key_added_metadata(
+        const std::vector<std::tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>>& rowsets,
+        bool parent_bounds_arity1 = false) {
+    auto m = std::make_shared<TabletMetadataPB>();
+    m->set_id(1);
+    m->set_version(1);
+    auto* schema = m->mutable_schema();
+    schema->set_keys_type(AGG_KEYS);
+    schema->set_id(100);
+    auto* k1 = schema->add_column();
+    k1->set_unique_id(0);
+    k1->set_name("k1");
+    k1->set_type("BIGINT");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    auto* k2 = schema->add_column();
+    k2->set_unique_id(1);
+    k2->set_name("k2");
+    k2->set_type("INT");
+    k2->set_is_key(true);
+    k2->set_is_nullable(true);
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+
+    auto* range = m->mutable_range();
+    if (parent_bounds_arity1) {
+        *range->mutable_lower_bound() = make_bigint_tuple_pb(0);
+    } else {
+        *range->mutable_lower_bound() = make_bigint_null_tuple_pb(0);
+    }
+    range->set_lower_bound_included(true);
+    *range->mutable_upper_bound() = make_bigint_null_tuple_pb(1000);
+    range->set_upper_bound_included(false);
+
+    for (const auto& [id, lo, hi, num_rows, data_size] : rowsets) {
+        auto* r = m->add_rowsets();
+        r->set_id(id);
+        r->set_num_rows(num_rows);
+        r->set_data_size(data_size);
+        r->set_num_dels(0); // explicit to skip the PK delvec fallback in build_rowset_anchor.
+        auto* sm = r->add_segment_metas();
+        sm->set_filename("seg" + std::to_string(id));
+        sm->set_size(data_size);
+        sm->set_num_rows(num_rows);
+        // Arity 1: written before `ADD COLUMN k2`.
+        *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
+        *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
+    }
+    return m;
+}
+
+// build_segments_from_rowsets lifts every tuple a pre-ADD segment contributes (min_key, max_key and
+// each metadata sample) onto the current sort key, padding with the NULL (== MIN) sentinel.
+TEST(TabletSplitterTest, BuildSegmentsFromRowsets_ProjectsNarrowSegmentKeysOntoCurrentSortKey) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 499, 500, 5000),
+    });
+    // Metadata samples are one column short too, exactly like min/max.
+    auto* sm = m->mutable_rowsets(0)->mutable_segment_metas(0);
+    sm->set_deprecated_sort_key_sample_row_interval(100);
+    for (int64_t v : {100, 200, 300, 400}) {
+        *sm->add_deprecated_sort_key_samples() = make_bigint_tuple_pb(v);
+    }
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, &segments));
+    ASSERT_EQ(1u, segments.size());
+    EXPECT_EQ(2u, segments[0].min_key.size());
+    EXPECT_EQ(2u, segments[0].max_key.size());
+    EXPECT_TRUE(segments[0].min_key[1].value().is_null());
+    EXPECT_TRUE(segments[0].max_key[1].value().is_null());
+    EXPECT_EQ(0, segments[0].min_key[0].value().get_int64());
+    EXPECT_EQ(499, segments[0].max_key[0].value().get_int64());
+    ASSERT_EQ(4u, segments[0].sort_key_samples.size());
+    for (const auto& sample : segments[0].sort_key_samples) {
+        EXPECT_EQ(2u, sample.size());
+        EXPECT_TRUE(sample[1].value().is_null());
+    }
+}
+
+// An absent sort_key_min/sort_key_max means "unknown" to every downstream consumer (the
+// !min_key.empty() guards, TabletRange::is_minimum). It must stay empty rather than becoming the
+// concrete minimum tuple (NULL, NULL).
+TEST(TabletSplitterTest, BuildSegmentsFromRowsets_LeavesUnsetSegmentKeysEmpty) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 499, 500, 5000),
+    });
+    auto* sm = m->mutable_rowsets(0)->mutable_segment_metas(0);
+    sm->clear_sort_key_min();
+    sm->clear_sort_key_max();
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, &segments));
+    ASSERT_EQ(1u, segments.size());
+    EXPECT_TRUE(segments[0].min_key.empty());
+    EXPECT_TRUE(segments[0].max_key.empty());
+}
+
+// The regression itself: splitting a tablet whose rowsets predate the trailing key add must emit
+// bounds at the tablet's sort-key arity. Before the projection, the interior boundaries came straight
+// out of the arity-1 segment tuples and bricked every new tablet.
+TEST(TabletSplitterTest, DataDrivenSplit_EmitsBoundsAtCurrentSortKeyArity) {
+    // Two disjoint rowsets with a gap, the shape the parity test proves yields a K=2 boundary.
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(2, 600, 999, 500, 5000),
+    });
+
+    std::vector<TabletRangeInfo> out;
+    ASSERT_OK(get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &out));
+    ASSERT_EQ(2u, out.size());
+    for (const auto& tri : out) {
+        if (tri.range.has_lower_bound()) {
+            EXPECT_EQ(2, tri.range.lower_bound().values_size()) << tri.range.DebugString();
+        }
+        if (tri.range.has_upper_bound()) {
+            EXPECT_EQ(2, tri.range.upper_bound().values_size()) << tri.range.DebugString();
+        }
+    }
+    // The interior boundary is shared: split[0].upper == split[1].lower, and it is the projected
+    // (k1, MIN) form rather than the bare (k1) the segments carried.
+    ASSERT_TRUE(out[0].range.has_upper_bound());
+    ASSERT_TRUE(out[1].range.has_lower_bound());
+    EXPECT_TRUE(MessageDifferencer::Equals(out[0].range.upper_bound(), out[1].range.lower_bound()));
+    EXPECT_EQ(VariantTypePB::NULL_VALUE, out[0].range.upper_bound().values(1).variant_type());
+}
+
+// Last line of defense: a tablet whose OWN range bound is already narrower than its sort key (the
+// end state of the bug, on a cluster that hit it before this fix) must fail the split instead of
+// propagating the corrupt bound into K new tablets. split_tablet turns this Status into the
+// identical-tablet fallback, so the table stays queryable.
+TEST(TabletSplitterTest, DataDrivenSplit_RejectsInheritedBoundWithWrongArity) {
+    auto m = make_trailing_key_added_metadata(
+            {
+                    std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+                    std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(2, 600, 999, 500, 5000),
+            },
+            /*parent_bounds_arity1=*/true);
+
+    std::vector<TabletRangeInfo> out;
+    auto st = get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &out);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("!= effective sort-key arity 2")) << st;
+}
+
+// Per-segment ownership pruning compares a segment's STORED sort-key bounds against the new tablets'
+// ranges, which the projection above emits at the current arity. A pre-ADD segment's narrower bounds
+// are not comparable with them: VariantTuple::compare orders a shorter prefix-equal tuple BELOW its
+// padded form, so a segment whose max is [400] misses the sibling starting at (400, NULL) -- while
+// create_seek_range_from routes that segment's k1=400 rows to exactly that sibling (the added
+// column's read-time default is NULL here, so the projected lower bound stays inclusive). The rows
+// would be reachable from neither new tablet.
+TEST(TabletSplitterTest, ComputeOwnership_narrowSegmentBoundMissesTheSiblingThatOwnsItsBoundaryRows) {
+    // Ranges at the post-ADD arity 2: [(0,NULL), (400,NULL)) and [(400,NULL), +inf).
+    TabletRangePB lower_range;
+    *lower_range.mutable_lower_bound() = make_bigint_null_tuple_pb(0);
+    lower_range.set_lower_bound_included(true);
+    *lower_range.mutable_upper_bound() = make_bigint_null_tuple_pb(400);
+    lower_range.set_upper_bound_included(false);
+    TabletRangePB upper_range;
+    *upper_range.mutable_lower_bound() = make_bigint_null_tuple_pb(400);
+    upper_range.set_lower_bound_included(true);
+    std::vector<TabletRangePB> ranges{lower_range, upper_range};
+
+    RowsetMetadataPB rs;
+    add_bigint_seg(&rs, 0, 400, "s0"); // pre-ADD: arity-1 bounds, max == the boundary's prefix
+
+    auto own = compute_rowset_segment_ownership(rs, ranges);
+    ASSERT_TRUE(own.ok());
+    EXPECT_TRUE(own->segments[0].keep[0]);
+    EXPECT_FALSE(own->segments[0].keep[1]) << "the boundary rows' segment is dropped from their own "
+                                              "new tablet -- which is why can_prune_rowset_segments "
+                                              "refuses to prune such a rowset at all";
+
+    // The gate (predicate (e), pinned by CanPruneRowsetSegments_predicates) is what keeps those rows
+    // reachable: the rowset stays unpruned and every segment survives on every new tablet as shared.
+    // Padding the stored bounds instead would not do -- an old segment's rows read as
+    // (prefix, default), so padding its MAX with the NULL minimum understates the segment's reach
+    // whenever a post-ADD rowset contributed a boundary between (prefix, NULL) and (prefix, default).
+    EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
+}
+
+// Corrupt metadata whose sort_key_idxes points past the column list must come back as a recoverable
+// Status, not an abort. The bounds check therefore has to run on the raw protobuf: TabletSchema's
+// _init_from_pb consumes sort_key_idxes first and indexes both schema.column(cid) and _cols[cid]
+// without checking, so validating after materialization would be too late.
+TEST(TabletSplitterTest, SortKeyProjection_RejectsOutOfRangeSortKeyIdxWithoutAborting) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+    });
+    ASSERT_EQ(2, m->schema().column_size());
+    m->mutable_schema()->clear_sort_key_idxes();
+    m->mutable_schema()->add_sort_key_idxes(0);
+    m->mutable_schema()->add_sort_key_idxes(5); // out of range
+    ASSERT_TRUE(m->schema().sort_key_unique_ids().empty());
+
+    std::vector<SegmentSplitInfo> segments;
+    auto st = build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, &segments);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("out of range")) << st;
+}
+
+// A schema carrying NO sort key at all (no sort_key_idxes and no key columns) yields arity 0. That is
+// "cannot tell", not "every bound must be empty": condemning such a split made 16 pre-existing
+// LakeTabletReshardTest cases fall back to an identical tablet, because their synthetic metadata has
+// no schema columns. A real range-distributed tablet always has at least one sort-key column.
+TEST(TabletSplitterTest, DataDrivenSplit_AllowsSchemaWithoutAnySortKey) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(2, 600, 999, 500, 5000),
+    });
+    // Strip the schema down to no columns and no sort key, like the synthetic reshard fixtures.
+    m->mutable_schema()->clear_column();
+    m->mutable_schema()->clear_sort_key_idxes();
+    m->mutable_schema()->clear_sort_key_unique_ids();
+
+    std::vector<TabletRangeInfo> out;
+    ASSERT_OK(get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &out));
+    EXPECT_EQ(2u, out.size()) << "a schema without a sort key must not be treated as corrupt";
+}
+
+// sort_key_unique_ids takes precedence in TabletSchema::_init_from_pb, which resolves it through
+// _unique_id_to_index.at(uid) -- that THROWS on an id no column carries, before any Status could be
+// returned. So the raw ids must be checked first, exactly like sort_key_idxes.
+TEST(TabletSplitterTest, SortKeyProjection_RejectsUnknownSortKeyUniqueIdWithoutAborting) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+    });
+    ASSERT_EQ(2, m->schema().column_size());
+    m->mutable_schema()->clear_sort_key_idxes();
+    m->mutable_schema()->add_sort_key_unique_ids(0);
+    m->mutable_schema()->add_sort_key_unique_ids(4242); // no column carries this unique id
+
+    std::vector<SegmentSplitInfo> segments;
+    auto st = build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, &segments);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("4242")) << st;
 }
 
 } // namespace starrocks::lake

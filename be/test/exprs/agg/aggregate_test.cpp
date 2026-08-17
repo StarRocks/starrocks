@@ -2175,6 +2175,55 @@ TEST_F(AggregateTest, test_array_aggV2) {
     }
 }
 
+// finalize_to_column() appends the null flag of the current row before the array row is built, so a
+// cancellation detected while sorting the order-by columns used to leave the nullable result column
+// with one more null flag than array rows, and the error placeholder appended on top of it.
+TEST_F(AggregateTest, test_array_aggV2_cancelled_keeps_nullable_result_consistent) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    std::vector<bool> is_asc_order{true};
+    std::vector<bool> nulls_first{true};
+    local_ctx->set_is_asc_order(is_asc_order);
+    local_ctx->set_nulls_first(nulls_first);
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    char_column->append_datum("a");
+    char_column->append_datum("b");
+
+    MutableColumnPtr int_column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    int_column->append_datum(2);
+    int_column->append_datum(1);
+
+    std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
+    array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(), state->state());
+
+    TypeDescriptor type_array_char;
+    type_array_char.type = LogicalType::TYPE_ARRAY;
+    type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
+    // a nullable result column is what the aggregator hands over when the output slot is nullable
+    MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, true);
+    res_array_col->append_datum(DatumArray{Slice("kept")});
+
+    local_ctx->state()->set_is_cancelled(true);
+    array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
+    ASSERT_TRUE(local_ctx->has_error());
+
+    // exactly one placeholder row for this state, and null/data columns still agree
+    auto* nullable_col = down_cast<NullableColumn*>(res_array_col.get());
+    ASSERT_EQ(2, nullable_col->null_column()->size());
+    ASSERT_EQ(2, nullable_col->data_column()->size());
+    ASSERT_EQ(2, res_array_col->size());
+    ASSERT_TRUE(res_array_col->is_null(1));
+}
+
 TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
     // Test array_agg2 with multiple ORDER BY columns
     // array_agg(varchar_col order by int_col, varchar_col2)

@@ -882,6 +882,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_del = new_rowset_meta->add_del_files();
             new_del->CopyFrom(src_del);
             new_del->set_name(final_del_filename);
+            // The replicated file is produced by the download, which routes .del files through
+            // build_file_converters and may re-encode the payload (DelFileStreamConverter, PK encoding
+            // V1->V2). The source checksum describes the source bytes, so keeping it would make the
+            // target reject a perfectly valid del file. Drop it unconditionally rather than trying to
+            // predict here whether this particular file gets transcoded: absent means "not recorded"
+            // and readers skip verification, same as the shared-nothing replication path.
+            new_del->clear_crc32c();
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {

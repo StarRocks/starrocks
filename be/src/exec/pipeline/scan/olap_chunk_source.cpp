@@ -320,6 +320,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
         }
         _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->has_vector_range = vector_options.__isset.has_vector_range
+                                                                 ? vector_options.has_vector_range
+                                                                 : vector_options.vector_range >= 0;
         _params.vector_search_option->result_order = vector_options.result_order;
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;

@@ -236,3 +236,21 @@ manager_chain AS (
 SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ employee_id, name, title, steps, id
 FROM manager_chain, const_cte
 ORDER BY steps;
+
+-- Test 13: Error case - the anchor infers DECIMAL(1,1) for bal, so the first iteration produces
+-- 1.5 and its insert fails in strict mode. The failure must be reported instead of ending the
+-- recursion as if it had converged.
+WITH RECURSIVE r AS (
+    SELECT 1 AS n, 0.5 AS bal
+    UNION ALL
+    SELECT n + 1, bal + 1 FROM r WHERE n < 5
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=20, enable_insert_strict=true, insert_max_filter_ratio=0)*/ * FROM r ORDER BY n;
+
+-- Test 13.1: widening the anchor column type keeps the same recursion working
+WITH RECURSIVE r AS (
+    SELECT 1 AS n, CAST(0.5 AS DECIMAL(10,1)) AS bal
+    UNION ALL
+    SELECT n + 1, bal + 1 FROM r WHERE n < 5
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=20, enable_insert_strict=true, insert_max_filter_ratio=0)*/ * FROM r ORDER BY n;
