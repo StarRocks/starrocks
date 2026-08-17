@@ -30,6 +30,7 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
+#include "util/crc32c.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
@@ -164,12 +165,18 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
     RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
+    // Checksum the plaintext serialized bytes, i.e. exactly what a reader gets back from read_all()
+    // after the file system layer has decrypted the file. Masked to match DelvecPagePB.crc32c.
+    const uint32_t del_crc32c =
+            crc32c::Mask(crc32c::Value(reinterpret_cast<const char*>(content.data()), content.size()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
     {
         // Use _dels_mutex to protect _dels concurrently append by multiple threads.
         std::lock_guard lg(_dels_mutex);
-        _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+        FileInfo del_info{std::move(name), content.size(), encryption_meta};
+        del_info.crc32c = del_crc32c;
+        _dels.emplace_back(std::move(del_info));
         // Keep _del_op_offsets and _del_num_rows positionally aligned with _dels. The tombstone
         // count is recorded here (rather than on FileInfo) so it stays a del-specific stat, mirroring
         // how op_offset is carried; it is later accounted toward the PK index rebuild-rows threshold.
