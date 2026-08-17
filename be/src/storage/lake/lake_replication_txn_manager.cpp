@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <optional>
 #include <unordered_set>
 
 #include "base/coding.h"
@@ -56,6 +57,69 @@ namespace {
 // Parallel copy is disabled when queue depth exceeds num_threads * this factor
 // to avoid adding more pressure to an already saturated pool.
 constexpr int kParallelCopyMaxQueuePerThread = 8;
+
+std::unordered_set<std::string> collect_shared_file_names(const TabletMetadataPB& metadata) {
+    std::unordered_set<std::string> files;
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            if (segment.shared()) {
+                files.emplace(segment.filename());
+            }
+        }
+        for (const auto& del : rowset.del_files()) {
+            if (del.shared()) {
+                files.emplace(del.name());
+            }
+        }
+    }
+    for (const auto& sstable : metadata.sstable_meta().sstables()) {
+        if (sstable.shared()) {
+            files.emplace(sstable.filename());
+        }
+    }
+    for (const auto& [_, file] : metadata.delvec_meta().version_to_file()) {
+        if (file.shared()) {
+            files.emplace(file.name());
+        }
+    }
+    for (const auto& [_, dcg] : metadata.dcg_meta().dcgs()) {
+        for (int i = 0; i < dcg.column_files_size(); ++i) {
+            if (i < dcg.shared_files_size() && dcg.shared_files(i)) {
+                files.emplace(dcg.column_files(i));
+            }
+        }
+    }
+    for (const auto& [_, idg] : metadata.idg_meta().idgs()) {
+        for (const auto& entry : idg.entries()) {
+            if (entry.shared_file() && entry.has_index_file() && !entry.index_file().empty()) {
+                files.emplace(entry.index_file());
+            }
+        }
+    }
+    return files;
+}
+
+StatusOr<std::optional<size_t>> get_existing_file_size(const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+    auto size = fs->get_file_size(path);
+    std::optional<size_t> existing_size;
+    if (size.ok()) {
+        existing_size = static_cast<size_t>(*size);
+    } else if (!size.status().is_not_found()) {
+        return size.status();
+    }
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::get_existing_file_size", &existing_size);
+    return existing_size;
+}
+
+void remove_cleanup_file(std::vector<std::string>* files_to_delete, const std::string& path, std::mutex* mutex) {
+    if (mutex != nullptr) {
+        std::lock_guard lock(*mutex);
+        std::erase(*files_to_delete, path);
+    } else {
+        std::erase(*files_to_delete, path);
+    }
+}
 
 StatusOr<TabletMetadataPtr> load_source_standalone_tablet_metadata(const std::string& metadata_path,
                                                                    const std::shared_ptr<FileSystem>& source_fs) {
@@ -365,6 +429,12 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                      convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
                                                        target_tablet_id, txn_id, data_version, src_data_dir,
                                                        segment_name_to_size_map, file_locations, filename_map));
+    std::unordered_set<std::string> shared_file_names;
+    if (src_tablet_meta->has_range() && target_tablet_meta->has_range()) {
+        // Aligned range children retain the source shared-file flags and resolve to the same
+        // partition data path, so their per-tablet replication tasks may target the same object.
+        shared_file_names = collect_shared_file_names(*src_tablet_meta);
+    }
     // calc column unique id to adapt for fast schema change
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
@@ -436,6 +506,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
         bool is_seg = is_segment(src_file_name);
         bool is_bundled_segment = is_seg && bundled_segment_names.contains(src_file_name);
+        bool is_shared_file = shared_file_names.contains(src_file_name);
         // Segments and .del files go through download_lake_file_with_converter + file_converters,
         // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
         bool use_converter = is_seg || is_del(src_file_name);
@@ -446,7 +517,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
 
         tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
-                            is_seg, is_bundled_segment, use_converter, encryption_info]() -> Status {
+                            is_seg, is_bundled_segment, is_shared_file, use_converter, encryption_info]() -> Status {
             // Fast cancel: check right before each file copy starts.
             if (txn_id < get_master_info().min_active_txn_id) {
                 LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
@@ -461,14 +532,41 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                       << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
             size_t final_file_size = 0;
+            bool copy_needed = true;
             auto start_ts = butil::gettimeofday_us();
-            if (use_converter) {
+            if (is_shared_file) {
+                // Reuse a sibling's completed copy. Remote shared-data filesystems expose the
+                // final path after close/rename, rather than exposing an in-progress multipart or
+                // temporary file at this path.
+                ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
+                if (existing_size.has_value()) {
+                    final_file_size = *existing_size;
+                    copy_needed = false;
+                    LOG(INFO) << "Skip copying an existing shared range file, src: " << src_file_location
+                              << ", target: " << target_file_location << ", txn_id: " << txn_id
+                              << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size;
+                }
+            }
+            if (copy_needed && use_converter) {
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
-                    RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
+                    auto copy_status = ReplicationUtils::download_lake_file_with_converter(
                             src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
-                            &final_file_size));
+                            &final_file_size);
+                    if (is_shared_file) {
+                        remove_cleanup_file(&files_to_delete, target_file_location, shared_mutex);
+                        if (copy_status.is_already_exist()) {
+                            ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
+                            if (!existing_size.has_value()) {
+                                return Status::Corruption("Shared range file disappeared after concurrent copy: " +
+                                                          target_file_location);
+                            }
+                            final_file_size = *existing_size;
+                            copy_status = Status::OK();
+                        }
+                    }
+                    RETURN_IF_ERROR(copy_status);
                 }
                 if (is_seg && !is_bundled_segment && final_file_size > 0 && final_file_size != src_file_size) {
                     if (shared_mutex != nullptr) {
@@ -481,7 +579,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                               << ", target_file: " << target_file_name << ", original size: " << src_file_size
                               << ", final size: " << final_file_size;
                 }
-            } else {
+            } else if (copy_needed) {
                 WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
                 if (config::enable_transparent_data_encryption) {
                     opts.encryption_info = encryption_info;
@@ -490,15 +588,26 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
-                    ASSIGN_OR_RETURN(final_file_size,
-                                     copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
-                                                                      target_file_location, opts, max_retry));
+                    auto copy_result = copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                        target_file_location, opts, max_retry);
+                    if (!copy_result.ok() && is_shared_file && copy_result.status().is_already_exist()) {
+                        ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
+                        if (!existing_size.has_value()) {
+                            return Status::Corruption("Shared range file disappeared after concurrent copy: " +
+                                                      target_file_location);
+                        }
+                        final_file_size = *existing_size;
+                    } else {
+                        ASSIGN_OR_RETURN(final_file_size, std::move(copy_result));
+                    }
                 }
-                if (shared_mutex != nullptr) {
-                    std::lock_guard lock(*shared_mutex);
-                    files_to_delete.push_back(target_file_location);
-                } else {
-                    files_to_delete.push_back(target_file_location);
+                if (!is_shared_file) {
+                    if (shared_mutex != nullptr) {
+                        std::lock_guard lock(*shared_mutex);
+                        files_to_delete.push_back(target_file_location);
+                    } else {
+                        files_to_delete.push_back(target_file_location);
+                    }
                 }
             }
 

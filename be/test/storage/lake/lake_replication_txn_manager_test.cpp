@@ -2442,6 +2442,94 @@ TEST_F(LakeReplicationRemoteStorageTest, copies_complete_bundle_object_through_f
     EXPECT_EQ(physical_contents, copied_contents);
 }
 
+TEST_F(LakeReplicationRemoteStorageTest, range_siblings_reuse_shared_file_without_failed_cleanup) {
+    const std::string contents = "shared-range-segment";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(contents);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    const std::string segment_name = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000073.dat";
+    auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    source->set_version(2);
+    source->mutable_range();
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(segment_name);
+    segment->set_size(contents.size());
+    segment->set_shared(true);
+    source->set_next_rowset_id(2);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = source;
+                                          });
+    bool hide_existing_file = false;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::get_existing_file_size", [&](void* arg) {
+        if (hide_existing_file) {
+            static_cast<std::optional<size_t>*>(arg)->reset();
+        }
+    });
+
+    _target_tablet_metadata->mutable_range();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto first_request = build_request(false /* with_full_path */);
+    first_request.__set_virtual_tablet_id(_virtual_tablet_id + 73);
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr));
+
+    ASSIGN_OR_ABORT(auto first_txn_log, _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id));
+    const auto& target_segment = first_txn_log->op_replication().tablet_metadata().rowsets(0).segment_metas(0);
+    const std::string target_path = _tablet_mgr->segment_location(_target_tablet_id, target_segment.filename());
+    ASSERT_TRUE(fs::path_exist(target_path));
+
+    const int64_t sibling_tablet_id = _target_tablet_id + 1;
+    auto sibling = generate_simple_tablet_metadata(sibling_tablet_id);
+    sibling->mutable_range();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*sibling));
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto* fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("put_txn_log_fail");
+    ASSERT_NE(nullptr, fp);
+    fp->setMode(trigger_mode);
+
+    auto sibling_request = first_request;
+    sibling_request.__set_tablet_id(sibling_tablet_id);
+    // Model the concurrent interleaving where this sibling checked the target before the first
+    // copy became visible. It must copy independently but must not acquire cleanup ownership.
+    hide_existing_file = true;
+    Status sibling_status = _replication_txn_manager->replicate_lake_remote_storage(sibling_request, nullptr);
+    hide_existing_file = false;
+
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    ASSERT_TRUE(sibling_status.is_internal_error()) << sibling_status;
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    EXPECT_TRUE(fs::path_exist(target_path));
+    EXPECT_EQ(2, mock_fs->open_count());
+
+    const int64_t third_tablet_id = sibling_tablet_id + 1;
+    auto third = generate_simple_tablet_metadata(third_tablet_id);
+    third->mutable_range();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*third));
+    auto third_request = first_request;
+    third_request.__set_tablet_id(third_tablet_id);
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(third_request, nullptr));
+    EXPECT_EQ(2, mock_fs->open_count());
+
+    (void)update_master_info(original_master_info);
+}
+
 TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion__encrypted_slices_before_copy) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
