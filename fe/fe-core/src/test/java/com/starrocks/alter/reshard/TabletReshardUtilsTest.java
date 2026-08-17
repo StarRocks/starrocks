@@ -273,23 +273,6 @@ public class TabletReshardUtilsTest {
      * tabletCount &lt; ceiling and auto-merge on tabletCount &gt; floor, so the ceiling must never
      * exceed the floor.
      */
-    @Test
-    public void earlySplitCeiling_neverExceedsParallelismFloor() {
-        int[] nodeCounts = {0, 1, 2, 3, 8, 16, 1024, 4096, Integer.MAX_VALUE};
-        int[] maxSplits = {0, 1, 2, 8, 1024, Integer.MAX_VALUE};
-        for (int cn : nodeCounts) {
-            for (int maxSplit : maxSplits) {
-                int ceiling = TabletReshardUtils.earlySplitCeiling(cn, maxSplit);
-                int floor = TabletReshardUtils.parallelismFloor(cn, maxSplit);
-                assertTrue(ceiling <= floor,
-                        "ceiling " + ceiling + " > floor " + floor + " for cn=" + cn + " maxSplit=" + maxSplit);
-            }
-        }
-        assertEquals(8, TabletReshardUtils.earlySplitCeiling(8, 1024));
-        assertEquals(8, TabletReshardUtils.earlySplitCeiling(16, 8));   // capped by max_split_count
-        assertEquals(1, TabletReshardUtils.earlySplitCeiling(1, 1024)); // a single node never splits
-        assertEquals(1, TabletReshardUtils.earlySplitCeiling(8, 1));    // splitting disabled
-    }
 
     @Test
     public void computeNodeCount_countsBackendsAndComputeNodesInTheWorkerGroup() {

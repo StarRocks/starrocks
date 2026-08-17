@@ -120,20 +120,6 @@ public class TabletReshardUtils {
         return target > 0 && calcSplitCount(dataSize, target) > 1;
     }
 
-    /**
-     * Highest tablet count the early rule may drive one index to.
-     *
-     * <p>MUST stay at or below the auto-merge parallelism floor. Merge acts on
-     * {@code tabletCount > floor} and early split on {@code tabletCount < ceiling}, so
-     * {@code ceiling <= floor} keeps the two regions disjoint and makes split/merge oscillation
-     * impossible for a given node-count sample. Deriving it from {@link #parallelismFloor} keeps them
-     * in lockstep even when {@code maxSplitCount < computeNodeCount}, where a plain node-count ceiling
-     * would overlap the merge region. The outer min() also keeps a single-node warehouse (floor 2,
-     * count 1) from splitting at all.
-     */
-    public static int earlySplitCeiling(int computeNodeCount, int maxSplitCount) {
-        return Math.min(computeNodeCount, parallelismFloor(computeNodeCount, maxSplitCount));
-    }
 
     /*
      * Return value > 1 if need split
@@ -204,7 +190,7 @@ public class TabletReshardUtils {
      * (TabletPreSplitCoordinator#selectTabletCount requires maxSplitCount >= 2), so no floor applies.
      *
      * <p>Public because TabletStatMgr derives the auto-merge floor from a node count it resolves once
-     * per scan, and {@link #earlySplitCeiling} must stay in lockstep with it.
+     * per scan, and the early-split bound is derived from the same value.
      */
     @VisibleForTesting
     public static int parallelismFloor(int computeNodeCount, int maxSplitCount) {

@@ -662,10 +662,8 @@ public class TabletStatMgrTest {
     }
 
     /** Runs one tablet-stat cycle over such a table and returns the early signal it emitted. */
-    /**
-     * Runs one scan with the leader flag under test and reports whether the reshard work ran at all:
-     * a resolution count of 0 means the eligibility gate short-circuited before the node-count probe.
-     */
+    // Runs one scan with the leader flag under test and reports whether the reshard work ran at all:
+    // a resolution count of 0 means the eligibility gate short-circuited before the node-count probe.
     private int runScanAndCountNodeCountResolutions(boolean leader) {
         NODE_COUNT_RESOLUTIONS.set(0);
         STUBBED_NODE_COUNT.set(4);

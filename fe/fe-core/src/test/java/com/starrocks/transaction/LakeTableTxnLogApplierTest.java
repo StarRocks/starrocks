@@ -16,386 +16,27 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
-import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
-    private static final long GIB = 1024L * 1024L * 1024L;
-    // Pinned rather than inherited: every early-split assertion below is sensitive to the gap between
-    // the two split thresholds these produce.
-    private static final long TARGET_SIZE = 10 * GIB;
-    private static final long MIN_SPLIT_SIZE = 2 * GIB;
-    // A split fires at ceil(1.5 x its target size); both pinned sizes are even, so 3/2 is exact.
-    private static final long EARLY_SPLIT_THRESHOLD = MIN_SPLIT_SIZE * 3 / 2;
-    // Tablet ids of the second index used by the per-index attribution test; disjoint from the helper's.
-    private static final long WIDE_INDEX_FIRST_TABLET_ID = 9200L;
-    private static final int WIDE_INDEX_TABLET_COUNT = 4;
-
-    private final List<ComputeNode> registeredNodes = new ArrayList<>();
-    private long savedTargetSize;
-    private long savedMinSplitSize;
-    private int savedMaxSplitCount;
-    private boolean savedEarlySplitEnabled;
-
-    @BeforeEach
-    public void pinReshardConfig() {
-        savedTargetSize = Config.tablet_reshard_target_size;
-        savedMinSplitSize = Config.tablet_reshard_min_split_size;
-        savedMaxSplitCount = Config.tablet_reshard_max_split_count;
-        savedEarlySplitEnabled = Config.tablet_reshard_enable_early_split;
-        Config.tablet_reshard_target_size = TARGET_SIZE;
-        Config.tablet_reshard_min_split_size = MIN_SPLIT_SIZE;
-        Config.tablet_reshard_max_split_count = 1024;
-        Config.tablet_reshard_enable_early_split = true;
-    }
-
-    @AfterEach
-    public void restoreGlobalState() {
-        Config.tablet_reshard_target_size = savedTargetSize;
-        Config.tablet_reshard_min_split_size = savedMinSplitSize;
-        Config.tablet_reshard_max_split_count = savedMaxSplitCount;
-        Config.tablet_reshard_enable_early_split = savedEarlySplitEnabled;
-        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        registeredNodes.forEach(clusterInfo::dropComputeNode);
-        registeredNodes.clear();
-    }
-
-    /**
-     * Registers compute nodes so the publish path's O(1) fast-path bound (total backends + total
-     * compute nodes) rises above the fixture index's two tablets, and the producer therefore has to
-     * resolve that index's real ceiling. Only the nodes created here are removed afterwards, so any
-     * pre-existing cluster membership is left untouched.
-     */
-    private void registerComputeNodes(int count) {
-        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        for (int i = 0; i < count; i++) {
-            ComputeNode node = new ComputeNode(10_000L + i, "fastpath-h" + i, 9050);
-            node.setWorkerGroupId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-            clusterInfo.addComputeNode(node);
-            registeredNodes.add(node);
-        }
-    }
-
-    private record PublishFixture(LakeTableTxnLogApplier applier, TransactionState state,
-                                  TableCommitInfo tableCommitInfo, Database db, LakeTable table) {
-    }
-
-    /**
-     * A leader-side publish of one range-distributed lake table whose single index holds two tablets,
-     * exactly one of which reports a stat of {@code reportedDataSize}.
-     */
-    private PublishFixture newPublishFixture(long reportedDataSize) {
-        MaterializedIndex index = new MaterializedIndex(indexId);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId[0], tabletMeta);
-        index.addTablet(new LakeTablet(tabletId[0]), tabletMeta);
-        TabletMeta noStatMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId[1], noStatMeta);
-        index.addTablet(new LakeTablet(tabletId[1]), noStatMeta);
-
-        LakeTable table = buildLakeTableWithIndex(index);
-        // Range distribution is required for the publish-driven reshard path to evaluate the table.
-        table.setDefaultDistributionInfo(new RangeDistributionInfo());
-        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
-        TransactionState state = newTransactionState();
-        state.setTransactionStatus(TransactionStatus.COMMITTED);
-
-        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
-        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
-        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
-        applier.applyCommitLog(state, tableCommitInfo);
-
-        state.setTransactionStatus(TransactionStatus.VISIBLE);
-        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
-        TabletStatPB stat = new TabletStatPB();
-        stat.numRows = 5L;
-        stat.dataSize = reportedDataSize;
-        partitionCommitInfo.getTabletStats().put(tabletId[0], stat);
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public boolean isLeader() {
-                return true;
-            }
-
-            @Mock
-            public static boolean isCheckpointThread() {
-                return false;
-            }
-        };
-        return new PublishFixture(applier, state, tableCommitInfo, new Database(dbId, "test_db"), table);
-    }
-
-    @Test
-    public void skipsNodeCountResolutionBelowTheEarlyThreshold() {
-        boolean[] resolved = {false};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                resolved[0] = true;
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        registerComputeNodes(16);
-        PublishFixture f = newPublishFixture(EARLY_SPLIT_THRESHOLD - 1);
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-        Assertions.assertFalse(resolved[0], "a publish with no early-split-sized tablet must pay nothing");
-    }
-
-    @Test
-    public void aTableThatCannotConsumeTheEarlySignalPaysNothingForIt() {
-        boolean[] resolved = {false};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                resolved[0] = true;
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        registerComputeNodes(16);
-        PublishFixture f = newPublishFixture(TARGET_SIZE * 2);
-        // Only a range-distributed table can consume the early signal, and hash distribution is the
-        // common case. Resolving a node count for such a table would be an O(backends + compute nodes)
-        // scan under the table write lock, on every publish, whose result is always discarded.
-        f.table().setDefaultDistributionInfo(new HashDistributionInfo());
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-        Assertions.assertFalse(resolved[0],
-                "a table that cannot consume the early signal must not resolve its node count");
-    }
-
-    @Test
-    public void resolvingTheNodeCountNeverReachesTheProbedAccessor() {
-        // applyVisibleLog runs under the table WRITE lock. The probed accessor's availability check
-        // reaches StarMgr (isResourceAvailable -> getAliveComputeNodes), so a network round trip here
-        // would stall every writer on the table. Nothing else asserts this: swapping the accessor in
-        // production happens to redden another test today, but only incidentally, because the probe
-        // errors in this harness and the catch zeroes the signal.
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResource(long tableId) {
-                Assertions.fail("applyVisibleLog must not use the probed accessor under the table write lock");
-                return WarehouseComputeResource.DEFAULT;
-            }
-
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        registerComputeNodes(16);
-        PublishFixture f = newPublishFixture(EARLY_SPLIT_THRESHOLD);
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-    }
-
-    @Test
-    public void fastPathSkipsResolutionWhenNoIndexCanBeUnderProvisioned() {
-        boolean[] resolved = {false};
-        long[] captured = {-1L};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                resolved[0] = true;
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-                captured[0] = maxUnderProvisionedTabletSize;
-            }
-        };
-        // An isolated two-node view, so the assertion does not depend on ambient cluster membership:
-        // the cluster-wide upper bound is exactly the fixture index's tablet count, hence no index can
-        // be under-provisioned and the fast path must skip the resolution outright.
-        SystemInfoService isolatedClusterInfo = new SystemInfoService();
-        isolatedClusterInfo.addComputeNode(new ComputeNode(20_000L, "isolated-h0", 9050));
-        isolatedClusterInfo.addComputeNode(new ComputeNode(20_001L, "isolated-h1", 9050));
-        new MockUp<NodeMgr>() {
-            @Mock
-            public SystemInfoService getClusterInfo() {
-                return isolatedClusterInfo;
-            }
-        };
-        PublishFixture f = newPublishFixture(TARGET_SIZE * 2);
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-        Assertions.assertFalse(resolved[0],
-                "no index can be under-provisioned, so the fast path must skip the resolution");
-        Assertions.assertEquals(0L, captured[0], "the skipped fast path must emit no early signal");
-    }
-
-    @Test
-    public void anIndexBelowTheFastPathBoundButAtItsRealCeilingEmitsNothing() {
-        AtomicInteger resolutions = new AtomicInteger(0);
-        long[] captured = {-1L};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                resolutions.incrementAndGet();
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int computeNodeCount(ComputeResource resource) {
-                return 2;      // the worker group's real ceiling is 2; the fixture's index has 2 tablets
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-                captured[0] = maxUnderProvisionedTabletSize;
-            }
-        };
-        registerComputeNodes(16);
-        PublishFixture f = newPublishFixture(TARGET_SIZE * 2);
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-        // The cluster-wide bound is only an upper bound on the worker group's ceiling: an index below
-        // the bound still has to be measured against the ceiling before it counts as under-provisioned.
-        Assertions.assertEquals(1, resolutions.get(),
-                "an index below the cluster-wide bound must have its real ceiling resolved");
-        Assertions.assertEquals(0L, captured[0],
-                "an index already at its worker group's ceiling is not under-provisioned");
-    }
-
-    @Test
-    public void aResolutionFailureSuppressesOnlyTheEarlySignal() {
-        long[] captured = {-1L};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                throw new RuntimeException("boom");
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-                captured[0] = maxUnderProvisionedTabletSize;
-            }
-        };
-        registerComputeNodes(16);
-        PublishFixture f = newPublishFixture(TARGET_SIZE * 2);
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());   // must NOT throw
-        Assertions.assertEquals(0L, captured[0], "a failed resolution must drop the hint, not the publish");
-    }
-
-    @Test
-    public void emitsTheEarlySignalForAnUnderProvisionedIndex() {
-        long[] captured = {-1L};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int computeNodeCount(ComputeResource resource) {
-                return 8;      // ceiling 8; the fixture's index has 2 tablets
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-                captured[0] = maxUnderProvisionedTabletSize;
-            }
-        };
-        registerComputeNodes(16);
-        // 4 GiB is the band the early rule exists for: at or above ceil(1.5 x tablet_reshard_min_split_size)
-        // = 3 GiB, and far below ceil(1.5 x tablet_reshard_target_size) = 15 GiB, where the size-based rule
-        // would already split. A producer gated on the size-based threshold emits nothing here.
-        long earlyOnlySize = EARLY_SPLIT_THRESHOLD + GIB;
-        PublishFixture f = newPublishFixture(earlyOnlySize);
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-        Assertions.assertEquals(earlyOnlySize, captured[0],
-                "an index below its ceiling must emit its largest tablet as the early signal");
-    }
-
-    @Test
-    public void attributesTheEarlySignalToTheIndexThatIsActuallyNarrow() {
-        long[] captured = {-1L};
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
-                return WarehouseComputeResource.DEFAULT;
-            }
-        };
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int computeNodeCount(ComputeResource resource) {
-                return WIDE_INDEX_TABLET_COUNT;   // ceiling 4: the wide index is at it, the base index is not
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-                captured[0] = maxUnderProvisionedTabletSize;
-            }
-        };
-        registerComputeNodes(16);
-        long narrowIndexSize = EARLY_SPLIT_THRESHOLD + GIB;
-        long wideIndexSize = narrowIndexSize * 2;   // the partition's largest, but in an index at its ceiling
-        // The fixture's base index keeps its two tablets and reports the SMALLER size.
-        PublishFixture f = newPublishFixture(narrowIndexSize);
-
-        // A second visible index, already at the ceiling, holding the LARGER tablet. Without per-index
-        // attribution the emitted signal is the partition-wide maximum, which is this index's tablet --
-        // a tablet the early rule must not act on, because splitting it would push an index that already
-        // matches the cluster's parallelism past the ceiling.
-        MaterializedIndex wideIndex = new MaterializedIndex(indexId + 500);
-        for (int i = 0; i < WIDE_INDEX_TABLET_COUNT; i++) {
-            long id = WIDE_INDEX_FIRST_TABLET_ID + i;
-            TabletMeta meta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
-            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(id, meta);
-            wideIndex.addTablet(new LakeTablet(id), meta);
-        }
-        f.table().getPartition(partitionId).getDefaultPhysicalPartition().createRollupIndex(wideIndex);
-        TabletStatPB wideStat = new TabletStatPB();
-        wideStat.numRows = 5L;
-        wideStat.dataSize = wideIndexSize;
-        f.tableCommitInfo().getIdToPartitionCommitInfo().get(physicalPartitionId)
-                .getTabletStats().put(WIDE_INDEX_FIRST_TABLET_ID, wideStat);
-
-        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
-        Assertions.assertEquals(narrowIndexSize, captured[0],
-                "the early signal must be the largest tablet of an index below its ceiling, "
-                        + "not the largest tablet in the partition");
-    }
-
     @Test
     public void testCommitAndApply() {
         LakeTable table = buildLakeTable();
@@ -503,8 +144,7 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         };
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
                 addCandidateCalls.incrementAndGet();
             }
         };
@@ -563,8 +203,7 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         };
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
                 addCandidateCalls.incrementAndGet();
             }
         };

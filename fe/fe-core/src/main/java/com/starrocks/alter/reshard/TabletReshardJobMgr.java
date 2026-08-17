@@ -97,6 +97,16 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // split/merge actionability decision lives here, so non-actionable signals are dropped and never
     // queued.
     public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+            long minAdjacentTabletPairSize) {
+        addReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize, 0L);
+    }
+
+    /**
+     * As above, plus the largest tablet of an index that still holds fewer tablets than the warehouse
+     * can drive in parallel. Only the periodic scan knows that, because only it walks an index's tablet
+     * list; every other producer passes 0 through the overload above.
+     */
+    public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
             long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
         if (!isLeaderAdmissionOpen()) {
             return;
@@ -145,19 +155,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
 
     public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
             throws StarRocksException {
-        // User-facing DDL entry: no caller-side sample, so resolve the compute-node count here.
-        return createTabletReshardJob(db, table, splitTabletClause,
-                TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
-    }
-
-    /**
-     * Automatic entry. {@code computeNodeCount} is the trigger's single sample, so the plan this job
-     * executes and the no-progress fingerprint the trigger recorded describe the same layout.
-     */
-    public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-            SplitTabletClause splitTabletClause, int computeNodeCount) throws StarRocksException {
-        TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause, computeNodeCount)
-                .createTabletReshardJob();
+        TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
         return job;
     }
@@ -175,24 +173,18 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // 64-bit fingerprint of the requested split plan: the raw reshard-config knobs plus the computed
     // child count of the tablet each rule would act on. Folding the raw configs guarantees any admin
     // config change re-arms the size-split latch even when calcSplitCount is capped at max_split_count;
-    // the computed counts also capture a size-band crossing. The early inputs are folded for the same
-    // reasons the normal ones are, plus two of their own: the ceiling moves with the warehouse size, so
-    // without it a resize would change the requested child count with nothing else observable; and
-    // max_parallel_tablets decides whether an index's early contribution is admitted at all, so an
-    // operator raising it to release deferred work must re-arm the latch. murmur3 (matching
-    // ColocateChecker) avoids the 32-bit Objects.hash collision that could hide a config change.
+    // the computed counts also capture a size-band crossing. A warehouse resize needs no term of its
+    // own: the scan decides whether an index is under-provisioned against the current node count, so a
+    // resize shows up as the early signal appearing or vanishing. murmur3 (matching ColocateChecker)
+    // avoids the 32-bit Objects.hash collision that could hide a config change.
     @VisibleForTesting
-    static long splitPlanSignature(long maxTabletSize, long maxUnderProvisionedTabletSize,
-            int computeNodeCount) {
+    static long splitPlanSignature(long maxTabletSize, long maxUnderProvisionedTabletSize) {
         return Hashing.murmur3_128().newHasher()
                 .putLong(Config.tablet_reshard_target_size)
                 .putInt(Config.tablet_reshard_max_split_count)
                 .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
                 .putLong(Config.tablet_reshard_min_split_size)
                 .putBoolean(Config.tablet_reshard_enable_early_split)
-                .putLong(Config.tablet_reshard_max_parallel_tablets)
-                .putInt(TabletReshardUtils.earlySplitCeiling(computeNodeCount,
-                        Config.tablet_reshard_max_split_count))
                 .putInt(TabletReshardUtils.calcSplitCount(maxUnderProvisionedTabletSize,
                         Math.max(1L, TabletReshardUtils.earlySplitTargetSize())))
                 .hash().asLong();
@@ -220,21 +212,13 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             long tableId = table.getId();
             boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
             boolean earlySignal = TabletReshardUtils.needEarlySplit(maxUnderProvisionedTabletSize);
-            // The smallest useful early contribution is a 2-way split, and early work is skipped while
-            // another reshard job runs, so skip before paying for a plan that cannot produce anything.
-            boolean earlyCapacityPossible = getTotalParallelTablets() == 0
-                    && Config.tablet_reshard_max_parallel_tablets >= 2;
-            if (normalSignal || (earlySignal && earlyCapacityPossible)) {
-                // Resolve the node count exactly once and use it for BOTH the suppression fingerprint
-                // and the job, so the fingerprint always describes the plan that ran.
-                int computeNodeCount = TabletReshardUtils.safeComputeNodeCountForTable(tableId);
+            if (normalSignal || earlySignal) {
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
-                        splitPlanSignature(maxTabletSize, maxUnderProvisionedTabletSize, computeNodeCount));
+                        splitPlanSignature(maxTabletSize, maxUnderProvisionedTabletSize));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
                     try {
-                        TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause(),
-                                computeNodeCount);
+                        TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause());
                         sizeSplitLatch.recordFired(tableId, signature, job.getJobId(),
                                 decision.nextAbortRetries());
                         LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}, "

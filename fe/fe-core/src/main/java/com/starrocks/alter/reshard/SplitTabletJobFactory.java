@@ -64,83 +64,36 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
-    private final int computeNodeCount;
-
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
-        // User-facing DDL entry: no caller-side count and no suppression latch, so resolve here.
-        this(db, table, splitTabletClause, TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
-    }
-
-    /**
-     * Automatic entry. The caller supplies the compute-node count so the trigger's no-progress
-     * fingerprint and the plan this factory executes describe the same layout; resolving it again here
-     * would let a warehouse resize between the two suppress a plan that has since become feasible.
-     * {@code 0} disables the early rule.
-     */
-    public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause,
-            int computeNodeCount) {
         this.db = db;
         this.table = table;
         this.splitTabletClause = splitTabletClause;
-        this.computeNodeCount = computeNodeCount;
     }
 
     /**
-     * Early-split policy captured ONCE per job, so a mutable-config change mid-plan cannot leave one
-     * job's indexes planned under different policies.
-     */
-    record EarlySplitPolicy(long earlyTarget, int computeNodeCount, int maxSplitCount, boolean enabled) {
-        int ceiling() {
-            return computeNodeCount > 0
-                    ? TabletReshardUtils.earlySplitCeiling(computeNodeCount, maxSplitCount) : 0;
-        }
-
-        boolean appliesTo(int tabletCount) {
-            return enabled && tabletCount < ceiling();
-        }
-
-        static EarlySplitPolicy disabled() {
-            return new EarlySplitPolicy(0L, 0, Config.tablet_reshard_max_split_count, false);
-        }
-    }
-
-    @VisibleForTesting
-    static EarlySplitPolicy capturePolicy(SplitTabletClause clause, int computeNodeCount) {
-        long earlyTarget = TabletReshardUtils.earlySplitTargetSize();
-        boolean explicitTargetSize = clause.getProperties() != null
-                && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
-        // earlyTarget > 0 is a guard, not a comment: calcSplitCount reads a non-positive target as a
-        // forced split count, and tablet_reshard_min_split_size has no positivity validator.
-        boolean enabled = Config.tablet_reshard_enable_early_split
-                && earlyTarget > 0
-                && !explicitTargetSize
-                && computeNodeCount > 0;
-        return new EarlySplitPolicy(earlyTarget, computeNodeCount,
-                Config.tablet_reshard_max_split_count, enabled);
-    }
-
-    /**
-     * Pure per-index split plan: {@code oldTabletId -> requested child count}, allocating NO tablet id.
-     * Callers measure the result against the job budget and only then materialize it.
+     * Split plan for one index: {@code oldTabletId -> requested child count}, allocating NO tablet id.
      *
-     * <p>The early rule fires only where the size rule declines to split
-     * ({@code k = kNormal > 1 ? kNormal : kEarly}). That ordering is load bearing: a BE split is
-     * all-or-nothing — when the segment key distribution cannot produce exactly the requested number of
-     * boundaries it publishes an identical tablet instead — so asking for more children than today's
-     * rule would can turn a split that succeeds into one that does nothing.
+     * <p>{@code earlyTarget} is the smaller target an under-provisioned index may aim at, or 0 to
+     * disable the rule. {@code bound} is the tablet count the early rule may not carry the index past;
+     * it is the auto-merge parallelism floor, so an index the early rule widened is never one that
+     * merge would immediately narrow again.
+     *
+     * <p>The early rule fires only where the size rule declines to split. That ordering is load
+     * bearing: a BE split is all-or-nothing — when the segment key distribution cannot produce exactly
+     * the requested number of boundaries it publishes an identical tablet instead — so asking for more
+     * children than today's rule would can turn a split that succeeds into one that does nothing.
      */
     @VisibleForTesting
     static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long clauseTargetSize,
-            EarlySplitPolicy policy) {
+            long earlyTarget, int bound) {
         int tabletCount = index.getTablets().size();
-        boolean early = policy.appliesTo(tabletCount);
-        int headroom = early ? Math.max(0, policy.ceiling() - tabletCount) : 0;
+        boolean early = earlyTarget > 0 && tabletCount < bound;
+        int headroom = early ? bound - tabletCount : 0;
 
-        // Snapshot id+size together, unconditionally. LakeTablet.dataSize is volatile and updated
-        // lock-free by the background tablet-stat collector, so re-reading it (once to sort, again to
-        // size the split) risks a value that changes between the two reads, and sorting on a live
-        // reference risks ArrayList.sort seeing an inconsistent comparator mid-sort. The snapshot also
-        // keeps "never sort the live list" true unconditionally, not only while the early rule fires.
+        // Snapshot id+size together. LakeTablet.dataSize is volatile and updated lock-free by the
+        // background stat collector, so re-reading it (once to sort, again to size the split) risks a
+        // value that changes between the two reads, and sorting on the live list risks ArrayList.sort
+        // seeing an inconsistent comparator mid-sort.
         record SizedTablet(long id, long dataSize) {
         }
         List<SizedTablet> tablets = new ArrayList<>(index.getTablets().size());
@@ -148,20 +101,18 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             tablets.add(new SizedTablet(tablet.getId(), tablet.getDataSize(true)));
         }
         if (early) {
-            // getTablets() returns the live range-ordered list that merge grouping and index
-            // reconstruction depend on — sort the snapshot, stably, so equal sizes keep range order.
+            // Spend the headroom on the biggest tablets first. Sort the snapshot, stably, so equal
+            // sizes keep the range order that merge grouping and index reconstruction depend on.
             tablets.sort(Comparator.comparingLong(SizedTablet::dataSize).reversed());
         }
 
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
         for (SizedTablet tablet : tablets) {
-            int kNormal = TabletReshardUtils.calcSplitCount(tablet.dataSize(), clauseTargetSize);
-            int kEarly = 1;
-            if (early && headroom > 0) {
-                kEarly = Math.min(TabletReshardUtils.calcSplitCount(tablet.dataSize(), policy.earlyTarget()),
+            int k = TabletReshardUtils.calcSplitCount(tablet.dataSize(), clauseTargetSize);
+            if (k <= 1 && early && headroom > 0) {
+                k = Math.min(TabletReshardUtils.calcSplitCount(tablet.dataSize(), earlyTarget),
                         headroom + 1);
             }
-            int k = kNormal > 1 ? kNormal : kEarly;
             if (k <= 1) {
                 continue;
             }
@@ -171,22 +122,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             }
         }
         return splitCounts;
-    }
-
-    /**
-     * Tablets the replacement MaterializedIndex will contain for this plan. Every sibling is re-created,
-     * not only the split ones, so this — not getParallelTablets(), which counts split children only —
-     * is what bounds FE heap and id churn for one job.
-     */
-    private static long replacementTabletCount(MaterializedIndex index, Map<Long, Integer> splitCounts) {
-        if (splitCounts.isEmpty()) {
-            return 0L;
-        }
-        long total = index.getTablets().size();
-        for (int k : splitCounts.values()) {
-            total += k - 1;
-        }
-        return total;
     }
 
     /*
@@ -544,82 +479,33 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 }
 
                 long clauseTargetSize = splitTabletClause.getTabletReshardTargetSize();
-                // Early work is admitted only while no other reshard job is running. That observation is
-                // a best-effort throttle, not an exclusion — check/init/insert in the manager are not
-                // atomic and five paths admit jobs — but it keeps early expansion off a busy cluster.
-                EarlySplitPolicy policy =
-                        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTotalParallelTablets() == 0
-                                ? capturePolicy(splitTabletClause, computeNodeCount)
-                                : EarlySplitPolicy.disabled();
+                // An index narrower than this cannot be narrowed further by auto-merge, which acts only
+                // above the same floor -- so widening up to it can never start a split/merge tug of war.
+                // min() with the node count keeps a single-node warehouse, whose floor is 2, from
+                // splitting for a parallelism it does not have.
+                int computeNodeCount = TabletReshardUtils.safeComputeNodeCountForTable(table.getId());
+                int earlyBound = computeNodeCount == 0 ? 0
+                        : Math.min(computeNodeCount, TabletReshardUtils.parallelismFloor(
+                                computeNodeCount, Config.tablet_reshard_max_split_count));
+                // An explicit target size in the statement means the caller asked for exactly that;
+                // the early rule stays out of it.
+                long earlyTarget = Config.tablet_reshard_enable_early_split
+                        && (splitTabletClause.getProperties() == null
+                            || !splitTabletClause.getProperties()
+                                    .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE))
+                        ? TabletReshardUtils.earlySplitTargetSize() : 0L;
 
-                // Pass 1: every index's baseline (today's plan) and its early plan. No id is allocated.
-                // Held in a list rather than keyed by MaterializedIndex: that class hashes on its tablet
-                // map and compares mutable row counts, so as a key it works only because tablet hashes
-                // are id-based and both loops see the same object references. A list needs neither
-                // accident, and costs nothing here.
-                record IndexPlans(long physicalPartitionId, MaterializedIndex index,
-                                  Map<Long, Integer> baseline, Map<Long, Integer> withEarly) {
-                }
-                List<IndexPlans> plans = new ArrayList<>();
-                long baselineTopology = 0L;
+                // Plan and materialize per index. This is the only place a tablet id is minted.
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
+                    Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex :
                             physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         // When not specifying which tablets to split,
                         // tablet_reshard_target_size must be greater than 0
                         Preconditions.checkState(clauseTargetSize > 0,
                                 "Invalid tablet_reshard_target_size: " + clauseTargetSize);
-                        Map<Long, Integer> baseline =
-                                planIndexSplits(oldIndex, clauseTargetSize, EarlySplitPolicy.disabled());
-                        plans.add(new IndexPlans(physicalPartition.getId(), oldIndex, baseline,
-                                planIndexSplits(oldIndex, clauseTargetSize, policy)));
-                        baselineTopology += replacementTabletCount(oldIndex, baseline);
-                    }
-                }
-
-                // Pass 2: spend only what the complete baseline leaves. The baseline itself is never
-                // trimmed — a purely size-driven plan may exceed the cap, exactly as today.
-                long earlyBudget = Config.tablet_reshard_max_parallel_tablets - baselineTopology;
-                // Keyed by PHYSICAL PARTITION id and then index id, not by index id alone: every
-                // physical partition of a table initializes its indexes with the same index-meta id
-                // (LocalMetastore: "initially, index id and index meta id are the same"), so a single
-                // index-id key would let each partition overwrite the previous one's plan and the
-                // materialization pass would apply one partition's tablet ids to another's index --
-                // producing identical tablets instead of the requested split.
-                Map<Long, Map<Long, Map<Long, Integer>>> chosen = new LinkedHashMap<>();
-                for (IndexPlans plan : plans) {
-                    MaterializedIndex oldIndex = plan.index();
-                    long delta = replacementTabletCount(oldIndex, plan.withEarly())
-                            - replacementTabletCount(oldIndex, plan.baseline());
-                    if (delta > 0 && delta <= earlyBudget) {
-                        chosen.computeIfAbsent(plan.physicalPartitionId(), k -> new LinkedHashMap<>())
-                                .put(oldIndex.getId(), plan.withEarly());
-                        earlyBudget -= delta;
-                    } else {
-                        if (delta > 0) {
-                            // "Replacement tablets" counts split children plus the untouched siblings
-                            // they ship alongside, so this budget is stricter than the admission check,
-                            // which counts split children only.
-                            LOG.info("Deferred early split for index {} of table {}.{}: it needs {} more "
-                                            + "replacement tablets (siblings included) than the baseline, "
-                                            + "and only {} remain within "
-                                            + "tablet_reshard_max_parallel_tablets {}",
-                                    oldIndex.getId(), db.getFullName(), table.getName(), delta, earlyBudget,
-                                    Config.tablet_reshard_max_parallel_tablets);
-                        }
-                        chosen.computeIfAbsent(plan.physicalPartitionId(), k -> new LinkedHashMap<>())
-                                .put(oldIndex.getId(), plan.baseline());
-                    }
-                }
-
-                // Materialize the chosen plans. This is the only place a tablet id is minted.
-                for (PhysicalPartition physicalPartition : physicalPartitions) {
-                    Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex :
-                            physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                        Map<Long, Integer> splitCounts = chosen
-                                .getOrDefault(physicalPartition.getId(), Map.of())
-                                .getOrDefault(oldIndex.getId(), Map.of());
+                        Map<Long, Integer> splitCounts =
+                                planIndexSplits(oldIndex, clauseTargetSize, earlyTarget, earlyBound);
                         if (splitCounts.isEmpty()) {
                             continue;
                         }

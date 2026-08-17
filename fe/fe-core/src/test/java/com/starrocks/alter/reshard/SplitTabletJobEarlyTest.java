@@ -37,12 +37,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -144,11 +140,21 @@ public class SplitTabletJobEarlyTest {
         return ids;
     }
 
+    /**
+     * Mirrors what the factory computes per job: the early rule is off when disabled by config, when
+     * the statement names an explicit target size, or when the warehouse has no usable node; the bound
+     * is the auto-merge floor, clamped by the node count so a single-node warehouse widens nothing.
+     */
     private Map<Long, Integer> plan(int computeNodeCount, SplitTabletClause clause) {
-        Object policy = Deencapsulation.invoke(SplitTabletJobFactory.class, "capturePolicy",
-                clause, computeNodeCount);
+        boolean explicitTarget = clause.getProperties() != null
+                && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+        long earlyTarget = Config.tablet_reshard_enable_early_split && !explicitTarget
+                ? Math.min(Config.tablet_reshard_min_split_size, Config.tablet_reshard_target_size) : 0L;
+        int bound = computeNodeCount == 0 ? 0
+                : Math.min(computeNodeCount, TabletReshardUtils.parallelismFloor(
+                        computeNodeCount, Config.tablet_reshard_max_split_count));
         return Deencapsulation.invoke(SplitTabletJobFactory.class, "planIndexSplits",
-                baseIndex(), clause.getTabletReshardTargetSize(), policy);
+                baseIndex(), clause.getTabletReshardTargetSize(), earlyTarget, bound);
     }
 
     /** Base index gets one tablet of earlyOnlySize; a second visible index gets one of normalSize. */
@@ -273,112 +279,26 @@ public class SplitTabletJobEarlyTest {
         assertTrue(plan(8, new SplitTabletClause()).isEmpty());
     }
 
-    @Test
-    public void anotherRunningJobSuppressesTheEarlyContribution() {
-        setTabletDataSizes(3L << 30);
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public long getTotalParallelTablets() {
-                return 4L;
-            }
-        };
-        assertThrows(StarRocksException.class,
-                () -> new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob(),
-                "with another job running the plan is the all-normal one, which is empty here");
-    }
 
-    @Test
-    public void aRunningJobLeavesTheAutomaticPlanIdenticalToTodays() throws Exception {
-        // Companion to anotherRunningJobSuppressesTheEarlyContribution, which only shows that an
-        // early-only plan becomes empty. Here a normal-sized tablet is also present, so the job that IS
-        // built must carry exactly the split_count the size rule alone produces: admitting the early
-        // contribution would make it 12.
-        // Separate indexes for the same reason anUnavailableWarehouseFallsBackToTheNormalRule needs
-        // them: in one index the 100 GiB tablet's normal split zeroes headroom before the 3 GiB tablet
-        // is reached, so the assertion would read 10 whether or not the early policy was captured.
-        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
-        // Pin the cap rather than inheriting the default: the contrast this test draws only exists
-        // while the early delta is admissible, so a future change to the default would quietly restore
-        // the "reads 10 either way" state the separate indexes above exist to prevent. tearDown
-        // restores it.
-        Config.tablet_reshard_max_parallel_tablets = 100L;
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public long getTotalParallelTablets() {
-                return 4L;
-            }
-        };
-        TabletReshardJob job =
-                new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
-        assertEquals(10L, job.getParallelTablets(), "only the 100 GiB tablet splits, exactly as today");
-    }
 
-    @Test
-    public void aLaterNormalBaselineIsReservedBeforeAnyEarlyDelta() throws Exception {
-        // Two indexes: an early-only one whose early plan has replacement topology 2 against a
-        // baseline of 0, i.e. delta 2, and a normal one whose baseline topology is 10. cap 10 is fully
-        // consumed by the baseline, so no early budget remains and the job is exactly the normal plan.
-        Config.tablet_reshard_max_parallel_tablets = 10L;
-        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
-        long earlyOnlyIndexId = baseIndex().getId();
 
-        // The deferral must be observable: it is the only operational signal that a job planned less
-        // than the table was eligible for. fe-core's test config sets <Root level="WARN">, so INFO
-        // never reaches an appender without also raising the logger's level for this window.
-        Logger coreLogger = (Logger) LogManager.getLogger(SplitTabletJobFactory.class);
-        Level savedLevel = coreLogger.getLevel();
-        Configurator.setLevel(SplitTabletJobFactory.class.getName(), Level.INFO);
-        CapturingAppender appender = new CapturingAppender();
-        appender.start();
-        coreLogger.addAppender(appender);
-        TabletReshardJob job;
-        try {
-            job = new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
-        } finally {
-            coreLogger.removeAppender(appender);
-            Configurator.setLevel(SplitTabletJobFactory.class.getName(), savedLevel);
-        }
 
-        assertEquals(10L, job.getParallelTablets(),
-                "only the normal index splits; the early delta must not have been admitted first");
-        assertEquals(1, appender.messages.size(), "exactly one index's early contribution is deferred");
-        String message = appender.messages.get(0);
-        assertTrue(message.contains("index " + earlyOnlyIndexId + " of table "
-                        + db.getFullName() + "." + table.getName()),
-                "names the deferred index and the table");
-        assertTrue(message.contains("needs 2 more replacement tablets"), "names the required topology");
-        assertTrue(message.contains("tablet_reshard_max_parallel_tablets 10"), "names the cap");
-    }
-
-    @Test
-    public void aRefusedEarlyPlanMintsNoIds() {
-        Config.tablet_reshard_max_parallel_tablets = 1L;   // topology for one 2-way split is 2
-        setTabletDataSizes(3L << 30);
-        long before = GlobalStateMgr.getCurrentState().getNextId();
-        assertThrows(StarRocksException.class,
-                () -> new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob());
-        long after = GlobalStateMgr.getCurrentState().getNextId();
-        // Each getNextId() observation itself consumes one id, so two observations with no allocation
-        // in between differ by exactly 1.
-        assertEquals(1L, after - before, "a refused early plan must not mint replacement tablet ids");
-    }
-
-    @Test
-    public void aSizeDrivenPlanIsNeverRejectedByTheEarlyBudget() throws Exception {
-        Config.tablet_reshard_max_parallel_tablets = 1L;
-        setTabletDataSizes(100L << 30);
-        TabletReshardJob job =
-                new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
-        assertEquals(10L, job.getParallelTablets(), "the baseline is never trimmed");
-    }
 
     @Test
     public void anEligibleEarlyPlanIsMaterializedIntoAJob() throws Exception {
-        // The one POSITIVE test for this task: every other test above suppresses, refuses or bypasses
-        // the early path, so only this one exercises the baseline/early two-pass wiring end to end.
+        // The one POSITIVE end-to-end test: every other test above suppresses, refuses or bypasses the
+        // early path, so only this one drives the real factory from clause to materialized job.
         setTabletDataSizes(3L << 30);
+        // The factory resolves the node count itself now, so stub the resolver rather than injecting.
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                return 8;
+            }
+        };
+
         TabletReshardJob job =
-                new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
+                new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
         assertEquals(2L, job.getParallelTablets(), "the early plan, not the empty baseline, was materialized");
     }
 
@@ -388,9 +308,17 @@ public class SplitTabletJobEarlyTest {
         // AstBuilder#visitSplitTabletClause produces for `ALTER TABLE t SPLIT TABLET` with no
         // PROPERTIES: getProperties() returns a new empty HashMap, never null.
         setTabletDataSizes(3L << 30);
+        // The factory resolves the node count itself now, so stub the resolver rather than injecting.
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                return 8;
+            }
+        };
+
         SplitTabletClause clause = new SplitTabletClause(null, null, new HashMap<>());
         clause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
-        TabletReshardJob job = new SplitTabletJobFactory(db, table, clause, 8).createTabletReshardJob();
+        TabletReshardJob job = new SplitTabletJobFactory(db, table, clause).createTabletReshardJob();
         assertEquals(2L, job.getParallelTablets(), "an empty property map is NOT an explicit target");
     }
 
@@ -412,7 +340,7 @@ public class SplitTabletJobEarlyTest {
             for (long badMin : new long[] {0L, -8L}) {
                 Config.tablet_reshard_min_split_size = badMin;
                 TabletReshardJob job =
-                        new SplitTabletJobFactory(db, table, clause, 8).createTabletReshardJob();
+                        new SplitTabletJobFactory(db, table, clause).createTabletReshardJob();
                 assertEquals(10L, job.getParallelTablets(),
                         "only the 100 GiB tablet's normal split, no forced-count contribution "
                                 + "from calcSplitCount's negative-target mode");
@@ -426,7 +354,7 @@ public class SplitTabletJobEarlyTest {
         SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(ids.get(0))), null);
         clause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
         assertThrows(StarRocksException.class,
-                () -> new SplitTabletJobFactory(db, table, clause, 8).createTabletReshardJob(),
+                () -> new SplitTabletJobFactory(db, table, clause).createTabletReshardJob(),
                 "an explicitly listed under-threshold tablet is not split, cn notwithstanding");
     }
 
@@ -455,7 +383,7 @@ public class SplitTabletJobEarlyTest {
         logical.addSubPartition(second);
         try {
             TabletReshardJob job =
-                    new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
+                    new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
             // Both partitions hold one 20 GiB tablet, so each must split into two by the size rule
             // alone. Keyed by index id only, one partition's plan is lost and the total is 2.
             assertEquals(4L, job.getParallelTablets(),

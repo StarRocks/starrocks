@@ -516,7 +516,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitCalls[0]++;
                 TestNormalTabletReshardJob job =
                         new TestNormalTabletReshardJob(1000L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
@@ -549,7 +549,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitCalls[0]++;
                 TestNormalTabletReshardJob job =
                         new TestNormalTabletReshardJob(2000L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
@@ -587,7 +587,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitCalls[0]++;
                 TestNormalTabletReshardJob job =
                         new TestNormalTabletReshardJob(2500L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
@@ -623,7 +623,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitCalls[0]++;
                 TestNormalTabletReshardJob job =
                         new TestNormalTabletReshardJob(2700L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
@@ -682,9 +682,9 @@ public class TabletReshardJobMgrTest {
                     "the old 32-bit Objects.hash fingerprint would have collided on these inputs");
 
             Config.tablet_reshard_target_size = targetA;
-            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
+            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L);
             Config.tablet_reshard_target_size = targetB;
-            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
+            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L);
             Assertions.assertNotEquals(sigA, sigB,
                     "the 64-bit murmur3 fingerprint must distinguish targets that collide under Objects.hash");
         } finally {
@@ -699,7 +699,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitFired[0] = true;
                 TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(3000L, TabletReshardJob.JobType.SPLIT_TABLET);
                 job.setTableId(table.getId());
@@ -735,7 +735,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) throws StarRocksException {
+                    com.starrocks.sql.ast.SplitTabletClause clause) throws StarRocksException {
                 attempts[0]++;
                 throw new StarRocksException("transient create failure");
             }
@@ -760,7 +760,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(3500L, TabletReshardJob.JobType.SPLIT_TABLET);
                 job.setTableId(table.getId());
                 return job;
@@ -809,7 +809,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitCalls[0]++;
                 TestNormalTabletReshardJob job =
                         new TestNormalTabletReshardJob(4000L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
@@ -844,7 +844,7 @@ public class TabletReshardJobMgrTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
                 splitCalls[0]++;
                 TestNormalTabletReshardJob job =
                         new TestNormalTabletReshardJob(4500L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
@@ -876,26 +876,23 @@ public class TabletReshardJobMgrTest {
     public void splitPlanSignatureChangesForEachNewInput() {
         long max = Config.tablet_reshard_target_size * 4;
         long early = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
-        long base = TabletReshardJobMgr.splitPlanSignature(max, early, 8);
+        long base = TabletReshardJobMgr.splitPlanSignature(max, early);
 
         long savedMin = Config.tablet_reshard_min_split_size;
         long savedCap = Config.tablet_reshard_max_parallel_tablets;
         boolean savedFlag = Config.tablet_reshard_enable_early_split;
         try {
             Config.tablet_reshard_min_split_size = savedMin * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early, 8), "min_split_size");
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early), "min_split_size");
             Config.tablet_reshard_min_split_size = savedMin;
 
             Config.tablet_reshard_enable_early_split = !savedFlag;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early, 8), "enable flag");
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early), "enable flag");
             Config.tablet_reshard_enable_early_split = savedFlag;
 
-            Config.tablet_reshard_max_parallel_tablets = savedCap + 1;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early, 8), "parallel cap");
-            Config.tablet_reshard_max_parallel_tablets = savedCap;
-
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early, 2), "node count");
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early * 8, 8), "early count");
+            // No node-count term: the scan decides under-provisioning against the current count, so a
+            // warehouse resize shows up as the early signal itself appearing or vanishing.
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early * 8), "early count");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;
             Config.tablet_reshard_max_parallel_tablets = savedCap;

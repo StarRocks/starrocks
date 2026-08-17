@@ -145,21 +145,17 @@ public class TabletStatMgr extends FrontendDaemon {
                 boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
                         && olapTable.isCloudNativeTableOrMaterializedView()
                         && olapTable.isRangeDistribution();
-                // One probed resolution per eligible table, exactly as before; the auto-merge floor and
-                // the early-split ceiling both derive from this single sample, so a warehouse resize
-                // cannot leave them describing different layouts.
+                // One probed resolution per eligible table, exactly as before.
                 int computeNodeCount = reshardEligible
                         ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
-                // One sample of the split cap too, for the same reason as the node count: reading it
-                // separately for the floor and the ceiling lets a config change land between the two
-                // and yield a floor above the ceiling, which is exactly the overlap that lets one scan
-                // emit both a merge and an early-split signal for the same index.
-                int maxSplitCount = Config.tablet_reshard_max_split_count;
+                // Merge acts strictly above this floor, so an index at or below it is one merge will
+                // not narrow -- which makes the same value the right bound for widening it early.
                 int parallelismFloor = computeNodeCount == 0 ? 0
-                        : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
-                // No zero guard here, unlike the floor above: the ceiling is bounded by the node count,
-                // so an unresolved count already yields 0 and leaves no index under-provisioned.
-                int earlySplitCeiling = TabletReshardUtils.earlySplitCeiling(computeNodeCount, maxSplitCount);
+                        : TabletReshardUtils.parallelismFloor(
+                                computeNodeCount, Config.tablet_reshard_max_split_count);
+                // min() with the node count keeps a single-node warehouse, whose floor is 2, from
+                // reporting its one tablet as under-provisioned.
+                int earlyBound = Math.min(computeNodeCount, parallelismFloor);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -181,7 +177,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // contributes the early signal. That ceiling sits at or below the merge
                                 // floor, so no index can be under-provisioned and mergeable at the same
                                 // time and the two rules cannot pull one index back and forth.
-                                boolean underProvisioned = tablets.size() < earlySplitCeiling;
+                                boolean underProvisioned = tablets.size() < earlyBound;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {

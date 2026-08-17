@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AutomaticTabletReshardTest {
@@ -93,7 +92,7 @@ public class AutomaticTabletReshardTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause splitTabletClause, int computeNodeCount) throws StarRocksException {
+                    SplitTabletClause splitTabletClause) throws StarRocksException {
                 throw new StarRocksException("Create tablet reshard job failed");
             }
         };
@@ -108,7 +107,7 @@ public class AutomaticTabletReshardTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause splitTabletClause, int computeNodeCount) throws StarRocksException {
+                    SplitTabletClause splitTabletClause) throws StarRocksException {
                 TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
                         new TabletReshardJobMgrTest.TestNormalTabletReshardJob(1L, TabletReshardJob.JobType.SPLIT_TABLET);
                 job.setTableId(table.getId());
@@ -169,7 +168,7 @@ public class AutomaticTabletReshardTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause splitTabletClause, int computeNodeCount) throws StarRocksException {
+                    SplitTabletClause splitTabletClause) throws StarRocksException {
                 splitCalled[0] = true;
                 return new TabletReshardJobMgrTest.TestNormalTabletReshardJob(2L, TabletReshardJob.JobType.SPLIT_TABLET);
             }
@@ -213,7 +212,7 @@ public class AutomaticTabletReshardTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause clause, int computeNodeCount) throws StarRocksException {
+                    SplitTabletClause clause) throws StarRocksException {
                 throw new StarRocksException("No tablets need to split");
             }
 
@@ -236,7 +235,7 @@ public class AutomaticTabletReshardTest {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause clause, int computeNodeCount) {
+                    SplitTabletClause clause) {
                 TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
                         new TabletReshardJobMgrTest.TestNormalTabletReshardJob(
                                 1L, TabletReshardJob.JobType.SPLIT_TABLET);
@@ -256,122 +255,7 @@ public class AutomaticTabletReshardTest {
                 "falling through to merge must not erase a live early signal's suppression");
     }
 
-    @Test
-    void earlyOnlyTriggerIsSkippedWhenTheParallelCapIsBelowTwo() {
-        // Carries BOTH an actionable early signal and an actionable merge signal: an implementation
-        // that `return`s instead of falling through when earlyCapacityPossible is false would swallow
-        // the merge, and every other test in this task would still pass.
-        int[] created = {0};
-        boolean[] mergeCalled = {false};
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                NODE_COUNT_RESOLUTIONS.incrementAndGet();
-                return 8;
-            }
-        };
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause clause, int computeNodeCount) {
-                created[0]++;
-                return null;
-            }
 
-            @Mock
-            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause clause) {
-                mergeCalled[0] = true;
-            }
-        };
 
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        long savedCap = Config.tablet_reshard_max_parallel_tablets;
-        Config.tablet_reshard_max_parallel_tablets = 1L;
-        try {
-            long earlySize = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
-            long mergeSignal =
-                    TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
-            Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, mergeSignal, earlySize);
-        } finally {
-            Config.tablet_reshard_max_parallel_tablets = savedCap;
-        }
-        assertEquals(0, created[0], "cap < 2 cannot fit any early split");
-        assertEquals(0, NODE_COUNT_RESOLUTIONS.get(), "and the short-circuit runs before the node-count probe");
-        assertTrue(mergeCalled[0], "the capacity short-circuit must fall through to merge, not return");
-        assertFalse(mgr.hasSizeSplitLatch(table.getId()), "a capacity short-circuit records no latch entry");
-    }
-
-    @Test
-    void theSampledNodeCountReachesBothTheSignatureAndTheFactory() {
-        // Property: ONE resolution feeds both the latch fingerprint and the factory. Prove it by
-        // returning a DIFFERENT count on any second resolution: if the code resolved twice, the
-        // fingerprint and the factory would disagree.
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                return NODE_COUNT_RESOLUTIONS.getAndIncrement() == 0 ? 8 : 2;
-            }
-        };
-        new MockUp<ColocateChecker>() {
-            @Mock
-            public static long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
-                RECORDED_RANGES_SIG.set(expectedRangesSig);
-                return expectedRangesSig;
-            }
-        };
-        int[] factoryNodeCount = {-1};
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause clause, int computeNodeCount) {
-                factoryNodeCount[0] = computeNodeCount;
-                TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
-                        new TabletReshardJobMgrTest.TestNormalTabletReshardJob(
-                                4L, TabletReshardJob.JobType.SPLIT_TABLET);
-                job.setTableId(table.getId());
-                return job;
-            }
-        };
-
-        long maxTabletSize = Config.tablet_reshard_target_size * 4;
-        Deencapsulation.invoke(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(),
-                "triggerTabletReshard", db, table, maxTabletSize, Long.MAX_VALUE, 0L);
-        assertEquals(8, factoryNodeCount[0], "the factory must be handed the sampled count");
-        assertEquals(TabletReshardJobMgr.splitPlanSignature(maxTabletSize, 0L, 8), RECORDED_RANGES_SIG.get(),
-                "the fingerprint must describe the plan that ran");
-        assertEquals(1, NODE_COUNT_RESOLUTIONS.get(), "one resolution per firing decision");
-    }
-
-    @Test
-    void earlyOnlyTriggerIsSkippedWhileAnotherJobRunsAndFiresAfterItFinishes() {
-        int[] created = {0};
-        long[] running = {4L};
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public long getTotalParallelTablets() {
-                return running[0];
-            }
-
-            @Mock
-            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
-                    SplitTabletClause clause, int computeNodeCount) {
-                created[0]++;
-                TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
-                        new TabletReshardJobMgrTest.TestNormalTabletReshardJob(
-                                2L, TabletReshardJob.JobType.SPLIT_TABLET);
-                job.setTableId(table.getId());
-                return job;
-            }
-        };
-
-        long earlySize = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, Long.MAX_VALUE, earlySize);
-        assertEquals(0, created[0], "no early job while another reshard job is running");
-
-        running[0] = 0L;
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, Long.MAX_VALUE, earlySize);
-        assertEquals(1, created[0], "capacity release lets the early split fire");
-    }
 
 }
