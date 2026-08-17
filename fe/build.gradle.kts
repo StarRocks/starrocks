@@ -88,16 +88,11 @@ subprojects {
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
         implementation(platform("io.netty:netty-bom:${project.ext["io.netty.version"]}"))
-<<<<<<< HEAD
-=======
         // Mirrors the grpc-bom import in fe/pom.xml. Added by hand because
         // build-support/sync_pom_to_gradle.py skips `<type>pom</type>` entries
         // ("Skip BOMs ... as they are handled with platform()"), so an import-scope
         // BOM cannot reach this file through the `dependency sync` markers below.
         implementation(platform("io.grpc:grpc-bom:${project.ext["grpc.version"]}"))
-        // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
-        testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
->>>>>>> 477ebbcc3c ([BugFix][CVE-2025-55163] Align all io.grpc artifacts via grpc-bom so grpc-netty matches grpc-core (#77171))
 
         constraints {
             // dependency sync start
