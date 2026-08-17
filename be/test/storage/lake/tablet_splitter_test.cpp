@@ -2459,7 +2459,7 @@ TEST(TabletSplitterTest, DataDrivenSplit_RejectsInheritedBoundWithWrongArity) {
     auto st = get_tablet_split_ranges(/*tablet_manager=*/nullptr, m, /*split_count=*/2, &out);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_corruption()) << st;
-    EXPECT_NE(std::string_view::npos, st.message().find("!= effective sort-key arity 2")) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("!= effective range-key arity 2")) << st;
 }
 
 // Per-segment ownership pruning compares a segment's STORED sort-key bounds against the new tablets'
