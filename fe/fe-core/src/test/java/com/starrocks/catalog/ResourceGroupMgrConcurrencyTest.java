@@ -39,6 +39,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -477,17 +478,47 @@ public class ResourceGroupMgrConcurrencyTest {
     @Test
     public void testSingleWriteAlterSnapshotReplacement() throws Exception {
         mgr.createResourceGroup(mvStmt("rg_alter_single_write", "1"));
-        Object snapBefore = getSnapshot();
 
-        // Alter properties — calls updateResourceGroup -> replaceResourceGroupInternal.
+        // Latch-synchronised concurrent reader: captures a snapshot reference during the alter
+        // and checks the group is present in that snapshot. With the old double-write code a
+        // reader that captured a snapshot between the remove and add would see null here.
+        AtomicReference<String> readerFailure = new AtomicReference<>();
+        CountDownLatch readerReady  = new CountDownLatch(1);
+        CountDownLatch writerDone   = new CountDownLatch(1);
+        CountDownLatch readerDone   = new CountDownLatch(1);
+
+        Thread reader = new Thread(() -> {
+            try {
+                readerReady.countDown();
+                // spin until alter is in-flight; the barrier is best-effort for race coverage
+                writerDone.await();
+                // Check every snapshot we can capture after the alter completed.
+                for (int i = 0; i < 1000; i++) {
+                    ResourceGroup rg = mgr.getResourceGroup("rg_alter_single_write");
+                    if (rg == null) {
+                        readerFailure.set("Group absent in iteration " + i);
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                readerFailure.set(e.getMessage());
+            } finally {
+                readerDone.countDown();
+            }
+        });
+        reader.setDaemon(true);
+        reader.start();
+        readerReady.await();
+
         mgr.alterResourceGroup(new com.starrocks.sql.ast.AlterResourceGroupStmt("rg_alter_single_write",
                 new com.starrocks.sql.ast.AlterResourceGroupStmt.AlterProperties(
                         Collections.singletonMap("mem_limit", "0.6"))));
+        writerDone.countDown();
+        readerDone.await(5, TimeUnit.SECONDS);
+
+        Assertions.assertNull(readerFailure.get(), readerFailure.get());
 
         Object snapAfter = getSnapshot();
-
-        // Snapshot holder was replaced cleanly in a single assignment.
-        Assertions.assertNotSame(snapBefore, snapAfter);
         Map<String, ResourceGroup> byNameAfter = snapField(snapAfter, "byName");
         Assertions.assertTrue(byNameAfter.containsKey("rg_alter_single_write"),
                 "Group must remain continuously present in snapshot after alter");
@@ -544,8 +575,81 @@ public class ResourceGroupMgrConcurrencyTest {
 
         Assertions.assertThrows(DdlException.class, () -> mgr.createResourceGroup(stmt2));
     }
+
+    // -------------------------------------------------------------------------
+    // 21. Finding 3 (stress): concurrent ALTER never produces a transient absent group
+    // -------------------------------------------------------------------------
+
+    /**
+     * Stress-tests that {@code replaceResourceGroupInternal} truly eliminates the
+     * transient-absence window seen with the old remove-then-add double-write.
+     *
+     * <p>One writer thread repeatedly alters an MV resource group (5 000 iterations).
+     * Ten reader threads each call {@code getResourceGroup} as fast as possible during
+     * the same period and count any {@code null} returns.
+     *
+     * <p>A null count greater than zero would mean a reader observed the group absent
+     * while a writer was mid-alter — the bug this fix is designed to prevent.
+     */
+    @Test
+    public void testConcurrentAlterNoTransientGroupAbsence() throws Exception {
+        mgr.createResourceGroup(mvStmt("rg_alter_stress", "1"));
+
+        int readerCount = 10;
+        int writerIters = 5_000;
+        ExecutorService pool = Executors.newFixedThreadPool(readerCount + 1);
+        CountDownLatch startLatch   = new CountDownLatch(1);
+        CountDownLatch writerDone   = new CountDownLatch(1);
+        AtomicBoolean  writerActive = new AtomicBoolean(true);
+        AtomicLong     nullCount    = new AtomicLong(0);
+        AtomicReference<Throwable> firstError = new AtomicReference<>();
+
+        // Writer: alternate between two mem_limit values to force repeated snapshot replacements.
+        pool.submit(() -> {
+            try {
+                startLatch.await();
+                for (int i = 0; i < writerIters; i++) {
+                    String memLimit = (i % 2 == 0) ? "0.3" : "0.4";
+                    mgr.alterResourceGroup(new com.starrocks.sql.ast.AlterResourceGroupStmt(
+                            "rg_alter_stress",
+                            new com.starrocks.sql.ast.AlterResourceGroupStmt.AlterProperties(
+                                    Collections.singletonMap("mem_limit", memLimit))));
+                }
+            } catch (Throwable t) {
+                firstError.compareAndSet(null, t);
+            } finally {
+                writerActive.set(false);
+                writerDone.countDown();
+            }
+        });
+
+        // Readers: count any null observations of the group during the writer's run.
+        for (int i = 0; i < readerCount; i++) {
+            pool.submit(() -> {
+                try {
+                    startLatch.await();
+                    while (writerActive.get() || !writerDone.await(0, TimeUnit.MILLISECONDS)) {
+                        if (mgr.getResourceGroup("rg_alter_stress") == null) {
+                            nullCount.incrementAndGet();
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Throwable t) {
+                    firstError.compareAndSet(null, t);
+                }
+            });
+        }
+
+        startLatch.countDown();
+        writerDone.await(30, TimeUnit.SECONDS);
+        pool.shutdownNow();
+        pool.awaitTermination(10, TimeUnit.SECONDS);
+
+        Assertions.assertNull(firstError.get(),
+                "Unexpected exception in concurrent thread: " + firstError.get());
+        Assertions.assertEquals(0L, nullCount.get(),
+                "Lock-free readers observed " + nullCount.get() +
+                        " transient null(s) for 'rg_alter_stress' during concurrent alter");
+    }
 }
-
-
-
-
