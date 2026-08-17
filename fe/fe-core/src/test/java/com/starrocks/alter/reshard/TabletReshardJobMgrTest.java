@@ -760,9 +760,9 @@ public class TabletReshardJobMgrTest {
                     "the old 32-bit Objects.hash fingerprint would have collided on these inputs");
 
             Config.tablet_reshard_target_size = targetA;
-            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
+            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8, Config.tablet_reshard_max_split_count);
             Config.tablet_reshard_target_size = targetB;
-            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
+            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8, Config.tablet_reshard_max_split_count);
             Assertions.assertNotEquals(sigA, sigB,
                     "the 64-bit murmur3 fingerprint must distinguish targets that collide under Objects.hash");
         } finally {
@@ -978,23 +978,24 @@ public class TabletReshardJobMgrTest {
         try {
             long max = Config.tablet_reshard_target_size * 4;
             long adaptive = Config.tablet_reshard_min_split_size * 4;
-            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8);
+            int cap = Config.tablet_reshard_max_split_count;
+            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8, cap);
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive, 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive, 8, cap),
                     "a larger max tablet changes the size rule's answer");
 
             Config.tablet_reshard_min_split_size = savedMin * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8, cap),
                     "min_split_size moves the adaptive target");
             Config.tablet_reshard_min_split_size = savedMin;
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8, 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8, 8, cap),
                     "a different adaptive-split tablet size");
 
             // The bound is a plan input, not just a scan input: an index the adaptive rule declined
             // to widen at four nodes may be worth widening at eight, so a resized warehouse has to
             // re-arm a suppressed table rather than leave it latched on the old bound's answer.
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 4),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 4, cap),
                     "a resized warehouse moves the bound");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;

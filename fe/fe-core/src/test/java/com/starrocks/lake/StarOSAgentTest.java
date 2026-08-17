@@ -435,7 +435,8 @@ public class StarOSAgentTest {
         newShardIdToGroupIds.put(101L, Lists.newArrayList(spreadGroupId));
         newShardIdToGroupIds.put(102L, Lists.newArrayList(spreadGroupId));
 
-        // spreadNewShards = true (pre-split): no WITH_SHARD pin, so StarOS spreads the new shards;
+        // unpinPlacement = true (pre-split, or an ORDER BY != PK split of a small index): no
+        // WITH_SHARD pin, so StarOS spreads the new shards;
         // the (SPREAD) group ids are still carried.
         starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
                 Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, true);
@@ -446,7 +447,7 @@ public class StarOSAgentTest {
             Assertions.assertEquals(Lists.newArrayList(spreadGroupId), info.getGroupIdsList());
         }
 
-        // spreadNewShards = false (online split): the WITH_SHARD pin to the old shard is kept so the
+        // unpinPlacement = false (ordinary online split): the WITH_SHARD pin to the old shard is kept so the
         // split reuses the source worker's warm cache.
         starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
                 Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false);

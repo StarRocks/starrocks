@@ -644,6 +644,14 @@ This topic introduces the following types of FE configurations:
 - Description: The TTL of the range-colocate checker's placement-convergence negative cache. Within this window, a PACK shard group that StarOS last reported as not yet converged is not re-queried, which throttles the per-tick `queryShardGroupStable` load while the group is still migrating. Only not-converged results are cached, so a stale entry can only delay the group's flip to stable by up to this window, never cause a premature flip. Values less than or equal to `0` disable the cache.
 - Introduced in: v4.1.3
 
+### `tablet_reshard_enable_pk_order_by`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a range-distributed PRIMARY KEY table may declare an `ORDER BY` key that differs from its primary key. When disabled, such a table is rejected at creation and an existing one is not resharded. Splitting a table of this shape keeps boundaries in primary-key space while its files stay ordered by the sort key, so reads are served from the parent tablet until an UNSHARE compaction has rewritten each child's data privately. The initial implementation requires `file_bundling=true` and rejects DCG/IDG sidecars during resharding.
+- Introduced in: v4.1.3
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - Default: true
