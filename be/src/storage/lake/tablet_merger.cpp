@@ -357,9 +357,27 @@ StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<Tablet
     return plan;
 }
 
-// Shift that lifts the rowset-id space that |append_index| will actually emit
-// above |base_metadata|'s watermark, so the two can be concatenated without
-// collisions.
+// True when |rowset|'s own ids still reach the merged namespace through
+// ctx.rssid_offset instead of being redirected to a canonical rowset.
+//
+// Emitted rowsets always do. Among the discarded ones, only delete predicates do:
+// merge_rowsets calls update_shared_rssid_map for a discarded duplicate exactly when
+// it is not a delete predicate, so a deduped predicate's id keeps falling through
+// map_rssid's natural-offset branch (build_legacy_rssid_lookup_maps projects every
+// rowset id, emitted or not) while a deduped data rowset's id and segment rssids all
+// resolve to the canonical rowset an earlier input already emitted.
+//
+// The floor (compute_rssid_offset) and the ceiling (compute_cumulative_rowset_id_ceiling)
+// must agree on this set. If the ceiling covers more, a later input is lifted over ids
+// nobody occupies and can overflow map_rssid near UINT32_MAX; if it covers less, a later
+// input lands on ids an earlier input still projects into.
+bool projects_via_rssid_offset(const RowsetEmissionDecision& decision, const RowsetMetadataPB& rowset) {
+    return decision.emit || rowset.has_delete_predicate();
+}
+
+// Shift that lifts the rowset-id space that |append_index| projects through its own
+// rssid_offset above |base_metadata|'s watermark, so the two can be concatenated
+// without collisions.
 //
 // The floor includes every rowset id or rowset-id reference that add_rowset()
 // carries into the merged metadata:
@@ -374,19 +392,26 @@ StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<Tablet
 // merge_rowsets will discard must not lower the floor: they are not carried into the
 // output and can make a high-ID surviving rowset overflow after an unnecessary lift.
 //
-// Using the emitted-rowset floor maps the smallest carried value to
-// base_metadata.next_rowset_id(), keeps all carried references disjoint from earlier
-// inputs, and preserves their relative ordering under the same uniform shift.
+// A discarded delete predicate contributes its id but none of its references: the
+// references die with it, while the id itself still projects naturally (see
+// projects_via_rssid_offset) and must stay disjoint from earlier inputs.
+//
+// Using that floor maps the smallest carried value to base_metadata.next_rowset_id(),
+// keeps all carried references disjoint from earlier inputs, and preserves their
+// relative ordering under the same uniform shift.
 int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata,
                              const std::vector<TabletMergeContext>& merge_contexts,
                              const RowsetEmissionPlan& emission_plan, size_t append_index) {
     uint32_t min_carried_id = std::numeric_limits<uint32_t>::max();
     const auto& append_metadata = *merge_contexts[append_index].metadata();
     for (int rowset_index = 0; rowset_index < append_metadata.rowsets_size(); ++rowset_index) {
-        if (!emission_plan[append_index][rowset_index].emit) continue;
-
         const auto& rowset = append_metadata.rowsets(rowset_index);
+        const auto& decision = emission_plan[append_index][rowset_index];
+        if (!projects_via_rssid_offset(decision, rowset)) continue;
+
         min_carried_id = std::min(min_carried_id, rowset.id());
+        if (!decision.emit) continue;
+
         if (rowset.has_max_compact_input_rowset_id()) {
             min_carried_id = std::min(min_carried_id, rowset.max_compact_input_rowset_id());
         }
@@ -2747,14 +2772,26 @@ ClampedLiftedRange clamp_lifted_range_to_uint32(int32_t source_rssid_offset, uin
 // rssid_offset assignment so each old tablet's projected rowset ids land
 // strictly above every earlier old tablet's projected ids.
 //
+// Only rowsets that project through their own ctx's rssid_offset are counted, the
+// same set compute_rssid_offset derives the floor from. A discarded duplicate's ids
+// resolve to the canonical rowset instead, which an earlier ctx already contributed
+// to this ceiling, so reserving room for it here would lift later inputs over an
+// unoccupied hole -- with three or more siblings whose id counters have diverged that
+// alone can push map_rssid past UINT32_MAX.
+//
 // Each uint32_t addend is widened to int64_t before the addition to avoid
 // uint32_t wrap when rowset.id() approaches UINT32_MAX — wrap there would
 // under-estimate the watermark and let later old tablets reuse occupied rssids.
 uint32_t compute_cumulative_rowset_id_ceiling(const std::vector<TabletMergeContext>& merge_contexts,
-                                              size_t upper_exclusive, uint32_t base_next_rowset_id) {
+                                              const RowsetEmissionPlan& emission_plan, size_t upper_exclusive,
+                                              uint32_t base_next_rowset_id) {
     uint32_t ceiling = base_next_rowset_id;
     for (size_t j = 0; j < upper_exclusive; ++j) {
-        for (const auto& rowset : merge_contexts[j].metadata()->rowsets()) {
+        const auto& metadata = *merge_contexts[j].metadata();
+        for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
+            const auto& rowset = metadata.rowsets(rowset_index);
+            if (!projects_via_rssid_offset(emission_plan[j][rowset_index], rowset)) continue;
+
             const int64_t end_wide = static_cast<int64_t>(rowset.id()) +
                                      static_cast<int64_t>(get_rowset_id_step(rowset)) +
                                      merge_contexts[j].rssid_offset();
@@ -3078,8 +3115,9 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // then derives ctx[i].rssid_offset against that watermark so its
     // projected ids land strictly above every earlier ctx's.
     for (size_t i = 1; i < merge_contexts.size(); ++i) {
-        const uint32_t cumulative_ceiling = compute_cumulative_rowset_id_ceiling(
-                merge_contexts, /*upper_exclusive=*/i, merge_contexts.front().metadata()->next_rowset_id());
+        const uint32_t cumulative_ceiling =
+                compute_cumulative_rowset_id_ceiling(merge_contexts, rowset_emission_plan, /*upper_exclusive=*/i,
+                                                     merge_contexts.front().metadata()->next_rowset_id());
         new_tablet_metadata->set_next_rowset_id(cumulative_ceiling);
         const int64_t rssid_offset =
                 compute_rssid_offset(*new_tablet_metadata, merge_contexts, rowset_emission_plan, i);

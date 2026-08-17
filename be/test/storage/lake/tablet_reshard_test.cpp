@@ -8962,6 +8962,104 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_l
     EXPECT_EQ(kBaseNextRowsetId + 1, merged->next_rowset_id());
 }
 
+// Three siblings whose rowset-id counters have diverged, where the middle one
+// carries nothing but a delete predicate that dedups away against the first
+// sibling's predicate at the same version.
+//
+// A discarded predicate is the one discarded rowset whose id still reaches the
+// merged namespace through the natural offset: merge_rowsets records a
+// shared_rssid_map entry for a discarded duplicate only when it is NOT a delete
+// predicate. So the floor must include it -- otherwise the middle sibling has no
+// floor at all, keeps offset 0, and its raw id (here 4.2e9) becomes the watermark
+// the third sibling is lifted above, pushing the third sibling's own high-ID
+// rowset past UINT32_MAX even though the emitted namespace has room for it.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_inflate_later_sibling_ceiling) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t low_tablet = next_id();
+    const int64_t predicate_only_tablet = next_id();
+    const int64_t wide_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(low_tablet);
+    prepare_tablet_dirs(predicate_only_tablet);
+    prepare_tablet_dirs(wide_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    // ctx[0]: data(v1) -> predicate(v10). Its next_rowset_id (3) is the base watermark.
+    TabletMetadataPB low_meta;
+    low_meta.set_id(low_tablet);
+    low_meta.set_version(base_version);
+    low_meta.set_next_rowset_id(3);
+    add_rowset_with_predicate(&low_meta, /*rowset_id=*/1, /*version=*/1, /*has_predicate=*/false);
+    add_rowset_with_predicate(&low_meta, /*rowset_id=*/2, /*version=*/10, /*has_predicate=*/true);
+    ASSERT_OK(put_tablet_metadata(low_meta));
+
+    // ctx[1]: the same v10 delete predicate, cross-published onto a sibling whose id
+    // counter ran far ahead. Predicates dedup by version, so this is the whole tablet
+    // and merge_rowsets emits nothing from it.
+    constexpr uint32_t kFarAheadPredicateId = 4'200'000'000;
+    TabletMetadataPB predicate_only_meta;
+    predicate_only_meta.set_id(predicate_only_tablet);
+    predicate_only_meta.set_version(base_version);
+    predicate_only_meta.set_next_rowset_id(kFarAheadPredicateId + 1);
+    add_rowset_with_predicate(&predicate_only_meta, kFarAheadPredicateId, /*version=*/10, /*has_predicate=*/true);
+    ASSERT_OK(put_tablet_metadata(predicate_only_meta));
+
+    // ctx[2]: two live rowsets ~1e8 ids apart. Lifting its floor (5) onto ctx[1]'s raw
+    // id would map the top one to 4'299'999'996 > UINT32_MAX.
+    constexpr uint32_t kWideSpanTopId = 100'000'000;
+    TabletMetadataPB wide_meta;
+    wide_meta.set_id(wide_tablet);
+    wide_meta.set_version(base_version);
+    wide_meta.set_next_rowset_id(kWideSpanTopId + 1);
+    add_rowset_with_predicate(&wide_meta, /*rowset_id=*/5, /*version=*/20, /*has_predicate=*/false);
+    add_rowset_with_predicate(&wide_meta, kWideSpanTopId, /*version=*/21, /*has_predicate=*/false);
+    ASSERT_OK(put_tablet_metadata(wide_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(low_tablet);
+    merging_tablet.add_old_tablet_ids(predicate_only_tablet);
+    merging_tablet.add_old_tablet_ids(wide_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    // Before the fix this returned InvalidArgument("Segment id overflow during tablet merge").
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    // ctx[0]'s two rowsets plus ctx[2]'s two; ctx[1]'s predicate is deduped away.
+    ASSERT_EQ(4, merged->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    int predicate_count = 0;
+    for (const auto& rowset : merged->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            ++predicate_count;
+            EXPECT_EQ(10, rowset.version());
+        }
+    }
+    EXPECT_EQ(1, predicate_count);
+
+    // ctx[1]'s floor is its discarded predicate id, so it shifts down to the base
+    // watermark 3 and reserves exactly that one slot. ctx[2] is then lifted to 4
+    // instead of to 4'200'000'001, and its span survives intact.
+    EXPECT_EQ((std::vector<uint32_t>{1, 2, 4, kWideSpanTopId - 1}), rowset_ids);
+    EXPECT_EQ(kWideSpanTopId, merged->next_rowset_id());
+}
+
 // Merge of two PK parents that both have cloud-native persistent index enabled.
 // This exercises the flush_parent_for_merge helper end-to-end. Parents have
 // no rowsets so load_from_lake_tablet is a no-op; the dumped sstable_meta
