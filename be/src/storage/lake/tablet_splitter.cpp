@@ -22,12 +22,15 @@
 #include <unordered_set>
 #include <vector>
 
+#include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/schema.h"
 #include "common/logging.h"
 #include "storage/base/short_key_index.h"
 #include "storage/chunk_helper.h"
 #include "storage/full_sort_key_codec.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -37,6 +40,7 @@
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -841,6 +845,45 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
     }
 }
 
+Status build_split_ranges_from_boundaries(const TabletMetadataPtr& tablet_metadata,
+                                          const std::vector<VariantTuple>& boundaries,
+                                          std::vector<TabletRangeInfo>* split_ranges) {
+    DCHECK(split_ranges != nullptr);
+    DCHECK(split_ranges->empty());
+    if (boundaries.empty()) {
+        return Status::InvalidArgument("No split boundaries available");
+    }
+    for (size_t i = 1; i < boundaries.size(); ++i) {
+        if (boundaries[i - 1].compare(boundaries[i]) >= 0) {
+            return Status::InvalidArgument("Split boundaries are not strictly increasing");
+        }
+    }
+
+    const int32_t num_splits = static_cast<int32_t>(boundaries.size()) + 1;
+    split_ranges->reserve(num_splits);
+    for (int32_t i = 0; i < num_splits; ++i) {
+        auto& split_range = split_ranges->emplace_back();
+        if (i == 0) {
+            split_range.range = tablet_metadata->range();
+        } else {
+            boundaries[i - 1].to_proto(split_range.range.mutable_lower_bound());
+            split_range.range.set_lower_bound_included(true);
+        }
+
+        if (i < num_splits - 1) {
+            boundaries[i].to_proto(split_range.range.mutable_upper_bound());
+            split_range.range.set_upper_bound_included(false);
+        } else if (tablet_metadata->range().has_upper_bound()) {
+            split_range.range.mutable_upper_bound()->CopyFrom(tablet_metadata->range().upper_bound());
+            split_range.range.set_upper_bound_included(tablet_metadata->range().upper_bound_included());
+        } else {
+            split_range.range.clear_upper_bound();
+            split_range.range.clear_upper_bound_included();
+        }
+    }
+    return Status::OK();
+}
+
 // Compute split_count tablet ranges covering the tablet's key space.
 //
 // Postcondition on Status::OK: split_ranges->size() == split_count.
@@ -865,15 +908,25 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     if (colocate_column_count < 0) {
         return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}", colocate_column_count));
     }
-    // The one sort-key resolution for this split: the colocate arity check, the segment-tuple
-    // projection inside build_segments_from_rowsets and the final range validation all speak the
-    // same sort key, so materialize it once here and thread it through.
+    // The one sort-key resolution for this split: the separate-sort-key guard below, the colocate
+    // arity check, the segment-tuple projection inside build_segments_from_rowsets and the final
+    // range validation all speak the same sort key, so materialize it once here and thread it
+    // through.
     //
     // The colocate arity is read from the materialized TabletSchema rather than the raw
     // TabletSchemaPB because a range-distributed table created without an explicit ORDER BY (e.g. a
     // PRIMARY KEY table) leaves sort_key_idxes empty in the PB, so the raw arity (0) would reject
     // every colocate split and silently fall back to an identical tablet.
     ASSIGN_OR_RETURN(const auto tablet_schema, materialize_sort_key_schema(tablet_metadata->schema()));
+    // Everything below derives boundaries from segment metadata, i.e. from sort-key space. A
+    // primary-key tablet whose physical order is not the primary key routes in primary-key space,
+    // so those two spaces do not line up: it must go through the PK-index sampling path or
+    // FE-supplied external boundaries instead.
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && tablet_schema->has_separate_sort_key()) {
+        return Status::NotSupported(
+                "data-driven tablet split cannot derive PK boundaries from sort-key-ordered segments; "
+                "use FE-supplied external boundaries");
+    }
     if (colocate_column_count > 0) {
         const int32_t sort_key_arity = static_cast<int32_t>(tablet_schema->sort_key_idxes().size());
         if (colocate_column_count > sort_key_arity) {
@@ -908,33 +961,7 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     }
 
     // Step 3: Build TabletRangeInfo directly from result.
-    int32_t num_splits = static_cast<int32_t>(split_result.boundaries.size()) + 1;
-
-    DCHECK(split_ranges->empty());
-    split_ranges->reserve(num_splits);
-
-    for (int32_t i = 0; i < num_splits; i++) {
-        auto& sr = split_ranges->emplace_back();
-        if (i == 0) {
-            sr.range = tablet_metadata->range();
-        } else {
-            split_result.boundaries[i - 1].to_proto(sr.range.mutable_lower_bound());
-            sr.range.set_lower_bound_included(true);
-        }
-
-        if (i < num_splits - 1) {
-            split_result.boundaries[i].to_proto(sr.range.mutable_upper_bound());
-            sr.range.set_upper_bound_included(false);
-        } else {
-            if (tablet_metadata->range().has_upper_bound()) {
-                sr.range.mutable_upper_bound()->CopyFrom(tablet_metadata->range().upper_bound());
-                sr.range.set_upper_bound_included(tablet_metadata->range().upper_bound_included());
-            } else {
-                sr.range.clear_upper_bound();
-                sr.range.clear_upper_bound_included();
-            }
-        }
-    }
+    RETURN_IF_ERROR(build_split_ranges_from_boundaries(tablet_metadata, split_result.boundaries, split_ranges));
 
     if (split_ranges->size() != static_cast<size_t>(split_count)) {
         LOG(WARNING) << "Insufficient split boundaries: tablet_id=" << tablet_metadata->id()
@@ -965,6 +992,191 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     apply_rowset_anchor(anchor, split_result, split_ranges);
 
     return Status::OK();
+}
+
+Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_manager,
+                                                          const TabletMetadataPtr& tablet_metadata, int32_t split_count,
+                                                          std::vector<std::string> encoded_samples,
+                                                          std::vector<TabletRangeInfo>* split_ranges,
+                                                          int32_t colocate_column_count) {
+    if (split_count < 2) {
+        return Status::InvalidArgument("Invalid split count, it is less than 2");
+    }
+    if (colocate_column_count < 0) {
+        return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}", colocate_column_count));
+    }
+    if (split_ranges == nullptr || !split_ranges->empty()) {
+        return Status::InvalidArgument("split_ranges must be non-null and empty");
+    }
+
+    auto tablet_schema = TabletSchema::create(tablet_metadata->schema());
+    if (tablet_schema->keys_type() != KeysType::PRIMARY_KEYS || !tablet_schema->has_separate_sort_key()) {
+        return Status::InvalidArgument("PK-index split samples require a PRIMARY KEY tablet with a separate sort key");
+    }
+    ASSIGN_OR_RETURN(auto encoding_type, tablet_schema->primary_key_encoding_type_or_error());
+    if (encoding_type != PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        return Status::NotSupported("PK-index split samples require V2 order-preserving primary-key encoding");
+    }
+
+    const auto key_idxes = TabletRangeHelper::range_key_idxes(*tablet_schema);
+    if (key_idxes.empty()) {
+        return Status::InvalidArgument("PK-index split samples require primary-key columns");
+    }
+    if (colocate_column_count > static_cast<int32_t>(key_idxes.size())) {
+        return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}, primary-key arity is {}",
+                                                   colocate_column_count, key_idxes.size()));
+    }
+
+    ASSIGN_OR_RETURN(auto tablet_sst_range,
+                     TabletRangeHelper::create_sst_seek_range_from(tablet_metadata->range(), tablet_schema));
+    auto encoded_less = [](const std::string& lhs, const std::string& rhs) {
+        return Slice(lhs).compare(Slice(rhs)) < 0;
+    };
+    std::sort(encoded_samples.begin(), encoded_samples.end(), encoded_less);
+    encoded_samples.erase(std::unique(encoded_samples.begin(), encoded_samples.end()), encoded_samples.end());
+    encoded_samples.erase(std::remove_if(encoded_samples.begin(), encoded_samples.end(),
+                                         [&](const std::string& key) {
+                                             if (key.empty()) return true;
+                                             if (!tablet_sst_range.seek_key.empty() &&
+                                                 Slice(key).compare(Slice(tablet_sst_range.seek_key)) <= 0) {
+                                                 return true;
+                                             }
+                                             return !tablet_sst_range.stop_key.empty() &&
+                                                    Slice(key).compare(Slice(tablet_sst_range.stop_key)) >= 0;
+                                         }),
+                          encoded_samples.end());
+    if (encoded_samples.size() < static_cast<size_t>(split_count)) {
+        return Status::InvalidArgument(
+                fmt::format("Not enough distinct PK-index samples: requested {} splits, got {} "
+                            "strict-interior keys",
+                            split_count, encoded_samples.size()));
+    }
+
+    auto encoded_column = BinaryColumn::create();
+    for (const auto& key : encoded_samples) {
+        encoded_column->append(Slice(key));
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, key_idxes);
+    auto decoded_chunk = ChunkFactory::new_chunk(pkey_schema, encoded_samples.size());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::decode(pkey_schema, *encoded_column, 0, encoded_column->size(),
+                                              decoded_chunk.get(), encoding_type));
+
+    std::vector<VariantTuple> decoded_samples;
+    decoded_samples.reserve(encoded_samples.size());
+    for (size_t row = 0; row < decoded_chunk->num_rows(); ++row) {
+        VariantTuple tuple;
+        tuple.reserve(pkey_schema.num_fields());
+        for (size_t column = 0; column < pkey_schema.num_fields(); ++column) {
+            tuple.emplace(pkey_schema.field(column)->type(), decoded_chunk->get_column_by_index(column)->get(row));
+        }
+        if (!decoded_samples.empty() && decoded_samples.back().compare(tuple) >= 0) {
+            return Status::Corruption("Decoded PK-index samples are not strictly increasing");
+        }
+        decoded_samples.push_back(std::move(tuple));
+    }
+
+    TabletRange tablet_range;
+    RETURN_IF_ERROR(tablet_range.from_proto(tablet_metadata->range()));
+    std::vector<VariantTuple> boundaries;
+    boundaries.reserve(split_count - 1);
+    for (int32_t i = 1; i < split_count; ++i) {
+        const size_t sample_index = static_cast<size_t>(i) * decoded_samples.size() / split_count;
+        DCHECK_LT(sample_index, decoded_samples.size());
+        VariantTuple boundary = decoded_samples[sample_index];
+        if (colocate_column_count > 0 && sample_index > 0 &&
+            colocate_prefix_differs(decoded_samples[sample_index - 1], decoded_samples[sample_index],
+                                    colocate_column_count)) {
+            boundary = build_canonical_boundary(decoded_samples[sample_index], colocate_column_count);
+        }
+        if (!tablet_range.strictly_contains(boundary)) {
+            return Status::InvalidArgument("PK-index split boundary is not strictly inside the tablet range");
+        }
+        if (!boundaries.empty() && boundaries.back().compare(boundary) >= 0) {
+            return Status::InvalidArgument("PK-index split boundaries are not strictly increasing");
+        }
+        boundaries.push_back(std::move(boundary));
+    }
+
+    RETURN_IF_ERROR(build_split_ranges_from_boundaries(tablet_metadata, boundaries, split_ranges));
+
+    // SST samples approximate PK density but cannot safely attribute individual historical rowsets.
+    // Keep FE statistics conservative and exact by distributing every old rowset uniformly, while
+    // anchoring the totals so their sum is unchanged across children.
+    const auto anchor = build_rowset_anchor(*tablet_metadata, tablet_manager);
+    RangeSplitResult uniform_result;
+    uniform_result.range_source_stats.resize(split_count);
+    for (auto& range_stats : uniform_result.range_source_stats) {
+        for (const auto& anchor_entry : anchor) {
+            range_stats[anchor_entry.first] = {1, 1};
+        }
+    }
+    apply_rowset_anchor(anchor, uniform_result, split_ranges);
+    return Status::OK();
+}
+
+Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
+                                                  const TabletMetadataPtr& tablet_metadata, int32_t split_count,
+                                                  std::vector<TabletRangeInfo>* split_ranges,
+                                                  int32_t colocate_column_count) {
+    if (split_count < 2) {
+        return Status::InvalidArgument("Invalid split count, it is less than 2");
+    }
+    if (!tablet_metadata->has_sstable_meta() || tablet_metadata->sstable_meta().sstables().empty()) {
+        return Status::InvalidArgument("Cloud-native PK index has no SSTs to sample");
+    }
+
+    // Sampling is scoped to THIS tablet's range, not to the SSTs' own extent: a tablet produced by an
+    // earlier split inherits its parent's whole sstable_meta, because the SST files stay shared until
+    // MERGE rewrites them privately. A density derived from the files would therefore land only the
+    // child's key-space fraction of the samples inside its own range, and the strict-interior filter in
+    // get_tablet_split_ranges_from_pk_index_samples_impl could drop below split_count even for a child
+    // that holds plenty of rows -- silently pinning it at the identical-tablet fallback forever.
+    auto tablet_schema = TabletSchema::create(tablet_metadata->schema());
+    ASSIGN_OR_RETURN(auto tablet_sst_range,
+                     TabletRangeHelper::create_sst_seek_range_from(tablet_metadata->range(), tablet_schema));
+
+    std::vector<const PersistentIndexSstablePB*> overlapping_sstables;
+    size_t overlapping_bytes = 0;
+    for (const auto& sstable_pb : tablet_metadata->sstable_meta().sstables()) {
+        if (!sstable_pb.has_range() || sstable_pb.range().start_key().empty() || sstable_pb.range().end_key().empty()) {
+            return Status::Corruption(fmt::format("PK-index SST {} has no usable key range", sstable_pb.filename()));
+        }
+        if (tablet_sst_range.has_overlap(sstable_pb.range())) {
+            overlapping_sstables.push_back(&sstable_pb);
+            overlapping_bytes += sstable_pb.filesize();
+        }
+    }
+    if (overlapping_sstables.empty()) {
+        return Status::InvalidArgument("No PK-index SST overlaps the tablet range");
+    }
+
+    constexpr size_t kSamplesPerSplit = 32;
+    const size_t target_sample_count = static_cast<size_t>(split_count) * kSamplesPerSplit;
+
+    std::vector<std::string> encoded_samples;
+    auto* block_cache = tablet_manager->update_mgr()->block_cache();
+    for (const auto* sstable_pb : overlapping_sstables) {
+        encoded_samples.push_back(sstable_pb->range().start_key());
+        encoded_samples.push_back(sstable_pb->range().end_key());
+        // Weight each SST's share of the sample budget by its size, so the quantiles picked downstream
+        // stay data-volume weighted the way the previous byte-interval sampling made them. Within one
+        // SST the samples are spread evenly over the part of its index that lies in the tablet range.
+        const size_t sst_sample_count =
+                overlapping_bytes == 0
+                        ? target_sample_count
+                        : std::max<size_t>(1, target_sample_count * sstable_pb->filesize() / overlapping_bytes);
+        ASSIGN_OR_RETURN(
+                auto sstable,
+                PersistentIndexSstable::new_sstable(
+                        *sstable_pb, tablet_manager->sst_location(tablet_metadata->id(), sstable_pb->filename()),
+                        block_cache ? block_cache->cache() : nullptr, false, nullptr, tablet_metadata, tablet_manager));
+        RETURN_IF_ERROR(sstable->sample_data_keys(&encoded_samples, Slice(tablet_sst_range.seek_key),
+                                                  Slice(tablet_sst_range.stop_key), sst_sample_count));
+    }
+
+    return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,
+                                                              std::move(encoded_samples), split_ranges,
+                                                              colocate_column_count);
 }
 
 // Builds a single new-tablet metadata that is "identical" to the old tablet —
@@ -1032,9 +1244,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //     straight off the raw TabletSchemaPB would instead see it empty and wrongly reject
     //     every such split (silent identical-fallback, no actual pre-split).
     auto tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(old_tablet_metadata->schema()).first;
-    const std::vector<ColumnId> sort_key_idxes = tablet_schema->sort_key_idxes();
-    if (sort_key_idxes.empty()) {
-        return Status::InvalidArgument("tablet has no sort key columns; external-boundaries path requires a sort key");
+    const std::vector<ColumnId> range_key_idxes = TabletRangeHelper::range_key_idxes(*tablet_schema);
+    if (range_key_idxes.empty()) {
+        return Status::InvalidArgument("tablet has no range key columns; external-boundaries path requires range keys");
     }
     // Precompute sort-key column metadata once (constant per call); the per-tuple
     // validation runs 2K times (K boundaries × {lower, upper}).
@@ -1045,17 +1257,17 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
         bool is_decimal;
     };
     std::vector<SortKeyColumnMeta> sort_key_meta;
-    sort_key_meta.reserve(sort_key_idxes.size());
-    for (ColumnId column_index : sort_key_idxes) {
+    sort_key_meta.reserve(range_key_idxes.size());
+    for (ColumnId column_index : range_key_idxes) {
         const TabletColumn& column = tablet_schema->column(column_index);
         const LogicalType type = column.type();
         const bool is_decimal = (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_field_type(type));
         sort_key_meta.push_back({type, column.precision(), column.scale(), is_decimal});
     }
     auto validate_tuple_against_schema = [&](const TuplePB& tuple, int range_index, std::string_view side) -> Status {
-        if (tuple.values_size() != static_cast<int>(sort_key_idxes.size())) {
-            return Status::InvalidArgument(fmt::format("new_tablet_ranges[{}].{}: tuple arity {} != sort_key arity {}",
-                                                       range_index, side, tuple.values_size(), sort_key_idxes.size()));
+        if (tuple.values_size() != static_cast<int>(range_key_idxes.size())) {
+            return Status::InvalidArgument(fmt::format("new_tablet_ranges[{}].{}: tuple arity {} != range-key arity {}",
+                                                       range_index, side, tuple.values_size(), range_key_idxes.size()));
         }
         for (int j = 0; j < tuple.values_size(); ++j) {
             const auto& variant = tuple.values(j);
@@ -1172,6 +1384,23 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //    no rowsets. Runs AFTER FE-input validation so empty tablets via external boundaries
     //    cannot accept semantically-invalid ranges either.
     if (old_tablet_metadata->rowsets_size() == 0) {
+        return Status::OK();
+    }
+
+    // For ORDER BY != PK, segment min/max and sampling metadata are in sort-key
+    // space and cannot estimate a PK-space child distribution. Correctness only
+    // requires every inherited rowset to remain shared until UNSHARE. Use uniform
+    // weights for transitional FE statistics and avoid comparing the two domains.
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && tablet_schema->has_separate_sort_key()) {
+        RangeSplitResult uniform_result;
+        uniform_result.range_source_stats.resize(external_ranges.size());
+        const auto anchor = build_rowset_anchor(*old_tablet_metadata, tablet_manager);
+        for (size_t i = 0; i < uniform_result.range_source_stats.size(); ++i) {
+            for (const auto& anchor_entry : anchor) {
+                uniform_result.range_source_stats[i][anchor_entry.first] = {1, 1};
+            }
+        }
+        apply_rowset_anchor(anchor, uniform_result, split_ranges);
         return Status::OK();
     }
 
@@ -1412,6 +1641,14 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
 
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
     new_metadatas.reserve(splitting_tablet.new_tablet_ids_size());
+    // Per-segment ownership compares each segment's stored sort-key bounds against the new tablets'
+    // ranges, so it is only sound while the two live in the same key space. TabletRangeHelper::
+    // range_key_idxes keeps a non-PK tablet's range in sort-key space whatever its ORDER BY, so those
+    // stay comparable; only a PRIMARY KEY tablet moves its range into primary-key space, and there a
+    // segment's sort-key bounds say nothing about which child owns its rows.
+    const auto old_tablet_schema = TabletSchema::create(old_tablet_metadata->schema());
+    const bool can_prune_by_segment_sort_bounds =
+            !(old_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && old_tablet_schema->has_separate_sort_key());
 
     // The full set of new-tablet ranges, used by per-segment ownership to test
     // overlap/containment of each segment against every sibling's range.
@@ -1441,7 +1678,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
     std::vector<bool> rowset_prunable(rowset_count, false);
     for (int rowset_index = 0; rowset_index < rowset_count; ++rowset_index) {
         const auto& source_rowset = old_tablet_metadata->rowsets(rowset_index);
-        if (!can_prune_rowset_segments(source_rowset, sort_key_arity)) continue;
+        if (!can_prune_by_segment_sort_bounds || !can_prune_rowset_segments(source_rowset, sort_key_arity)) continue;
         auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges);
         if (ownership_or.ok()) {
             rowset_ownership[rowset_index] = std::move(ownership_or.value());
@@ -1749,6 +1986,16 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                                         colocate_column_count);
 }
 
+Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manager,
+                                                     const TabletMetadataPtr& tablet_metadata, int32_t split_count,
+                                                     std::vector<std::string> encoded_samples,
+                                                     std::vector<TabletRangeInfo>* split_ranges,
+                                                     int32_t colocate_column_count) {
+    return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,
+                                                              std::move(encoded_samples), split_ranges,
+                                                              colocate_column_count);
+}
+
 // -----------------------------------------------------------------------------
 // Phase-1 per-segment shared optimization helpers (declared in tablet_splitter.h).
 // -----------------------------------------------------------------------------
@@ -1923,6 +2170,13 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         return Status::InvalidArgument("splitting tablet has no new tablet");
     }
 
+    auto split_schema = TabletSchema::create(tablet_metadata->schema());
+    if (split_schema->keys_type() == KeysType::PRIMARY_KEYS && split_schema->has_separate_sort_key() &&
+        ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
+         (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty()))) {
+        return Status::NotSupported("range-tablet split with ORDER BY != PK does not support DCG or IDG yet");
+    }
+
     // Flush the old tablet's PK-index memtable into sstables before propagating
     // metadata to the new tablets, so every new tablet inherits an sstable_meta that
     // already covers its rowsets' live data. This is the pre-split half of
@@ -1931,10 +2185,10 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
                      tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
 
-    // Dispatch on FE-supplied new_tablet_ranges. When set, FE has computed the
-    // K-1 boundaries externally (external boundaries / external boundaries); BE computes
-    // per-rowset stats only. When unset, fall back to the existing
-    // data-driven boundary search via get_tablet_split_ranges.
+    // Dispatch on FE-supplied new_tablet_ranges. When set, FE has computed the K-1 boundaries
+    // externally and BE computes per-rowset stats only. Otherwise ORDER BY != PK tablets sample
+    // their cloud-native PK-index SSTs; tablets whose physical order is the range key keep using
+    // the segment-driven boundary search.
     //
     // Symmetric identical-fallback: either path's non-OK Status routes through
     // make_identical_new_tablet_metadata to produce a single identical new
@@ -1943,7 +2197,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     std::vector<TabletRangeInfo> split_ranges;
     // colocate_column_count is carried at the txn level (single split job = single txn) since
     // every SplittingTabletInfoPB in the same job would carry the same value. See lake_types.proto.
-    // external-boundaries path skips boundary computation entirely (FE-supplied), so it does not consume the
+    // External-boundaries path skips boundary computation entirely (FE-supplied), so it does not consume the
     // colocate_column_count signal.
     const bool is_external_boundaries = splitting_tablet.new_tablet_ranges_size() > 0;
     // For external boundaries, FE supplies two parallel lists (new_tablet_ids and new_tablet_ranges);
@@ -1956,6 +2210,10 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     } else if (is_external_boundaries) {
         status = compute_split_ranges_from_external_boundaries(tablet_manager, old_tablet_metadata,
                                                                splitting_tablet.new_tablet_ranges(), &split_ranges);
+    } else if (split_schema->keys_type() == KeysType::PRIMARY_KEYS && split_schema->has_separate_sort_key()) {
+        status = get_tablet_split_ranges_from_pk_index_impl(tablet_manager, old_tablet_metadata,
+                                                            splitting_tablet.new_tablet_ids_size(), &split_ranges,
+                                                            txn_info.colocate_column_count());
     } else {
         status = get_tablet_split_ranges(tablet_manager, old_tablet_metadata, splitting_tablet.new_tablet_ids_size(),
                                          &split_ranges, txn_info.colocate_column_count());

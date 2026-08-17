@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -182,6 +183,18 @@ struct TabletRangeInfo {
 Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
                                int32_t colocate_column_count = 0);
+
+// PK-index-driven peer used when a PRIMARY KEY tablet's physical sort key differs from its PK.
+// |encoded_samples| are V2-encoded primary keys sampled from the tablet's cloud-native persistent-index
+// SSTs. The helper filters them to strict interior points of the current tablet range, chooses K-1
+// quantiles, decodes them back to full PK tuples, and emits K ranges. Exposed separately so the boundary
+// selection/decoding contract can be unit-tested without object-store I/O; the production split path
+// collects the samples from TabletMetadataPB::sstable_meta before calling it.
+Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manager,
+                                                     const TabletMetadataPtr& tablet_metadata, int32_t split_count,
+                                                     std::vector<std::string> encoded_samples,
+                                                     std::vector<TabletRangeInfo>* split_ranges,
+                                                     int32_t colocate_column_count = 0);
 
 // external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
 // from FE-supplied boundaries instead of computing them from segment
