@@ -1025,31 +1025,31 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     DCHECK_GE(columns.size(), 1);
     DCHECK(_src_columns.empty());
 
-    _result = NullableColumn::create(JsonColumn::create(), NullColumn::create());
-    auto* nullable_result = down_cast<NullableColumn*>(_result.get());
-    _json_result = down_cast<JsonColumn*>(nullable_result->data_column_raw_ptr());
-    _null_result = down_cast<NullColumn*>(nullable_result->null_column_raw_ptr());
+    auto result = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+    auto* nullable_result = down_cast<NullableColumn*>(result.get());
+    auto* json_result = down_cast<JsonColumn*>(nullable_result->data_column_raw_ptr());
+    auto* null_result = down_cast<NullColumn*>(nullable_result->null_column_raw_ptr());
     size_t rows = columns[0]->size();
-    _result->reserve(rows);
+    result->reserve(rows);
 
     for (auto& col : columns) {
         _src_columns.emplace_back(col.get());
     }
 
     if (_src_root->op == JsonFlatPath::OP_INCLUDE) {
-        _merge_impl<true>(rows);
+        _merge_impl<true>(rows, *json_result, *null_result);
     } else {
-        _merge_impl<false>(rows);
+        _merge_impl<false>(rows, *json_result, *null_result);
     }
 
     _src_columns.clear();
     if (_output_nullable) {
-        down_cast<NullableColumn*>(_result.get())->update_has_null();
+        nullable_result->update_has_null();
         // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
-        _result->check_or_die();
-        return _result;
+        result->check_or_die();
+        return result;
     } else {
-        auto data_column = down_cast<NullableColumn*>(_result.get())->data_column();
+        auto data_column = nullable_result->data_column();
         // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
         data_column->check_or_die();
         return data_column;
@@ -1057,7 +1057,7 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
 }
 
 template <bool IN_TREE>
-void JsonMerger::_merge_impl(size_t rows) {
+void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& null_result) {
     if (_has_remain) {
         auto remain = down_cast<const JsonColumn*>(_src_columns.back());
         for (size_t i = 0; i < rows; i++) {
@@ -1069,23 +1069,23 @@ void JsonMerger::_merge_impl(size_t rows) {
                 _merge_json(_src_root.get(), &builder, i);
                 builder.close();
                 auto slice = builder.slice();
-                _json_result->append(JsonValue(slice));
-                _null_result->append(slice.isEmptyObject());
+                json_result.append(JsonValue(slice));
+                null_result.append(slice.isEmptyObject());
             } else if (!vs.isObject()) {
                 for (int k = 0; k < _src_paths.size(); k++) {
                     // check child column should be null
                     DCHECK(_src_columns[k]->is_null(i));
                 }
-                _json_result->append(JsonValue(vs));
-                _null_result->append(vs.isEmptyObject());
+                json_result.append(JsonValue(vs));
+                null_result.append(vs.isEmptyObject());
             } else {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
                 _merge_json_with_remain<IN_TREE>(_src_root.get(), &vs, &builder, i);
                 builder.close();
                 auto slice = builder.slice();
-                _json_result->append(JsonValue(slice));
-                _null_result->append(slice.isEmptyObject());
+                json_result.append(JsonValue(slice));
+                null_result.append(slice.isEmptyObject());
             }
         }
     } else {
@@ -1095,8 +1095,8 @@ void JsonMerger::_merge_impl(size_t rows) {
             _merge_json(_src_root.get(), &builder, i);
             builder.close();
             auto json = builder.slice();
-            _json_result->append(JsonValue(json));
-            _null_result->append(json.isEmptyObject());
+            json_result.append(JsonValue(json));
+            null_result.append(json.isEmptyObject());
         }
     }
 }

@@ -229,6 +229,25 @@ TEST_F(JsonFlattenerTest, testNormalJson) {
     EXPECT_EQ("4", result[1]->debug_item(1));
 }
 
+TEST_F(JsonFlattenerTest, mergerDoesNotRetainReturnedColumn) {
+    std::vector<std::string> paths = {"k1", "k2"};
+    std::vector<LogicalType> types = {TYPE_BIGINT, TYPE_BIGINT};
+    auto flat_columns = test_json({R"({"k1": 1, "k2": 2})", R"({"k1": 3, "k2": 4})"}, paths, types, false);
+
+    for (bool output_nullable : {false, true}) {
+        JsonMerger merger(paths, types);
+        merger.set_output_nullable(output_nullable);
+
+        auto result = merger.merge(flat_columns);
+
+        ASSERT_EQ(output_nullable, result->is_nullable());
+        ASSERT_EQ(2, result->size());
+        EXPECT_EQ(JsonValue::parse(R"({"k1": 1, "k2": 2})").value(), *result->get(0).get_json());
+        EXPECT_EQ(JsonValue::parse(R"({"k1": 3, "k2": 4})").value(), *result->get(1).get_json());
+        EXPECT_EQ(1, result->use_count());
+    }
+}
+
 TEST_F(JsonFlattenerTest, testCastNormalJson) {
     std::vector<std::string> json = {R"( {"k1": 1, "k2": 2} )", R"( {"k1": 3, "k2": [1,2,3,4]} )"};
 
