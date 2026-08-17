@@ -3,7 +3,7 @@ name: CD SYNC CI PIPELINE
 # CI gate for reverse-sync PRs (identified by the `sync` label — on StarRocks only the
 # reverse sync opens `sync`-labeled PRs; the executor desensitizes the rest so there is no
 # "(cd-sync #N)" title / `cd-sync` label) opened on StarRocks main / branch-4.1 /
-# branch-4.0 by repo-sync.yml. Mirror of
+# branch-4.0 by cd-repo-sync.yml. Mirror of
 # celerdata-enterprise's sync-ci-pipeline.yml, trimmed for v1: BUILD chain only (no UT),
 # auto-merge on green. Runs on [self-hosted, normal] (mirrors ci-pipeline's heavy-job pool;
 # the tiny [sync] pool is reserved for the executor + ci-sync trigger). Requires secret: PAT.
