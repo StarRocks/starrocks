@@ -74,8 +74,7 @@ StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, 
                                               ZSTD_defaultCMem);
     if (d == nullptr) {
         if (trained) {
-            return Status::Corruption(
-                    "the dictionary page is marked as a trained ZSTD dictionary but is not one");
+            return Status::Corruption("the dictionary page is marked as a trained ZSTD dictionary but is not one");
         }
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
     }
