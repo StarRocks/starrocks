@@ -196,6 +196,9 @@ private:
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
     void _verify_footer();
 
+    // Encodes and records the index entry for the block starting at |row|.
+    Status _append_sort_key_index_entry(const Chunk& chunk, size_t row);
+
     // Check global dictionary validity for a single column writer
     void _check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index);
 
