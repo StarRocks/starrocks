@@ -652,4 +652,127 @@ public class ResourceGroupMgrConcurrencyTest {
                 "Lock-free readers observed " + nullCount.get() +
                         " transient null(s) for 'rg_alter_stress' during concurrent alter");
     }
+
+    // -------------------------------------------------------------------------
+    // 22. Finding P1 (discussion_r3793204369): CREATE RESOURCE GROUP OR REPLACE
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testCreateResourceGroupReplaceMemPoolChangeMemLimit() throws Exception {
+        Map<String, String> props1 = Maps.newHashMap();
+        props1.put("cpu_weight", "1");
+        props1.put("mem_limit", "50%");
+        props1.put("mem_pool", "custom_pool_1");
+        props1.put("type", "mv");
+        CreateResourceGroupStmt stmt1 = new CreateResourceGroupStmt("rg_mp1", false, false,
+                Collections.emptyList(), props1);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt1);
+        mgr.createResourceGroup(stmt1);
+
+        ResourceGroup rg1 = mgr.getResourceGroup("rg_mp1");
+        Assertions.assertNotNull(rg1);
+        Assertions.assertEquals(0.5, rg1.getMemLimit());
+
+        // Replace the group in custom_pool_1 with a different mem_limit (60%).
+        // This validates that resourceGroupInMemPoolHaveSameMemLimit ignores the old version
+        // of rg_mp1 being replaced and succeeds without throwing DdlException.
+        Map<String, String> props2 = Maps.newHashMap();
+        props2.put("cpu_weight", "1");
+        props2.put("mem_limit", "60%");
+        props2.put("mem_pool", "custom_pool_1");
+        props2.put("type", "mv");
+        CreateResourceGroupStmt stmt2 = new CreateResourceGroupStmt("rg_mp1", false, true,
+                Collections.emptyList(), props2);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt2);
+
+        mgr.createResourceGroup(stmt2);
+
+        ResourceGroup rg2 = mgr.getResourceGroup("rg_mp1");
+        Assertions.assertNotNull(rg2);
+        Assertions.assertEquals(0.6, rg2.getMemLimit());
+    }
+
+    @Test
+    public void testCreateResourceGroupReplaceShortQueryGroup() throws Exception {
+        ResourceGroup sqGroup = new ResourceGroup();
+        sqGroup.setName("sq_replace");
+        sqGroup.setId(888L);
+        sqGroup.setResourceGroupType(TWorkGroupType.WG_SHORT_QUERY);
+        sqGroup.setMemLimit(0.5);
+        sqGroup.setCpuWeight(1);
+        sqGroup.setClassifiers(Collections.emptyList());
+
+        java.lang.reflect.Method addMethod =
+                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
+        addMethod.setAccessible(true);
+        addMethod.invoke(mgr, sqGroup);
+
+        Assertions.assertNotNull(snapField(getSnapshot(), "shortQueryResourceGroup"));
+        Assertions.assertEquals("sq_replace",
+                ((ResourceGroup) snapField(getSnapshot(), "shortQueryResourceGroup")).getName());
+
+        // Replace short_query group with MV group.
+        // Validates that shortQueryResourceGroup in snapshot becomes null when a WG_SHORT_QUERY group is replaced.
+        Map<String, String> props2 = Maps.newHashMap();
+        props2.put("cpu_weight", "1");
+        props2.put("mem_limit", "60%");
+        props2.put("type", "mv");
+        CreateResourceGroupStmt stmt2 = new CreateResourceGroupStmt("sq_replace", false, true,
+                Collections.emptyList(), props2);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt2);
+
+        mgr.createResourceGroup(stmt2);
+
+        ResourceGroup sqReplaced = snapField(getSnapshot(), "shortQueryResourceGroup");
+        Assertions.assertNull(sqReplaced,
+                "shortQueryResourceGroup must become null when WG_SHORT_QUERY group is replaced with WG_MV");
+        ResourceGroup rgReplaced = mgr.getResourceGroup("sq_replace");
+        Assertions.assertNotNull(rgReplaced);
+        Assertions.assertEquals(0.6, rgReplaced.getMemLimit());
+    }
+
+    @Test
+    public void testCreateResourceGroupReplaceFailsValidationBeforeSideEffects() throws Exception {
+        Map<String, String> props1 = Maps.newHashMap();
+        props1.put("cpu_weight", "1");
+        props1.put("mem_limit", "50%");
+        props1.put("type", "mv");
+        CreateResourceGroupStmt stmt1 = new CreateResourceGroupStmt("rg_valid_test", false, false,
+                Collections.emptyList(), props1);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt1);
+        mgr.createResourceGroup(stmt1);
+
+        ResourceGroup original = mgr.getResourceGroup("rg_valid_test");
+        Assertions.assertNotNull(original);
+
+        // Inject an existing short_query group.
+        ResourceGroup sqExisting = new ResourceGroup();
+        sqExisting.setName("sq_existing");
+        sqExisting.setId(999L);
+        sqExisting.setResourceGroupType(TWorkGroupType.WG_SHORT_QUERY);
+        sqExisting.setMemLimit(0.5);
+        sqExisting.setClassifiers(Collections.emptyList());
+        java.lang.reflect.Method addMethod =
+                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
+        addMethod.setAccessible(true);
+        addMethod.invoke(mgr, sqExisting);
+
+        // Attempt replacing rg_valid_test with short_query type when another short_query group sq_existing exists.
+        Map<String, String> propsBad = Maps.newHashMap();
+        propsBad.put("cpu_weight", "1");
+        propsBad.put("mem_limit", "50%");
+        propsBad.put("type", "short_query");
+        CreateResourceGroupStmt stmtBad = new CreateResourceGroupStmt("rg_valid_test", false, true,
+                Collections.emptyList(), propsBad);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmtBad);
+
+        // Should throw DdlException: "There can be only one short_query RESOURCE_GROUP"
+        Assertions.assertThrows(DdlException.class, () -> mgr.createResourceGroup(stmtBad));
+
+        // Verify original group remains completely unmodified in snapshot.
+        ResourceGroup current = mgr.getResourceGroup("rg_valid_test");
+        Assertions.assertNotNull(current);
+        Assertions.assertEquals(original.getId(), current.getId());
+        Assertions.assertEquals(TWorkGroupType.WG_MV, current.getResourceGroupType());
+    }
 }
