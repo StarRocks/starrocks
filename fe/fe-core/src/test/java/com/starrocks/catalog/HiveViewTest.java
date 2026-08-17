@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.TableRelation;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
