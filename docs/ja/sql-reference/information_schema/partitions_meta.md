@@ -25,7 +25,7 @@ description: "partitions_metaはテーブルのパーティションに関する
 | PARTITION_KEY                 | パーティションのパーティションキー。             |
 | PARTITION_VALUE               | パーティションの値（例: `Range` または `List`）。 |
 | DISTRIBUTION_KEY              | パーティションの分散キー。                       |
-| BUCKETS                       | パーティション内のバケット数。                   |
+| BUCKETS                       | パーティション内のバケット数。Range 分散を使用するテーブルでは、この値はパーティションのベースインデックスにおける実際のタブレット数であり、タブレットの分割およびマージに応じて変化します。 |
 | REPLICATION_NUM               | パーティションのレプリケーション数。             |
 | STORAGE_MEDIUM                | パーティションのストレージメディア。             |
 | COOLDOWN_TIME                 | パーティションのクールダウン時間。               |

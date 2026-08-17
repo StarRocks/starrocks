@@ -493,10 +493,8 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
-        // BUCKETS: each physical partition can carry its own bucket count (e.g. ADD PHYSICAL PARTITION),
-        // so prefer the per-physical value and fall back to the table-level distribution default.
-        partitionMetaInfo.setBuckets(physicalPartition.getBucketNum() > 0 ?
-                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
+        // BUCKETS
+        partitionMetaInfo.setBuckets(physicalPartition.getActualBucketNum(distributionInfo));
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE

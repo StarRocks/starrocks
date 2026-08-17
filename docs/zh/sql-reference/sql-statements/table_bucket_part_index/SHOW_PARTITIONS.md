@@ -47,7 +47,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | PartitionKey             | 分区键，由一个或多个分区列组成。                                                     |
 | Range                    | Range 分区的范围，为左闭右开区间。                           |
 | DistributionKey          | 分区中数据进行哈希分桶时的分桶键。                           |
-| Buckets                  | 分区中的分桶数量。                                           |
+| Buckets                  | 分区中的分桶数量。对于使用 Range 分布的表，该值为分区中 Base Index 的实际 Tablet 数量，会随 Tablet 的分裂与合并而变化。 |
 | ReplicationNum           | 分区中每个 Tablet 的副本数量。                                |
 | StorageMedium            | 数据存储介质。返回值为 `HDD` 表示机械硬盘，返回值为 `SSD` 表示固态硬盘。           |
 | CooldownTime             | 数据降冷时间。如果一开始数据的存储介质为 SSD ，在该时间点之后，数据存储介质会从 SSD 切换为 HDD。 格式："yyyy-MM-dd HH:mm:ss"。|
