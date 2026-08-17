@@ -36,6 +36,16 @@ void MetadataCache::cache_rowset(Rowset* ptr) {
     _insert(ptr->rowset_id_str(), weak_ptr, ptr->segment_memory_usage());
 }
 
+void MetadataCache::update_rowset_charge(Rowset* ptr, size_t charge) {
+    const std::string key = ptr->rowset_id_str();
+    Cache::Handle* handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return;
+    }
+    _cache->update_charge(handle, charge);
+    _cache->release(handle);
+}
+
 void MetadataCache::evict_rowset(Rowset* ptr) {
     _erase(ptr->rowset_id_str());
 }

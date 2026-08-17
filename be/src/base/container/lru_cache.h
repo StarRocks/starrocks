@@ -150,6 +150,15 @@ public:
     // REQUIRES: handle must have been returned by a method on *this.
     virtual void release(Handle* handle) = 0;
 
+    // Update the charge of the mapping referenced by |handle| without replacing
+    // its value. Returns false if the mapping is no longer in the cache.
+    //
+    // The caller must still release |handle| after this call. Increasing the
+    // charge may evict other unpinned entries to enforce the cache capacity.
+    // REQUIRES: handle must not have been released yet.
+    // REQUIRES: handle must have been returned by a method on *this.
+    virtual bool update_charge(Handle* handle, size_t value_size) = 0;
+
     // Refresh the recency of an existing cache entry without taking or
     // releasing a handle, so callers can update LRU order without triggering
     // deleter side effects.
@@ -279,6 +288,7 @@ public:
                           CachePriority priority = CachePriority::NORMAL);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
     void release(Cache::Handle* handle);
+    bool update_charge(Cache::Handle* handle, size_t value_size);
     void touch(const CacheKey& key, uint32_t hash);
     void erase(const CacheKey& key, uint32_t hash);
     int prune();
@@ -332,6 +342,7 @@ public:
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
+    bool update_charge(Handle* handle, size_t value_size) override;
     void touch(const CacheKey& key) override;
     void erase(const CacheKey& key) override;
     void* value(Handle* handle) override;
