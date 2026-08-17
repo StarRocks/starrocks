@@ -485,7 +485,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet 的大小**大于** `tablet_reshard_target_size`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
-  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数，且该 Tablet 的大小**大于** `tablet_reshard_min_split_size`，则无需等到 `tablet_reshard_target_size` 即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。在 `PROPERTIES` 中指定 `tablet_reshard_target_size` 会禁用该行为，并严格按照指定的目标大小执行。如需在整个集群范围内禁用，可将 FE 配置项 `tablet_reshard_enable_early_split` 设置为 `false`。
+  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数，且该 Tablet 的大小达到 `tablet_reshard_min_split_size` 的 1.5 倍（该参数在此规则下作为目标 Tablet 大小，默认 2 GB，即触发阈值为 3 GB），则无需等到 `tablet_reshard_target_size` 即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。在 `PROPERTIES` 中指定 `tablet_reshard_target_size` 会禁用该行为，并严格按照指定的目标大小执行。如需在整个集群范围内禁用，可将 FE 配置项 `tablet_reshard_enable_early_split` 设置为 `false`。
 
   - 触发合并（MERGE）的条件：
     - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。

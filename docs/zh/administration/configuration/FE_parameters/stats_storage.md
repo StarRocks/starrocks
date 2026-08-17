@@ -614,7 +614,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 当物化索引的 Tablet 数量少于其所属仓库的计算节点数时，是否允许该索引在达到 `tablet_reshard_min_split_size` 时即触发拆分，而无需等到 `tablet_reshard_target_size`。新建分区初始只有一个 Tablet，在其增长到足以拆分之前，只能由一个计算节点承接写入。该配置项可让这类分区更快获得集群级别的写入并行度，在持续导入场景下效果尤为明显。提前拆分仅在按大小拆分的规则不会触发拆分时生效，且不会使索引的 Tablet 数量超过其所属仓库的计算节点数。作为一种限流手段，当有其他 Tablet SPLIT 或 MERGE 作业正在运行时，提前拆分通常会被推迟。将该配置项设置为 `false` 后，拆分将完全由 `tablet_reshard_target_size` 决定；已经开始的作业不受影响。该配置仅在存算分离模式下生效。
+- 描述: 当物化索引的 Tablet 数量少于其所属仓库的计算节点数时，是否允许该索引按 `tablet_reshard_min_split_size` 触发拆分，而无需等到 `tablet_reshard_target_size`。该参数在此规则下作为目标 Tablet 大小，因此触发阈值为其 1.5 倍（默认 2 GB 时即 3 GB）。新建分区初始只有一个 Tablet，在其增长到足以拆分之前，只能由一个计算节点承接写入。该配置项可让这类分区更快获得集群级别的写入并行度，在持续导入场景下效果尤为明显。提前拆分仅在按大小拆分的规则不会触发拆分时生效，且不会使索引的 Tablet 数量超过其所属仓库的计算节点数。作为一种限流手段，当有其他 Tablet SPLIT 或 MERGE 作业正在运行时，提前拆分通常会被推迟。将该配置项设置为 `false` 后，拆分将完全由 `tablet_reshard_target_size` 决定；已经开始的作业不受影响。该配置仅在存算分离模式下生效。
 - 引入版本: v4.1.5, v4.2.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
