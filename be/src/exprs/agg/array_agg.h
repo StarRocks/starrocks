@@ -29,6 +29,20 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+inline bool array_agg_exceeds_max_size(FunctionContext* ctx, size_t element_count) {
+    const ssize_t limit = ctx->get_array_agg_max_size();
+    if (LIKELY(limit <= 0 || element_count <= static_cast<size_t>(limit))) {
+        return false;
+    }
+    ctx->set_error(fmt::format("array_agg produced an array exceeding the limit {} set by the session variable "
+                               "array_agg_max_size.",
+                               limit)
+                           .c_str(),
+                   false);
+    return true;
+}
+
 // Primary template: non-string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
 struct ArrayAggAggregateState {
@@ -77,6 +91,15 @@ struct ArrayAggAggregateState {
             }
         }
         return &data_column;
+    }
+
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
     }
 
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
@@ -163,6 +186,15 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
         return &data_column;
     }
 
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
+    }
+
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
 
     static bool check_overflow(const Column& col, FunctionContext* ctx) {
@@ -247,9 +279,9 @@ public:
         // If they don't, the update() below indexes past the element column and hands the state
         // a wild Slice.
         if (UNLIKELY(offset_size.first + offset_size.second > element_data_column->size())) {
-            LOG_FIRST_N(ERROR, 20) << "array_agg merge: inconsistent array column"
-                                   << " row=" << row_num << " offset=" << offset_size.first
-                                   << " size=" << offset_size.second << " elements=" << element_data_column->size()
+            LOG_FIRST_N(ERROR, 20) << "array_agg merge: inconsistent array column" << " row=" << row_num
+                                   << " offset=" << offset_size.first << " size=" << offset_size.second
+                                   << " elements=" << element_data_column->size()
                                    << " array_rows=" << input_column->size()
                                    << " elem_nullable=" << array_element.is_nullable();
             ctx->set_error("array_agg: corrupted array column (offsets exceed element column)");
@@ -282,8 +314,7 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        // should check overflow before append, otherwise will generate invalid result.
-        if (UNLIKELY(state_impl.check_overflow(ctx))) {
+        if (UNLIKELY(array_agg_exceeds_max_size(ctx, state_impl.element_count()) || state_impl.check_overflow(ctx))) {
             return;
         }
 
@@ -318,7 +349,21 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
+        // get_values must always grow dst by exactly end - start rows, even when it fails. Two callers depend
+        // on that and neither can observe an error: the Analytor appends dst to an input chunk whose row count
+        // is already fixed, and the nullable wrapper appends end - start null flags alongside this call no
+        // matter what happens here. So pad dst back up on every exit path. The padding is never read: whoever
+        // set the error fails the query.
+        const size_t expected_size = dst->size() + (end - start);
+        auto defer = DeferOp([&]() {
+            if (dst->size() < expected_size) {
+                dst->append_default(expected_size - dst->size());
+            }
+        });
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        if (UNLIKELY(array_agg_exceeds_max_size(ctx, state_impl.element_count()))) {
+            return;
+        }
         const auto& data_column = state_impl.get_data_column();
         auto* array_column = down_cast<ArrayColumn*>(dst);
         for (auto i = start; i < end; i++) {
@@ -612,6 +657,9 @@ public:
             }
             index.resize(res_num);
             elem_size = res_num;
+        }
+        if (UNLIKELY(array_agg_exceeds_max_size(ctx, elem_size))) {
+            return;
         }
         auto* elements_col = array_col->elements_column_raw_ptr();
         if (index.empty()) {

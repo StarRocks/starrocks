@@ -286,6 +286,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 }
                 _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs,
                                                                   is_distinct, is_asc_order, nulls_first);
+                if (state->query_options().__isset.array_agg_max_size) {
+                    _agg_fn_ctxs[i]->set_array_agg_max_size(state->query_options().array_agg_max_size);
+                }
             } else {
                 _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
             }

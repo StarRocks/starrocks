@@ -196,6 +196,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **データ型**: String
 * **スコープ**: Session
 
+### array_agg_max_size
+
+* **スコープ**: Session
+* **説明**: [array_agg](sql-functions/array-functions/array_agg.md) 関数が 1 つの配列に集約できる要素の最大数です。あるグループがこの上限を超えた場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
+
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session

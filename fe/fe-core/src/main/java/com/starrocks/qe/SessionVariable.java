@@ -957,6 +957,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    public static final String ARRAY_AGG_MAX_SIZE = "array_agg_max_size";
+
     // These parameters are experimental. They may be removed in the future
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
     public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
@@ -3116,6 +3118,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 1024;
 
+    // Maximum number of elements array_agg may accumulate into a single array. A query that
+    // exceeds it fails instead of returning an oversized array. 0 or negative means unlimited.
+    @VariableMgr.VarAttr(name = ARRAY_AGG_MAX_SIZE)
+    private long arrayAggMaxSize = 0;
+
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedRows = 1 * 1024 * 1024 * 1024;
 
@@ -3695,6 +3702,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setExprChildrenLimit(int exprChildrenLimit) {
         this.exprChildrenLimit = exprChildrenLimit;
+    }
+
+    public long getArrayAggMaxSize() {
+        return arrayAggMaxSize;
+    }
+
+    public void setArrayAggMaxSize(long arrayAggMaxSize) {
+        this.arrayAggMaxSize = arrayAggMaxSize;
     }
 
     public void setFullSortMaxBufferedRows(long v) {
@@ -6691,6 +6706,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
+        tResult.setArray_agg_max_size(arrayAggMaxSize);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
         tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);
