@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
@@ -323,6 +324,54 @@ public abstract class TabletReshardJob implements Writable {
     protected abstract void registerReshardingTabletsOnRestart();
 
     public abstract TTabletReshardJobsItem getInfo();
+
+    /**
+     * Admission-time reservation body, shared by the split and merge jobs. The caller runs it under
+     * the table WRITE lock: the table must be NORMAL, every index the job is about to reshard must
+     * still be the live version of its index meta, and only then does the table flip to
+     * {@code TABLET_RESHARD}.
+     *
+     * <p>All three steps belong in one lock scope. The job was built from a snapshot the factory took
+     * under a lock it has since released, so the layout can have moved on; and the state flip is what
+     * stops it from moving again, because the factories and this method both require NORMAL, so no
+     * second reshard job can be admitted while this one holds the table. Validating before the flip
+     * and under the same lock is therefore the only point at which "these indexes are live" can be
+     * established and stay true for the rest of the job.
+     */
+    protected static void reserveTableForReshard(long dbId, OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw new TabletReshardException(
+                    "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
+        }
+        checkReshardingIndexesStillLatest(dbId, olapTable, reshardingPhysicalPartitions);
+        olapTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+    }
+
+    private static void checkReshardingIndexesStillLatest(long dbId, OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        String dbName = db == null ? "" : db.getFullName();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                // Dropped in the same gap (DROP PARTITION / TRUNCATE are permitted alongside a reshard).
+                // Every later step of the job already skips a partition that is missing, so this is not
+                // a reason to reject the job.
+                continue;
+            }
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                // The new index the job will install carries the source index's meta id, so the meta id
+                // is still available even when the source index itself is already gone.
+                TabletReshardUtils.checkIndexStillLatest(physicalPartition,
+                        reshardingIndex.getMaterializedIndexId(),
+                        reshardingIndex.getMaterializedIndex().getMetaId(),
+                        dbName, olapTable.getName());
+            }
+        }
+    }
 
     /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,

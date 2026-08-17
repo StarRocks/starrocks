@@ -227,6 +227,41 @@ public class TabletReshardUtils {
         }
     }
 
+    /**
+     * Admission-time counterpart of {@link #checkIndexNotSuperseded}: an index a reshard job was
+     * built against must still be the latest version of its index meta when the job reserves the
+     * table.
+     *
+     * <p>The creation-time check cannot cover this. A job factory releases the table lock before its
+     * job is handed to {@code TabletReshardJobMgr#addTabletReshardJob}, so another reshard job on the
+     * same table can complete in that gap and install a new version of the very index this job is
+     * about to reshard -- turning a source index that was live at creation into a superseded one.
+     * The consequences are the same as admitting a superseded tablet in the first place, plus one
+     * more: {@code addMaterializedIndex} would fail its "index id already exists" precondition past
+     * the job's no-abort boundary.
+     *
+     * <p>Takes ids rather than a {@link MaterializedIndex} because the index may be gone from the
+     * partition altogether by now, which this also rejects -- resharding an index that no longer
+     * exists produces nothing, and installing its successor would fail the same precondition.
+     */
+    public static void checkIndexStillLatest(PhysicalPartition physicalPartition, long indexId, long indexMetaId,
+                                             String dbName, String tableName) throws StarRocksException {
+        MaterializedIndex latest = physicalPartition.getLatestIndex(indexMetaId);
+        if (latest != null && latest.getId() == indexId) {
+            return;
+        }
+        String indexDesc = "materialized index " + indexId + " in physical partition "
+                + physicalPartition.getId() + " in table " + dbName + '.' + tableName;
+        if (latest == null) {
+            throw new StarRocksException("Cannot reshard " + indexDesc
+                    + ": it was removed after this tablet reshard job was created");
+        }
+        throw new StarRocksException("Cannot reshard " + indexDesc
+                + ": it has already been superseded by index " + latest.getId()
+                + " since this tablet reshard job was created. The current tablets of that partition are "
+                + describeTablets(latest));
+    }
+
     // The replacement ids, spelled out in the message rather than pointed at with SHOW PROC: the
     // partition-level proc path requires system-level OPERATE, while triggering this rejection only
     // requires ALTER on the table, so a user who can hit the error may not be able to run the command

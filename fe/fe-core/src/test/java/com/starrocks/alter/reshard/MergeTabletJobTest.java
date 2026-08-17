@@ -1223,6 +1223,36 @@ public class MergeTabletJobTest {
                 "expected original cause message, got: " + thrown.getMessage());
     }
 
+    /**
+     * The factory releases the table lock before the job reaches the manager, so another reshard job
+     * can complete in that gap and supersede the very index this job was built against -- the
+     * creation-time check cannot see it. init() re-checks under the write lock that reserves the
+     * table, so the job is rejected at admission instead of publishing against tablets that are no
+     * longer part of the table and then spinning in RUNNING forever.
+     */
+    @Test
+    public void testInitRejectsSupersededIndex() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex sourceIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex supersedingIndex = new MaterializedIndex(
+                GlobalStateMgr.getCurrentState().getNextId(), sourceIndex.getMetaId(),
+                IndexState.NORMAL, sourceIndex.getShardGroupId());
+        supersedingIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+        physicalPartition.addMaterializedIndex(supersedingIndex, true);
+        try {
+            StarRocksException e = Assertions.assertThrows(StarRocksException.class, mergeJob::init);
+            Assertions.assertTrue(e.getMessage().contains("superseded by index " + supersedingIndex.getId()),
+                    e.getMessage());
+            // Rejected before the reservation, so the table is left available to whoever can still use it.
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        } finally {
+            // Tests in this class share a single static table.
+            physicalPartition.deleteMaterializedIndexByIndexId(supersedingIndex.getId());
+        }
+    }
+
 
     // A publish failure is always retried, never terminal, so it must be reported WITHOUT being
     // written into the journaled errorMessage: a job whose retry later succeeds would otherwise

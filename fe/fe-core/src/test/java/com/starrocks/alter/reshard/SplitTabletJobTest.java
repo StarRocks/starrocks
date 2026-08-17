@@ -30,6 +30,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -825,6 +826,36 @@ public class SplitTabletJobTest {
             Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
         } finally {
             table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    /**
+     * The factory releases the table lock before the job reaches the manager, so another reshard job
+     * can complete in that gap and supersede the very index this job was built against -- the
+     * creation-time check cannot see it. init() re-checks under the write lock that reserves the
+     * table, so the job is rejected at admission instead of publishing against tablets that are no
+     * longer part of the table and then spinning in RUNNING forever.
+     */
+    @Test
+    public void testInitRejectsSupersededIndex() throws Exception {
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex sourceIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex supersedingIndex = new MaterializedIndex(
+                GlobalStateMgr.getCurrentState().getNextId(), sourceIndex.getMetaId(),
+                MaterializedIndex.IndexState.NORMAL, sourceIndex.getShardGroupId());
+        supersedingIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+        physicalPartition.addMaterializedIndex(supersedingIndex, true);
+        try {
+            StarRocksException e = Assertions.assertThrows(StarRocksException.class, tabletReshardJob::init);
+            Assertions.assertTrue(e.getMessage().contains("superseded by index " + supersedingIndex.getId()),
+                    e.getMessage());
+            // Rejected before the reservation, so the table is left available to whoever can still use it.
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        } finally {
+            // Tests in this class share a single static table.
+            physicalPartition.deleteMaterializedIndexByIndexId(supersedingIndex.getId());
         }
     }
 

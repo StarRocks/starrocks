@@ -115,8 +115,8 @@ public class MergeTabletJob extends TabletReshardJob {
 
     @Override
     public void init() throws StarRocksException {
-        try {
-            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            reserveTableForReshard(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         } catch (TabletReshardException e) {
             // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
             // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.

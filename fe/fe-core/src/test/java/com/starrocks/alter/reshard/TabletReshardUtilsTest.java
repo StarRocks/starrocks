@@ -341,6 +341,43 @@ public class TabletReshardUtilsTest {
         assertFalse(e.getMessage().contains("2020"), e.getMessage());
     }
 
+    // Admission-time counterpart of the check above. The factory builds a job from a snapshot taken
+    // under a lock it then releases, so a source index that was live at creation can be superseded --
+    // or removed outright -- before the job reserves the table. Both leave the job with nothing live
+    // to reshard, so both are rejected.
+    @Test
+    public void checkIndexStillLatest_rejectsSupersededOrRemovedIndex() {
+        MaterializedIndex oldIndex = new MaterializedIndex(100L, 100L, IndexState.NORMAL, 0L);
+        oldIndex.addTablet(new LakeTablet(1000L), null, false);
+        PhysicalPartition partition = new PhysicalPartition(1L, 0L, oldIndex);
+
+        // Still the latest version of its meta: admission proceeds.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 100L, 100L, "db", "t"));
+
+        // A reshard job admitted first installs a new version of the same index meta.
+        MaterializedIndex newIndex = new MaterializedIndex(200L, 100L, IndexState.NORMAL, 0L);
+        newIndex.addTablet(new LakeTablet(2000L), null, false);
+        partition.addMaterializedIndex(newIndex, true);
+
+        StarRocksException e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 100L, 100L, "db", "t"));
+        assertTrue(e.getMessage().contains("superseded by index 200"), e.getMessage());
+        assertTrue(e.getMessage().contains("[2000]"), e.getMessage());
+
+        // The winner of that race is of course still admissible.
+        assertDoesNotThrowStarRocks(() ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 200L, 100L, "db", "t"));
+
+        // Index meta gone from the partition entirely: there is nothing left to reshard, and
+        // installing a successor would fail addMaterializedIndex's precondition well past the job's
+        // no-abort boundary.
+        partition.deleteMaterializedIndexByMetaId(100L);
+        e = assertThrows(StarRocksException.class, () ->
+                TabletReshardUtils.checkIndexStillLatest(partition, 200L, 100L, "db", "t"));
+        assertTrue(e.getMessage().contains("was removed after"), e.getMessage());
+    }
+
     private interface ThrowingRunnable {
         void run() throws StarRocksException;
     }
