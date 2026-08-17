@@ -14,6 +14,9 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.CommonSubqueryCTEHoister;
+import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -137,6 +140,67 @@ public class CommonSubqueryCTETest extends TPCDSPlanTestBase {
                 + "(select ss_store_sk from store_sales limit 10) b "
                 + "where a.ss_store_sk = b.ss_store_sk";
         assertEquals(2, scanCount(sql, "store_sales"));
+    }
+
+    /**
+     * A LIMIT nested below the candidate is just as unsafe to share as one written on it directly: the
+     * inner derived table keeps its LIMIT, so two occurrences may pick different rows today.
+     */
+    @Test
+    public void testNestedLimitNotShared() throws Exception {
+        String sql = "select a.ss_store_sk, b.ss_store_sk from "
+                + "(select ss_store_sk from (select ss_store_sk from store_sales limit 1) i1) a, "
+                + "(select ss_store_sk from (select ss_store_sk from store_sales limit 1) i2) b "
+                + "where a.ss_store_sk = b.ss_store_sk";
+        assertEquals(2, scanCount(sql, "store_sales"));
+    }
+
+    /**
+     * The pre-analysis guards read SQL text and cannot see through a view, so a view calling rand() would
+     * otherwise be shared. The post-analysis re-check must catch it and revert.
+     */
+    @Test
+    public void testNonDeterministicBehindViewNotShared() throws Exception {
+        starRocksAssert.withView("create view cse_rand_view as select ss_store_sk, rand() r from store_sales");
+        try {
+            String sql = "select a.ss_store_sk, b.ss_store_sk from "
+                    + "(select ss_store_sk, r from cse_rand_view) a, "
+                    + "(select ss_store_sk, r from cse_rand_view) b "
+                    + "where a.ss_store_sk = b.ss_store_sk";
+            assertEquals(2, scanCount(sql, "store_sales"));
+        } finally {
+            starRocksAssert.dropView("cse_rand_view");
+        }
+    }
+
+    /**
+     * A prepared statement re-plans one cached AST per EXECUTE, so a rewrite whose grouping decision depends
+     * on the current parameter bindings must not be baked in. Parameterized statements are skipped outright.
+     */
+    @Test
+    public void testParameterizedStatementNotRewritten() throws Exception {
+        String sql = "select a.ss_store_sk, b.ss_store_sk from "
+                + "(select ss_store_sk from store_sales where ss_item_sk = ?) a, "
+                + "(select ss_store_sk from store_sales where ss_item_sk = ?) b "
+                + "where a.ss_store_sk = b.ss_store_sk";
+        // `?` parses into a PrepareStmt wrapper; the statement actually re-planned on every EXECUTE is the
+        // inner one, which is what the guard has to inspect.
+        PrepareStmt prepared = (PrepareStmt) com.starrocks.sql.parser.SqlParser
+                .parse("prepare p from " + sql, connectContext.getSessionVariable()).get(0);
+        QueryStatement stmt = (QueryStatement) prepared.getInnerStmt();
+        assertTrue(CommonSubqueryCTEHoister.hoist(stmt).isEmpty());
+    }
+
+    /** Same shape without parameters is still rewritten, so the guard above is not over-broad. */
+    @Test
+    public void testSameShapeWithoutParametersIsRewritten() throws Exception {
+        String sql = "select a.ss_store_sk, b.ss_store_sk from "
+                + "(select ss_store_sk from store_sales where ss_item_sk = 1) a, "
+                + "(select ss_store_sk from store_sales where ss_item_sk = 1) b "
+                + "where a.ss_store_sk = b.ss_store_sk";
+        QueryStatement stmt = (QueryStatement) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable()).get(0);
+        assertTrue(!CommonSubqueryCTEHoister.hoist(stmt).isEmpty());
     }
 
     @Test

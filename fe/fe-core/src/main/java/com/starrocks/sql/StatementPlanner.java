@@ -338,6 +338,15 @@ public class StatementPlanner {
             LOG.debug("common subquery hoisting produced an unanalyzable statement, reverting", e);
             record.revert();
             Analyzer.analyze(statement, session);
+            return;
+        }
+
+        // The pre-analysis guards read SQL text, which cannot see through a view - views are only expanded
+        // during analysis. Re-check the hoisted bodies now that they are resolved, so that e.g. two derived
+        // tables reading a view that calls rand() are not silently made to agree.
+        if (CommonSubqueryCTEHoister.isUnsafeAfterAnalysis(record)) {
+            record.revert();
+            Analyzer.analyze(statement, session);
         }
     }
 

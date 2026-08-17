@@ -16,16 +16,22 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -75,13 +81,14 @@ import java.util.regex.Pattern;
  * the memo (see {@code RelationTransformer#buildCTEAnchorAndProducer}) and
  * {@code CostModel#visitPhysicalCTEAnchor} arbitrates against {@code cbo_cte_reuse_rate}.
  *
- * <p><b>Correlation.</b> Measured, not assumed: StarRocks already rejects a correlated derived table in
- * FROM ("Column '...' cannot be resolved") whether or not this pass runs, so a body that reaches this
- * code cannot depend on an enclosing scope. Hoisting to the <em>outermost</em> query block keeps that
- * property honest anyway - the CTE body is then analyzed against an essentially empty outer scope, so
- * an outer reference could only fail to resolve, never silently rebind to a different column. The
- * caller still reverts and re-analyzes if analysis throws, as a net for cases neither of us predicted;
- * see {@code StatementPlanner#analyzeWithCommonSubqueryCte}.
+ * <p><b>Correlation.</b> A derived table that reads an outer column cannot be recognized before name
+ * resolution, so this pass does not try. What makes that safe is the choice of destination: hoisting to
+ * the <em>outermost</em> query block means the body is analyzed against an essentially empty outer scope,
+ * where an outer reference can only fail to resolve - it can never quietly bind to a different column.
+ * The caller therefore reverts the rewrite and re-analyzes the original statement whenever analysis
+ * throws; see {@code StatementPlanner#analyzeWithCommonSubqueryCte}. (How far out such a reference may
+ * legally reach is a separate question - {@code Scope#resolveField} only permits the first outer level -
+ * but the fallback does not depend on the answer.)
  */
 public final class CommonSubqueryCTEHoister {
     private static final Logger LOG = LogManager.getLogger(CommonSubqueryCTEHoister.class);
@@ -103,6 +110,16 @@ public final class CommonSubqueryCTEHoister {
         HoistRecord record = new HoistRecord();
         QueryRelation top = stmt == null ? null : stmt.getQueryRelation();
         if (top == null) {
+            return record;
+        }
+
+        // A prepared statement re-plans one cached AST on every EXECUTE: PrepareStmt#assignValues mutates the
+        // Parameter objects in place and hands back the same inner statement. Two bodies differing only in a
+        // parameter serialize identically whenever this execution happens to bind equal values, and hoisting
+        // would detach one of them permanently - a later EXECUTE with different values would then feed both
+        // consumers from the surviving parameter. Whether two bodies are the same must not depend on the
+        // current bindings, so a parameterized statement is left alone entirely.
+        if (containsParameter(stmt)) {
             return record;
         }
 
@@ -214,10 +231,12 @@ public final class CommonSubqueryCTEHoister {
             return null;
         }
         SubqueryRelation subquery = site.subquery;
-        QueryRelation body = subquery.getQueryStatement().getQueryRelation();
-        // Two occurrences of a LIMIT without ORDER BY may legitimately return different rows today;
-        // sharing would force them to agree.
-        if (body.hasLimit()) {
+        // Two occurrences of a LIMIT without ORDER BY may legitimately return different rows today; sharing
+        // would force them to agree. The check has to cover the whole subtree, not just the candidate's own
+        // top-level relation: a nested derived table keeps its LIMIT (SubqueryRelation's constructor only
+        // drops ORDER BY when there is no LIMIT), so `(select * from (select * from t limit 1) x)` is just as
+        // unsafe to share as a LIMIT written directly on the candidate.
+        if (site.hasLimit) {
             return null;
         }
         // `(select ...) t(a, b)` renames the output; the CTE would have to carry the names too.
@@ -257,6 +276,86 @@ public final class CommonSubqueryCTEHoister {
             }
         }
         return sql;
+    }
+
+    /**
+     * Re-checks the hoisted bodies once analysis has resolved them, and reports whether any of them turned out
+     * to be unsafe to share after all.
+     *
+     * <p>The pre-analysis guards work on SQL text, which cannot see through a view: views are only expanded
+     * inside {@link QueryAnalyzer}, so a derived table reading a view whose definition calls {@code rand()}
+     * looks perfectly deterministic beforehand. Sharing it would make two references return the same random
+     * values instead of independent ones. Here the bodies are fully resolved, so the check is authoritative.
+     */
+    public static boolean isUnsafeAfterAnalysis(HoistRecord record) {
+        for (CTERelation cte : record.added) {
+            boolean[] found = {false};
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                    String name = expr.getFunctionName();
+                    if (name != null && FunctionSet.nonDeterministicFunctions.contains(name.toLowerCase(Locale.ROOT))) {
+                        found[0] = true;
+                        return null;
+                    }
+                    return super.visitFunctionCall(expr, context);
+                }
+            }.visit(cte.getCteQueryStatement());
+            if (found[0]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsParameter(QueryStatement stmt) {
+        boolean[] found = {false};
+        new ParseTimeTraverser() {
+            @Override
+            public Void visitExpression(Expr node, Void context) {
+                if (node instanceof Parameter) {
+                    found[0] = true;
+                    return null;
+                }
+                return super.visitExpression(node, context);
+            }
+        }.visit(stmt);
+        return found[0];
+    }
+
+    /**
+     * {@link AstTraverser#visitSelect} reaches the SELECT list and GROUP BY through {@code getOutputExpression()}
+     * and {@code getGroupBy()}, which only the analyzer fills in. Before analysis those are null and both clauses
+     * are silently skipped, so a pre-analysis scan built on the base traverser has a blind spot exactly where
+     * expressions usually live. This walks the parse-time clauses instead.
+     */
+    private static class ParseTimeTraverser extends AstTraverser<Void, Void> {
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.getSelectList() != null) {
+                for (SelectListItem item : node.getSelectList().getItems()) {
+                    if (item.getExpr() != null) {
+                        visit(item.getExpr(), context);
+                    }
+                }
+            }
+            GroupByClause groupBy = node.getGroupByClause();
+            if (groupBy != null) {
+                if (groupBy.getOriGroupingExprs() != null) {
+                    groupBy.getOriGroupingExprs().forEach(expr -> visit(expr, context));
+                }
+                if (groupBy.getGroupingSetList() != null) {
+                    groupBy.getGroupingSetList().forEach(set -> set.forEach(expr -> visit(expr, context)));
+                }
+            }
+            if (node.getWhereClause() != null) {
+                visit(node.getWhereClause(), context);
+            }
+            if (node.getHavingClause() != null) {
+                visit(node.getHavingClause(), context);
+            }
+            return super.visitSelect(node, context);
+        }
     }
 
     private static Set<String> words(String sql) {
@@ -311,6 +410,7 @@ public final class CommonSubqueryCTEHoister {
         private final int depth;
         private final boolean lateral;
         private boolean hasTable;
+        private boolean hasLimit;
 
         private Site(SubqueryRelation subquery, Consumer<Relation> setter, List<SubqueryRelation> ancestors,
                      boolean lateral) {
@@ -363,6 +463,7 @@ public final class CommonSubqueryCTEHoister {
                 SubqueryRelation subquery = (SubqueryRelation) relation;
                 Site site = new Site(subquery, setter, new ArrayList<>(stack), lateral);
                 site.hasTable = containsTable(subquery);
+                site.hasLimit = containsLimit(subquery);
                 sites.add(site);
 
                 stack.add(subquery);
@@ -388,6 +489,45 @@ public final class CommonSubqueryCTEHoister {
             if (alias != null && alias.getTbl() != null) {
                 reservedNames.add(alias.getTbl());
             }
+        }
+
+        /** True when this relation, or anything nested under it, carries a LIMIT. */
+        private static boolean containsLimit(Relation relation) {
+            if (relation instanceof QueryRelation && ((QueryRelation) relation).hasLimit()) {
+                return true;
+            }
+            if (relation instanceof JoinRelation) {
+                JoinRelation join = (JoinRelation) relation;
+                return containsLimit(join.getLeft()) || containsLimit(join.getRight());
+            }
+            if (relation instanceof PivotRelation) {
+                PivotRelation pivot = (PivotRelation) relation;
+                return pivot.getQuery() != null && containsLimit(pivot.getQuery());
+            }
+            if (relation instanceof SelectRelation) {
+                Relation from = ((SelectRelation) relation).getRelation();
+                if (from != null && containsLimit(from)) {
+                    return true;
+                }
+            } else if (relation instanceof SetOperationRelation) {
+                for (QueryRelation child : ((SetOperationRelation) relation).getRelations()) {
+                    if (containsLimit(child)) {
+                        return true;
+                    }
+                }
+            } else if (relation instanceof SubqueryRelation) {
+                if (containsLimit(((SubqueryRelation) relation).getQueryStatement().getQueryRelation())) {
+                    return true;
+                }
+            }
+            if (relation instanceof QueryRelation) {
+                for (CTERelation cte : ((QueryRelation) relation).getCteRelations()) {
+                    if (containsLimit(cte.getCteQueryStatement().getQueryRelation())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private static boolean containsTable(Relation relation) {
