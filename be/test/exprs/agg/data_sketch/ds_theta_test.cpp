@@ -304,4 +304,172 @@ TEST_F(DataSketchsThetaTest, TestIntersectCondAggRejectsMalformedInput) {
     EXPECT_TRUE(local_ctx->has_error());
 }
 
+// ---- Happy-path tests: scalar set-op functions ----------------------------
+
+TEST_F(DataSketchsThetaTest, TestScalarEstimate) {
+    auto sketch = make_sketch_bytes(0, 1000);
+    Slice sk(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    Columns cols{make_binary_col(sk)};
+    auto result = DsThetaFunctions::ds_theta_estimate(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto* out = down_cast<const DoubleColumn*>(result.value().get());
+    EXPECT_NEAR(out->get_data()[0], 1000.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestScalarUnionDisjoint) {
+    auto a = make_sketch_bytes(0, 500);
+    auto b = make_sketch_bytes(1000, 500);
+    Columns cols{make_binary_col(Slice(reinterpret_cast<const char*>(a.data()), a.size())),
+                 make_binary_col(Slice(reinterpret_cast<const char*>(b.data()), b.size()))};
+    auto result = DsThetaFunctions::ds_theta_union(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 1000.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestScalarIntersectOverlapping) {
+    // [0,1000) ∩ [500,1500) = [500,1000): ~500
+    auto a = make_sketch_bytes(0, 1000);
+    auto b = make_sketch_bytes(500, 1000);
+    Columns cols{make_binary_col(Slice(reinterpret_cast<const char*>(a.data()), a.size())),
+                 make_binary_col(Slice(reinterpret_cast<const char*>(b.data()), b.size()))};
+    auto result = DsThetaFunctions::ds_theta_intersect(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestScalarANotBOverlapping) {
+    // [0,1000) \ [500,1500) = [0,500): ~500
+    auto a = make_sketch_bytes(0, 1000);
+    auto b = make_sketch_bytes(500, 1000);
+    Columns cols{make_binary_col(Slice(reinterpret_cast<const char*>(a.data()), a.size())),
+                 make_binary_col(Slice(reinterpret_cast<const char*>(b.data()), b.size()))};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 100.0);
+}
+
+// ---- Happy-path tests: ds_theta_intersect_cond_agg ------------------------
+
+// Helper: build a FunctionContext and aggregate function for ds_theta_intersect_cond_agg.
+static std::unique_ptr<FunctionContext> make_cond_agg_ctx() {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    return std::unique_ptr<FunctionContext>(
+            FunctionContext::create_test_context(std::move(arg_types), return_type));
+}
+
+// Feed rows into ds_theta_intersect_cond_agg one at a time.
+static void feed_row(FunctionContext* ctx, const AggregateFunction* func, AggDataPtr state,
+                     const std::vector<uint8_t>& sketch_bytes, int32_t is_anchor) {
+    auto sketch_col = BinaryColumn::create();
+    sketch_col->append(Slice(reinterpret_cast<const char*>(sketch_bytes.data()), sketch_bytes.size()));
+    auto flag_col = FixedLengthColumn<int32_t>::create();
+    flag_col->append(is_anchor);
+    const Column* raw[] = {sketch_col.get(), flag_col.get()};
+    func->update_batch_single_state(ctx, 1, raw, state);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggHappyPath) {
+    // anchor = [0,1000), window = [500,1500) → intersection ~500
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    ASSERT_NE(nullptr, func);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 1000), 1);    // anchor
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 1000), 0);  // window
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggDisjointSets) {
+    // anchor = [0,500), window = [1000,1500) → intersection ~0
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 500), 1);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(1000, 500), 0);
+
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 0.0, 50.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggMultipleRowsPerGroup) {
+    // Feed two anchor sketches and two window sketches; their unions are intersected.
+    // anchor = [0,500) ∪ [500,1000) = [0,1000)
+    // window = [500,1000) ∪ [1000,1500) = [500,1500)
+    // intersection = [500,1000) ~500
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 500), 1);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 500), 1);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 500), 0);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(1000, 500), 0);
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggSerializeDeserializeRoundTrip) {
+    // Verify serialize → merge → finalize produces the same result as a direct finalize.
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+
+    // State 1: anchor rows
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    feed_row(local_ctx.get(), func, state1->state(), make_sketch_bytes(0, 1000), 1);
+
+    // State 2: window rows
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    feed_row(local_ctx.get(), func, state2->state(), make_sketch_bytes(500, 1000), 0);
+
+    // Serialize both partial states
+    MutableColumnPtr serde1 = BinaryColumn::create();
+    MutableColumnPtr serde2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde1.get());
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde2.get());
+
+    // Merge into a third state
+    auto state3 = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serde1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde2.get(), state3->state(), 0);
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggReturnsZeroWithMissingGroup) {
+    // If only anchor rows are fed (no window), finalize must return 0 without error.
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 500), 1);
+
+    ASSERT_FALSE(local_ctx->has_error());
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_EQ(result_col->get_data()[0], 0.0);
+}
+
 } // namespace starrocks

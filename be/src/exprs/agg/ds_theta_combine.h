@@ -62,10 +62,13 @@ public:
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         // Input is already a compact theta serialization; pass through as-is.
-        const BinaryColumn* in = down_cast<const BinaryColumn*>(src[0].get());
+        const Column* src_col = src[0].get();
+        const Column* data_col = ColumnHelper::get_data_column(src_col);
+        const BinaryColumn* in = down_cast<const BinaryColumn*>(data_col);
         auto* out = down_cast<BinaryColumn*>(dst.get());
         for (size_t i = 0; i < chunk_size; ++i) {
-            out->append(in->get_slice(i));
+            size_t idx = src_col->is_constant() ? 0 : i;
+            out->append(in->get_slice(idx));
         }
     }
 
@@ -86,20 +89,26 @@ private:
     void _merge_serialized(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                            size_t row_num) const {
         _init_if_needed(state);
-        DCHECK(column->is_binary());
-        const BinaryColumn* binary = down_cast<const BinaryColumn*>(column);
-        auto slice = binary->get_slice(row_num);
+        const Column* data_col = ColumnHelper::get_data_column(column);
+        DCHECK(data_col->is_binary());
+        const BinaryColumn* binary = down_cast<const BinaryColumn*>(data_col);
+        size_t idx = column->is_constant() ? 0 : row_num;
+        auto slice = binary->get_slice(idx);
         if (slice.size == 0) {
             return;
         }
         auto* mem_usage = &(this->data(state).memory_usage);
         int64_t prev_memory = *mem_usage;
-        DataSketchesTheta theta(mem_usage);
-        if (!theta.deserialize(slice)) {
-            ctx->set_error("ds_theta_combine: malformed sketch input");
-            return;
+        {
+            // Scope tmp so its allocation is freed before we sample the delta,
+            // preventing temporary memory from being permanently added to FunctionContext.
+            DataSketchesTheta tmp(mem_usage);
+            if (!tmp.deserialize(slice)) {
+                ctx->set_error("ds_theta_combine: malformed sketch input");
+                return;
+            }
+            this->data(state).theta_sketch->merge(tmp);
         }
-        this->data(state).theta_sketch->merge(theta);
         ctx->add_mem_usage(*mem_usage - prev_memory);
     }
 

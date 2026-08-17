@@ -81,33 +81,39 @@ public:
         // columns[1] = INT is_anchor flag (1 = anchor, 0 = window)
         const Column* raw0 = ColumnHelper::get_data_column(columns[0]);
         const BinaryColumn* sketch_col = down_cast<const BinaryColumn*>(raw0);
-        auto slice = sketch_col->get_slice(row_num);
+        size_t sketch_idx = columns[0]->is_constant() ? 0 : row_num;
+        auto slice = sketch_col->get_slice(sketch_idx);
         if (slice.size == 0) return;
 
         const Column* raw1 = ColumnHelper::get_data_column(columns[1]);
-        int32_t is_anchor = down_cast<const FixedLengthColumn<int32_t>*>(raw1)->get_data()[row_num];
+        size_t flag_idx = columns[1]->is_constant() ? 0 : row_num;
+        int32_t is_anchor = down_cast<const FixedLengthColumn<int32_t>*>(raw1)->get_data()[flag_idx];
 
         if (is_anchor != 0) {
             _init_anchor_if_needed(state);
             auto* mem = &(this->data(state).anchor_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(mem);
-            if (!tmp.deserialize(slice)) {
-                ctx->set_error("ds_theta_intersect_cond_agg: malformed anchor sketch input");
-                return;
+            {
+                DataSketchesTheta tmp(mem);
+                if (!tmp.deserialize(slice)) {
+                    ctx->set_error("ds_theta_intersect_cond_agg: malformed anchor sketch input");
+                    return;
+                }
+                this->data(state).anchor_sketch->merge(tmp);
             }
-            this->data(state).anchor_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         } else {
             _init_window_if_needed(state);
             auto* mem = &(this->data(state).window_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(mem);
-            if (!tmp.deserialize(slice)) {
-                ctx->set_error("ds_theta_intersect_cond_agg: malformed window sketch input");
-                return;
+            {
+                DataSketchesTheta tmp(mem);
+                if (!tmp.deserialize(slice)) {
+                    ctx->set_error("ds_theta_intersect_cond_agg: malformed window sketch input");
+                    return;
+                }
+                this->data(state).window_sketch->merge(tmp);
             }
-            this->data(state).window_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         }
     }
@@ -135,24 +141,28 @@ public:
             _init_anchor_if_needed(state);
             auto* mem = &(this->data(state).anchor_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(mem);
-            if (!tmp.deserialize(anchor_slice)) {
-                ctx->set_error("ds_theta_intersect_cond_agg: malformed anchor sketch in merge state");
-                return;
+            {
+                DataSketchesTheta tmp(mem);
+                if (!tmp.deserialize(anchor_slice)) {
+                    ctx->set_error("ds_theta_intersect_cond_agg: malformed anchor sketch in merge state");
+                    return;
+                }
+                this->data(state).anchor_sketch->merge(tmp);
             }
-            this->data(state).anchor_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         }
         if (window_slice.size > 0) {
             _init_window_if_needed(state);
             auto* mem = &(this->data(state).window_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(mem);
-            if (!tmp.deserialize(window_slice)) {
-                ctx->set_error("ds_theta_intersect_cond_agg: malformed window sketch in merge state");
-                return;
+            {
+                DataSketchesTheta tmp(mem);
+                if (!tmp.deserialize(window_slice)) {
+                    ctx->set_error("ds_theta_intersect_cond_agg: malformed window sketch in merge state");
+                    return;
+                }
+                this->data(state).window_sketch->merge(tmp);
             }
-            this->data(state).window_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         }
     }
@@ -167,15 +177,18 @@ public:
     // If is_anchor=0: writes [0][sketch_bytes]           (anchor=empty, window=sketch).
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        const Column* raw0 = ColumnHelper::get_data_column(src[0].get());
-        const BinaryColumn* sketch_col = down_cast<const BinaryColumn*>(raw0);
-        const Column* raw1 = ColumnHelper::get_data_column(src[1].get());
-        const auto* flag_col = down_cast<const FixedLengthColumn<int32_t>*>(raw1);
+        const Column* src0 = src[0].get();
+        const BinaryColumn* sketch_col = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(src0));
+        const Column* src1 = src[1].get();
+        const auto* flag_col =
+                down_cast<const FixedLengthColumn<int32_t>*>(ColumnHelper::get_data_column(src1));
         auto* out = down_cast<BinaryColumn*>(dst.get());
 
         for (size_t i = 0; i < chunk_size; ++i) {
-            auto sketch = sketch_col->get_slice(i);
-            int32_t is_anchor = flag_col->get_data()[i];
+            size_t sketch_idx = src0->is_constant() ? 0 : i;
+            size_t flag_idx = src1->is_constant() ? 0 : i;
+            auto sketch = sketch_col->get_slice(sketch_idx);
+            int32_t is_anchor = flag_col->get_data()[flag_idx];
             uint32_t anchor_size = (is_anchor != 0) ? static_cast<uint32_t>(sketch.size) : 0;
             std::string row(4 + sketch.size, '\0');
             char* ptr = row.data();

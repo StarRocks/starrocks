@@ -9,9 +9,16 @@ Builds an Apache DataSketches Theta sketch over `expr` and returns the sketch
 serialized as `VARBINARY` (compact form). Pair with [ds_theta_combine](./ds_theta_combine.md)
 and [ds_theta_estimate](../scalar-functions/ds_theta_estimate.md) to materialize and reuse sketches.
 
-The output uses the standard Apache DataSketches C++ compact serialization, so
-sketches written by StarRocks can be consumed by any Apache DataSketches
-implementation that uses the default hash seed, and vice versa.
+The output uses the standard Apache DataSketches C++ compact serialization format,
+compatible with any Apache DataSketches consumer.
+
+:::note
+`ds_theta_accumulate` pre-hashes input values before passing them to DataSketches.
+Set operations between StarRocks-accumulated sketches and sketches built externally
+from the same raw values will not produce correct results due to this hash difference.
+Use `ds_theta_combine`, `ds_theta_intersect`, and `ds_theta_a_not_b` to operate on
+sketches that were all produced by the same accumulation path.
+:::
 
 ## Syntax
 
