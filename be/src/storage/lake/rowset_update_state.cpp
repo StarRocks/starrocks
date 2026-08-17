@@ -235,6 +235,8 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
     auto& iter = _segment_iters[segment_id];
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
+    // Before init(), which eagerly loads the first chunk: the selection is built inside _load().
+    result->set_row_selector(_row_selector.get());
     RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
@@ -874,6 +876,11 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
             pk_columns.push_back((uint32_t)i);
         }
         _pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
+        // Only a SPLIT child's cross publish gets one; it is nullptr on every ordinary publish and
+        // costs nothing there. Built once per rowset and reused by every segment's iterator, which
+        // is what lets it hold its encode buffer across chunks.
+        ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(
+                                                *params.metadata, params.tablet_schema, params.op_write.rowset()));
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
