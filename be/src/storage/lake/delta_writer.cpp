@@ -291,9 +291,16 @@ private:
     // _write_schema->num_columns() < _tablet_schema->num_columns() means this is a partial update
     std::shared_ptr<const TabletSchema> _write_schema;
 
-    // Subscripts in _tablet_schema for each column in _write_schema
-    // Would be empty if the _write_schema is the same as _tablet_schema, otherwise
-    // _write_column_ids.size() == _write_schema->num_columns()
+    // Subscripts in _tablet_schema for each column in _write_schema.
+    // Empty when _write_schema equals _tablet_schema. Otherwise it holds one entry per REAL tablet
+    // column of _write_schema, in the same order, so _write_column_ids[i] describes _write_schema
+    // column i.
+    //
+    // A flexible partial update breaks the "sizes are equal" form of that: _write_schema carries a
+    // trailing synthetic "__cset__" set-id column that maps to no tablet column and therefore has no
+    // entry here, so num_columns() is one LARGER. Code that walks _write_schema and indexes into this
+    // vector is only safe because "__cset__" is appended LAST and skipped by uid -- moving it
+    // anywhere else would silently misalign every column after it (wrong column ids, not a crash).
     std::vector<int32_t> _write_column_ids;
 
     // Converted from |_write_schema|.
@@ -514,7 +521,13 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns());
         DCHECK_GE(_write_schema_for_mem_table.num_fields(), _write_schema->num_columns());
         if (_write_schema->num_columns() < _tablet_schema->num_columns()) {
-            DCHECK_EQ(_write_column_ids.size(), _write_schema->num_columns());
+            // A flexible partial update appends a synthetic "__cset__" column to _write_schema that
+            // maps to no tablet column, so _write_column_ids is exactly one shorter. The assertion
+            // predates that column and fired on every flexible load -- FATAL in DCHECK-enabled
+            // builds, which made flexible partial update impossible to run under ASAN or Debug at
+            // all. Release builds compile DCHECK out, which is why it stayed invisible.
+            const size_t synthetic = _flexible_partial_update ? 1 : 0;
+            DCHECK_EQ(_write_column_ids.size() + synthetic, _write_schema->num_columns());
         }
 
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_partial_update() &&
@@ -1074,6 +1087,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 if (tablet_column.unique_id() == kCsetReservedColumnUid) {
                     continue;
                 }
+                // This indexes _write_column_ids with a _write_schema subscript, which only lines up
+                // because "__cset__" is the LAST column: the skip above then fires exactly at the one
+                // index that has no entry. Pin that, because moving the synthetic column earlier
+                // would not crash -- it would quietly emit the wrong column id for every column after
+                // it, and the resulting overlay would be applied to the wrong columns on read.
+                DCHECK_LT(i, static_cast<int>(_write_column_ids.size()))
+                        << "the synthetic __cset__ column must be last in _write_schema";
                 op_write->mutable_txn_meta()->add_partial_update_column_ids(_write_column_ids[i]);
                 op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
