@@ -204,10 +204,16 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         //
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
+        //
+        // With hold_segments the task keeps its input Segment objects alive on the Rowset instance,
+        // so the cross-pass reuse above no longer needs the shared metadata cache. Filling it would
+        // only push soon-to-be-deleted input segments into a node-wide cache, evicting neighbors'
+        // entries. Snapshot the mutable config once so fill and hold never disagree mid-task.
+        const bool hold_segments = config::lake_compaction_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = true,
-                                   .hold_segments = config::lake_compaction_hold_input_segments};
+                                   .fill_metadata_cache = !hold_segments,
+                                   .hold_segments = hold_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
