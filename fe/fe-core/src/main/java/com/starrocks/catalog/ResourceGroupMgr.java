@@ -63,6 +63,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -207,14 +208,16 @@ public class ResourceGroupMgr implements Writable {
                 // is gone, but use a no-op snapshot callback — the snapshot update will be done
                 // atomically together with the CREATE entry below (single volatile write).
                 ResourceGroup oldWg = snapshot.byName.get(wg.getName());
-                ResourceGroup oldWgForOp =
-                        GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(oldWg), ResourceGroup.class);
-                oldWgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
-                ResourceGroupOpEntry deleteOp =
-                        new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, oldWgForOp);
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logResourceGroupOp(deleteOp, wal -> { /* snapshot updated atomically below */ });
-                resourceGroupOps.add(deleteOp.toThrift());
+                if (oldWg != null) {
+                    ResourceGroup oldWgForOp =
+                            GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(oldWg), ResourceGroup.class);
+                    oldWgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+                    ResourceGroupOpEntry deleteOp =
+                            new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, oldWgForOp);
+                    GlobalStateMgr.getCurrentState().getEditLog()
+                            .logResourceGroupOp(deleteOp, wal -> { /* snapshot updated atomically below */ });
+                    resourceGroupOps.add(deleteOp.toThrift());
+                }
             }
 
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
@@ -258,9 +261,9 @@ public class ResourceGroupMgr implements Writable {
             return true;
         }
         return snapshot.byName.entrySet().stream().allMatch(entry ->
-                !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+                !Objects.equals(wg.getMemPool(), entry.getValue().getMemPool()) ||
                 entry.getKey().equals(wg.getName()) ||
-                wg.getMemLimit().equals(entry.getValue().getMemLimit()));
+                Objects.equals(wg.getMemLimit(), entry.getValue().getMemLimit()));
     }
 
     private String getUnqualifiedUser(ConnectContext ctx) {
@@ -811,8 +814,10 @@ public class ResourceGroupMgr implements Writable {
         Map<Long, ResourceGroup> newById = new HashMap<>(old.byId);
         newById.put(wg.getId(), wg);
         Map<Long, ResourceGroupClassifier> newByClassifier = new HashMap<>(old.byClassifier);
-        for (ResourceGroupClassifier classifier : wg.classifiers) {
-            newByClassifier.put(classifier.getId(), classifier);
+        if (wg.getClassifiers() != null) {
+            for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
+                newByClassifier.put(classifier.getId(), classifier);
+            }
         }
         ResourceGroup shortQuery = (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY)
                 ? wg : old.shortQueryResourceGroup;
@@ -844,23 +849,27 @@ public class ResourceGroupMgr implements Writable {
         if (oldWg != null) {
             newByName.remove(oldName);
             newById.remove(oldWg.getId());
-            for (ResourceGroupClassifier c : oldWg.classifiers) {
-                newByClassifier.remove(c.getId());
+            if (oldWg.getClassifiers() != null) {
+                for (ResourceGroupClassifier c : oldWg.getClassifiers()) {
+                    newByClassifier.remove(c.getId());
+                }
             }
         }
 
         // Add new entries.
         newByName.put(newWg.getName(), newWg);
         newById.put(newWg.getId(), newWg);
-        for (ResourceGroupClassifier c : newWg.classifiers) {
-            newByClassifier.put(c.getId(), c);
+        if (newWg.getClassifiers() != null) {
+            for (ResourceGroupClassifier c : newWg.getClassifiers()) {
+                newByClassifier.put(c.getId(), c);
+            }
         }
 
         // Determine the short_query group for the new snapshot.
         ResourceGroup shortQuery;
         if (newWg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQuery = newWg;
-        } else if (oldWg != null && oldWg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+        } else if (old.shortQueryResourceGroup != null && old.shortQueryResourceGroup.getName().equals(oldName)) {
             shortQuery = null;
         } else {
             shortQuery = old.shortQueryResourceGroup;
