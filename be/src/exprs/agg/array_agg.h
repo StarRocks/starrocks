@@ -279,9 +279,9 @@ public:
         // If they don't, the update() below indexes past the element column and hands the state
         // a wild Slice.
         if (UNLIKELY(offset_size.first + offset_size.second > element_data_column->size())) {
-            LOG_FIRST_N(ERROR, 20) << "array_agg merge: inconsistent array column" << " row=" << row_num
-                                   << " offset=" << offset_size.first << " size=" << offset_size.second
-                                   << " elements=" << element_data_column->size()
+            LOG_FIRST_N(ERROR, 20) << "array_agg merge: inconsistent array column"
+                                   << " row=" << row_num << " offset=" << offset_size.first
+                                   << " size=" << offset_size.second << " elements=" << element_data_column->size()
                                    << " array_rows=" << input_column->size()
                                    << " elem_nullable=" << array_element.is_nullable();
             ctx->set_error("array_agg: corrupted array column (offsets exceed element column)");
