@@ -14,7 +14,7 @@
 
 package com.starrocks.type;
 
-import com.starrocks.catalog.TypeSerializer;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.expression.TypeDef;
