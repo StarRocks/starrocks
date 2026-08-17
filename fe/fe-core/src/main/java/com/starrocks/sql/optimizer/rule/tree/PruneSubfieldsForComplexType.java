@@ -184,7 +184,13 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                 if (path.isFromPredicate() || !path.hasChildPath()) {
                     continue;
                 }
-                if (path.getPath().equalsIgnoreCase(column.getName())) {
+                // Match on the column id, not the name: a path is rooted at the storage-side id
+                // (PruneSubfieldRule and computeAllColumnAccessPath both name it after
+                // Column#getColumnId), and a renamed column keeps that id while its name changes.
+                // Matching the name would stop recognising the path after a rename, leaving the
+                // declared type full while BE still prunes by the path - the same width disagreement
+                // as before, just the other way round.
+                if (path.getPath().equalsIgnoreCase(column.getColumnId().getId())) {
                     return true;
                 }
             }

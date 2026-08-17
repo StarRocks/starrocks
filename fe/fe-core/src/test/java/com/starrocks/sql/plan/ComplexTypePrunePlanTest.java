@@ -313,6 +313,32 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneBoundaryAfterColumnRename() throws Exception {
+        // An access path is rooted at the column's storage id, and a rename does not change that id -
+        // only the name. If the prune boundary were decided by the current name, a renamed column
+        // would stop being recognised as backed by a path: FE would keep the declared type full while
+        // BE still prunes the scan schema by the path, which is the same width disagreement as an
+        // unbacked narrowing, only the other way round.
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.withTable("create table array_struct_rename(c1 int, " +
+                "c2 array<struct<c2_sub1 int, c2_sub2 int>>) " +
+                "duplicate key(c1) distributed by hash(c1) buckets 1 " +
+                "properties('replication_num'='1')");
+        try {
+            starRocksAssert.ddl("alter table array_struct_rename rename column c2 to c2_new");
+            String sql = "select c2_new[1].c2_sub1 from array_struct_rename";
+            String plan = getVerboseExplain(sql);
+            // the path is still rooted at the original column id ...
+            assertContains(plan, "ColumnAccessPath: [/c2/INDEX/c2_sub1]");
+            // ... and the declared type narrows in lockstep with it
+            assertContains(plan, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        } finally {
+            starRocksAssert.dropTable("array_struct_rename");
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
     public void testUnnestCrossJoin() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest cross join " +
