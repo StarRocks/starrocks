@@ -244,6 +244,10 @@ public enum RuleType {
     TF_IVM_VERSION_AGGREGATE,
     TF_IVM_VERSION_UNION,
 
+    // Append new transformation rule types here: the ordinal indexes the OptimizerOptions disable BitSet,
+    // so never insert into the middle of this block.
+    TF_MERGE_SAME_PREDICATE_AGG_CROSS_JOIN,
+
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
     IMP_OLAP_LSCAN_TO_PSCAN,

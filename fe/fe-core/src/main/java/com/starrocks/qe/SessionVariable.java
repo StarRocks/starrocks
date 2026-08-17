@@ -945,6 +945,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+    public static final String ENABLE_MERGE_SAME_PREDICATE_AGG_CROSS_JOIN =
+            "enable_merge_same_predicate_agg_cross_join";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
     public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
@@ -2247,6 +2249,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
     private boolean enableRewriteSumByAssociativeRule = true;
+
+    // Merge cross-joined scalar aggregations that share an identical predicate over the same table into a single
+    // scan + aggregation. The surviving scan keeps the branch predicate verbatim, so scan-side behaviour
+    // (partition pruning, zone maps, late materialization) is unchanged.
+    @VarAttr(name = ENABLE_MERGE_SAME_PREDICATE_AGG_CROSS_JOIN)
+    private boolean enableMergeSamePredicateAggCrossJoin = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = true;
@@ -5741,6 +5749,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteSumByAssociativeRule() {
         return this.enableRewriteSumByAssociativeRule;
+    }
+
+    public void setEnableMergeSamePredicateAggCrossJoin(boolean enableMergeSamePredicateAggCrossJoin) {
+        this.enableMergeSamePredicateAggCrossJoin = enableMergeSamePredicateAggCrossJoin;
+    }
+
+    public boolean isEnableMergeSamePredicateAggCrossJoin() {
+        return this.enableMergeSamePredicateAggCrossJoin;
     }
 
     public void setEnableRewriteSimpleAggToMetaScan(boolean enableRewriteSimpleAggToMetaScan) {

@@ -1,0 +1,102 @@
+-- name: test_iceberg_merge_same_predicate_agg_cross_join
+
+-- Value-level correctness for MergeSamePredicateAggCrossJoinRule on Iceberg external tables, which is the shape
+-- the rule was written for. Every query runs twice, once with the rule on and once off, and the results must
+-- agree; the scan-operator count taken from the query profile proves the rule actually fired rather than the two
+-- runs being trivially identical.
+--
+-- The data is tiny and fixed so the expected values can be checked by hand:
+--   k=1 -> (10,100),(20,200)      k=2 -> (30,300),(40,NULL)
+--   k=3 -> (NULL,500)             k=99 -> no rows
+
+create external catalog ice_mspa_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+
+create database ice_mspa_${uuid0}.ice_db_${uuid0};
+set catalog ice_mspa_${uuid0};
+use ice_mspa_${uuid0}.ice_db_${uuid0};
+
+create external table t_mspa (k int, a int, b int);
+insert into t_mspa values (1, 10, 100), (1, 20, 200), (2, 30, 300), (2, 40, null), (3, null, 500);
+
+set enable_profile = true;
+set enable_async_profile = false;
+
+-- ============================================================
+-- rule ON
+-- ============================================================
+set enable_merge_same_predicate_agg_cross_join = true;
+
+select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
+select count(*) as scans_on from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- Table: t_mspa%';
+
+select (select count(*) from t_mspa where k = 99) c1,
+       (select count(a) from t_mspa where k = 99) c2,
+       (select sum(a) from t_mspa where k = 99) s,
+       (select avg(a) from t_mspa where k = 99) av,
+       (select max(a) from t_mspa where k = 99) mx;
+
+select (select count(*) from t_mspa where k = 3) c1,
+       (select count(a) from t_mspa where k = 3) c2,
+       (select sum(a) from t_mspa where k = 3) s,
+       (select max(b) from t_mspa where k = 3) mx;
+
+select (select count(*) from t_mspa where k = 2) c1,
+       (select count(b) from t_mspa where k = 2) c2,
+       (select sum(b) from t_mspa where k = 2) s,
+       (select avg(b) from t_mspa where k = 2) av;
+
+select (select count(*) from t_mspa where k = 1) c1,
+       (select sum(a) from t_mspa where k = 1) c2,
+       (select max(a) from t_mspa where k = 1) c3,
+       (select min(b) from t_mspa where k = 1) c4,
+       (select avg(b) from t_mspa where k = 1) c5;
+
+select (select count(distinct a) from t_mspa where k = 1) d1, (select sum(b) from t_mspa where k = 1) d2;
+
+select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa where k = 1) g2,
+       (select count(*) from t_mspa where k = 2) g3, (select sum(a) from t_mspa where k = 2) g4;
+select count(*) as scans_two_groups_on from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- Table: t_mspa%';
+
+select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select count(a) from t_mspa) n3;
+
+-- ============================================================
+-- rule OFF: identical results, more scans
+-- ============================================================
+set enable_merge_same_predicate_agg_cross_join = false;
+
+select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
+select count(*) as scans_off from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- Table: t_mspa%';
+
+select (select count(*) from t_mspa where k = 99) c1,
+       (select count(a) from t_mspa where k = 99) c2,
+       (select sum(a) from t_mspa where k = 99) s,
+       (select avg(a) from t_mspa where k = 99) av,
+       (select max(a) from t_mspa where k = 99) mx;
+
+select (select count(*) from t_mspa where k = 3) c1,
+       (select count(a) from t_mspa where k = 3) c2,
+       (select sum(a) from t_mspa where k = 3) s,
+       (select max(b) from t_mspa where k = 3) mx;
+
+select (select count(*) from t_mspa where k = 2) c1,
+       (select count(b) from t_mspa where k = 2) c2,
+       (select sum(b) from t_mspa where k = 2) s,
+       (select avg(b) from t_mspa where k = 2) av;
+
+select (select count(*) from t_mspa where k = 1) c1,
+       (select sum(a) from t_mspa where k = 1) c2,
+       (select max(a) from t_mspa where k = 1) c3,
+       (select min(b) from t_mspa where k = 1) c4,
+       (select avg(b) from t_mspa where k = 1) c5;
+
+select (select count(distinct a) from t_mspa where k = 1) d1, (select sum(b) from t_mspa where k = 1) d2;
+
+select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa where k = 1) g2,
+       (select count(*) from t_mspa where k = 2) g3, (select sum(a) from t_mspa where k = 2) g4;
+select count(*) as scans_two_groups_off from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- Table: t_mspa%';
+
+select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select count(a) from t_mspa) n3;
+
+drop table t_mspa force;
+drop database ice_mspa_${uuid0}.ice_db_${uuid0};
+drop catalog ice_mspa_${uuid0};

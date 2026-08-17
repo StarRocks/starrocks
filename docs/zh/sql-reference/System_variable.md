@@ -692,6 +692,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_merge_same_predicate_agg_cross_join
+
+* 描述：是否将 CROSS JOIN 链上「读同一张表、且过滤条件完全相同」的标量聚合分支合并成一次扫描 + 一次聚合。形如 `SELECT (SELECT count(*) FROM t WHERE p), (SELECT sum(a) FROM t WHERE p)` 的查询，未开启时每个子查询各扫一遍 `t`。仅当分支谓词在结构上完全一致时才合并，因此合并后扫描节点的谓词与合并前逐字相同，分区裁剪、zone map、延迟物化的行为均保持不变。适用于 OLAP 内表以及 Hive、Delta Lake、Iceberg 外表。带 GROUP BY、LIMIT、JOIN、非确定性表达式的分支，以及会产生多个 DISTINCT 列的情况，均不会被合并。
+* 类型：Session
+* 默认值：`true`
+* 数据类型：boolean
+* 引入版本：v4.2.0
+
 ### enable_materialized_view_agg_pushdown_rewrite
 
 * 描述：是否为物化视图查询改写启用聚合函数下推。如果设置为 `true`，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。有关此功能的具体场景和限制的详细信息，请参见 [聚合函数下推](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#聚合下推)。

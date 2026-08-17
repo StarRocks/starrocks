@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.LargeInPredicateToJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeSamePredicateAggCrossJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
@@ -550,6 +551,10 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new ExtractRangePredicateFromScalarApplyRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
+        // Must run here, right after Apply -> Join: branch shapes are still uniform (predicates live in their own
+        // LogicalFilterOperator, projections are not folded into Operator.projection yet, and scans have not been
+        // specialized by partition/tablet pruning), which keeps the structural comparison small and safe.
+        scheduler.rewriteOnce(tree, rootTaskContext, new MergeSamePredicateAggCrossJoinRule());
         CTEUtils.collectCteOperators(tree, context);
 
         // IVM rule rewrite
