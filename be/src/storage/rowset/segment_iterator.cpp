@@ -3312,10 +3312,10 @@ Status SegmentIterator::_evaluate_late_materialize_read_other_columns(vector<row
         if (ordinals->size() != col->size()) {
             // Name the column and the iterator: which iterator short-read is the whole diagnosis here,
             // and the message is all a production incident leaves behind.
-            return Status::Corruption(strings::Substitute(
-                    "_predicate_evaluate_late_materialize col size not equal to ordinal col size: "
-                    "column_id=$0 iterator=$1 ordinals=$2 col=$3",
-                    current_column_id, cur_iter->name(), ordinals->size(), col->size()));
+            return Status::Corruption(
+                    strings::Substitute("_predicate_evaluate_late_materialize col size not equal to ordinal col size: "
+                                        "column_id=$0 iterator=$1 ordinals=$2 col=$3",
+                                        current_column_id, cur_iter->name(), ordinals->size(), col->size()));
         }
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
 
