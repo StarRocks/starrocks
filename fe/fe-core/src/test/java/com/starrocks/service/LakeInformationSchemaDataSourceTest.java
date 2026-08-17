@@ -16,12 +16,6 @@ package com.starrocks.service;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-<<<<<<< HEAD
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.PatternMatcher;
-=======
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
@@ -37,14 +31,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.vector.VectorIndexBuildScheduler;
->>>>>>> 8786405fa2 ([BugFix] Report the real tablet count as Buckets for range-distribution partitions (#77465))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -255,93 +246,6 @@ public class LakeInformationSchemaDataSourceTest {
                 "expected an added physical partition reporting 5 buckets, got: " + bucketsByPartitionId);
     }
 
-    /**
-     * partitions_meta must report a range-distribution partition's real tablet count. Base holds 3
-     * tablets while the rollups hold 2 and 4, so "base" (3) is distinguishable from the old fixed 1,
-     * from the minimum (2) and from the maximum (4).
-     */
-    @Test
-    public void testGetLakePartitionsMetaReportsRangeBaseIndexTabletNum() throws Exception {
-        starRocksAssert.withDatabase("db_range_buckets").useDatabase("db_range_buckets");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_range_buckets");
-
-        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT, true));
-        long partitionId = 90025L;
-        long physicalPartitionId = 90035L;
-        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
-        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-        partitionInfo.setReplicationNum(partitionId, (short) 1);
-        partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
-
-        LakeTable table = new LakeTable(90024L, "range_buckets_t", columns, KeysType.DUP_KEYS,
-                partitionInfo, new RangeDistributionInfo());
-        MaterializedIndex baseIndex = newRangeIndex(30000L, 3000L, 3);
-        table.setBaseIndexMetaId(baseIndex.getMetaId());
-        table.setIndexMeta(baseIndex.getMetaId(), "range_buckets_t", columns, 0, 0, (short) 1,
-                TStorageType.COLUMN, KeysType.DUP_KEYS);
-
-        // STORAGE_PATH is filled unconditionally for a cloud-native table:
-        // InformationSchemaDataSource.genPartitionMetaInfo does
-        // table.getPartitionFilePathInfo(id).getFullPath(), and OlapTable.getPartitionFilePathInfo is
-        // @Nullable, returning null when the table has no StorageInfo. Without this the request throws
-        // an NPE long before the bucket assertion.
-        S3FileStoreInfo.Builder s3FsBuilder = S3FileStoreInfo.newBuilder()
-                .setBucket("test-bucket")
-                .setRegion("test-region");
-        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
-                .setFsType(FileStoreType.S3)
-                .setFsKey("test-bucket")
-                .setS3FsInfo(s3FsBuilder.build())
-                .build();
-        FilePathInfo pathInfo = FilePathInfo.newBuilder()
-                .setFsInfo(fsInfo)
-                .setFullPath("s3://test-bucket/range_buckets_t")
-                .build();
-        table.setStorageInfo(pathInfo, new DataCacheInfo(true, false));
-
-        Partition partition = new Partition(partitionId, physicalPartitionId, "range_buckets_t",
-                baseIndex, new RangeDistributionInfo());
-        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-        physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
-        physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
-        table.addPartition(partition);
-
-        db.registerTableUnlocked(table);
-        try {
-            Assertions.assertNotEquals(baseIndex.getId(),
-                    physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
-                    "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
-
-            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-            TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
-            TAuthInfo authInfo = new TAuthInfo();
-            authInfo.setPattern("db_range_buckets");
-            authInfo.setUser("root");
-            authInfo.setUser_ip("%");
-            req.setAuth_info(authInfo);
-            TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
-
-            Integer buckets = null;
-            for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
-                if (meta.getTable_name().equals("range_buckets_t")) {
-                    buckets = meta.getBuckets();
-                }
-            }
-            Assertions.assertEquals(Integer.valueOf(3), buckets);
-        } finally {
-            db.dropTable(90024L);
-        }
-    }
-
-    private static MaterializedIndex newRangeIndex(long indexId, long metaId, int tabletNum) {
-        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
-                PhysicalPartition.INVALID_SHARD_GROUP_ID);
-        for (int i = 0; i < tabletNum; i++) {
-            index.addTablet(new LakeTablet(indexId + i), null, false);
-        }
-        return index;
-    }
-
     @Test
     public void testGetTablesConfigWithExactTableNameFilter() throws Exception {
         starRocksAssert.withEnableMV().withDatabase("db_exact_filter").useDatabase("db_exact_filter");
@@ -451,5 +355,92 @@ public class LakeInformationSchemaDataSourceTest {
         TException exception = Assertions.assertThrows(TException.class,
                 () -> InformationSchemaDataSource.generateTablesConfigResponse(req));
         Assertions.assertEquals("Pattern is in bad format: " + invalidPattern, exception.getMessage());
+    }
+
+    /**
+     * partitions_meta must report a range-distribution partition's real tablet count. Base holds 3
+     * tablets while the rollups hold 2 and 4, so "base" (3) is distinguishable from the old fixed 1,
+     * from the minimum (2) and from the maximum (4).
+     */
+    @Test
+    public void testGetLakePartitionsMetaReportsRangeBaseIndexTabletNum() throws Exception {
+        starRocksAssert.withDatabase("db_range_buckets").useDatabase("db_range_buckets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_range_buckets");
+
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT, true));
+        long partitionId = 90025L;
+        long physicalPartitionId = 90035L;
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
+
+        LakeTable table = new LakeTable(90024L, "range_buckets_t", columns, KeysType.DUP_KEYS,
+                partitionInfo, new RangeDistributionInfo());
+        MaterializedIndex baseIndex = newRangeIndex(30000L, 3000L, 3);
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
+        table.setIndexMeta(baseIndex.getMetaId(), "range_buckets_t", columns, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        // STORAGE_PATH is filled unconditionally for a cloud-native table:
+        // InformationSchemaDataSource.genPartitionMetaInfo does
+        // table.getPartitionFilePathInfo(id).getFullPath(), and OlapTable.getPartitionFilePathInfo is
+        // @Nullable, returning null when the table has no StorageInfo. Without this the request throws
+        // an NPE long before the bucket assertion.
+        S3FileStoreInfo.Builder s3FsBuilder = S3FileStoreInfo.newBuilder()
+                .setBucket("test-bucket")
+                .setRegion("test-region");
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsType(FileStoreType.S3)
+                .setFsKey("test-bucket")
+                .setS3FsInfo(s3FsBuilder.build())
+                .build();
+        FilePathInfo pathInfo = FilePathInfo.newBuilder()
+                .setFsInfo(fsInfo)
+                .setFullPath("s3://test-bucket/range_buckets_t")
+                .build();
+        table.setStorageInfo(pathInfo, new DataCacheInfo(true, false));
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, "range_buckets_t",
+                baseIndex, new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
+        physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
+        table.addPartition(partition);
+
+        db.registerTableUnlocked(table);
+        try {
+            Assertions.assertNotEquals(baseIndex.getId(),
+                    physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
+                    "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+            TAuthInfo authInfo = new TAuthInfo();
+            authInfo.setPattern("db_range_buckets");
+            authInfo.setUser("root");
+            authInfo.setUser_ip("%");
+            req.setAuth_info(authInfo);
+            TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+            Integer buckets = null;
+            for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
+                if (meta.getTable_name().equals("range_buckets_t")) {
+                    buckets = meta.getBuckets();
+                }
+            }
+            Assertions.assertEquals(Integer.valueOf(3), buckets);
+        } finally {
+            db.dropTable(90024L);
+        }
+    }
+
+    private static MaterializedIndex newRangeIndex(long indexId, long metaId, int tabletNum) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), null, false);
+        }
+        return index;
     }
 }
