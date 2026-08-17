@@ -1155,8 +1155,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum_if(994: sum), any_value_if(995: row_hit, TRUE), sum_if(997: sum), any_value_if(998: row_hit," +
-                " TRUE)\n" +
+                "  |  output: sum_if(994: sum), any_value_if(995: row_hit), sum_if(997: sum), " +
+                "any_value_if(998: row_hit)\n" +
                 "  |  group by: 977: io_id, 984: org_id\n" +
                 "  |  having: (995: row_hit IS NOT NULL) OR (998: row_hit IS NOT NULL)");
     }
