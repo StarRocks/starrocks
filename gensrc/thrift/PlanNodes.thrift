@@ -774,6 +774,8 @@ struct TVectorSearchOptions {
   // 13: retired (was has_complex_residual). The BE now detects a row-filtering operator placed above
   // the ANN scan directly from the execution tree (FragmentExecutor walk -> ScanNode), instead of an
   // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
+  // Whether vector_range is present. Kept separate because similarity metrics can have negative bounds.
+  14: optional bool has_vector_range;
 }
 
 // One (indexed column, query string) unit of a BM25 full-text ranking scan. v1 always carries exactly

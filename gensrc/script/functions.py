@@ -61,6 +61,8 @@ vectorized_functions = [
     #   cosine function
     [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
     [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10104, "inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
+    [10105, "approx_inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
     [10106, "approx_cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
