@@ -295,9 +295,51 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.has_preaggregation = options.has_preaggregation;
 
+<<<<<<< HEAD
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);
     // Append the columns with delete condition to segment schema.
+=======
+Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<SeekRange>& shared_segment_range,
+                                        SegmentReadOptions* segment_options) const {
+    if (segment_options == nullptr) {
+        return Status::InvalidArgument("segment read options is null");
+    }
+    segment_options->tablet_range = std::nullopt;
+    // A primary-key tablet routes rows by its range in primary-key space, but lays its segments out in
+    // sort-key order. When the two differ, no rowid interval of the segment corresponds to the range, so
+    // every consumer that turns the range into one (the coarse scan range, the prepared-split resolution,
+    // SegmentIterator::_apply_tablet_range) would either narrow to the wrong rows or throw comparing a
+    // primary-key datum against a sort-key column. Withhold the range instead of publishing a value none
+    // of them can use.
+    //
+    // No such tablet exists yet, which is why withholding the range loses nothing today: a
+    // range-distributed primary-key table must declare ORDER BY equal to its key columns
+    // (CreateTableAnalyzer), and OPTIMIZE -- the only clause that rewrites a sort key -- is rejected on
+    // range-distributed tables. Once that restriction is relaxed the range stops being the per-child
+    // restriction on a shared segment, and the parent tablet keeps serving reads until the de-share
+    // compaction has rewritten each child's data privately. Whatever relaxes the restriction owes that
+    // cutover; this guard only makes sure the undefined conversion can never reach a segment meanwhile.
+    if (_tablet_schema != nullptr && _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+        _tablet_schema->has_separate_sort_key()) {
+        if (shared_segment_range.has_value()) {
+            LOG(WARNING) << "withhold tablet range from shared segment: primary-key tablet orders its segments by "
+                            "a separate sort key, so the range has no rowid interval. tablet="
+                         << tablet_id() << ", rowset=" << metadata().id() << ", segment_idx=" << segment_idx;
+        }
+        return Status::OK();
+    }
+    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) &&
+        _metadata->segment_metas(segment_idx).shared() && shared_segment_range.has_value()) {
+        segment_options->tablet_range = *shared_segment_range;
+    }
+    return Status::OK();
+}
+
+Schema Rowset::build_segment_schema(const Schema& schema, const RowsetReadOptions& options,
+                                    const DisjunctivePredicates& delete_predicates) const {
+    Schema segment_schema = schema;
+>>>>>>> de11ef1b64 ([BugFix] Do not narrow a shared segment by a tablet range the sort key cannot order (#77634))
     std::set<ColumnId> need_added_column;
     seg_options.delete_predicates.get_column_ids(&need_added_column);
 
@@ -458,12 +500,26 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
+<<<<<<< HEAD
         seg_options.tablet_range = std::nullopt;
         const int32_t meta_pos = segments[i].segment_meta_pos;
         if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
+=======
+        if (seg_ptr == nullptr) {
+            // This vector must stay positionally aligned, so a null segment can only be tolerated (its
+            // slot left as the default null placeholder) when experimental_lake_ignore_lost_segment
+            // dropped a physically-lost segment. With the flag off it is an unexpected bug -- fail loudly.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment in get_each_segment_iterator, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              tablet_id(), metadata().id(), i));
+            continue;
+        }
+        RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
+>>>>>>> de11ef1b64 ([BugFix] Do not narrow a shared segment by a tablet range the sort key cannot order (#77634))
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -515,12 +571,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
             seg_options.stats = (*per_segment_stats)[i];
         }
-        seg_options.tablet_range = std::nullopt;
-        const int32_t meta_pos = segments[i].segment_meta_pos;
-        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
-            shared_segment_range.has_value()) {
-            seg_options.tablet_range = *shared_segment_range;
-        }
+        RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
         // Apply per-segment rowid range if provided
         if (rowid_range_per_segment != nullptr && i < rowid_range_per_segment->size()) {
             seg_options.rowid_range_option = (*rowid_range_per_segment)[i];

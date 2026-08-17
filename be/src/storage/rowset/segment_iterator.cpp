@@ -1554,9 +1554,42 @@ Status SegmentIterator::_apply_tablet_range() {
         return Status::OK();
     }
 
+<<<<<<< HEAD
     // _lookup_ordinal() relies on short key index.
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+=======
+    // A primary-key tablet routes rows by its range in primary-key space, while its segments are laid
+    // out in sort-key order. When the two differ the tablet's rows are scattered across the whole
+    // segment and NO rowid interval is the right answer -- the conversion is undefined, not merely
+    // imprecise. Attempting it compares a primary-key datum against a sort-key column type, which
+    // throws bad_variant_access out of the scan; on the publish path (primary index rebuild ->
+    // scan_one_rebuild_unit) nothing catches it and the BE aborts, so every restart re-runs the same
+    // publish and dies again.
+    //
+    // Leave the scan range untouched instead. Lake tablets already withhold the range for this shape in
+    // Rowset::set_segment_tablet_range, which is where the reasoning for why nothing depends on it lives;
+    // this is the backstop for every other producer.
+    //
+    // Only primary-key tablets are affected. Every other key model encodes its range over the sort key
+    // itself, so there the narrowing is both well-defined and load-bearing.
+    if (_segment->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
+        _segment->tablet_schema().has_separate_sort_key()) {
+        LOG(WARNING) << "skip tablet range narrowing: primary-key tablet orders its segments by a separate sort "
+                        "key, so the range has no rowid interval. segment="
+                     << _segment->file_name();
+        return Status::OK();
+    }
+
+    std::optional<Range<>> rowid_range_opt;
+    if (_opts.read_state_cache.tablet_rowid_range != nullptr) {
+        rowid_range_opt = *_opts.read_state_cache.tablet_rowid_range;
+    } else {
+        // _lookup_ordinal() relies on short key index.
+        RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+    }
+>>>>>>> de11ef1b64 ([BugFix] Do not narrow a shared segment by a tablet range the sort key cannot order (#77634))
     if (rowid_range_opt.has_value()) {
         _scan_range &= SparseRange<>(rowid_range_opt.value());
     } else {
