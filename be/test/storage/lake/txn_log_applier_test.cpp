@@ -185,6 +185,69 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
     EXPECT_EQ(0, meta->rowsets(0).num_rows());
 }
 
+// The single-log path had the hole the batch path above was already built to avoid: a cross
+// published rowset arrives with the rowset-level num_rows apportioned across the siblings, so a
+// sibling holding this tablet's rows can legitimately see 0. The per-segment counts are not
+// apportioned, so they are what settles it -- keying presence off the rowset-level count drops the
+// segments and the rows are gone while the transaction reports success.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogZeroNumRowsKeepsSegments) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10120);
+    auto meta = build_non_pk_metadata(10120);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10120, 30, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(7);
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size()) << "a rowset whose segments hold rows must be attached whatever num_rows says";
+    EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, meta->rowsets(0).num_rows()) << "the apportioned statistic is kept as-is";
+}
+
+// The counterpart: nothing to attach when the op really is empty.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogNoSegmentsAttachesNothing) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10121);
+    auto meta = build_non_pk_metadata(10121);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10121, 31, /*num_rows=*/0, /*data_size=*/0, {});
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
+// An empty write still produces a segment, and it reports 0 rows. That is not a cross publish and
+// there is nothing to attach -- the segment count alone would not tell the two apart, which is why
+// this path asks the per-segment counts. (The batch path is deliberately left as it was: it keys
+// off the segment count and merges, so an empty segment costs it a file reference, not a rowset.)
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogEmptySegmentAttachesNothing) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10122);
+    auto meta = build_non_pk_metadata(10122);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10122, 32, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
+// A legacy rowset whose segment_metas were back-filled from the deprecated parallel arrays carries
+// no per-segment count at all. Nothing proves it empty, so it is kept.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogUncountedSegmentIsKept) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10123);
+    auto meta = build_non_pk_metadata(10123);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(10123, 33, /*num_rows=*/0, /*data_size=*/0, {"seg_uncounted"});
+    ASSERT_FALSE(log->op_write().rowset().segment_metas(0).has_num_rows());
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, meta->rowsets_size());
+    EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);

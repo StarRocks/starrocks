@@ -490,8 +490,13 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
+    // Segments count as "there is something to rewrite" alongside num_rows. On a split cross
+    // publish that count is apportioned per sibling, so a row-mode partial update whose segments
+    // hold this tablet's rows can still arrive with num_rows == 0; returning on the count alone
+    // would leave the partial segment (only the updated columns) attached without its unmodified
+    // columns rewritten in.
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
-        rowset_meta.num_rows() == 0) {
+        (rowset_meta.num_rows() == 0 && rowset_meta.segment_metas_size() == 0)) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
