@@ -44,6 +44,7 @@
 #include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_compaction_state.h"
 #include "storage/persistent_index_parallel_publish_context.h"
@@ -744,40 +745,48 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     return Status::OK();
 }
 
+Status UpdateManager::_open_upsert_source_segment(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
+                                                  Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                                  SegmentPtr* segment, std::unique_ptr<RandomAccessFile>* read_file) {
+    FileInfo info;
+    const auto& segment_meta = op_write.rowset().segment_metas(seg);
+    info.path = segment_meta.filename();
+    if (segment_meta.has_bundle_file_offset()) {
+        info.bundle_file_offset = segment_meta.bundle_file_offset();
+        info.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        info.encryption_meta = segment_meta.encryption_meta();
+    }
+
+    FileInfo file_info{.path = tablet->segment_location(info.path), .encryption_meta = info.encryption_meta};
+    if (info.size.has_value()) file_info.size = info.size;
+    if (info.bundle_file_offset.has_value()) file_info.bundle_file_offset = info.bundle_file_offset;
+
+    // This is a segment this transaction just wrote and reads exactly once, so it is deliberately kept
+    // out of the metacache: there is nothing for a later reader to reuse.
+    ASSIGN_OR_RETURN(*segment, Segment::open(fs, file_info, seg, tschema));
+    RandomAccessFileOptions opts;
+    if (!file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
+        opts.encryption_info = std::move(unwrap);
+    }
+    ASSIGN_OR_RETURN(*read_file, fs->new_random_access_file_with_bundling(opts, file_info));
+    return Status::OK();
+}
+
 Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
-                                             Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                             Segment* segment, RandomAccessFile* read_file,
                                              const std::vector<uint32_t>& insert_rowids,
                                              const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
     auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
     {
-        FileInfo info;
-        const auto& segment_meta = op_write.rowset().segment_metas(seg);
-        info.path = segment_meta.filename();
-        if (segment_meta.has_bundle_file_offset()) {
-            info.bundle_file_offset = segment_meta.bundle_file_offset();
-            info.size = segment_meta.size();
-        }
-        if (segment_meta.has_encryption_meta()) {
-            info.encryption_meta = segment_meta.encryption_meta();
-        }
-
-        FileInfo file_info{.path = tablet->segment_location(info.path), .encryption_meta = info.encryption_meta};
-        if (info.size.has_value()) file_info.size = info.size;
-        if (info.bundle_file_offset.has_value()) file_info.bundle_file_offset = info.bundle_file_offset;
-
-        ASSIGN_OR_RETURN(auto segment, Segment::open(fs, file_info, seg, tschema));
-        RandomAccessFileOptions opts;
-        if (!file_info.encryption_meta.empty()) {
-            ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
-            opts.encryption_info = std::move(unwrap);
-        }
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file_with_bundling(opts, file_info));
-        iter_opts.read_file = raf.get();
+        iter_opts.read_file = read_file;
 
         for (uint32_t cid : update_cids) {
             const TabletColumn& col = tschema->column(cid);
@@ -916,13 +925,21 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         MutableColumnPtr pk_column_for_upsert;
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column_for_upsert, pk_encoding_type));
 
+        // Opened once for all batches of this source segment: the footer parse and the per-column
+        // reader construction cost scale with the schema width and would otherwise be repeated for
+        // every batch of `column_mode_partial_update_insert_batch_size` rows.
+        SegmentPtr source_segment;
+        std::unique_ptr<RandomAccessFile> source_read_file;
+        RETURN_IF_ERROR(
+                _open_upsert_source_segment(op_write, tschema, tablet, fs, seg, &source_segment, &source_read_file));
+
         for (size_t batch_start = 0; batch_start < insert_rowids.size(); batch_start += batch_size) {
             size_t batch_end = std::min(batch_start + batch_size, insert_rowids.size());
             std::vector<uint32_t> batch_insert_rowids(insert_rowids.begin() + batch_start,
                                                       insert_rowids.begin() + batch_end);
             ChunkPtr full_chunk;
-            RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
-                                                   &full_chunk));
+            RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, source_segment.get(), source_read_file.get(),
+                                                   batch_insert_rowids, update_cids, &full_chunk));
 
             RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
             total_rows += full_chunk->num_rows();
@@ -1835,9 +1852,24 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         }
     }
 
-    auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
-                                         const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
-                                         const std::vector<uint32_t>& read_column_ids) -> Status {
+    // Two invariants govern `allow_segment_cache`; both are about what a *later* reader of the shared
+    // object sees, not about what this function reads back.
+    //
+    //   - `segment_id_in_rowset` must be the segment's index inside its rowset, not its rssid.
+    //     SegmentIterator derives the delvec and DCG keys as `rowset_id + segment->id()`
+    //     (segment_iterator.cpp), so caching an object built with the rssid makes every later query
+    //     look the delvec up under `rowset_id + rssid`, find nothing, and stop masking the rows the
+    //     partial update superseded -- duplicate primary keys.
+    //   - `tablet_schema` must be the full tablet schema. Segment builds `_column_readers` from the
+    //     schema it was constructed with, and `new_column_iterator_or_default` silently falls back to
+    //     a default-value iterator for a column that has no reader, so a cached narrow Segment hands
+    //     later readers defaults in place of the stored data.
+    //
+    // Callers that cannot honour both must pass `allow_segment_cache=false`.
+    auto fetch_values_from_segment =
+            [&](const FileInfo& segment_info, uint32_t segment_id, uint32_t segment_id_in_rowset,
+                const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
+                const std::vector<uint32_t>& read_column_ids, bool allow_segment_cache) -> Status {
         FileInfo file_info{.path = params.tablet->segment_location(segment_info.path),
                            .encryption_meta = segment_info.encryption_meta};
         if (segment_info.size.has_value()) {
@@ -1846,7 +1878,19 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         if (segment_info.bundle_file_offset.has_value()) {
             file_info.bundle_file_offset = segment_info.bundle_file_offset;
         }
-        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
+        file_info.fs = fs;
+        StatusOr<SegmentPtr> segment;
+        auto* tablet_mgr = params.tablet->tablet_mgr();
+        if (allow_segment_cache && tablet_mgr != nullptr && config::lake_pk_partial_update_use_segment_cache) {
+            // Reuse the metacache entry instead of re-parsing the footer and rebuilding a column
+            // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
+            // a cached entry turns the open into a no-op. LakeIOOptions is left at its defaults to
+            // keep the data-cache behaviour identical to the static Segment::open below.
+            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{},
+                                               /*fill_meta_cache=*/true, tablet_schema);
+        } else {
+            segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema);
+        }
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
                          << segment.status();
@@ -1918,9 +1962,17 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
                                                  params.metadata->id(), params.metadata->version(), rssid));
         }
-        // pass the actual segment_id to properly handle DCG reading
+        auto rowid_iter = params.container.rssid_to_rowid().find(rssid);
+        if (rowid_iter == params.container.rssid_to_rowid().end()) {
+            return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} has no rowset id",
+                                                 params.metadata->id(), params.metadata->version(), rssid));
+        }
+        // `rssid` addresses the segment across the whole tablet and is what the DCG bookkeeping above is
+        // keyed by; `rssid - rowset_id` is its index inside its own rowset, which is what a Segment
+        // object must carry as its id.
         RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid,
-                                                  params.tablet_schema, rowids, column_ids));
+                                                  rssid - rowid_iter->second, params.tablet_schema, rowids, column_ids,
+                                                  /*allow_segment_cache=*/true));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -1941,9 +1993,13 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         if (segment_meta.has_encryption_meta()) {
             info.encryption_meta = segment_meta.encryption_meta();
         }
-        RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id,
+        // `auto_increment_state->schema` covers only the partial-update columns, and the file is this
+        // transaction's own segment, read once. Keep it off the metacache: there is nothing to reuse,
+        // and a cached narrow Segment would make later readers of this file miss the columns it omits.
+        RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id, segment_id,
                                                   // use partial segment column offset id to get the column
-                                                  auto_increment_state->schema, rowids, auto_increment_col_partial_id));
+                                                  auto_increment_state->schema, rowids, auto_increment_col_partial_id,
+                                                  /*allow_segment_cache=*/false));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     VLOG(2) << "UpdateManager get_column_values " << cost_str.str();

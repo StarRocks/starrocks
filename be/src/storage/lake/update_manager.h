@@ -29,6 +29,7 @@
 namespace starrocks {
 
 class Cache;
+class RandomAccessFile;
 class TxnLogPB_OpWrite;
 
 namespace lake {
@@ -92,10 +93,17 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
-    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
-                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
-                                  const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
-                                  ChunkPtr* out_chunk);
+    // Materialize one batch of inserted rows out of an already-opened source segment. The segment is
+    // opened once per source segment by `_open_upsert_source_segment` and reused across batches;
+    // re-opening it per batch would re-parse the footer and rebuild a column reader for every column
+    // of the schema each time.
+    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Segment* segment,
+                                  RandomAccessFile* read_file, const std::vector<uint32_t>& insert_rowids,
+                                  const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk);
+
+    Status _open_upsert_source_segment(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
+                                       Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                       SegmentPtr* segment, std::unique_ptr<RandomAccessFile>* read_file);
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,

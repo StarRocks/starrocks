@@ -1518,6 +1518,15 @@ CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
 // the legacy path is used and no incompatible on-disk state is written.
 CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
+// Whether row-mode partial update reads the base segments it needs through the segment metacache
+// (TabletManager::load_segment) instead of a static Segment::open. The static open neither looks up
+// nor fills the cache, so every publish re-parses the footer and rebuilds a column reader for every
+// column of the tablet schema -- a cost paid again on each publish for base segments that a high
+// frequency partial-update stream keeps touching. Only the base-segment reads are routed through the
+// cache; the auto-increment branch reads this transaction's own segment with a schema restricted to
+// the partial-update columns and must never publish that narrow view into the cache. Set to false to
+// restore the static open.
+CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
