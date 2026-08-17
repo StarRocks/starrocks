@@ -331,6 +331,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_JSON:
     case TYPE_VARIANT:
     case TYPE_VARBINARY:
+    case TYPE_GEOMETRY:
         return sizeof(Slice);
 
     case TYPE_NULL:
