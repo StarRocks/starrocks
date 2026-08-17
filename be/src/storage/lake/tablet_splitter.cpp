@@ -1641,8 +1641,14 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
 
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
     new_metadatas.reserve(splitting_tablet.new_tablet_ids_size());
+    // Per-segment ownership compares each segment's stored sort-key bounds against the new tablets'
+    // ranges, so it is only sound while the two live in the same key space. TabletRangeHelper::
+    // range_key_idxes keeps a non-PK tablet's range in sort-key space whatever its ORDER BY, so those
+    // stay comparable; only a PRIMARY KEY tablet moves its range into primary-key space, and there a
+    // segment's sort-key bounds say nothing about which child owns its rows.
+    const auto old_tablet_schema = TabletSchema::create(old_tablet_metadata->schema());
     const bool can_prune_by_segment_sort_bounds =
-            !TabletSchema::create(old_tablet_metadata->schema())->has_separate_sort_key();
+            !(old_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && old_tablet_schema->has_separate_sort_key());
 
     // The full set of new-tablet ranges, used by per-segment ownership to test
     // overlap/containment of each segment against every sibling's range.
