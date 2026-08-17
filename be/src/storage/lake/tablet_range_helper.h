@@ -28,6 +28,11 @@
 namespace starrocks::lake {
 class TabletRangeHelper {
 public:
+    // Returns the schema column indexes used to encode tablet boundaries. Range-distributed
+    // primary-key tablets always route in primary-key space, even when their physical sort key
+    // is different. Other key models retain the historical sort-key boundary semantics.
+    static std::vector<ColumnId> range_key_idxes(const TabletSchema& tablet_schema);
+
     /**
      * @brief Create a SeekRange from TabletRangePB.
      *
