@@ -578,6 +578,15 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     }
     UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
     UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
+<<<<<<< HEAD
+=======
+    UPDATE_STARLET_CONFIG(starlet_cache_replication_timeout_ms, write_cache_rpc_timeout_ms);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_gs_max_single_part_size, fslib_gs_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
+>>>>>>> a16411accce ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#60610))
 #undef UPDATE_STARLET_CONFIG
 
 #ifndef BUILD_FORMAT_LIB

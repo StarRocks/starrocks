@@ -289,6 +289,51 @@ This topic introduces the following types of BE configurations:
 - Description: The cache expiration time of starlet filesystem instances.
 - Introduced in: v3.3.15, 3.4.5
 
+### starlet_fslib_azure_storage_max_single_part_size
+
+- Default: 104857600
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the object size above which files written to Azure Blob Storage or ADLS Gen2 use a multipart upload instead of a single upload request. Both Azure filesystems share this item. BE buffers up to this many bytes in memory per output stream before switching to multipart, so raising it raises memory usage, multiplied by the number of concurrent output streams. Raising it high enough to avoid multipart entirely can also fail uploads outright if it exceeds the object store's single-request upload limit; the upload then fails with the backend's own error. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_azure_storage_min_upload_part_size
+
+- Default: 5242880
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the block size used for multipart uploads to Azure Blob Storage or ADLS Gen2. Both Azure filesystems share this item. BE buffers up to this many bytes in memory per output stream between block uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the block limits of the storage service. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_gs_max_single_part_size
+
+- Default: 104857600
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the object size above which files written to Google Cloud Storage use a streaming upload instead of a single insert request. BE buffers up to this many bytes in memory per output stream before switching to streaming, so raising it raises memory usage, multiplied by the number of concurrent output streams. Raising it high enough to avoid streaming entirely can also fail uploads outright if it exceeds the object store's single-request upload limit; the upload then fails with the backend's own error. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_s3_max_single_part_size
+
+- Default: 104857600
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the object size above which files written to S3 or an S3-compatible object store use a multipart upload instead of a single `PutObject` request. BE buffers up to this many bytes in memory per output stream before switching to multipart, so raising it raises memory usage, multiplied by the number of concurrent output streams. Raising it too high to avoid multipart entirely can also fail uploads outright: AWS S3 rejects a single `PutObject` larger than 5 GiB, and the limits of S3-compatible object stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
+- Introduced in: v4.1.5, v4.2
+
+### starlet_fslib_s3_min_upload_part_size
+
+- Default: 5242880
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
+- Introduced in: v4.1.5, v4.2
+
 ### starlet_port
 
 - Default: 9070
