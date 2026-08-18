@@ -155,6 +155,7 @@ Defines the maximum number of concurrent queries in the resource group to preven
 ##### `mem_used_pct_limit`
 
 Defines the memory usage percentage limit in this resource group on a BE node above which the resource group is treated as overloaded. The value range is [0, 1]. Effective only when greater than 0, with a default value of 0.
+If the resource group uses a shared `mem_pool` (not `default_mem_pool`), the limit is evaluated against the pool-level memory usage and limit on that BE node.
 This parameter only takes effect for resource-group-level query queues, which additionally require the global session variable `enable_group_level_query_queue` to be set to `true`.
 
 #### Big query resource parameters

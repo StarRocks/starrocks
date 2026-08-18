@@ -1384,7 +1384,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> numQueries == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
 
-        // 2. Report the group at 50% memory < 80% -> the group is no longer overloaded and the queries should be run.
+        // 2. Report the group at 50% memory < 80% -> the group is not overloaded and the queries should be run.
         groupUsages = ImmutableList.of(
                 new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(50).setMem_limit_bytes(100));
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, groupUsages);
@@ -1392,6 +1392,42 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> 0L == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
 
         coords.forEach(DefaultCoordinator::onFinished);
+
+        // 3. Test shared mem pool behavior: Report the group as belonging to a shared mem_pool
+        // at 90% pool usage >= 80% while the group is at 20% -> queries of the group are queued.
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(10).setMem_limit_bytes(50)
+                        .setMem_pool("mem_pool_0").setMem_pool_mem_used_bytes(90).setMem_pool_mem_limit_bytes(100)
+                        .setNum_running_queries(1));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, groupUsages);
+
+        threads = new ArrayList<>();
+        List<DefaultCoordinator> poolCoords = new ArrayList<>();
+        for (int i = 0; i < numQueries; i++) {
+            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+            poolCoords.add(coord);
+            threads.add(new Thread(() -> {
+                try {
+                    manager.maybeWait(connectContext, coord);
+                } catch (StarRocksException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }));
+        }
+        threads.forEach(Thread::start);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> numQueries == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+
+        // 4. Test shared mem pool behavior: Report the group as belonging to a shared mem_pool at 50% pool usage < 80%
+        // while the group is at 80% -> the group is not overloaded and the queries should be run.
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(40).setMem_limit_bytes(50)
+                        .setMem_pool("mem_pool_0").setMem_pool_mem_used_bytes(50).setMem_pool_mem_limit_bytes(100));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, groupUsages);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> 0L == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+
+        poolCoords.forEach(DefaultCoordinator::onFinished);
     }
 
     @Test
