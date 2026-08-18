@@ -2766,6 +2766,50 @@ ClampedLiftedRange clamp_lifted_range_to_uint32(int32_t source_rssid_offset, uin
     return range;
 }
 
+// The rssid step a canonical rowset actually occupies once update_canonical has folded its
+// same-uid duplicates in, indexed by the plan's output index.
+//
+// get_rowset_id_step() answers for one rowset's own segment list, but union_segments_by_idx
+// keys the union on segment_idx, and a multi-level split hands same-uid siblings DISJOINT
+// pruned segment subsets (compute_rowset_segment_ownership keeps shared=true regardless of
+// overlap count). A duplicate can therefore contribute a segment_idx ABOVE anything in the
+// canonical's own list: canonical {idx 0} + sibling {idx 1, 2} occupies three rssids, not one.
+// Reserving only the canonical's own step lets the next input's lifted ids land inside that
+// span, so two rowsets share an rssid -- which surfaces as the PK index rebuild reaching the
+// same key from two different physical segments under one rssid and failing the merge publish
+// forever with "insert found duplicate key".
+//
+// Duplicates from ANY input widen their canonical, including inputs at or above the
+// upper_exclusive the ceiling is being computed for: the union happens in Phase 2, long after
+// every offset is fixed, so the reservation cannot depend on input order.
+std::vector<uint32_t> compute_post_union_rowset_id_steps(const std::vector<TabletMergeContext>& merge_contexts,
+                                                         const RowsetEmissionPlan& emission_plan) {
+    size_t num_outputs = 0;
+    for (const auto& per_source : emission_plan) {
+        for (const auto& decision : per_source) {
+            if (decision.canonical_index >= 0) {
+                num_outputs = std::max(num_outputs, static_cast<size_t>(decision.canonical_index) + 1);
+            }
+        }
+    }
+    // invariant: every rowset occupies at least one id, matching get_rowset_id_step()
+    std::vector<uint32_t> steps(num_outputs, 1);
+    for (size_t j = 0; j < emission_plan.size(); ++j) {
+        const auto& metadata = *merge_contexts[j].metadata();
+        for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
+            const auto& decision = emission_plan[j][rowset_index];
+            if (decision.canonical_index < 0) continue;
+            const auto& rowset = metadata.rowsets(rowset_index);
+            // A deduped delete predicate keeps projecting its own id (projects_via_rssid_offset)
+            // and carries no segments, so it never widens the canonical it dedups against.
+            if (!decision.emit && rowset.has_delete_predicate()) continue;
+            auto& step = steps[decision.canonical_index];
+            step = std::max(step, get_rowset_id_step(rowset));
+        }
+    }
+    return steps;
+}
+
 // Returns the highest (rowset.id + step + ctx.rssid_offset) seen across
 // merge_contexts[0..upper_exclusive), or |base_next_rowset_id| if higher.
 // Phase 1 in merge_tablet uses this as the watermark for ctx[i]'s
@@ -2775,26 +2819,36 @@ ClampedLiftedRange clamp_lifted_range_to_uint32(int32_t source_rssid_offset, uin
 // Only rowsets that project through their own ctx's rssid_offset are counted, the
 // same set compute_rssid_offset derives the floor from. A discarded duplicate's ids
 // resolve to the canonical rowset instead, which an earlier ctx already contributed
-// to this ceiling, so reserving room for it here would lift later inputs over an
-// unoccupied hole -- with three or more siblings whose id counters have diverged that
-// alone can push map_rssid past UINT32_MAX.
+// to this ceiling, so reserving a separate span for it here would lift later inputs over
+// an unoccupied hole -- with three or more siblings whose id counters have diverged that
+// alone can push map_rssid past UINT32_MAX. What the discarded duplicate does still do is
+// widen the canonical's own span through union_segments_by_idx, which |post_union_steps|
+// accounts for; that grows no hole because the canonical really occupies those ids.
 //
 // Each uint32_t addend is widened to int64_t before the addition to avoid
 // uint32_t wrap when rowset.id() approaches UINT32_MAX — wrap there would
 // under-estimate the watermark and let later old tablets reuse occupied rssids.
 uint32_t compute_cumulative_rowset_id_ceiling(const std::vector<TabletMergeContext>& merge_contexts,
-                                              const RowsetEmissionPlan& emission_plan, size_t upper_exclusive,
+                                              const RowsetEmissionPlan& emission_plan,
+                                              const std::vector<uint32_t>& post_union_steps, size_t upper_exclusive,
                                               uint32_t base_next_rowset_id) {
     uint32_t ceiling = base_next_rowset_id;
     for (size_t j = 0; j < upper_exclusive; ++j) {
         const auto& metadata = *merge_contexts[j].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
+            const auto& decision = emission_plan[j][rowset_index];
             const auto& rowset = metadata.rowsets(rowset_index);
-            if (!projects_via_rssid_offset(emission_plan[j][rowset_index], rowset)) continue;
+            if (!projects_via_rssid_offset(decision, rowset)) continue;
 
-            const int64_t end_wide = static_cast<int64_t>(rowset.id()) +
-                                     static_cast<int64_t>(get_rowset_id_step(rowset)) +
-                                     merge_contexts[j].rssid_offset();
+            // An emitted rowset is the canonical of its dedup group, so it must reserve the
+            // group's post-union span. A discarded delete predicate projects only its own id.
+            const bool use_group_step = decision.emit && decision.canonical_index >= 0 &&
+                                        static_cast<size_t>(decision.canonical_index) < post_union_steps.size();
+            const uint32_t step =
+                    use_group_step ? post_union_steps[decision.canonical_index] : get_rowset_id_step(rowset);
+
+            const int64_t end_wide =
+                    static_cast<int64_t>(rowset.id()) + static_cast<int64_t>(step) + merge_contexts[j].rssid_offset();
             const uint32_t end =
                     static_cast<uint32_t>(std::clamp<int64_t>(end_wide, 0, std::numeric_limits<uint32_t>::max()));
             ceiling = std::max(ceiling, end);
@@ -3114,10 +3168,16 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // earlier ctxs[0..i-1]'s projected rowset ids; compute_rssid_offset
     // then derives ctx[i].rssid_offset against that watermark so its
     // projected ids land strictly above every earlier ctx's.
+    //
+    // Computed once, over every input: Phase 2's union_segments_by_idx can widen a
+    // canonical rowset's segment_idx span with segments from a duplicate in ANY input, so
+    // each canonical must reserve its post-union span before any offset is fixed.
+    const std::vector<uint32_t> post_union_steps =
+            compute_post_union_rowset_id_steps(merge_contexts, rowset_emission_plan);
     for (size_t i = 1; i < merge_contexts.size(); ++i) {
-        const uint32_t cumulative_ceiling =
-                compute_cumulative_rowset_id_ceiling(merge_contexts, rowset_emission_plan, /*upper_exclusive=*/i,
-                                                     merge_contexts.front().metadata()->next_rowset_id());
+        const uint32_t cumulative_ceiling = compute_cumulative_rowset_id_ceiling(
+                merge_contexts, rowset_emission_plan, post_union_steps, /*upper_exclusive=*/i,
+                merge_contexts.front().metadata()->next_rowset_id());
         new_tablet_metadata->set_next_rowset_id(cumulative_ceiling);
         const int64_t rssid_offset =
                 compute_rssid_offset(*new_tablet_metadata, merge_contexts, rowset_emission_plan, i);
