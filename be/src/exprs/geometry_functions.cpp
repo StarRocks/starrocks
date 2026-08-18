@@ -29,7 +29,6 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/logging.h"
-#include "gen_cpp/opcode/GeometryFunctions.inc"
 #include "geo/geo_types.h"
 
 namespace starrocks {
@@ -1753,3 +1752,5 @@ StatusOr<ColumnPtr> GeometryFunctions::st_distance_sphere_geom(FunctionContext* 
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/GeometryFunctions.inc"
