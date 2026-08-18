@@ -17,10 +17,14 @@ name: AI Sync Conflict Fix
 #         back to `gh auth token` for git clone/push (see unstable-case-review.yml).
 
 on:
-  # NOTE: auto-triggers are DISABLED during validation — only manual dispatch is active, so the tool
-  # never fires unattended on real sync PRs. Re-enable (uncomment) once we're ready for production.
-  # pull_request_target:
-  #   types: [labeled, closed]
+  # pull_request_target is ENABLED: labeled(conflict) -> fast-path resolve a single sync PR;
+  # closed(fix PR) -> auto-clear the origin PR's conflict label after the fix PR merges.
+  # (pull_request_target uses the base branch's copy of this workflow, so it takes effect once
+  #  merged to the default branch.)
+  pull_request_target:
+    types: [labeled, closed]
+  # schedule fallback stays DISABLED for now — re-enable to also sweep PRs whose conflict was
+  # added while pending (which the labeled fast path skips) or whose label event was missed.
   # schedule:
   #   - cron: "*/30 * * * *"
   workflow_dispatch:
