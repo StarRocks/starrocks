@@ -8031,6 +8031,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_mixed_refs_
     // ctx_b (ctx[1], rssid_offset=1): rowset 1 shared-ancestor + rowset 2
     // child-local + non-shared sstable that mixes refs to BOTH (= post-
     // split PK-index compaction's signature output).
+    //
+    // ctx_a's next_rowset_id is 3 while its only live rowset is 1: id 2 was
+    // allocated and later compacted away. That gap is what makes ctx_b's
+    // shift non-zero. compute_rssid_offset takes the floor over the rowsets
+    // ctx_b actually EMITS -- its rowset 1 dedups into ctx_a's canonical and
+    // is discarded, so the floor is rowset 2 -- giving rssid_offset = 3 - 2 = 1.
+    // Without the gap the floor would land exactly on ctx_a's ceiling, ctx_b's
+    // natural map would agree with the plan, and the metadata-only fast path
+    // (covered by the T1 sibling above) would be correct instead.
     const std::string ns_filename = "ns_mixed.sst";
     const auto ns_path = _tablet_manager->sst_location(child_b, ns_filename);
     const uint64_t ns_filesize = write_legacy_pk_sstable(
@@ -8039,7 +8048,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_mixed_refs_
     auto meta_a = std::make_shared<TabletMetadataPB>();
     meta_a->set_id(child_a);
     meta_a->set_version(base_version);
-    meta_a->set_next_rowset_id(2);
+    meta_a->set_next_rowset_id(3);
     set_primary_key_schema(meta_a.get(), 1001);
     auto* rs_a1 = meta_a->add_rowsets();
     rs_a1->set_id(1);
@@ -8385,10 +8394,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
     // ctx[0] keeps its original offset (0); no stacking.
     EXPECT_EQ(0, sst_a->rssid_offset());
 
-    // Recover ctx[1].rssid_offset from the rowset mapping. compute_rssid_offset
-    // can be negative (base.next_rowset_id - append.min_id) when ctx[1]'s input
-    // rowset ids are already higher than ctx[0]'s, which is legal and exercises
-    // the accumulation arithmetic under signed offsets.
+    // Recover ctx[1].rssid_offset from the rowset mapping. Here ctx[1]'s complete
+    // carried rowset-id space starts at 5, above ctx[0]'s next_rowset_id, so
+    // compute_rssid_offset returns a negative shift. Deriving the offset from the
+    // output rather than hard-coding it keeps the accumulation assertion meaningful.
     bool found_ctx1 = false;
     int32_t ctx1_offset = 0;
     for (const auto& rs : merged->rowsets()) {
@@ -8407,6 +8416,360 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
     // should be projected by +ctx1_offset.
     const uint32_t sst_b_high = static_cast<uint32_t>(sst_b->max_rss_rowid() >> 32);
     EXPECT_EQ(static_cast<uint32_t>(5 + ctx1_offset), sst_b_high);
+}
+
+// Merging a cold sibling with a hot one whose rowset id space has run far ahead must not
+// fail the publish. Regression for "Segment id overflow during tablet merge".
+//
+// The id layout below is taken verbatim from a wedged production partition: writes into a
+// range-distributed table are range-routed, so the hot range's tablet reached rowset id 860
+// / next_rowset_id 861 while the cold sibling still had a single compacted rowset at id 11 /
+// next_rowset_id 12. compute_rssid_offset used to answer 12 - 798 = -786 for the hot tablet,
+// and add_rowset applies that shift to two fields that reference rowsets which no longer
+// exist and therefore sit below the live minimum: max_compact_input_rowset_id (797) and
+// del_files[].origin_rowset_id (766, inherited from a compaction input). 766 - 786 = -20
+// tripped map_rssid's `mapped < 0` branch and failed the whole reshard publish; the FE then
+// retried it forever and the table stayed unwritable.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_hot_sibling_id_space_does_not_overflow) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t cold_tablet = next_id();
+    const int64_t hot_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(cold_tablet);
+    prepare_tablet_dirs(hot_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    // ctx[0]: the cold sibling. Everything it ever wrote has been compacted into rowset 11,
+    // whose inputs (<= 10) are gone.
+    auto cold_meta = std::make_shared<TabletMetadataPB>();
+    cold_meta->set_id(cold_tablet);
+    cold_meta->set_version(base_version);
+    cold_meta->set_next_rowset_id(12);
+    set_primary_key_schema(cold_meta.get(), 1001);
+    add_rowset(cold_meta.get(), /*rowset_id=*/11, /*max_compact_input_rowset_id=*/10,
+               /*del_origin_rowset_id=*/11);
+
+    // ctx[1]: the hot sibling. min live id 798, and rowset 803 is a compaction output that
+    // inherited a del file from input rowset 766 -- 32 ids below its own live minimum.
+    auto hot_meta = std::make_shared<TabletMetadataPB>();
+    hot_meta->set_id(hot_tablet);
+    hot_meta->set_version(base_version);
+    hot_meta->set_next_rowset_id(861);
+    set_primary_key_schema(hot_meta.get(), 1001);
+    add_rowset(hot_meta.get(), /*rowset_id=*/798, /*max_compact_input_rowset_id=*/797,
+               /*del_origin_rowset_id=*/798);
+    add_rowset(hot_meta.get(), /*rowset_id=*/803, /*max_compact_input_rowset_id=*/797,
+               /*del_origin_rowset_id=*/766);
+    add_rowset(hot_meta.get(), /*rowset_id=*/860, /*max_compact_input_rowset_id=*/859,
+               /*del_origin_rowset_id=*/860);
+
+    ASSERT_OK(put_tablet_metadata(cold_meta));
+    ASSERT_OK(put_tablet_metadata(hot_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(cold_tablet);
+    merging_tablet.add_old_tablet_ids(hot_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    // Before the fix this returned InvalidArgument("Segment id overflow during tablet merge").
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    // No dedup is possible (every rowset carries its own uid), so all four survive.
+    ASSERT_EQ(4, merged->rowsets_size());
+
+    std::map<uint32_t, const RowsetMetadataPB*> by_id;
+    for (const auto& rowset : merged->rowsets()) {
+        by_id[rowset.id()] = &rowset;
+    }
+
+    // The complete carried floor is origin_rowset_id 766, so the hot tablet receives
+    // offset 12 - 766 = -754. Its live rowsets remain above every projected dead
+    // reference while the complete projected space starts at the cold tablet's ceiling.
+    ASSERT_TRUE(by_id.count(11)) << "cold sibling's rowset must keep id 11";
+    ASSERT_TRUE(by_id.count(44)) << "hot sibling's rowsets must use the complete carried floor";
+    ASSERT_TRUE(by_id.count(49));
+    ASSERT_TRUE(by_id.count(106));
+
+    // The two dead-reference fields are shifted by the same offset as the live ids.
+    // The minimum reference lands exactly at base.next_rowset_id instead of below zero.
+    const auto* compaction_output = by_id[49];
+    EXPECT_EQ(43u, compaction_output->max_compact_input_rowset_id());
+    ASSERT_EQ(1, compaction_output->del_files_size());
+    EXPECT_EQ(12u, compaction_output->del_files(0).origin_rowset_id());
+
+    // Every value carried by the hot sibling must stay above the cold sibling's live
+    // rowset id. Under the old live-only floor, max_compact_input_rowset_id 797
+    // landed exactly on 11 and origin_rowset_id 766 underflowed to -20.
+    for (const auto& rowset : merged->rowsets()) {
+        if (rowset.id() == 11) continue; // cold sibling's rowset
+        EXPECT_GT(rowset.id(), 11u);
+        EXPECT_GT(rowset.max_compact_input_rowset_id(), 11u);
+        for (const auto& del_file : rowset.del_files()) {
+            EXPECT_GT(del_file.origin_rowset_id(), 11u);
+        }
+    }
+
+    // Future writes must not reuse an occupied id.
+    EXPECT_EQ(107u, merged->next_rowset_id());
+}
+
+// A later input's compacted-away reference can numerically equal an earlier
+// input's live rowset id. The reference must be included in the source floor so
+// the two unrelated identifiers remain disjoint in the merged namespace.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dead_reference_does_not_collide_with_earlier_live_rowset) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t earlier_tablet = next_id();
+    const int64_t later_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(earlier_tablet);
+    prepare_tablet_dirs(later_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto earlier_meta = std::make_shared<TabletMetadataPB>();
+    earlier_meta->set_id(earlier_tablet);
+    earlier_meta->set_version(base_version);
+    earlier_meta->set_next_rowset_id(767);
+    set_primary_key_schema(earlier_meta.get(), 1001);
+    add_rowset(earlier_meta.get(), /*rowset_id=*/766, /*max_compact_input_rowset_id=*/765,
+               /*del_origin_rowset_id=*/766);
+
+    auto later_meta = std::make_shared<TabletMetadataPB>();
+    later_meta->set_id(later_tablet);
+    later_meta->set_version(base_version);
+    later_meta->set_next_rowset_id(804);
+    set_primary_key_schema(later_meta.get(), 1001);
+    add_rowset(later_meta.get(), /*rowset_id=*/798, /*max_compact_input_rowset_id=*/797,
+               /*del_origin_rowset_id=*/798);
+    add_rowset(later_meta.get(), /*rowset_id=*/803, /*max_compact_input_rowset_id=*/765,
+               /*del_origin_rowset_id=*/766);
+
+    ASSERT_OK(put_tablet_metadata(earlier_meta));
+    ASSERT_OK(put_tablet_metadata(later_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(earlier_tablet);
+    merging_tablet.add_old_tablet_ids(later_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    std::map<uint32_t, const RowsetMetadataPB*> by_id;
+    for (const auto& rowset : merged->rowsets()) {
+        by_id[rowset.id()] = &rowset;
+    }
+
+    ASSERT_TRUE(by_id.count(766)) << "the earlier input's live rowset keeps id 766";
+    ASSERT_TRUE(by_id.count(800)) << "the later input shifts by 767 - 765 = 2";
+    ASSERT_TRUE(by_id.count(805));
+
+    const auto* later_compaction_output = by_id[805];
+    ASSERT_EQ(1, later_compaction_output->del_files_size());
+    EXPECT_EQ(768u, later_compaction_output->del_files(0).origin_rowset_id())
+            << "the later input's dead reference must not alias the earlier live rowset";
+    EXPECT_EQ(767u, later_compaction_output->max_compact_input_rowset_id())
+            << "the later input's compaction watermark must also stay above the earlier live rowset";
+    EXPECT_EQ(806u, merged->next_rowset_id());
+}
+
+// A same-UID sibling copy is discarded by merge_rowsets, so its historical
+// references must not lower the later input's floor. Otherwise an ancient
+// reference on the discarded copy can force a positive lift that overflows a
+// high-ID rowset that is actually emitted.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_lower_rssid_floor) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t earlier_tablet = next_id();
+    const int64_t later_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(earlier_tablet);
+    prepare_tablet_dirs(later_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto earlier_meta = std::make_shared<TabletMetadataPB>();
+    earlier_meta->set_id(earlier_tablet);
+    earlier_meta->set_version(base_version);
+    constexpr uint32_t kBaseRowsetId = std::numeric_limits<uint32_t>::max() - 101;
+    constexpr uint32_t kBaseNextRowsetId = kBaseRowsetId + 1;
+    earlier_meta->set_next_rowset_id(kBaseNextRowsetId);
+    set_primary_key_schema(earlier_meta.get(), 1001);
+    auto* canonical = add_rowset(earlier_meta.get(), /*rowset_id=*/kBaseRowsetId,
+                                 /*max_compact_input_rowset_id=*/0, /*del_origin_rowset_id=*/0);
+
+    auto later_meta = std::make_shared<TabletMetadataPB>();
+    later_meta->set_id(later_tablet);
+    later_meta->set_version(base_version);
+    later_meta->set_next_rowset_id(std::numeric_limits<uint32_t>::max());
+    set_primary_key_schema(later_meta.get(), 1001);
+    auto* duplicate = add_rowset(later_meta.get(), /*rowset_id=*/kBaseRowsetId,
+                                 /*max_compact_input_rowset_id=*/0, /*del_origin_rowset_id=*/0);
+    duplicate->mutable_uid()->CopyFrom(canonical->uid());
+
+    constexpr uint32_t kHighRowsetId = std::numeric_limits<uint32_t>::max() - 1;
+    add_rowset(later_meta.get(), /*rowset_id=*/kHighRowsetId,
+               /*max_compact_input_rowset_id=*/kHighRowsetId,
+               /*del_origin_rowset_id=*/kHighRowsetId);
+
+    ASSERT_OK(put_tablet_metadata(earlier_meta));
+    ASSERT_OK(put_tablet_metadata(later_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(earlier_tablet);
+    merging_tablet.add_old_tablet_ids(later_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    ASSERT_EQ(2, merged->rowsets_size()) << "the same-UID sibling copy must be deduplicated";
+    std::map<uint32_t, const RowsetMetadataPB*> by_id;
+    for (const auto& rowset : merged->rowsets()) {
+        by_id[rowset.id()] = &rowset;
+    }
+    ASSERT_TRUE(by_id.count(kBaseRowsetId));
+    ASSERT_TRUE(by_id.count(kBaseNextRowsetId))
+            << "the emitted high-ID rowset must map from its own floor, not the discarded copy's reference";
+    EXPECT_EQ(kBaseNextRowsetId + 1, merged->next_rowset_id());
+}
+
+// Three siblings whose rowset-id counters have diverged, where the middle one
+// carries nothing but a delete predicate that dedups away against the first
+// sibling's predicate at the same version.
+//
+// A discarded predicate is the one discarded rowset whose id still reaches the
+// merged namespace through the natural offset: merge_rowsets records a
+// shared_rssid_map entry for a discarded duplicate only when it is NOT a delete
+// predicate. So the floor must include it -- otherwise the middle sibling has no
+// floor at all, keeps offset 0, and its raw id (here 4.2e9) becomes the watermark
+// the third sibling is lifted above, pushing the third sibling's own high-ID
+// rowset past UINT32_MAX even though the emitted namespace has room for it.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_inflate_later_sibling_ceiling) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t low_tablet = next_id();
+    const int64_t predicate_only_tablet = next_id();
+    const int64_t wide_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(low_tablet);
+    prepare_tablet_dirs(predicate_only_tablet);
+    prepare_tablet_dirs(wide_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    // ctx[0]: data(v1) -> predicate(v10). Its next_rowset_id (3) is the base watermark.
+    TabletMetadataPB low_meta;
+    low_meta.set_id(low_tablet);
+    low_meta.set_version(base_version);
+    low_meta.set_next_rowset_id(3);
+    add_rowset_with_predicate(&low_meta, /*rowset_id=*/1, /*version=*/1, /*has_predicate=*/false);
+    add_rowset_with_predicate(&low_meta, /*rowset_id=*/2, /*version=*/10, /*has_predicate=*/true);
+    ASSERT_OK(put_tablet_metadata(low_meta));
+
+    // ctx[1]: the same v10 delete predicate, cross-published onto a sibling whose id
+    // counter ran far ahead. Predicates dedup by version, so this is the whole tablet
+    // and merge_rowsets emits nothing from it.
+    constexpr uint32_t kFarAheadPredicateId = 4'200'000'000;
+    TabletMetadataPB predicate_only_meta;
+    predicate_only_meta.set_id(predicate_only_tablet);
+    predicate_only_meta.set_version(base_version);
+    predicate_only_meta.set_next_rowset_id(kFarAheadPredicateId + 1);
+    add_rowset_with_predicate(&predicate_only_meta, kFarAheadPredicateId, /*version=*/10, /*has_predicate=*/true);
+    ASSERT_OK(put_tablet_metadata(predicate_only_meta));
+
+    // ctx[2]: two live rowsets ~1e8 ids apart. Lifting its floor (5) onto ctx[1]'s raw
+    // id would map the top one to 4'299'999'996 > UINT32_MAX.
+    constexpr uint32_t kWideSpanTopId = 100'000'000;
+    TabletMetadataPB wide_meta;
+    wide_meta.set_id(wide_tablet);
+    wide_meta.set_version(base_version);
+    wide_meta.set_next_rowset_id(kWideSpanTopId + 1);
+    add_rowset_with_predicate(&wide_meta, /*rowset_id=*/5, /*version=*/20, /*has_predicate=*/false);
+    add_rowset_with_predicate(&wide_meta, kWideSpanTopId, /*version=*/21, /*has_predicate=*/false);
+    ASSERT_OK(put_tablet_metadata(wide_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(low_tablet);
+    merging_tablet.add_old_tablet_ids(predicate_only_tablet);
+    merging_tablet.add_old_tablet_ids(wide_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    // Before the fix this returned InvalidArgument("Segment id overflow during tablet merge").
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    // ctx[0]'s two rowsets plus ctx[2]'s two; ctx[1]'s predicate is deduped away.
+    ASSERT_EQ(4, merged->rowsets_size());
+
+    std::vector<uint32_t> rowset_ids;
+    int predicate_count = 0;
+    for (const auto& rowset : merged->rowsets()) {
+        rowset_ids.push_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            ++predicate_count;
+            EXPECT_EQ(10, rowset.version());
+        }
+    }
+    EXPECT_EQ(1, predicate_count);
+
+    // ctx[1]'s floor is its discarded predicate id, so it shifts down to the base
+    // watermark 3 and reserves exactly that one slot. ctx[2] is then lifted to 4
+    // instead of to 4'200'000'001, and its span survives intact.
+    EXPECT_EQ((std::vector<uint32_t>{1, 2, 4, kWideSpanTopId - 1}), rowset_ids);
+    EXPECT_EQ(kWideSpanTopId, merged->next_rowset_id());
 }
 
 // Merge of two PK parents that both have cloud-native persistent index enabled.
