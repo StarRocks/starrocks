@@ -46,6 +46,10 @@ Status batch_update_tablet_replica_info(const std::vector<uint64_t>& tablet_ids)
 Status staros_need_warmup_tablet(int64_t tablet_id);
 staros::WarmupLevel staros_worker_warmup_level();
 
+// Applies the starlet_fslib_*_part_size BE configs to their starlet gflags, validating each value
+// with starlet's own predicate. Called during worker init; exposed for tests.
+void apply_starlet_upload_threshold_configs();
+
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);
 std::unique_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::unique_ptr<staros::starlet::Starlet> starlet);
