@@ -911,12 +911,6 @@ TEST_F(BlockCompressionTest, dict_decompress_failure_does_not_poison_the_thread)
     }
 }
 
-// The dictionary builders reject bad input instead of trusting it. The two size
-// guards matter most: zstd_compression_dict_max_size is an operator-settable mutable
-// config, and a value that is non-positive (widening to a huge size_t) or simply
-// absurd would otherwise reach std::string::resize on a flush or compaction
-// thread -- an allocation failure where the documented behaviour is "give up and
-// write without a dictionary".
 // The segment metacache sizes itself from what the readers report, and a DDict is
 // held for as long as the reader that built it. So its reported size has to be
 // real: roughly the dictionary it copied, and it has to grow with it.
@@ -1013,6 +1007,144 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_memory_is_accounted_and_returned) {
     // the scope was entered and left in pairs, around both the create and the free
     ASSERT_GT(g_scope_enters.load(), 0);
     ASSERT_EQ(g_scope_enters.load(), g_scope_leaves.load());
+}
+
+// Everything above proves the cache decodes correctly. None of it proves the cache does
+// its job, or stays inside the bound its memory argument rests on -- both are invisible
+// to an output comparison, and both are exactly what a regression would take away. The
+// byte counter makes them observable: one context is ~94 KB, so counting bytes counts
+// contexts.
+TEST_F(BlockCompressionTest, dict_ctx_cache_hits_and_stays_bounded) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    // eight distinct dictionaries, each with a body compressed against it
+    constexpr int kDicts = 8;
+    struct Arm {
+        std::string sample, body, compressed;
+        std::unique_ptr<compression::ZstdDDict> ddict;
+    };
+    std::vector<Arm> arms(kDicts);
+    for (int i = 0; i < kDicts; i++) {
+        for (int k = 0; k < 300; k++) {
+            arms[i].sample += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " ";
+        }
+        for (int k = 0; k < 600; k++) {
+            arms[i].body += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " payload ";
+        }
+        auto cd = compression::ZstdCDict::create(Slice(arms[i].sample), 3);
+        ASSERT_TRUE(cd.ok());
+        auto dd = compression::ZstdDDict::create(Slice(arms[i].sample));
+        ASSERT_TRUE(dd.ok());
+        arms[i].ddict = std::move(dd.value());
+        arms[i].compressed.resize(codec->max_compressed_len(arms[i].body.size()));
+        Slice out(arms[i].compressed);
+        std::vector<Slice> in{Slice(arms[i].body)};
+        ASSERT_TRUE(codec->compress(in, &out, false, arms[i].body.size(), nullptr, nullptr, cd.value().get()).ok());
+        arms[i].compressed.resize(out.size);
+    }
+
+    auto decode = [&](int i) {
+        std::string got(arms[i].body.size(), '\0');
+        Slice g(got);
+        ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok());
+        ASSERT_EQ(arms[i].body, std::string(g.data, g.size));
+    };
+
+    const size_t before = dict_dctx_cache_memory_bytes();
+    size_t after_first_page = 0;
+    size_t after_one_dict_many_pages = 0;
+    size_t after_cycling_all = 0;
+    size_t after_failure = 0;
+
+    // a fresh thread, so the numbers are this thread's contexts and nobody else's
+    std::thread t([&] {
+        // 1. THE POINT OF THE CACHE: the first page of a dictionary establishes the
+        //    session (one context); the next 49 pages of the SAME dictionary must add
+        //    nothing. If the hit ever degrades, every page re-loads the dictionary --
+        //    correct output, ~30% slower reads, and nothing else would notice. The
+        //    single-context size is measured from the first page alone, so the
+        //    comparison below is between two independent measurements.
+        decode(0);
+        after_first_page = dict_dctx_cache_memory_bytes();
+        for (int p = 1; p < 50; p++) decode(0);
+        after_one_dict_many_pages = dict_dctx_cache_memory_bytes();
+
+        // 2. THE BOUND: cycling through more dictionaries than there are slots must not
+        //    grow without limit. kDictDCtxCacheSize is 4 in the .cpp; the per-thread cost
+        //    quoted in the design rests on this staying true.
+        for (int round = 0; round < 5; round++) {
+            for (int i = 0; i < kDicts; i++) decode(i);
+        }
+        after_cycling_all = dict_dctx_cache_memory_bytes();
+
+        // 3. DISCARD: a page that fails to decode must cost that context its slot, not
+        //    be handed out again. Output equality cannot see this; the counter can.
+        std::string garbage = arms[0].compressed;
+        garbage[garbage.size() / 2] ^= 0xFF;
+        std::string got(arms[0].body.size(), '\0');
+        Slice g(got);
+        ASSERT_FALSE(codec->decompress(Slice(garbage), &g, arms[0].ddict.get()).ok());
+        after_failure = dict_dctx_cache_memory_bytes();
+    });
+    t.join();
+
+    const size_t one_ctx = after_first_page - before;
+    ASSERT_GT(one_ctx, 1024u) << "a ZSTD_DCtx is tens of KB";
+    // 49 more pages of the same dictionary added no context: the cache hit
+    ASSERT_EQ(after_first_page, after_one_dict_many_pages)
+            << "pages after the first re-allocated a context: the cache is not hitting";
+    // 8 dictionaries over 5 rounds, still at most the 4 slots
+    ASSERT_LE(after_cycling_all - before, 4 * one_ctx)
+            << "the per-thread context set grew past kDictDCtxCacheSize";
+    // the failed page cost its context its slot
+    ASSERT_LT(after_failure, after_cycling_all) << "a context that failed mid-decompression was kept";
+    // and nothing survives the thread
+    ASSERT_EQ(before, dict_dctx_cache_memory_bytes());
+}
+
+// The whole reason this change exists is that an old BE must be able to read segments a
+// newer one wrote. The other direction is the one that has to be safe by construction: a
+// build WITHOUT this change meets a page compressed against a dictionary, decodes it with
+// no dictionary at all, and must FAIL rather than hand back plausible-looking bytes. The
+// page checksum covers the compressed body, so it passes either way -- the only thing
+// standing between a downgraded cluster and silent wrong answers is that zstd refuses.
+TEST_F(BlockCompressionTest, dict_page_cannot_be_decoded_without_its_dictionary) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int k = 0; k < 400; k++) {
+        sample += "recurring phrase " + std::to_string(k % 40) + " ";
+    }
+    auto cd = compression::ZstdCDict::create(Slice(sample), 3);
+    ASSERT_TRUE(cd.ok());
+
+    int refused = 0;
+    for (int p = 0; p < 32; p++) {
+        std::string body;
+        for (int k = 0; k < 400; k++) {
+            body += "recurring phrase " + std::to_string((k + p) % 40) + " payload " + std::to_string(p) + " ";
+        }
+        std::string compressed(codec->max_compressed_len(body.size()), '\0');
+        Slice out(compressed);
+        std::vector<Slice> in{Slice(body)};
+        ASSERT_TRUE(codec->compress(in, &out, false, body.size(), nullptr, nullptr, cd.value().get()).ok());
+        compressed.resize(out.size);
+
+        // exactly what an old reader does: the two-argument overload, no dictionary
+        std::string got(body.size(), '\0');
+        Slice g(got);
+        Status st = codec->decompress(Slice(compressed), &g);
+        if (!st.ok()) {
+            refused++;
+        } else {
+            // the unacceptable outcome: it "worked" and produced something else
+            ASSERT_EQ(body, std::string(g.data, g.size))
+                    << "page " << p << " decoded without its dictionary and returned WRONG bytes";
+        }
+    }
+    ASSERT_EQ(32, refused) << "a dictionary-compressed page decoded without the dictionary";
 }
 
 } // namespace starrocks
