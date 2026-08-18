@@ -37,7 +37,6 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -297,15 +296,8 @@ public class IcebergScanNode extends ScanNode {
         }
         TCloudConfiguration current = new TCloudConfiguration();
         currentConfig.toThrift(current);
-        String expiration = current.getCloud_properties() == null ? null
-                : current.getCloud_properties().get(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY);
-        if (expiration == null) {
-            return null;
-        }
-        long expiryMs;
-        try {
-            expiryMs = Long.parseLong(expiration);
-        } catch (NumberFormatException e) {
+        Long expiryMs = currentConfig.getVendedCredentialExpiresAtMs();
+        if (expiryMs == null) {
             return null;
         }
         long nowMs = System.currentTimeMillis();
@@ -336,10 +328,8 @@ public class IcebergScanNode extends ScanNode {
                 // token value). Compare the whole map — a new token can carry the same expiry.
                 return null;
             }
-            String newExpiration = result.getCloud_properties() == null ? null
-                    : result.getCloud_properties().get(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY);
             LOG.info("re-vended cloud credential for table {}: expiry {} -> {}",
-                    icebergTable.getCatalogTableName(), expiration, newExpiration);
+                    icebergTable.getCatalogTableName(), expiryMs, fresh.getVendedCredentialExpiresAtMs());
             return result;
         } catch (Exception e) {
             // Best-effort: a failed re-vend just leaves the current token; the scan continues.

@@ -68,7 +68,10 @@ public class VendedCredentialRefreshSchedulerTest extends SchedulerConnectorTest
     private static CloudConfiguration vendedConfig(String token, long expiresAtMs) {
         GCPCloudCredential credential = new GCPCloudCredential("", false, "", "", "", "",
                 token, String.valueOf(expiresAtMs));
-        return new GCPCloudConfiguration(credential);
+        GCPCloudConfiguration config = new GCPCloudConfiguration(credential);
+        // The factory sets this for real vended credentials; this fixture bypasses the factory.
+        config.setVendedCredentialExpiresAtMs(expiresAtMs);
+        return config;
     }
 
     private IcebergScanNode newIcebergNode(int planNodeId, String token, long expiryMs) {

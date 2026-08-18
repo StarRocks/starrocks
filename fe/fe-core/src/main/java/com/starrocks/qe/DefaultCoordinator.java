@@ -840,7 +840,9 @@ public class DefaultCoordinator extends Coordinator {
     private void maybeStartVendedCredentialRefreshTask() {
         boolean hasVendedIcebergScan = executionDAG.getScanNodes().stream()
                 .anyMatch(scanNode -> scanNode instanceof IcebergScanNode
-                        && ((IcebergScanNode) scanNode).getCloudConfiguration() != null);
+                        && ((IcebergScanNode) scanNode).getCloudConfiguration() != null
+                        && ((IcebergScanNode) scanNode).getCloudConfiguration()
+                                .getVendedCredentialExpiresAtMs() != null);
         if (!hasVendedIcebergScan || !jobSpec.isEnablePipeline() || vendedRefreshStopped) {
             return;
         }
