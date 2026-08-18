@@ -209,7 +209,7 @@ public class Config extends ConfigBase {
     public static boolean audit_log_enable_compress = false;
 
     @ConfField(mutable = true, comment = "Whether to enable the builtin audit loader, which persists audit " +
-            "events into the internal table _statistics_.starrocks_audit_tbl. Disabled by default. It stays " +
+            "events into the table starrocks_audit_db__.starrocks_audit_tbl__. Disabled by default. It stays " +
             "inert while an external dynamic AUDIT plugin is installed, to avoid importing audit data twice.")
     public static boolean enable_audit_loader = false;
     @ConfField(mutable = true, comment = "Max interval in seconds between two builtin audit loader flushes.")

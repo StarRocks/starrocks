@@ -318,7 +318,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否启用内置审计导入功能。启用后，FE 会将审计事件（查询与连接）持久化到内部表 `_statistics_.starrocks_audit_tbl`，可直接使用 SQL 分析审计数据。审计表由 Leader FE 在功能开启后自动创建（按天分区，默认保留 30 天，可通过 `ALTER TABLE ... SET ("partition_live_number"="N")` 调整，系统不会覆盖该修改；表被误删后会自动重建为空表）。当集群已安装外部动态 AUDIT 插件（如 auditloader 插件）时，该功能自动保持失效以避免审计数据重复导入，外部插件卸载后自动恢复。该功能与 `fe.audit.log` 相互独立、可共存。注意：`ADMIN SET FRONTEND CONFIG` 仅对当前连接的 FE 生效且重启后失效，多 FE 集群需逐台开启；如需持久化，请写入各 FE 的 `fe.conf`。
+- 描述: 是否启用内置审计导入功能。启用后，FE 会将审计事件（查询与连接）持久化到表 `starrocks_audit_db__.starrocks_audit_tbl__`，可直接使用 SQL 分析审计数据。审计库和表由 Leader FE 在功能开启后自动创建（按天分区，默认保留 30 天，可通过 `ALTER TABLE ... SET ("partition_live_number"="N")` 调整，系统不会覆盖该修改；表被误删后会自动重建为空表）。当集群已安装外部动态 AUDIT 插件（如 auditloader 插件）时，该功能自动保持失效以避免审计数据重复导入，外部插件卸载后自动恢复。该功能与 `fe.audit.log` 相互独立、可共存。注意：`ADMIN SET FRONTEND CONFIG` 仅对当前连接的 FE 生效且重启后失效，多 FE 集群需逐台开启；如需持久化，请写入各 FE 的 `fe.conf`。
 - 引入版本: v4.2
 
 ### `enable_audit_sql`
