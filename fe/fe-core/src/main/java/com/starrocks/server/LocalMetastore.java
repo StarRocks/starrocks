@@ -50,6 +50,8 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService.RangeSpec;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -5621,6 +5623,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
+    }
+
+    public String getRangeDistributionTopology(String databaseName, String tableName) throws StarRocksException {
+        return new RangeDistributionMigrationService().getTopology(databaseName, tableName);
+    }
+
+    public long submitRangeDistributionSplit(String databaseName, String tableName,
+                                             Map<Long, List<RangeSpec>> parentTabletIdToRanges)
+            throws StarRocksException {
+        return new RangeDistributionMigrationService().submitSplit(
+                databaseName, tableName, parentTabletIdToRanges);
     }
 
     public void onEraseDatabase(long dbId) {
