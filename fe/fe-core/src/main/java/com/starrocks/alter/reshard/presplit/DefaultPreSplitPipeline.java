@@ -220,7 +220,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
         recordSamplerInvocation();
 
-        int requestedTabletCount = TabletPreSplitCoordinator.selectTabletCount(
+        int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
                 new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();

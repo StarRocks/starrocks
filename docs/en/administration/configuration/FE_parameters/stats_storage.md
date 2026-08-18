@@ -725,6 +725,15 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
 - Introduced in: v4.1.0
 
+### `tablet_pre_split_target_size`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Target tablet size that Sample-Based Tablet Pre-Split sizes a load's split count against. `0` (the default) inherits `tablet_reshard_target_size`. Lower it to give a load more write parallelism without shrinking every tablet in the cluster: the background tablet split/merge daemon keeps measuring against `tablet_reshard_target_size`, so it merges the finer tablets back together after the load finishes. This matters most for a load that writes brand-new range-distributed partitions (for example the replacement partitions of an `INSERT OVERWRITE`), which start from a single catch-all tablet and would otherwise be written by a single backend.
+- Introduced in: v4.1.0
+
 #### Rolling back Sample-Based Tablet Pre-Split
 
 To disable the feature safely before a downgrade or during a production rollback:

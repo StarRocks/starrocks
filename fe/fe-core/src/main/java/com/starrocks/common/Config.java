@@ -4923,6 +4923,24 @@ public class Config extends ConfigBase {
     public static int tablet_pre_split_max_partitions_per_load = 32;
 
     /**
+     * Target tablet size Sample-Based Tablet Pre-Split sizes a load's split count against, in bytes.
+     * Zero (the default) inherits tablet_reshard_target_size.
+     *
+     * <p>Exists so pre-split can be tuned independently of the background split/merge daemon.
+     * The daemon keeps every tablet in the cluster near tablet_reshard_target_size, so lowering
+     * that value to buy more write parallelism for one load would also shrink every unrelated
+     * tablet. Lowering this value instead only affects how finely a load's target partitions are
+     * pre-split; the daemon still converges them back toward tablet_reshard_target_size afterwards,
+     * so a load can be written in parallel without permanently raising the cluster's tablet count.
+     */
+    @ConfField(mutable = true, comment = "Target tablet size in bytes that Sample-Based Tablet "
+            + "Pre-Split sizes a load's split count against. Zero (default) inherits "
+            + "tablet_reshard_target_size. Lower it to give a load more write parallelism without "
+            + "shrinking every tablet in the cluster: the background split/merge daemon keeps using "
+            + "tablet_reshard_target_size, so it merges the finer tablets back afterwards.")
+    public static long tablet_pre_split_target_size = 0L;
+
+    /**
      * Whether to enable tracing historical nodes when cluster scale
      */
     @ConfField(mutable = true)
