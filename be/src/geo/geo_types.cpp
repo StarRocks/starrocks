@@ -563,8 +563,7 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
 }
 #endif
 
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
-                      double* max_x, double* max_y) {
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y) {
     if (shape == nullptr) return false;
 
     auto update = [&](const S2Point& pt) {
@@ -622,14 +621,12 @@ static constexpr double kGeoEarthRadiusM = 6371008.8;
 
 double geo_line_length_meters(const GeoShape* shape) {
     if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) return 0.0;
-    return static_cast<const GeoLine*>(shape)->polyline()->GetLength().radians() *
-           kGeoEarthRadiusM;
+    return static_cast<const GeoLine*>(shape)->polyline()->GetLength().radians() * kGeoEarthRadiusM;
 }
 
 double geo_polygon_area_sq_meters(const GeoShape* shape) {
     if (!shape || shape->type() != GEO_SHAPE_POLYGON) return 0.0;
-    return static_cast<const GeoPolygon*>(shape)->polygon()->GetArea() *
-           kGeoEarthRadiusM * kGeoEarthRadiusM;
+    return static_cast<const GeoPolygon*>(shape)->polygon()->GetArea() * kGeoEarthRadiusM * kGeoEarthRadiusM;
 }
 
 double geo_polygon_perimeter_meters(const GeoShape* shape) {
@@ -698,8 +695,7 @@ int geo_polygon_loop_vertex_count(const GeoShape* shape, int loop_idx) {
     return poly->loop(loop_idx)->num_vertices();
 }
 
-bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j,
-                                 double* x, double* y) {
+bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j, double* x, double* y) {
     if (!shape || shape->type() != GEO_SHAPE_POLYGON) return false;
     const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
     if (loop_idx < 0 || loop_idx >= poly->num_loops()) return false;
