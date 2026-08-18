@@ -2648,6 +2648,12 @@ public class ResourceGroupStmtTest {
         assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(String.format(sql, "-0.1")))
                 .isInstanceOf(SemanticException.class)
                 .hasMessageContaining("mem_used_pct_limit should range from 0.00(include) to 1.00(include)");
+
+        // NaN
+        assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(String.format(sql, "NaN")))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("mem_used_pct_limit should range from 0.00(include) to 1.00(include)");
+
    }
 
     @Test
