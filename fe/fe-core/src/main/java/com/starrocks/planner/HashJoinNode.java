@@ -42,6 +42,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TAsofJoinCondition;
@@ -52,6 +53,7 @@ import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -220,6 +222,15 @@ public class HashJoinNode extends JoinNode {
         hashJoinNode.setPartition_exprs(normalizer.normalizeOrderedExprs(partitionExprs));
         hashJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
         hashJoinNode.setLate_materialization(enableLateMaterialization);
+        // Same reasoning as NestLoopJoinNode: the conjuncts reference these definitions by slot id.
+        // A HashJoinNode reaches the digested subtree under narrower conditions (isTransformJoin()
+        // also demands a left-transform op and a non-shuffled distribution), and no probe of mine
+        // made this one collide, but the omission is identical and costs nothing to close.
+        if (commonSlotMap != null) {
+            Pair<List<Integer>, List<ByteBuffer>> cse = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+            hashJoinNode.setCse_slot_ids(cse.first);
+            hashJoinNode.setCse_exprs(cse.second);
+        }
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
