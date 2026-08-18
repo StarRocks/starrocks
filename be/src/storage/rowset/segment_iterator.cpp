@@ -1583,12 +1583,22 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         _context->_read_chunk->reset();
         Chunk* chunk = _context->_read_chunk.get();
-        size_t column_index = 0;
         for (size_t cid = 0; cid < _column_iterators.size(); ++cid) {
             if (_column_iterators[cid] == nullptr) {
                 continue;
             }
-            ColumnPtr& col = chunk->get_column_by_index(column_index++);
+            // The read chunk is built from `_context->_read_schema`, which may be reordered
+            // (predicate columns moved to the front by `reorder_schema` for late-materialization
+            // / low-cardinality handling). Its positional order therefore does NOT match the
+            // ascending-cid order of `_column_iterators`. Look up the scratch destination column
+            // by column id so the iterator and its `dst` stay type-aligned; pairing a complex-type
+            // iterator (array/map/struct/json) with a scalar column otherwise reinterprets the
+            // column and crashes inside `get_io_range_vec` (e.g. ArrayColumnIterator reading
+            // `offsets->get_data().back()` on a mistyped column).
+            if (!chunk->is_cid_exist(cid)) {
+                continue;
+            }
+            ColumnPtr& col = chunk->get_column_by_id(cid);
             if (!_scan_range.empty()) {
                 RETURN_IF_ERROR(_column_iterators[cid]->seek_to_ordinal(_scan_range.begin()));
             }
