@@ -579,6 +579,10 @@ struct TIcebergSchemaField {
     // Refer to field name
     2: optional string name
 
+    // Mirrors Types.NestedField#isOptional(). Unset means optional: never enforce
+    // NOT NULL without an explicit signal from the Iceberg schema.
+    3: optional bool is_optional
+
     // You can fill other field properties here if you needed
     // .......
 
