@@ -221,7 +221,8 @@ public:
 
 // Compute the axis-aligned bounding box of any GeoShape.
 // Returns false if the shape is null or has no vertices.
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y);
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
+                      double* max_x, double* max_y);
 
 // ---------------------------------------------------------------------------
 // S2-dependent helpers — implemented in geo_types.cpp, usable without
@@ -251,6 +252,13 @@ int geo_line_vertex_count(const GeoShape* shape);
 // Returns false if shape is not a LINESTRING or i is out of range.
 bool geo_line_vertex_at(const GeoShape* shape, int i, double* x, double* y);
 
+// S2-level validity check (polygon IsValid / polyline IsValid; always true for points).
+bool geo_is_valid(const GeoShape* shape);
+
+// Returns true if two POLYGON shapes share any points (S2Polygon::Intersects).
+// For non-polygon pairs falls back to contains / MBR overlap.
+bool geo_polygon_intersects(const GeoShape* a, const GeoShape* b);
+
 // Number of loops in a POLYGON (0 for other types).
 int geo_polygon_loop_count(const GeoShape* shape);
 
@@ -258,6 +266,7 @@ int geo_polygon_loop_count(const GeoShape* shape);
 int geo_polygon_loop_vertex_count(const GeoShape* shape, int loop_idx);
 
 // Coordinates of the j-th vertex of the loop_idx-th loop of a POLYGON.
-bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j, double* x, double* y);
+bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j,
+                                 double* x, double* y);
 
 } // namespace starrocks

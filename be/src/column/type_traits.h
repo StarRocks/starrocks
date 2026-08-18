@@ -87,6 +87,8 @@ inline constexpr bool isArithmeticLT<TYPE_JSON> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
 template <>
+inline constexpr bool isArithmeticLT<TYPE_GEOMETRY> = false;
+template <>
 inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
 
 template <LogicalType logical_type>
@@ -100,6 +102,9 @@ inline constexpr bool isSliceLT<TYPE_VARCHAR> = true;
 
 template <>
 inline constexpr bool isSliceLT<TYPE_VARBINARY> = true;
+
+template <>
+inline constexpr bool isSliceLT<TYPE_GEOMETRY> = true;
 
 template <LogicalType logical_type>
 struct RunTimeTypeTraits {};
@@ -316,6 +321,13 @@ struct RunTimeTypeTraits<TYPE_BINARY> {
 
 template <>
 struct RunTimeTypeTraits<TYPE_VARBINARY> {
+    using CppType = Slice;
+    using ColumnType = BinaryColumn;
+    using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_GEOMETRY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
