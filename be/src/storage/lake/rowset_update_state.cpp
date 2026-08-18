@@ -18,7 +18,9 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/binary_column.h"
 #include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "column/serde/column_array_serde.h"
 #include "common/stack_util.h"
@@ -33,6 +35,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
@@ -881,6 +884,109 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
     return Status::OK();
 }
 
+// Drop the delete keys that fall outside this tablet's key range.
+//
+// A del file is cross-published verbatim to every SPLIT child: each child reads the SAME parent del
+// file and erases every key in it from its OWN primary index. The upsert side does not have this
+// problem because it is clipped at read time -- convert_txn_log_for_splitting stamps this tablet's
+// range onto op_write.rowset, and get_each_segment_iterator turns it into
+// SegmentReadOptions::tablet_range, which _apply_tablet_range resolves to a rowid range via the
+// short key index so out-of-range rows are never even read. A del file is a flat serialized PK
+// column with no index and no guaranteed key order, so it gets no such pruning and every child sees
+// every key.
+//
+// Erasing a key it does not own is not merely wasted work: the child's primary index still carries
+// the ancestor entries inherited through its shared sstables (the tablet-range gate on those runs
+// only in LakePersistentIndex::merge_sstables, i.e. at sstable compaction time), so the lookup can
+// SUCCEED and hand back a location in a rowset the split pruned away from this child. That rssid
+// then reaches MetaFileBuilder::update_num_del_stat, which finds no such rowset and fails the
+// publish with "unexpected segment id: <rssid> tablet id: <child>" -- permanently, since the load
+// txn is retried forever and the SPLIT job's CLEANING waits on it.
+//
+// Dropping them is correct, not just safe: a key outside this tablet's range belongs to a sibling by
+// definition, the same del file is cross-published to that sibling, and the sibling erases it from
+// its own index. Each child erasing only its own slice is exactly what the upsert side already does.
+//
+// Costs nothing extra in I/O: the caller has already read and decoded the whole del file, so this is
+// one pass over an in-memory column. Byte comparison is valid because create_sst_seek_range_from
+// encodes the bounds with the same PrimaryKeyEncoder and pkey_schema used to materialize this column,
+// and requires PK_ENCODING_TYPE_V2 (big-endian, order preserving) for range-distribution tables.
+static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params, Column* deletes) {
+    // No tablet range at all => not a range-distribution tablet, nothing to clip against.
+    if (!params.metadata->has_range() || deletes->empty()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto seek_range,
+                     TabletRangeHelper::create_sst_seek_range_from(params.metadata->range(), params.tablet_schema));
+    // Both bounds empty means (-inf, +inf): every key belongs here. Mirrors SeekRange::all_range()'s
+    // short-circuit in SegmentIterator::_apply_tablet_range.
+    if (seek_range.seek_key.empty() && seek_range.stop_key.empty()) {
+        return Status::OK();
+    }
+
+    // Resolve a per-key accessor WITHOUT materializing a Slice array. Building one (e.g. via
+    // PrimaryIndex::build_persistent_keys) would cost ~16 bytes per key on top of the already-resident
+    // decoded column -- ~160 MB for a 10M-key delete -- and would not be counted in _memory_usage. That
+    // is worst exactly on the large-delete path, whose prebuilt tombstone sstable exists to bound
+    // publish memory in the first place.
+    const size_t num_keys = deletes->size();
+    const Column* data_column = ColumnHelper::get_data_column(deletes);
+    const LargeBinaryColumn* large_binary_column = nullptr;
+    const BinaryColumn* binary_column = nullptr;
+    const uint8_t* fixed_width_data = nullptr;
+    size_t fixed_width_key_size = 0;
+    if (data_column->is_large_binary()) {
+        large_binary_column = down_cast<const LargeBinaryColumn*>(data_column);
+    } else if (data_column->is_binary()) {
+        binary_column = down_cast<const BinaryColumn*>(data_column);
+    } else {
+        // A non-binary PK column is fixed width: keys sit back to back, type_size() bytes each.
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        fixed_width_data = visitor.result();
+        fixed_width_key_size = data_column->type_size();
+    }
+    auto key_at = [&](size_t i) -> Slice {
+        if (large_binary_column != nullptr) {
+            return large_binary_column->get_slice(i);
+        }
+        if (binary_column != nullptr) {
+            return binary_column->get_slice(i);
+        }
+        return Slice(fixed_width_data + i * fixed_width_key_size, fixed_width_key_size);
+    };
+
+    const Slice lower(seek_range.seek_key);
+    const Slice upper(seek_range.stop_key);
+    // The selection buffer is allocated lazily, on the first out-of-range key. A tablet whose del file
+    // is entirely inside its own range -- every non-split tablet, and any child that owns all the keys
+    // it was handed -- therefore pays no allocation at all, only the comparisons.
+    Filter selection;
+    size_t num_dropped = 0;
+    for (size_t i = 0; i < num_keys; i++) {
+        const Slice key = key_at(i);
+        // [seek_key, stop_key): lower inclusive, upper exclusive (see SstSeekRange).
+        const bool in_range = (seek_range.seek_key.empty() || key.compare(lower) >= 0) &&
+                              (seek_range.stop_key.empty() || key.compare(upper) < 0);
+        if (in_range) {
+            continue;
+        }
+        if (selection.empty()) {
+            selection.assign(num_keys, 1);
+        }
+        selection[i] = 0;
+        ++num_dropped;
+    }
+    if (num_dropped == 0) {
+        // Nothing to drop: no selection buffer was ever allocated, and the column is untouched.
+        return Status::OK();
+    }
+    deletes->filter(selection);
+    VLOG(2) << "clip_deletes_to_tablet_range tablet:" << params.metadata->id() << " dropped " << num_dropped << " of "
+            << num_keys << " delete keys";
+    return Status::OK();
+}
+
 Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStateParams& params) {
     CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
@@ -923,6 +1029,9 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());
     const auto* end = begin + read_buffer.size();
     RETURN_IF_ERROR(Serd::deserialize(begin, end, col.get()));
+    // Clip before accounting memory, so a heavily-pruned SPLIT child only holds its own slice of the
+    // parent's del file rather than the whole thing.
+    RETURN_IF_ERROR(clip_deletes_to_tablet_range(params, col.get()));
     _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);
     TRACE("end read $0-th deletes files", del_id);
