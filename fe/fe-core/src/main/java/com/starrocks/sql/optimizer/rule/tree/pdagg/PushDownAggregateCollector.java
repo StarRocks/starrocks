@@ -84,11 +84,17 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
             FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
+    private static final List<String> WHITE_FNS_WITH_COUNT = ImmutableList.<String>builder()
+            .addAll(WHITE_FNS).add(FunctionSet.COUNT).build();
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
     private final ColumnRefFactory factory;
     private final SessionVariable sessionVariable;
+    // Selected once per collector instance so a single collect() pass can't observe the
+    // switch flip mid-walk; the rewriter never needs this list since it only materializes
+    // what the collector already decided.
+    private final List<String> whiteFns;
 
     // Used to assign a unique index to each path from root to leaf node.
     // For example, in the following tree structure, the index of A#1, Join#3, Join#5 is 0,
@@ -112,6 +118,18 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
         this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
         this.nextRootToLeafPathIndex = nextRootToLeafPathIndex;
+        this.whiteFns = sessionVariable.isCboPushDownCountAggregate() ? WHITE_FNS_WITH_COUNT : WHITE_FNS;
+    }
+
+    private boolean countPushDownEnabled() {
+        return sessionVariable.isCboPushDownCountAggregate();
+    }
+
+    // count(*) has no args, so plain isConstant() is vacuously true for it (the loop over
+    // children never runs); that would wrongly make a lone count(*) look like "all aggregations
+    // are constant" and get skipped. Treat it as never-constant here.
+    private static boolean isConstantAggregate(CallOperator call) {
+        return !call.getArguments().isEmpty() && call.isConstant();
     }
 
     Map<LogicalAggregationOperator, List<AggregatePushDownContext>> getAllRewriteContext() {
@@ -273,7 +291,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         // check has constant aggregate, forbidden
         if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
+                context.aggregations.values().stream().allMatch(PushDownAggregateCollector::isConstantAggregate)) {
             return visit(optExpression, context);
         }
 
@@ -283,14 +301,15 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
     @Override
     public Void visitLogicalAggregate(OptExpression optExpression, AggregatePushDownContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
-        // distinct/count* aggregate can't push down
-        if (aggregate.getAggregations().values().stream().anyMatch(c -> c.isDistinct() || c.isCountStar())) {
+        // distinct aggregate can't push down; count(*) can, when the switch is on
+        if (aggregate.getAggregations().values().stream()
+                .anyMatch(c -> c.isDistinct() || (c.isCountStar() && !countPushDownEnabled()))) {
             return visit(optExpression, context);
         }
 
         // all constant can't push down
         if (!aggregate.getAggregations().isEmpty() &&
-                aggregate.getAggregations().values().stream().allMatch(ScalarOperator::isConstant)) {
+                aggregate.getAggregations().values().stream().allMatch(PushDownAggregateCollector::isConstantAggregate)) {
             return visit(optExpression, context);
         }
 
@@ -311,7 +330,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         }
         // constant aggregate can't push down
         if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
+                context.aggregations.values().stream().allMatch(PushDownAggregateCollector::isConstantAggregate)) {
             return visit(optExpression, context);
         }
 
@@ -744,7 +763,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         // distinct function, not support function can't push down
         if (context.aggregations.values().stream()
-                .anyMatch(v -> v.isDistinct() || !WHITE_FNS.contains(v.getFnName()))) {
+                .anyMatch(v -> v.isDistinct() || !whiteFns.contains(v.getFnName()))) {
             return false;
         }
 
