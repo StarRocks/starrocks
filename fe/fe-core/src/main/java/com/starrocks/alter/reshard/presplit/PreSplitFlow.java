@@ -111,6 +111,14 @@ final class PreSplitFlow {
             }
             runMultiPartitionFlow(database, target, prepared, loadKind, shouldAbort, context, partitionScope);
         } else {
+            // An unpartitioned target owns exactly one partition and the single-partition flow has
+            // nowhere to apply a scope. This hook runs pre-analysis, so an INSERT naming a partition
+            // that does not exist on this table has not been rejected yet -- splitting the sole real
+            // partition here would let a statement that goes on to fail analysis reshape the table.
+            // Skip conservatively; this is the same shape the pre-scope code rejected outright.
+            if (partitionScope.isSpecified()) {
+                return;
+            }
             runSinglePartitionFlow(database, target, prepared, loadKind, shouldAbort);
         }
     }

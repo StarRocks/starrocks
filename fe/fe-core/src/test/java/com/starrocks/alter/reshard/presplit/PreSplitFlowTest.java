@@ -23,6 +23,9 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -105,6 +108,68 @@ public class PreSplitFlowTest {
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void dispatchSkipsUnpartitionedTargetWithExplicitPartitionScope() {
+        // INSERT INTO <unpartitioned> PARTITION(x) reaches this hook BEFORE analysis has had a
+        // chance to reject an x that does not exist. The single-partition flow cannot honor a
+        // scope, so without this gate a statement that goes on to fail would still have split the
+        // table's only real partition.
+        Database database = mock(Database.class);
+        OlapTable table = mockTable(/*partitioned*/ false, /*automatic*/ false);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        InsertStmt insertStmt = mock(InsertStmt.class);
+        when(insertStmt.isSpecifyPartitionNames()).thenReturn(true);
+        when(insertStmt.getTargetPartitionNames()).thenReturn(
+                new PartitionRef(List.of("no_such_partition"), false, NodePosition.ZERO));
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic =
+                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            stubEligibleTarget(targets, database, table);
+            stubPipelineFactory(pipelineStatic);
+
+            PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                    () -> false, mock(ConnectContext.class),
+                    PreSplitPartitionScope.fromInsert(insertStmt));
+
+            coordinator.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void dispatchStillRoutesUnpartitionedTargetWithoutScopeToSingle() {
+        // Guards the gate above from over-reaching: a bare INSERT into the same unpartitioned
+        // table carries no scope and must keep pre-splitting exactly as it did before.
+        Database database = mock(Database.class);
+        OlapTable table = mockTable(/*partitioned*/ false, /*automatic*/ false);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        InsertStmt insertStmt = mock(InsertStmt.class);
+        when(insertStmt.isSpecifyPartitionNames()).thenReturn(false);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic =
+                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            stubEligibleTarget(targets, database, table);
+            stubPipelineFactory(pipelineStatic);
+            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+            PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                    () -> false, mock(ConnectContext.class),
+                    PreSplitPartitionScope.fromInsert(insertStmt));
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
         }
     }
 
