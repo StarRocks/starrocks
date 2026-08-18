@@ -14,8 +14,6 @@
 
 #include "exprs/geometry_functions.h"
 
-#include "gen_cpp/opcode/GeometryFunctions.inc"
-
 #include <s2/s2earth.h>
 #include <s2/s2latlng.h>
 #include <s2/s2loop.h>
@@ -31,6 +29,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/logging.h"
+#include "gen_cpp/opcode/GeometryFunctions.inc"
 #include "geo/geo_types.h"
 
 namespace starrocks {
