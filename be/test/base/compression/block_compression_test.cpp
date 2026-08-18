@@ -1092,8 +1092,7 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_hits_and_stays_bounded) {
         std::string truncated = arms[0].compressed.substr(0, arms[0].compressed.size() / 2);
         std::string got(arms[0].body.size(), '\0');
         Slice g(got);
-        ASSERT_FALSE(codec->decompress(Slice(truncated), &g, arms[0].ddict.get()).ok())
-                << "a half frame decoded";
+        ASSERT_FALSE(codec->decompress(Slice(truncated), &g, arms[0].ddict.get()).ok()) << "a half frame decoded";
         after_failure = dict_dctx_cache_memory_bytes();
     });
     t.join();
