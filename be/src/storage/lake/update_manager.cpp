@@ -1884,30 +1884,33 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         file_info.fs = fs;
         StatusOr<SegmentPtr> segment;
         auto* tablet_mgr = params.tablet->tablet_mgr();
-        if (allow_segment_cache && tablet_mgr != nullptr && config::lake_pk_partial_update_use_segment_cache) {
+        bool use_segment_cache =
+                allow_segment_cache && tablet_mgr != nullptr && config::lake_pk_partial_update_use_segment_cache;
+        if (use_segment_cache && segment_mem_estimate > 0) {
+            // Take the cache path only while this publish's own base segments can fit in it. A publish
+            // reads every base segment holding a row it updates, so once that set exceeds the cache
+            // there is nothing to gain: entries are evicted as fast as they are filled, the hit rate
+            // stays at zero, and the tablet metadata and schemas sharing the cache get flushed out
+            // with it. Going through TabletManager::load_segment anyway would also be strictly more
+            // expensive than the static open, because it hands the Segment a TabletManager and every
+            // column index load then calls update_cache_size(), which walks all of the segment's
+            // column readers and takes a cache lock. The static open leaves that pointer null and
+            // skips the whole accounting path.
+            //
+            // The size estimate comes from the first segment this publish opens: a Segment's cost is
+            // dominated by one column reader per schema column, so it is near-uniform within a tablet.
+            // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
+            // evicts to stay under capacity, so it reports room even while it thrashes.
+            use_segment_cache = touched_segment_count * segment_mem_estimate <= tablet_mgr->metacache()->capacity();
+        }
+        TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
+        if (use_segment_cache) {
             // Reuse the metacache entry instead of re-parsing the footer and rebuilding a column
             // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
             // a cached entry turns the open into a no-op. LakeIOOptions is left at its defaults to
             // keep the data-cache behaviour identical to the static Segment::open below.
-            //
-            // Only insert when this publish's own base segments can fit. A publish reads every base
-            // segment holding a row it updates, so once that set exceeds the cache, inserting all of
-            // them evicts as fast as it fills: the hit rate stays at zero, every insert still pays
-            // eviction and memory accounting, and the tablet metadata and schemas sharing this cache
-            // get flushed out with it. Measured at 2.2x slower than not caching at all.
-            //
-            // The estimate comes from the first segment this publish opens, since a Segment's cost is
-            // dominated by one column reader per schema column and is therefore near-uniform across
-            // the segments of one tablet. Note that comparing the cache's own usage against its
-            // capacity does NOT work: an LRU evicts to stay under capacity, so it always reports
-            // room even while it thrashes.
-            bool fill_meta_cache = true;
-            if (segment_mem_estimate > 0) {
-                fill_meta_cache = touched_segment_count * segment_mem_estimate <= tablet_mgr->metacache()->capacity();
-            }
-            TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &fill_meta_cache);
-            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{}, fill_meta_cache,
-                                               tablet_schema);
+            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{},
+                                               /*fill_meta_cache=*/true, tablet_schema);
             if (segment.ok() && segment_mem_estimate == 0) {
                 segment_mem_estimate = (*segment)->mem_usage();
             }
