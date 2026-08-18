@@ -879,6 +879,113 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_per_segment_shared_invariants) {
     EXPECT_EQ(1024, r0.data_size() + r1.data_size());
 }
 
+// (k1, NULL) -- an INT prefix bound lifted onto a (k1, k2) sort key, the shape the FE's
+// TrailingSortKeyRangeReprojection stamps onto every pre-existing tablet range when a metadata-only
+// trailing sort-key ADD widens the sort key.
+static TuplePB generate_sort_key_with_trailing_null(int value) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum()));
+    TuplePB tuple_pb;
+    tuple.to_proto(&tuple_pb);
+    return tuple_pb;
+}
+
+// Per-segment shared, after a metadata-only trailing sort-key ADD (end-to-end). The rowsets predate
+// the ADD, so their sort_key_min/sort_key_max are one column short while the tablet's range -- and
+// therefore every boundary the split emits -- is at the widened arity. Ownership must NOT prune with
+// those non-comparable bounds: VariantTuple::compare orders a shorter prefix-equal tuple BELOW its
+// padded form, so a segment whose stored max is [k] misses the sibling whose range starts at
+// (k, NULL) -- the very sibling create_seek_range_from routes that segment's k-prefix rows to. Every
+// segment must therefore survive on every child, as shared.
+TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_pre_trailing_key_add_segments_on_every_child) {
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+
+    // Post-ADD schema: the sort key is (k1, k2); k2 is the column the ADD appended.
+    auto* schema = metadata.mutable_schema();
+    schema->set_id(778501);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_short_key_columns(1);
+    auto* k1 = schema->add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("INT");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    auto* k2 = schema->add_column();
+    k2->set_unique_id(2);
+    k2->set_name("k2");
+    k2->set_type("INT");
+    k2->set_is_key(true);
+    k2->set_is_nullable(true);
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+
+    auto* range = metadata.mutable_range();
+    *range->mutable_lower_bound() = generate_sort_key_with_trailing_null(0);
+    range->set_lower_bound_included(true);
+    *range->mutable_upper_bound() = generate_sort_key_with_trailing_null(1000);
+    range->set_upper_bound_included(false);
+
+    // Two disjoint pre-ADD rowsets. Their key spans do not overlap, so with pruning enabled each
+    // child would keep only its own rowset and drop the other's segment outright.
+    auto add_pre_add_rowset = [&](uint32_t id, int lo, int hi, const std::string& segment_name) {
+        auto* rs = metadata.add_rowsets();
+        rs->set_id(id);
+        rs->set_num_rows(500);
+        rs->set_data_size(5000);
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename(segment_name);
+        sm->set_size(5000);
+        sm->set_num_rows(500);
+        // Arity 1: written before the trailing `ADD COLUMN k2`.
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(lo));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(hi));
+    };
+    add_pre_add_rowset(2, 0, 400, "seg_lo.dat");
+    add_pre_add_rowset(3, 600, 999, "seg_hi.dat");
+
+    EXPECT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    const int64_t child0 = next_id();
+    const int64_t child1 = next_id();
+    splitting.add_new_tablet_ids(child0);
+    splitting.add_new_tablet_ids(child1);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, metadata.version(),
+                                              metadata.version() + 1, txn_info, false, tablet_metadatas,
+                                              tablet_ranges));
+
+    ASSERT_EQ(1u, tablet_metadatas.count(child1)) << "the split fell back to an identical tablet";
+    for (int64_t child : {child0, child1}) {
+        auto c = tablet_metadatas.at(child);
+        ASSERT_EQ(2, c->rowsets_size()) << "tablet " << child << " lost a pre-ADD rowset: " << c->DebugString();
+        std::set<std::string> segs;
+        for (const auto& r : c->rowsets()) {
+            for (const auto& s : r.segment_metas()) {
+                segs.insert(s.filename());
+                EXPECT_TRUE(s.shared()) << s.filename() << " must stay shared: its ownership was never proven";
+            }
+        }
+        EXPECT_EQ((std::set<std::string>{"seg_lo.dat", "seg_hi.dat"}), segs);
+        // Every emitted bound speaks the widened sort key.
+        if (c->range().has_lower_bound()) EXPECT_EQ(2, c->range().lower_bound().values_size());
+        if (c->range().has_upper_bound()) EXPECT_EQ(2, c->range().upper_bound().values_size());
+    }
+}
+
 // SPLIT propagates per-segment ownership to non-segment metadata:
 //   - a pruned-away segment's delvec page + dcg entry are erased on the tablet
 //     that doesn't keep it;
