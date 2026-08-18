@@ -44,6 +44,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/unary_function.h"
+#include "geo/geo_types.h"
 #include "gutil/casts.h"
 #include "runtime/datetime_value.h"
 #include "runtime/exception.h"
@@ -2318,5 +2319,36 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
     cast_expr->add_child(child);
     return cast_expr;
 }
+
+// ── VARCHAR → GEOMETRY cast (parses WKT string) ────────────────────────────
+
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_geometry_fn(ColumnPtr& column) {
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_GEOMETRY> builder(viewer.size());
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        auto wkt = viewer.value(row);
+        GeoParseStatus status;
+        std::unique_ptr<GeoShape> shape(GeoShape::from_wkt(wkt.data, wkt.size, &status));
+        if (shape == nullptr) {
+            if constexpr (AllowThrowException) {
+                throw std::runtime_error("Invalid WKT geometry string");
+            }
+            builder.append_null();
+        } else {
+            std::string buf;
+            shape->encode_to(&buf);
+            builder.append(Slice(buf.data(), buf.size()));
+        }
+    }
+    return builder.build(ColumnHelper::is_all_const({column}));
+}
+
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
+CUSTOMIZE_FN_CAST(TYPE_CHAR,    TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
 
 } // namespace starrocks
