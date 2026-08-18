@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.wildfly.common.Assert;
 
 import java.util.Arrays;
 import java.util.List;
@@ -878,19 +877,24 @@ class SelectStmtWithCaseWhenTest {
                 "FROM cte01\n" +
                 "WHERE len_bucket IS NOT NULL;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan.contains("  2:SELECT\n" +
+        Assertions.assertTrue(plan.contains("  2:SELECT\n" +
                 "  |  predicates: 3: case IS NOT NULL\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: id, VARCHAR, false]\n" +
+<<<<<<< HEAD
                 "  |  3 <-> CASE WHEN 5: array_length < 2 THEN 'bucket1' " +
                 "WHEN (5: array_length >= 2) AND (5: array_length < 4) THEN 'bucket2' ELSE NULL END\n" +
                 "  |  4 <-> [5: array_length, INT, true]\n" +
+=======
+                "  |  3 <-> CASE WHEN [5: array_length, INT, true] < 2 THEN 'bucket1' " +
+                "WHEN ([5: array_length, INT, true] >= 2) AND ([5: array_length, INT, true] < 4) THEN 'bucket2' ELSE NULL END\n" +
+>>>>>>> 14facdec64 ([BugFix] Drop dead subfield slots pulled out of the scan by predicate expr reuse (#77456))
                 "  |  common expressions:\n" +
                 "  |  5 <-> array_length[([2: col_arr, ARRAY<VARCHAR(100)>, true]); " +
-                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]"));
+                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]"), plan);
     }
 
     @Test
