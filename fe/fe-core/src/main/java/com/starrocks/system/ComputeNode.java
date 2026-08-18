@@ -754,9 +754,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             return true;
         }
 
-        // Enforce when we have at least one running query to avoid starvation of the group
+        // Treat the group as overloaded when its effective memory usage exceeds the threshold
         return usage.group.isMemUsedPctLimitEffective() && usage.isMemUsagePctEffective() &&
-                usage.getNumRunningQueries() > 0 &&
                 usage.getMemUsagePct() >= usage.group.getMemUsedPctLimit();
     }
 

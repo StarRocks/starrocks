@@ -1363,8 +1363,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 1. Report the group at 90% memory >= 80% -> queries of the group are queued.
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(90).setMem_limit_bytes(100)
-                        .setNum_running_queries(1));
+                new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(90).setMem_limit_bytes(100));
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, groupUsages);
 
         List<Thread> threads = new ArrayList<>();
@@ -1397,8 +1396,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // at 90% pool usage >= 80% while the group is at 20% -> queries of the group are queued.
         groupUsages = ImmutableList.of(
                 new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(10).setMem_limit_bytes(50)
-                        .setMem_pool("mem_pool_0").setMem_pool_mem_used_bytes(90).setMem_pool_mem_limit_bytes(100)
-                        .setNum_running_queries(1));
+                        .setMem_pool("mem_pool_0").setMem_pool_mem_used_bytes(90).setMem_pool_mem_limit_bytes(100));
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, groupUsages);
 
         threads = new ArrayList<>();
