@@ -133,6 +133,12 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
                                int32_t colocate_column_count = 0);
 
+// Build SegmentSplitInfo[] from a tablet's rowsets, lifting every tuple a segment contributes onto
+// the tablet's CURRENT sort key (see SortKeyProjection). Does NOT enforce "segments non-empty" --
+// the data-driven and external-boundaries callers have different semantics on empty and own that
+// check. Exposed so unit tests can drive the projection directly.
+Status build_segments_from_rowsets(const TabletMetadataPtr& tablet_metadata, std::vector<SegmentSplitInfo>* segments);
+
 // external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
 // from FE-supplied boundaries instead of computing them from segment
 // distribution. Exposed for unit testing of the validation paths; the
@@ -163,10 +169,15 @@ struct RowsetOwnership {
 };
 
 // True iff a rowset's metadata shape permits per-segment ownership pruning:
-// (a) no partial-compaction cursor, (b) every segment has sort-key bounds. Each
-// SegmentMetadataPB is self-contained (filename/size/shared/bundle_file_offset travel
-// with it), so bundled rowsets prune uniformly with any other.
-bool can_prune_rowset_segments(const RowsetMetadataPB& rowset);
+// (a) no partial-compaction cursor, (b) every segment has sort-key bounds, (c) those bounds are at
+// |sort_key_arity|, the tablet's CURRENT sort-key arity, so they are comparable with the new
+// tablets' ranges. Each SegmentMetadataPB is self-contained
+// (filename/size/shared/bundle_file_offset travel with it), so bundled rowsets prune uniformly with
+// any other.
+//
+// |sort_key_arity| == 0 means "cannot tell" (a schema carrying no sort key at all, e.g. synthetic
+// metadata) and skips (c) rather than rejecting every rowset.
+bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_arity);
 
 // Computes per-segment ownership of a pruneable rowset against the new tablets'
 // ranges. Fail-closed: returns non-OK (caller degrades the whole rowset to

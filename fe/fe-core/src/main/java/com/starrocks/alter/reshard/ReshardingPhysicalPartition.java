@@ -48,8 +48,6 @@ public class ReshardingPhysicalPartition {
 
     protected Future<Map<Long, TabletRange>> publishFuture;
 
-<<<<<<< HEAD
-=======
     // Reason this partition's last publish attempt failed, cleared once it publishes or the partition
     // is dropped from the table (runRunningJob then skips it, so no publish result would). Scoped to
     // the partition (not the job) so a partition that recovers stops reporting even while a sibling
@@ -73,7 +71,6 @@ public class ReshardingPhysicalPartition {
     // poll and the retry would never come due -- the pacing would turn into a permanent block.
     protected transient boolean publishFailureAccounted;
 
->>>>>>> 5fcbcc9cca ([BugFix] Pace and report reshard publish retries instead of spinning silently (#77691))
     public ReshardingPhysicalPartition(long physicalPartitionId,
             Map<Long, ReshardingMaterializedIndex> reshardingIndexes) {
         this.physicalPartitionId = physicalPartitionId;
@@ -102,6 +99,14 @@ public class ReshardingPhysicalPartition {
         this.publishFailureAccounted = false;
     }
 
+    public void setPublishFailureReason(String publishFailureReason) {
+        this.publishFailureReason = publishFailureReason;
+    }
+
+    public String getPublishFailureReason() {
+        return publishFailureReason;
+    }
+
     public enum PublishState {
         NOT_STARTED, // Publish not started
         IN_PROGRESS, // Publish in progress
@@ -109,9 +114,18 @@ public class ReshardingPhysicalPartition {
         FAILED, // Publish failed
     }
 
+    /**
+     * {@code failureReason} is set only for {@link PublishState#FAILED} and carries the publish
+     * error text, so a job that keeps retrying can surface why in its errorMessage instead of
+     * sitting in RUNNING with nothing but a log line.
+     */
     public static record PublishResult(
             PublishState publishState,
-            Map<Long, TabletRange> tabletRanges) {
+            Map<Long, TabletRange> tabletRanges,
+            String failureReason) {
+        public PublishResult(PublishState publishState, Map<Long, TabletRange> tabletRanges) {
+            this(publishState, tabletRanges, null);
+        }
     }
 
     public PublishResult getPublishResult() {
@@ -135,10 +149,6 @@ public class ReshardingPhysicalPartition {
             Thread.currentThread().interrupt();
             return new PublishResult(PublishState.IN_PROGRESS, null);
         } catch (Exception e) {
-<<<<<<< HEAD
-            LOG.warn("Failed to publish future get. ", e);
-            return new PublishResult(PublishState.FAILED, null);
-=======
             Throwable cause = (e.getCause() != null) ? e.getCause() : e;
             if (!publishFailureAccounted) {
                 publishFailureAccounted = true;
@@ -157,7 +167,6 @@ public class ReshardingPhysicalPartition {
                         physicalPartitionId, consecutivePublishFailures, retryIntervalMs, e);
             }
             return new PublishResult(PublishState.FAILED, null, cause.getMessage());
->>>>>>> 5fcbcc9cca ([BugFix] Pace and report reshard publish retries instead of spinning silently (#77691))
         }
     }
 

@@ -125,8 +125,8 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     public void init() throws StarRocksException {
-        try {
-            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            reserveTableForReshard(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         } catch (TabletReshardException e) {
             // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
             // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
@@ -223,6 +223,12 @@ public class SplitTabletJob extends TabletReshardJob {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
                 if (physicalPartition == null) {
+                    // The partition was dropped mid-job (DROP PARTITION / TRUNCATE are permitted while
+                    // the table is in TABLET_RESHARD). Its publish will never be retried again, so drop
+                    // any failure reason it left behind instead of reporting a failure that can no
+                    // longer recover -- note this skip also leaves allPartitionFinished alone, so the
+                    // job goes on to finish.
+                    reshardingPhysicalPartition.setPublishFailureReason(null);
                     continue;
                 }
 
@@ -237,8 +243,6 @@ public class SplitTabletJob extends TabletReshardJob {
                         || publishResult.publishState() == PublishState.FAILED) {
                     // Publish not started or publish failed
                     allPartitionFinished = false;
-<<<<<<< HEAD
-=======
                     // Remember why THIS partition's publish failed so a job stuck retrying can
                     // explain itself; without it ERROR_MESSAGE is empty and the cause lives only in
                     // fe.log. Kept until this partition publishes (an IN_PROGRESS retry must not
@@ -253,7 +257,6 @@ public class SplitTabletJob extends TabletReshardJob {
                             continue;
                         }
                     }
->>>>>>> 5fcbcc9cca ([BugFix] Pace and report reshard publish retries instead of spinning silently (#77691))
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
@@ -266,6 +269,8 @@ public class SplitTabletJob extends TabletReshardJob {
                     // Publish is in progress
                     allPartitionFinished = false;
                 } else if (publishResult.publishState() == PublishState.SUCCESS) {
+                    // This partition published: its earlier failure (if any) has recovered.
+                    reshardingPhysicalPartition.setPublishFailureReason(null);
                     // Publish success, update new tablet ranges
                     // Note this will be executed repeatedly when retry job, it should be idempotent
                     Map<Long, TabletRange> tabletRanges = publishResult.tabletRanges();
@@ -510,6 +515,19 @@ public class SplitTabletJob extends TabletReshardJob {
         return sb.toString();
     }
 
+    // First partition currently retrying a failed publish, or null when none is. Read live from the
+    // per-partition state so a partition that recovers drops out without any job-level bookkeeping.
+    @Override
+    protected String anyPublishFailureReason() {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            String reason = reshardingPhysicalPartition.getPublishFailureReason();
+            if (reason != null) {
+                return reason;
+            }
+        }
+        return null;
+    }
+
     @Override
     public TTabletReshardJobsItem getInfo() {
         TTabletReshardJobsItem item = new TTabletReshardJobsItem();
@@ -538,11 +556,7 @@ public class SplitTabletJob extends TabletReshardJob {
         item.setParallel_tablets(getParallelTablets());
         item.setCreated_time(createdTimeMs / 1000);
         item.setFinished_time(finishedTimeMs / 1000);
-        if (errorMessage != null) {
-            item.setError_message(errorMessage);
-        } else {
-            item.setError_message("");
-        }
+        item.setError_message(reportedErrorMessage());
         return item;
     }
 
