@@ -2066,8 +2066,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             // merge into one read.
             if (_cross_column_stream == nullptr) {
                 ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
-                _cross_column_stream = std::make_unique<SharedBufferedInputStream>(
-                        rfile->stream(), _segment->file_name(), file_size);
+                _cross_column_stream =
+                        std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
                 auto options = SharedBufferedInputStream::CoalesceOptions{
                         .max_dist_size = config::io_coalesce_read_max_distance_size,
                         .max_buffer_size = config::io_coalesce_read_max_buffer_size};

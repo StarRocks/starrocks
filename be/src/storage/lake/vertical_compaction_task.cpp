@@ -144,9 +144,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
                     (_context->stats->io_bytes_read_remote - remote_bytes_before) / (1024 * 1024);
             if (pass_remote_mb >= config::lake_compaction_data_cache_bypass_threshold_mb) {
                 _bypass_data_cache = true;
-                LOG(INFO) << "Vertical compaction switching to direct object-storage reads, tablet: "
-                          << _tablet.id() << ", txn: " << _txn_id
-                          << ", second-pass remote MB: " << pass_remote_mb
+                LOG(INFO) << "Vertical compaction switching to direct object-storage reads, tablet: " << _tablet.id()
+                          << ", txn: " << _txn_id << ", second-pass remote MB: " << pass_remote_mb
                           << ", remaining column groups: " << (column_group_size - i - 1);
             }
         }
@@ -292,12 +291,12 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     // In bypass mode the pass reads object storage directly: no cache fill (the cache demonstrably
     // cannot retain the working set), no cache lookup, and all of a segment's column regions merged
     // into few large reads instead of per-column cache-block churn.
-    reader_params.lake_io_opts = {.fill_data_cache = !_bypass_data_cache &&
-                                                     config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .skip_disk_cache = _bypass_data_cache,
-                                  .buffer_size = read_buffer_size(),
-                                  .hold_segments = config::lake_compaction_hold_input_segments,
-                                  .coalesce_across_columns = _bypass_data_cache};
+    reader_params.lake_io_opts = {
+            .fill_data_cache = !_bypass_data_cache && config::lake_enable_vertical_compaction_fill_data_cache,
+            .skip_disk_cache = _bypass_data_cache,
+            .buffer_size = read_buffer_size(),
+            .hold_segments = config::lake_compaction_hold_input_segments,
+            .coalesce_across_columns = _bypass_data_cache};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and
