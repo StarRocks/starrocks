@@ -203,6 +203,26 @@ public class CommonSubqueryCTETest extends TPCDSPlanTestBase {
         assertTrue(!CommonSubqueryCTEHoister.hoist(stmt).isEmpty());
     }
 
+    /** ASSERT_ROWS attaches an assertion that a plain CTE reference would drop. */
+    @Test
+    public void testAssertRowsNotShared() throws Exception {
+        String sql = "select a.ss_store_sk, b.ss_store_sk from "
+                + "assert_rows (select ss_store_sk from store_sales where ss_item_sk = 1) a, "
+                + "assert_rows (select ss_store_sk from store_sales where ss_item_sk = 1) b "
+                + "where a.ss_store_sk = b.ss_store_sk";
+        assertEquals(2, scanCount(sql, "store_sales"));
+    }
+
+    /** A relation type the allowlist does not recognize must not be hoisted. */
+    @Test
+    public void testUnrecognizedRelationNotShared() throws Exception {
+        String sql = "select a.c, b.c from "
+                + "(select ss_store_sk c from store_sales, unnest([1,2])) a, "
+                + "(select ss_store_sk c from store_sales, unnest([1,2])) b "
+                + "where a.c = b.c";
+        assertEquals(2, scanCount(sql, "store_sales"));
+    }
+
     @Test
     public void testExplicitColumnAliasesNotShared() throws Exception {
         String sql = "select a.k, b.k from "

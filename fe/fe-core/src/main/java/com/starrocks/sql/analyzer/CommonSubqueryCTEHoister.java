@@ -248,7 +248,21 @@ public final class CommonSubqueryCTEHoister {
         if (subquery.getExplicitColumnNames() != null) {
             return null;
         }
+        // ASSERT_ROWS asks RelationTransformer#visitSubqueryRelation for a LogicalAssertOneRowOperator.
+        // Replacing the site with a plain table reference would drop it, turning a query that should fail
+        // the assertion into one that quietly returns rows.
+        if (subquery.isAssertRows()) {
+            return null;
+        }
         if (!site.hasTable) {
+            return null;
+        }
+        // Everything the body is built from must be on the allowlist. Sharing is only safe when a body's
+        // result is a function of its text, and the guards above are a blacklist over an open-ended
+        // language - each round of review has found another construct belonging on it. Requiring the
+        // relations to be recognized flips the failure mode: a construct nobody has considered yet is
+        // simply not optimized, rather than silently made to agree across the two occurrences.
+        if (!isAllowlistedRelation(subquery)) {
             return null;
         }
 
@@ -391,6 +405,49 @@ public final class CommonSubqueryCTEHoister {
             }
             return super.visitSelect(node, context);
         }
+    }
+
+    /**
+     * Whether every relation making up this body is one we have reasoned about.
+     *
+     * <p>Only relations whose result is fully determined by the SQL that produced them qualify. The
+     * exclusions are the ones that are not: {@code TABLE SAMPLE} draws an independent subset per relation,
+     * so two identical clauses may legitimately disagree and sharing would force one draw on both;
+     * {@code ASSERT_ROWS} attaches an assertion that a plain CTE reference would drop; a {@code LATERAL}
+     * join binds its right side to the left; and a column-alias list renames the output the CTE would have
+     * to carry. Any relation type not listed is rejected rather than assumed harmless.
+     */
+    private static boolean isAllowlistedRelation(Relation relation) {
+        if (relation instanceof TableRelation) {
+            // A sample is redrawn per relation, so two identical clauses are not interchangeable.
+            return ((TableRelation) relation).getSampleClause() == null;
+        }
+        if (relation instanceof JoinRelation) {
+            JoinRelation join = (JoinRelation) relation;
+            return !join.isLateral()
+                    && isAllowlistedRelation(join.getLeft())
+                    && isAllowlistedRelation(join.getRight());
+        }
+        if (relation instanceof SubqueryRelation) {
+            SubqueryRelation subquery = (SubqueryRelation) relation;
+            return !subquery.isAssertRows()
+                    && subquery.getExplicitColumnNames() == null
+                    && isAllowlistedRelation(subquery.getQueryStatement().getQueryRelation());
+        }
+        if (relation instanceof SelectRelation) {
+            Relation from = ((SelectRelation) relation).getRelation();
+            // `select 1` with no FROM is fine; it has nothing to share but nothing unsafe either.
+            return from == null || isAllowlistedRelation(from);
+        }
+        if (relation instanceof SetOperationRelation) {
+            for (QueryRelation child : ((SetOperationRelation) relation).getRelations()) {
+                if (!isAllowlistedRelation(child)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     private static Set<String> words(String sql) {
