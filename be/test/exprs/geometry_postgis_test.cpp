@@ -1163,13 +1163,16 @@ TEST_F(GeometryPostGISTest, StDistanceSphere_SameResultAsStDistance) {
 TEST_F(GeometryPostGISTest, StGeomFromGeoJSON_RoundTrip_Point) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto geom = geom_col("POINT (3.5 7.25)");
-    Columns c1; c1.emplace_back(geom);
+    Columns c1;
+    c1.emplace_back(geom);
     auto json_r = GeometryFunctions::st_as_geojson(ctx.get(), c1).value();
     ASSERT_FALSE(json_r->is_null(0));
-    Columns c2; c2.emplace_back(json_r);
+    Columns c2;
+    c2.emplace_back(json_r);
     auto geom2 = GeometryFunctions::st_geom_from_geojson(ctx.get(), c2).value();
     ASSERT_FALSE(geom2->is_null(0));
-    Columns c3; c3.emplace_back(geom2);
+    Columns c3;
+    c3.emplace_back(geom2);
     auto wkt = GeometryFunctions::st_as_text(ctx.get(), c3).value();
     ASSERT_FALSE(wkt->is_null(0));
     EXPECT_NE(std::string::npos, get_varchar(wkt).find("3.5"));
@@ -1179,12 +1182,15 @@ TEST_F(GeometryPostGISTest, StGeomFromGeoJSON_RoundTrip_Point) {
 TEST_F(GeometryPostGISTest, StGeomFromGeoJSON_RoundTrip_LineString) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto geom = geom_col("LINESTRING (0 0, 1 1, 2 0)");
-    Columns c1; c1.emplace_back(geom);
+    Columns c1;
+    c1.emplace_back(geom);
     auto json_r = GeometryFunctions::st_as_geojson(ctx.get(), c1).value();
-    Columns c2; c2.emplace_back(json_r);
+    Columns c2;
+    c2.emplace_back(json_r);
     auto geom2 = GeometryFunctions::st_geom_from_geojson(ctx.get(), c2).value();
     ASSERT_FALSE(geom2->is_null(0));
-    Columns c3; c3.emplace_back(geom2);
+    Columns c3;
+    c3.emplace_back(geom2);
     EXPECT_EQ("ST_LineString", get_varchar(GeometryFunctions::st_geometry_type(ctx.get(), c3).value()));
 }
 
@@ -1199,10 +1205,13 @@ TEST_F(GeometryPostGISTest, StBuffer_PolygonExpandsEnvelope) {
     cols.emplace_back(dbl_col(0.1));
     auto r = GeometryFunctions::st_buffer(ctx.get(), cols).value();
     ASSERT_FALSE(r->is_null(0));
-    Columns tc; tc.emplace_back(r);
+    Columns tc;
+    tc.emplace_back(r);
     EXPECT_EQ("ST_Polygon", get_varchar(GeometryFunctions::st_geometry_type(ctx.get(), tc).value()));
     std::unique_ptr<FunctionContext> ctx2(FunctionContext::create_test_context());
-    Columns cc; cc.emplace_back(r); cc.emplace_back(geom_col("POINT (2.5 2.5)"));
+    Columns cc;
+    cc.emplace_back(r);
+    cc.emplace_back(geom_col("POINT (2.5 2.5)"));
     EXPECT_TRUE(get_bool_raw(GeometryFunctions::st_contains(ctx2.get(), cc).value()));
 }
 
@@ -1225,7 +1234,8 @@ TEST_F(GeometryPostGISTest, StSimplify_PolygonReducesVertices) {
     cols.emplace_back(dbl_col(0.001));
     auto r = GeometryFunctions::st_simplify(ctx.get(), cols).value();
     ASSERT_FALSE(r->is_null(0));
-    Columns nc; nc.emplace_back(r);
+    Columns nc;
+    nc.emplace_back(r);
     EXPECT_LE(get_int(GeometryFunctions::st_npoints(ctx.get(), nc).value()), 5);
 }
 
@@ -1236,7 +1246,8 @@ TEST_F(GeometryPostGISTest, StSimplify_PolygonPreservesType) {
     cols.emplace_back(dbl_col(0.0));
     auto r = GeometryFunctions::st_simplify(ctx.get(), cols).value();
     ASSERT_FALSE(r->is_null(0));
-    Columns tc; tc.emplace_back(r);
+    Columns tc;
+    tc.emplace_back(r);
     EXPECT_EQ("ST_Polygon", get_varchar(GeometryFunctions::st_geometry_type(ctx.get(), tc).value()));
 }
 

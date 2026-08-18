@@ -546,14 +546,14 @@ TEST_F(DBSCANTest, ExactEpsBoundary_InclusiveAtEps) {
     // Two points at exactly eps=200m apart (0.001° ≈ 111m at equator,
     // 0.0018° ≈ 200m).  The algorithm uses dist <= eps, so they should cluster.
     // Use 0.002° ≈ 222m spacing — slightly over eps=200m → should be noise.
-    std::vector<double> xs_in  = {0.0, 0.0018}; // ~200m at equator
-    std::vector<double> ys_in  = {0.0, 0.0};
-    std::vector<double> xs_out = {0.0, 0.002};  // ~222m at equator
+    std::vector<double> xs_in = {0.0, 0.0018}; // ~200m at equator
+    std::vector<double> ys_in = {0.0, 0.0};
+    std::vector<double> xs_out = {0.0, 0.002}; // ~222m at equator
     std::vector<double> ys_out = {0.0, 0.0};
-    std::vector<bool>   valid  = {true, true};
+    std::vector<bool> valid = {true, true};
     std::vector<int32_t> out_in, out_out;
 
-    dbscan(xs_in,  ys_in,  valid, 200.0, 2, out_in);
+    dbscan(xs_in, ys_in, valid, 200.0, 2, out_in);
     dbscan(xs_out, ys_out, valid, 200.0, 2, out_out);
 
     // Points within eps cluster together
@@ -572,7 +572,7 @@ TEST_F(DBSCANTest, ExactEpsBoundary_InclusiveAtEps) {
 TEST_F(KMeansTest, KZero_NoOp) {
     std::vector<double> xs = {0.0, 1.0, 2.0};
     std::vector<double> ys = {0.0, 1.0, 2.0};
-    std::vector<bool>   valid(3, true);
+    std::vector<bool> valid(3, true);
     std::vector<int32_t> out;
     // k=0: the algorithm clamps k = min(k, n), but k=0 → no valid centroids.
     // Expect no crash; all outputs default to 0.
