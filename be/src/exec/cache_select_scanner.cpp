@@ -179,9 +179,9 @@ Status CacheSelectScanner::_fetch_orc() {
 Status CacheSelectScanner::_fetch_parquet() {
     ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
     // create file reader
-    std::shared_ptr<parquet::FileReader> reader = std::make_shared<parquet::FileReader>(
-            4096, _file.get(), file_size, _scanner_params.datacache_options,
-            _shared_buffered_input_stream.get(), nullptr);
+    std::shared_ptr<parquet::FileReader> reader =
+            std::make_shared<parquet::FileReader>(4096, _file.get(), file_size, _scanner_params.datacache_options,
+                                                  _shared_buffered_input_stream.get(), nullptr);
 
     RETURN_IF_ERROR(reader->init(&_scanner_ctx));
 
