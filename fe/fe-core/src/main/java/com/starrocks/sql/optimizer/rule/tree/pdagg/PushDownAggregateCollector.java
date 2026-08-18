@@ -179,6 +179,12 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         ColumnRefSet aggUsedColumns = new ColumnRefSet();
         context.aggregations.values().forEach(v -> aggUsedColumns.union(v.getUsedColumns()));
 
+        // Columns consumed by a non-distinct count(). count() can't be split per case-when/if branch:
+        // a NULL branch would make the partial value NULL, while sum(NULL) = NULL but count(...) = 0.
+        ColumnRefSet countUsedColumns = new ColumnRefSet();
+        context.aggregations.values().stream().filter(PushDownAggregateUtils::isCountAgg)
+                .map(CallOperator::getUsedColumns).forEach(countUsedColumns::union);
+
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = project.getColumnRefMap();
         Map<ColumnRefOperator, ScalarOperator> aggRewriteMap = columnRefMap;
 
@@ -193,7 +199,16 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                 continue;
             }
 
-            if (call instanceof CaseWhenOperator) {
+            boolean isCaseWhen = call instanceof CaseWhenOperator;
+            boolean isIfFn = !isCaseWhen && call.getFunction() != null
+                    && FunctionSet.IF.equals(call.getFunction().getFunctionName().getFunction());
+
+            if ((isCaseWhen || isIfFn) && countUsedColumns.contains(key)) {
+                // forbidden push down: count(col) where col comes from a case-when/if() output
+                return visit(optExpression, context);
+            }
+
+            if (isCaseWhen) {
                 CaseWhenOperator caseWhen = (CaseWhenOperator) value;
                 for (ScalarOperator condition : caseWhen.getAllConditionClause()) {
                     condition.getUsedColumns().getStream().map(factory::getColumnRef)
@@ -227,8 +242,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                     aggRewriteMap = Maps.newHashMap(columnRefMap);
                 }
                 aggRewriteMap.put(key, newCaseWhen);
-            } else if (call.getFunction() != null &&
-                        FunctionSet.IF.equals(call.getFunction().getFunctionName().getFunction())) {
+            } else if (isIfFn) {
                 if (call.getChildren().stream().skip(1).anyMatch(c -> c.isConstant() && !c.isConstantNull())) {
                     // forbidden push down
                     return visit(optExpression, context);
@@ -346,9 +360,23 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return AggregatePushDownContext.EMPTY;
         }
 
+        // count over a join is N0*N1, unrecoverable from sum(cnt_left) and sum(cnt_right), so it must be
+        // pushed to exactly one side. count(*)/count(col) has no aggregationsRefs to source-check above,
+        // so without this strip both sides would otherwise accept it.
+        Map<ColumnRefOperator, CallOperator> childAggregations = Maps.newHashMap(context.aggregations);
+        if (!childAggregations.isEmpty()) {
+            childAggregations.entrySet().removeIf(
+                    e -> PushDownAggregateUtils.isCountAgg(e.getValue())
+                            && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
+            if (childAggregations.isEmpty()) {
+                // nothing left to pre-aggregate on this side; don't degenerate into a group-by-only push down.
+                return AggregatePushDownContext.EMPTY;
+            }
+        }
+
         int rootToLeafPathIndex = child == 0 ? context.rootToLeafPathIndex : nextRootToLeafPathIndex.getAndIncrement();
         AggregatePushDownContext childContext = new AggregatePushDownContext(rootToLeafPathIndex);
-        childContext.aggregations.putAll(context.aggregations);
+        childContext.aggregations.putAll(childAggregations);
 
         // check group by
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {

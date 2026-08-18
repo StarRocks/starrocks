@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.MapUtils;
@@ -178,6 +179,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         List<ColumnRefOperator> keys = Lists.newArrayList(context.aggregations.keySet());
         for (ColumnRefOperator key : keys) {
             CallOperator aggFn = context.aggregations.get(key);
+            if (aggFn.getArguments().isEmpty()) {
+                // count(*) has no child to rewrite; its group bys are already handled above.
+                continue;
+            }
             ScalarOperator aggInput = aggFn.getChild(0);
 
             if (!(aggInput instanceof ColumnRefOperator)) {
@@ -192,6 +197,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                     && FunctionSet.IF.equals(((CallOperator) aggExpr).getFunction().getFunctionName().getFunction());
 
             if (isCaseWhen) {
+                // count() can't be split per-branch: the NULL branch would make the partial value NULL,
+                // and sum(NULL) = NULL while count(...) = 0. The collector must have already refused this.
+                Preconditions.checkState(!PushDownAggregateUtils.isCountAgg(aggFn),
+                        "count aggregate must not reach the case-when push down path");
                 // Clone to avoid mutating the shared object in originProjectMap/project's columnRefMap.
                 // Without clone, when multiple aggregations reference the same CASE WHEN column,
                 // the first aggregation's setThenClause/setElseClause corrupts the shared operator.
@@ -224,6 +233,9 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 context.aggregations.remove(key);
                 originProjectMap.put(key, new CaseWhenOperator(key.getType(), caseWhen));
             } else if (isIfFn) {
+                // Same reasoning as the CASE-WHEN branch above.
+                Preconditions.checkState(!PushDownAggregateUtils.isCountAgg(aggFn),
+                        "count aggregate must not reach the if() push down path");
                 // Clone to avoid mutating the shared object (same reason as CaseWhen above).
                 CallOperator ifFn = (CallOperator) aggExpr.clone();
                 ifFn.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
@@ -285,10 +297,12 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         // rewrite origin aggregation
         for (ColumnRefOperator ref : allAggregateRefs) {
             CallOperator call = aggregate.getAggregations().get(ref);
-            ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), call.isNullable());
+            // sum(partial_count) is nullable even though count(*) itself never is.
+            boolean nullable = call.isNullable() || PushDownAggregateUtils.isCountAgg(call);
+            ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), nullable);
             childContext.aggregations.put(newRef, call);
 
-            CallOperator newCall = genAggregation(call, newRef);
+            CallOperator newCall = genRollupAggregation(call, newRef);
             newAggregations.put(ref, newCall);
         }
 
@@ -305,8 +319,22 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return processChild(optExpression, childContext);
     }
 
+    // Used when rewriting the aggregate that sits above the push-down target: the rolled-up
+    // function name may differ from origin's (e.g. count -> sum).
+    private CallOperator genRollupAggregation(CallOperator origin, ColumnRefOperator partialRef) {
+        String rollupName = AggregateFunctionRollupUtils.getRollupFunctionName(origin, false);
+        // canPushDown() only lets whitelisted functions through, and every one of them has a rollup mapping.
+        Preconditions.checkState(rollupName != null, "no rollup function for %s", origin);
+        return genAggregation(rollupName, origin, partialRef);
+    }
+
+    // Used when replacing an aggregation with a new one over different args, keeping the same function.
     private CallOperator genAggregation(CallOperator origin, ScalarOperator args) {
-        Function fn = ExprUtils.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
+        return genAggregation(origin.getFunction().getFunctionName().getFunction(), origin, args);
+    }
+
+    private CallOperator genAggregation(String fnName, CallOperator origin, ScalarOperator args) {
+        Function fn = ExprUtils.getBuiltinFunction(fnName,
                 new Type[] {args.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         Preconditions.checkState(fn instanceof AggregateFunction);
@@ -346,8 +374,21 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
         }
 
+        // count over a join is N0*N1: it can't be recovered from sum(cnt_left) and sum(cnt_right), so it
+        // must land on exactly one side. The collector already enforces this; re-derive it here too since
+        // this pass independently re-walks the push-down path instead of following the collector's choice.
+        Map<ColumnRefOperator, CallOperator> childAggregations = Maps.newHashMap(context.aggregations);
+        if (!childAggregations.isEmpty()) {
+            childAggregations.entrySet().removeIf(
+                    e -> PushDownAggregateUtils.isCountAgg(e.getValue())
+                            && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
+            if (childAggregations.isEmpty()) {
+                return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
+            }
+        }
+
         AggregatePushDownContext childContext = new AggregatePushDownContext();
-        childContext.aggregations.putAll(context.aggregations);
+        childContext.aggregations.putAll(childAggregations);
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
@@ -395,13 +436,18 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         OptExpression result = optExpression;
         // if the aggregation is complex expression, need create project
-        if (context.aggregations.values().stream().map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
+        if (context.aggregations.values().stream()
+                .anyMatch(c -> !c.getArguments().isEmpty() && !c.getChild(0).isColumnRef())) {
             Map<ColumnRefOperator, ScalarOperator> refs = Maps.newHashMap();
             optExpression.getOutputColumns().getStream()
                     .map(factory::getColumnRef)
                     .forEach(c -> refs.put(c, c));
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
+                if (entry.getValue().getArguments().isEmpty()) {
+                    // count(*) has no child to hoist into a project.
+                    continue;
+                }
                 ScalarOperator input = entry.getValue().getChild(0);
                 if (!input.isColumnRef()) {
                     ColumnRefOperator ref = factory.create(input, input.getType(), input.isNullable());
