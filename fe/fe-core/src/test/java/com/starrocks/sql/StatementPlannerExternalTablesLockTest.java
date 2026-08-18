@@ -18,17 +18,22 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,10 +143,13 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
     private static class FailingRefreshHiveMetadata extends MockedHiveMetadata {
         private final AtomicInteger getTableCalls;
         private final AtomicInteger refreshCalls;
+        private final RuntimeException refreshFailure;
 
-        private FailingRefreshHiveMetadata(AtomicInteger getTableCalls, AtomicInteger refreshCalls) {
+        private FailingRefreshHiveMetadata(AtomicInteger getTableCalls, AtomicInteger refreshCalls,
+                                           RuntimeException refreshFailure) {
             this.getTableCalls = getTableCalls;
             this.refreshCalls = refreshCalls;
+            this.refreshFailure = refreshFailure;
         }
 
         @Override
@@ -153,7 +161,7 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         @Override
         public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
             refreshCalls.incrementAndGet();
-            throw new RuntimeException("mock refresh failure");
+            throw refreshFailure;
         }
     }
 
@@ -488,23 +496,70 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 "filesystem external table should be resolved before and after refresh, but not during locked analysis");
     }
 
-    @Test
-    public void testInsertSelectFilesystemRefreshFailurePropagatesError() throws Exception {
+    /**
+     * Registers a Hive mock whose refreshTable throws {@code failure}, plans {@code sql}, and
+     * returns the thrown exception. The failure mirrors the production shape from
+     * HiveMetaClient.callRPC: a StarRocksConnectorException with the real signal in the cause.
+     */
+    private Exception planWithFailingRefresh(String sql, RuntimeException failure,
+                                             Class<? extends Exception> expectedType) throws Exception {
         AtomicInteger getTableCalls = new AtomicInteger();
         AtomicInteger refreshCalls = new AtomicInteger();
 
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) gsm.getMetadataMgr();
         metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME,
-                new FailingRefreshHiveMetadata(getTableCalls, refreshCalls));
+                new FailingRefreshHiveMetadata(getTableCalls, refreshCalls, failure));
 
-        String sql = "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
-
-        Assertions.assertThrows(RuntimeException.class, () -> StatementPlanner.plan(stmt, connectContext));
-        Assertions.assertEquals(1, refreshCalls.get(), "filesystem external refresh should still be attempted once");
+        Exception e = Assertions.assertThrows(expectedType, () -> StatementPlanner.plan(stmt, connectContext));
+        Assertions.assertEquals(1, refreshCalls.get(), "filesystem external refresh should be attempted once");
         Assertions.assertEquals(1, getTableCalls.get(),
                 "planner should stop after the first pre-lock resolution when refresh fails");
+        return e;
+    }
+
+    private void assertActionableRefreshError(String sql) throws Exception {
+        Exception e = planWithFailingRefresh(sql,
+                new StarRocksConnectorException("Failed to get table tpch.lineitem",
+                        new MetaException("mock metastore denial")),
+                SemanticException.class);
+        Assertions.assertTrue(e.getMessage().contains("hive0.tpch.lineitem"),
+                "error should name the table: " + e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("enable_insert_select_external_auto_refresh"),
+                "error should name the session variable that disables the refresh: " + e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("Failed to get table"),
+                "error should preserve the connector message: " + e.getMessage());
+        Assertions.assertNotNull(e.getCause(), "the connector exception should be kept as the cause");
+    }
+
+    @Test
+    public void testInsertSelectFilesystemRefreshFailurePropagatesActionableError() throws Exception {
+        assertActionableRefreshError("insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem");
+    }
+
+    @Test
+    public void testSubmitTaskInsertRefreshFailurePropagatesActionableError() throws Exception {
+        assertActionableRefreshError("submit task zd1034_refresh_failure as " +
+                "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem");
+    }
+
+    @Test
+    public void testInsertSelectFilesystemRefreshDroppedTableGetsNoDisableAdvice() throws Exception {
+        // Production shape for a dropped table: HiveMetaClient.callRPC's reflective invoke wraps
+        // NoSuchObjectException in InvocationTargetException, and CachingHiveMetastore rethrows it
+        // wrapped in StarRocksConnectorException after invalidating the cache.
+        Exception e = planWithFailingRefresh(
+                "insert into t0 (v1, v2) select l_orderkey, l_partkey from hive0.tpch.lineitem",
+                new StarRocksConnectorException("refresh hive metadata failed, invalidated cache.",
+                        new InvocationTargetException(new NoSuchObjectException("table not found"))),
+                SemanticException.class);
+        Assertions.assertTrue(e.getMessage().contains("hive0.tpch.lineitem"),
+                "error should name the table: " + e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("no longer exists"),
+                "error should say the table is gone: " + e.getMessage());
+        Assertions.assertFalse(e.getMessage().contains("enable_insert_select_external_auto_refresh"),
+                "a dropped table must not be answered with disable-the-refresh advice: " + e.getMessage());
     }
 
     @Test

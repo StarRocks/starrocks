@@ -46,8 +46,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -108,7 +111,9 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
+import io.delta.kernel.exceptions.TableNotFoundException;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -2177,7 +2182,26 @@ public class QueryAnalyzer {
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
-            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            try {
+                metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            } catch (StarRocksConnectorException e) {
+                String qualifiedName = catalogName + "." + dbName + "." + tableName.getTbl();
+                if (LogUtil.isCausedBy(e, NoSuchObjectException.class)
+                        || LogUtil.isCausedBy(e, TableNotFoundException.class)) {
+                    // The metastore reports the table is gone and the connector has already
+                    // invalidated its cache entry. Say so instead of advising to plan from the
+                    // stale cached object of a dropped table.
+                    throw new SemanticException(String.format(
+                            "External table %s no longer exists in the metastore: %s",
+                            qualifiedName, e.getMessage()), e);
+                }
+                throw new SemanticException(String.format(
+                        "Auto refresh of external table %s before INSERT failed: %s. "
+                                + "To plan with the cached metadata instead, set session variable %s to false "
+                                + "(for SUBMIT TASK, use SET GLOBAL or a SET_VAR hint right after SUBMIT).",
+                        qualifiedName, e.getMessage(),
+                        SessionVariable.ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH), e);
+            }
             Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
             return refreshedTable != null ? refreshedTable : resolvedTable;
         }
