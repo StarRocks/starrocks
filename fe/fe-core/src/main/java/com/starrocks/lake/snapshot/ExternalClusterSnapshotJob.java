@@ -171,7 +171,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     @Override
     protected void runCleaningJob(SnapshotJobContext context) throws StarRocksException {
         createDeleteClusterSnasphotTasks();
-        cleaningCompleted = false;
+        cleaningCompleted = getLakeSnapshotBatchTask().getTaskNum() == 0;
         persistStateChange(ClusterSnapshotJobState.FINISHED);
         if (feImageCreatedTimeMs > 0) {
             MetricRepo.GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(feImageCreatedTimeMs);

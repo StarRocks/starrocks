@@ -178,7 +178,12 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
                     continue;
                 }
                 extJob.createDeleteClusterSnasphotTasks();
-                LOG.info("Dispatched cleanup retry tasks for snapshot job: {}", extJob.getId());
+                if (extJob.getLakeSnapshotBatchTask().getTaskNum() == 0) {
+                    extJob.setCleaningCompleted(true);
+                    LOG.info("Cleanup completed for snapshot job {} because no delete tasks are needed", extJob.getId());
+                } else {
+                    LOG.info("Dispatched cleanup retry tasks for snapshot job: {}", extJob.getId());
+                }
             } catch (Exception e) {
                 LOG.warn("Failed to retry cleanup for snapshot job: {}", extJob.getId(), e);
             }
