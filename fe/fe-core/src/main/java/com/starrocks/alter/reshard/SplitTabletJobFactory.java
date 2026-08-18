@@ -63,7 +63,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
-    private int earlyBound = -1;
+    private int adaptiveBound = -1;
 
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
         this.db = db;
@@ -80,42 +80,47 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      * tablets, or their own target size, never consult it and must not pay for a round trip they do
      * not use -- the merge side keeps the same property.
      */
-    private int earlyBound() {
-        if (earlyBound < 0) {
-            earlyBound = TabletReshardUtils.earlySplitBound(
+    private int adaptiveBound() {
+        if (adaptiveBound < 0) {
+            // An explicit target size in the statement means the caller asked for exactly that size, so
+            // leave the target alone. A zero bound is what tells adaptiveTargetSize to do that.
+            boolean explicitTarget = splitTabletClause.getProperties() != null
+                    && splitTabletClause.getProperties()
+                            .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+            adaptiveBound = explicitTarget ? 0 : TabletReshardUtils.adaptiveSplitBound(
                     TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
         }
-        return earlyBound;
+        return adaptiveBound;
     }
 
     /**
-     * Split plan for one index: {@code oldTabletId -> child count}, in the index's own tablet order.
+     * Split plan for one index: {@code oldTabletId -> child count}.
      *
-     * <p>While the index holds fewer tablets than {@code bound}, a tablet the size rule declines to
-     * split may still split toward {@code earlyTarget} ({@code 0} disables that). {@code bound} is the
-     * auto-merge parallelism floor: merge acts strictly above it, so an index widened only up to it is
-     * never one merge would immediately narrow again. Headroom stops the walk from passing the bound.
+     * <p>The size rule decides first and is untouched. Where it declines, the adaptive target gets a
+     * turn: while the index has less parallelism than the warehouse can drive, that target is the size
+     * that would give it one tablet per usable node, and {@code adaptiveSplitCount} is bounded so the
+     * index lands at or below the auto-merge floor however its data is spread. Merge acts strictly
+     * above that floor, so an index this widens is never one merge would immediately narrow.
      *
-     * <p>The early rule fires only where the size rule declines. That ordering is load bearing: a BE
-     * split is all-or-nothing, so asking for more children than the size rule would can turn a split
-     * that succeeds into one that publishes an identical tablet and does nothing.
+     * <p>The size rule wins outright where it applies. That ordering is load bearing: a BE split is
+     * all-or-nothing -- when the key distribution cannot produce exactly the requested number of
+     * boundaries it publishes an identical tablet instead -- so asking for more children than today's
+     * rule would can turn a split that succeeds into one that does nothing.
      */
     @VisibleForTesting
-    static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long clauseTargetSize,
-            long earlyTarget, int bound) {
-        int headroom = earlyTarget > 0 ? Math.max(0, bound - index.getTablets().size()) : 0;
+    static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long steadyTargetSize, int bound) {
+        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(
+                index.getDataSize(true), steadyTargetSize, bound);
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
         for (Tablet tablet : index.getTablets()) {
             long dataSize = tablet.getDataSize(true);
-            int k = TabletReshardUtils.calcSplitCount(dataSize, clauseTargetSize);
-            if (k <= 1 && headroom > 0) {
-                k = Math.min(TabletReshardUtils.calcSplitCount(dataSize, earlyTarget), headroom + 1);
-            }
+            int k = TabletReshardUtils.calcSplitCount(dataSize, steadyTargetSize);
             if (k <= 1) {
-                continue;
+                k = TabletReshardUtils.adaptiveSplitCount(dataSize, adaptiveTarget);
             }
-            headroom = Math.max(0, headroom - (k - 1));
-            splitCounts.put(tablet.getId(), k);
+            if (k > 1) {
+                splitCounts.put(tablet.getId(), k);
+            }
         }
         return splitCounts;
     }
@@ -475,13 +480,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 }
 
                 long clauseTargetSize = splitTabletClause.getTabletReshardTargetSize();
-                // An explicit target size in the statement means the caller asked for exactly that;
-                // the early rule stays out of it.
-                long earlyTarget = Config.tablet_reshard_enable_early_split
-                        && (splitTabletClause.getProperties() == null
-                            || !splitTabletClause.getProperties()
-                                    .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE))
-                        ? TabletReshardUtils.earlySplitTargetSize() : 0L;
 
                 // Plan and materialize per index. This is the only place a tablet id is minted.
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
@@ -492,8 +490,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                         // tablet_reshard_target_size must be greater than 0
                         Preconditions.checkState(clauseTargetSize > 0,
                                 "Invalid tablet_reshard_target_size: " + clauseTargetSize);
-                        Map<Long, Integer> splitCounts = planIndexSplits(oldIndex, clauseTargetSize,
-                                earlyTarget, earlyTarget > 0 ? earlyBound() : 0);
+                        Map<Long, Integer> splitCounts =
+                                planIndexSplits(oldIndex, clauseTargetSize, adaptiveBound());
                         if (splitCounts.isEmpty()) {
                             continue;
                         }

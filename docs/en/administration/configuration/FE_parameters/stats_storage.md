@@ -605,17 +605,8 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. Should be no larger than `tablet_reshard_target_size`. From v4.1.5 and v4.2.0, it is also the target tablet size used while a materialized index has fewer tablets than the number of compute nodes in its warehouse, so raising it also delays early splitting. See `tablet_reshard_enable_early_split`. Tablets produced during that phase can be temporarily smaller than this value.
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest target size automatic splitting will aim at: while a materialized index holds fewer tablets than its warehouse has compute nodes, splitting aims at the size that would give it one tablet per node, floored at this value, so a tablet splits once it is worth at least two of that target. Raising this value therefore also delays that splitting, and setting it at or above `tablet_reshard_target_size` turns it off, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`. From v4.1.5 and v4.2.0, it is also the target tablet size used while a materialized index has fewer tablets than the number of compute nodes in its warehouse, so raising it also delays early splitting. Tablets produced during that phase can be temporarily smaller than this value.
 - Introduced in: v4.1.0
-
-### `tablet_reshard_enable_early_split`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether a materialized index that has fewer tablets than the number of compute nodes in its warehouse may split at `tablet_reshard_min_split_size` instead of waiting for `tablet_reshard_target_size`. That value acts as a target size here, so the rule triggers once a tablet reaches 1.5 times it (3 GB at its 2 GB default). A newly created partition starts with a single tablet, so it accepts writes from only one compute node until it grows large enough to split. This configuration lets such a partition reach cluster-wide write parallelism much sooner, which matters most under continuous ingestion. The early rule applies only where the size-based rule would not split at all, and it never raises the tablet count of an index above the number of compute nodes in its warehouse. Set this configuration to `false` to leave splitting entirely to `tablet_reshard_target_size`; jobs that have already started are not affected. This configuration only takes effect in shared-data mode.
-- Introduced in: v4.1.5, v4.2.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
 

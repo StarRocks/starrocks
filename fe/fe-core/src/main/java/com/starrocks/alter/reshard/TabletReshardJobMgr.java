@@ -83,7 +83,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // arrival order. Self-contained (carries db/table id) so the drain needs no side key. Transient
     // (not persisted): leader failover falls back to the scan.
     private record ReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+                                    long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize) {
     }
 
     // tableId (globally unique) -> coalesced reshard candidate awaiting a drain evaluation.
@@ -107,25 +107,25 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
      * list; every other producer passes 0 through the overload above.
      */
     public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-            long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+            long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize) {
         if (!isLeaderAdmissionOpen()) {
             return;
         }
         // Keep the queue empty in the common (no-reshard) case; the drain re-checks authoritatively.
         // All three disjuncts are required: dropping the merge one disables automatic merge.
         if (!TabletReshardUtils.needSplit(maxTabletSize)
-                && !TabletReshardUtils.needEarlySplit(maxUnderProvisionedTabletSize)
+                && maxAdaptiveSplitTabletSize <= 0
                 && !TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
             return;
         }
         reshardCandidates.merge(tableId,
                 new ReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize,
-                        maxUnderProvisionedTabletSize),
+                        maxAdaptiveSplitTabletSize),
                 (existing, incoming) -> new ReshardCandidate(existing.dbId(), existing.tableId(),
                         Math.max(existing.maxTabletSize(), incoming.maxTabletSize()),
                         Math.min(existing.minAdjacentTabletPairSize(), incoming.minAdjacentTabletPairSize()),
-                        Math.max(existing.maxUnderProvisionedTabletSize(),
-                                incoming.maxUnderProvisionedTabletSize())));
+                        Math.max(existing.maxAdaptiveSplitTabletSize(),
+                                incoming.maxAdaptiveSplitTabletSize())));
     }
 
     public TabletReshardJobMgr() {
@@ -178,15 +178,14 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // resize shows up as the early signal appearing or vanishing. murmur3 (matching ColocateChecker)
     // avoids the 32-bit Objects.hash collision that could hide a config change.
     @VisibleForTesting
-    static long splitPlanSignature(long maxTabletSize, long maxUnderProvisionedTabletSize) {
+    static long splitPlanSignature(long maxTabletSize, long maxAdaptiveSplitTabletSize) {
         return Hashing.murmur3_128().newHasher()
                 .putLong(Config.tablet_reshard_target_size)
                 .putInt(Config.tablet_reshard_max_split_count)
                 .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
                 .putLong(Config.tablet_reshard_min_split_size)
-                .putBoolean(Config.tablet_reshard_enable_early_split)
-                .putInt(TabletReshardUtils.calcSplitCount(maxUnderProvisionedTabletSize,
-                        Math.max(1L, TabletReshardUtils.earlySplitTargetSize())))
+                .putBoolean(true /*adaptive target always applies*/)
+                .putLong(maxAdaptiveSplitTabletSize)
                 .hash().asLong();
     }
 
@@ -198,7 +197,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
      * own lock.
      */
     private void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize,
-                                      long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+                                      long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize) {
         if (!isLeaderAdmissionOpen()) {
             return;
         }
@@ -211,10 +210,10 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         try {
             long tableId = table.getId();
             boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
-            boolean earlySignal = TabletReshardUtils.needEarlySplit(maxUnderProvisionedTabletSize);
-            if (normalSignal || earlySignal) {
+            boolean adaptiveSignal = maxAdaptiveSplitTabletSize > 0;
+            if (normalSignal || adaptiveSignal) {
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
-                        splitPlanSignature(maxTabletSize, maxUnderProvisionedTabletSize));
+                        splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
                     try {
@@ -222,9 +221,9 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                         sizeSplitLatch.recordFired(tableId, signature, job.getJobId(),
                                 decision.nextAbortRetries());
                         LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}, "
-                                        + "maxUnderProvisionedTabletSize {}",
+                                        + "maxAdaptiveSplitTabletSize {}",
                                 db.getFullName(), table.getName(), maxTabletSize,
-                                maxUnderProvisionedTabletSize);
+                                maxAdaptiveSplitTabletSize);
                         return;
                     } catch (StarRocksException e) {
                         // An empty plan is not a failure for an early-only trigger: fall through so an
@@ -255,7 +254,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             // Drop stale suppression ONLY when no split signal remains. Clearing it while an early
             // signal is live would erase the tombstone that stops a deterministic no-progress split from
             // re-firing on the next unchanged candidate.
-            if (!normalSignal && !earlySignal) {
+            if (!normalSignal && !adaptiveSignal) {
                 sizeSplitLatch.forgetTable(tableId);
             }
             if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
@@ -386,7 +385,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     @VisibleForTesting
     long peekMaxUnderProvisionedTabletSize(long tableId) {
         ReshardCandidate candidate = reshardCandidates.get(tableId);
-        return candidate == null ? -1L : candidate.maxUnderProvisionedTabletSize();
+        return candidate == null ? -1L : candidate.maxAdaptiveSplitTabletSize();
     }
 
     @VisibleForTesting
@@ -420,7 +419,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 continue;
             }
             triggerTabletReshard(db, (OlapTable) table, candidate.maxTabletSize(),
-                    candidate.minAdjacentTabletPairSize(), candidate.maxUnderProvisionedTabletSize());
+                    candidate.minAdjacentTabletPairSize(), candidate.maxAdaptiveSplitTabletSize());
         }
     }
 

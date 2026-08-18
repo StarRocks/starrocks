@@ -48,18 +48,15 @@ public class TabletReshardUtilsTest {
     private long savedTargetSize;
     private int savedMaxSplitCount;
     private long savedMinSplitSize;
-    private boolean savedEnableEarlySplit;
 
     @BeforeEach
     public void setup() {
         savedTargetSize = Config.tablet_reshard_target_size;
         savedMaxSplitCount = Config.tablet_reshard_max_split_count;
         savedMinSplitSize = Config.tablet_reshard_min_split_size;
-        savedEnableEarlySplit = Config.tablet_reshard_enable_early_split;
         Config.tablet_reshard_target_size = 10L * 1024 * 1024 * 1024; // 10G
         Config.tablet_reshard_max_split_count = 1024;
         Config.tablet_reshard_min_split_size = 2L * 1024 * 1024 * 1024; // 2G
-        Config.tablet_reshard_enable_early_split = true;
     }
 
     @AfterEach
@@ -67,7 +64,6 @@ public class TabletReshardUtilsTest {
         Config.tablet_reshard_target_size = savedTargetSize;
         Config.tablet_reshard_max_split_count = savedMaxSplitCount;
         Config.tablet_reshard_min_split_size = savedMinSplitSize;
-        Config.tablet_reshard_enable_early_split = savedEnableEarlySplit;
     }
 
     @Test
@@ -233,38 +229,47 @@ public class TabletReshardUtilsTest {
         assertEquals(0, TabletReshardUtils.safeComputeNodeCountForTable(123L));
     }
 
-    @Test
-    public void earlySplitTargetSize_clampsToTarget() {
-        Config.tablet_reshard_target_size = 10L << 30;
-        Config.tablet_reshard_min_split_size = 2L << 30;
-        assertEquals(2L << 30, TabletReshardUtils.earlySplitTargetSize());
 
-        // A minimum above the target clamps down, so the early threshold collapses onto the normal one
-        // and the early rule can only fire where the normal rule already declined.
-        Config.tablet_reshard_min_split_size = 40L << 30;
-        assertEquals(10L << 30, TabletReshardUtils.earlySplitTargetSize());
+
+    @Test
+    public void adaptiveTargetSize_aimsForOneTabletPerNodeWhileTheIndexIsNarrow() {
+        long saved = Config.tablet_reshard_min_split_size;
+        Config.tablet_reshard_min_split_size = 2L << 30;
+        try {
+            // 24 GiB over a bound of 8 wants 3 GiB tablets, which is below the steady target, so the
+            // adaptive term wins and a single 24 GiB tablet splits into exactly the bound.
+            assertEquals(3L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8));
+            assertEquals(8, TabletReshardUtils.calcSplitCount(24L << 30, 3L << 30),
+                    "one step lands on the bound, so nothing needs to stop it overshooting");
+
+            // Enough data that one tablet per node would be larger than the steady target: the steady
+            // target wins and the rule is the size rule, unchanged.
+            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(100L << 30, 10L << 30, 8));
+
+            // Nearly empty index: the floor stops it being carved into slivers.
+            assertEquals(2L << 30, TabletReshardUtils.adaptiveTargetSize(100L << 20, 10L << 30, 8));
+
+            // Unresolved warehouse leaves the steady target alone.
+            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 0));
+        } finally {
+            Config.tablet_reshard_min_split_size = saved;
+        }
     }
 
     @Test
-    public void needEarlySplit_honoursThresholdFlagAndNonPositiveTarget() {
-        Config.tablet_reshard_enable_early_split = true;
-        Config.tablet_reshard_target_size = 10L << 30;
-        Config.tablet_reshard_min_split_size = 2L << 30;
-        long earlyThreshold = TabletReshardUtils.splitThreshold(2L << 30); // 3 GiB
-
-        assertFalse(TabletReshardUtils.needEarlySplit(earlyThreshold - 1));
-        assertTrue(TabletReshardUtils.needEarlySplit(earlyThreshold));
-
-        Config.tablet_reshard_enable_early_split = false;
-        assertFalse(TabletReshardUtils.needEarlySplit(earlyThreshold));
-
-        // A non-positive minimum must NOT reach calcSplitCount's forced-count mode, which would read
-        // -8 as "split into 8".
-        Config.tablet_reshard_enable_early_split = true;
-        for (long badMin : new long[] {0L, -8L}) {
-            Config.tablet_reshard_min_split_size = badMin;
-            assertFalse(TabletReshardUtils.needEarlySplit(Long.MAX_VALUE / 2),
-                    "min_split_size " + badMin + " must not enable the early rule");
+    public void adaptiveTargetSize_isDisabledByRaisingTheMinimumToTheTarget() {
+        long saved = Config.tablet_reshard_min_split_size;
+        try {
+            // The floor is clamped to the target, so a minimum at or above it collapses the whole
+            // expression to the target -- that clamp is the off switch, and it is also what stops a
+            // large minimum raising the target above its configured value.
+            Config.tablet_reshard_min_split_size = 10L << 30;
+            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8));
+            Config.tablet_reshard_min_split_size = 40L << 30;
+            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8),
+                    "a minimum above the target must not raise the target");
+        } finally {
+            Config.tablet_reshard_min_split_size = saved;
         }
     }
 

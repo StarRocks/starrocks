@@ -97,27 +97,53 @@ public class TabletReshardUtils {
     }
 
     /**
-     * Target tablet size while an index sits below the cluster's usable parallelism. Clamped to the
-     * steady-state target so it can never exceed it: when an operator sets the minimum above the
-     * target, the early threshold collapses onto the normal one and the rule becomes a no-op.
+     * Target tablet size for one index: the steady-state target, or the size that would give the index
+     * one tablet per usable compute node, whichever is smaller, floored so a nearly empty index is not
+     * carved into slivers.
+     *
+     * <p>There is no second rule and no second threshold. An index that already holds roughly
+     * {@code indexDataSize / bound} per tablet gets the same answer from {@link #calcSplitCount} as it
+     * would from the steady-state target, so the adaptive term stops applying by itself once the index
+     * is wide enough -- no separate ceiling, and no accounting to stop it overshooting.
+     *
+     * <p>The floor is clamped to the target. That clamp is what makes
+     * {@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switch the adaptive behaviour
+     * off: the floor becomes the target, and the whole expression collapses to the target. Without the
+     * clamp, a minimum above the target would raise the effective target above it and change the
+     * steady-state rule too.
+     *
+     * <p>{@code bound} is the auto-merge parallelism floor. Merge acts strictly above it, so an index
+     * this rule widens to the bound is never one merge would immediately narrow again. A non-positive
+     * bound (an unresolved warehouse) leaves the steady-state target untouched.
      */
-    @VisibleForTesting
-    static long earlySplitTargetSize() {
-        return Math.min(Config.tablet_reshard_min_split_size, Config.tablet_reshard_target_size);
+    public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound) {
+        long configuredFloor = Config.tablet_reshard_min_split_size;
+        // A non-positive minimum has no validator on it, and without a floor this expression would let
+        // an index be carved to the split-count cap. Treat it as "no adaptive target", not "no floor".
+        if (bound <= 0 || steadyTargetSize <= 0 || configuredFloor <= 0) {
+            return steadyTargetSize;
+        }
+        long floor = Math.min(configuredFloor, steadyTargetSize);
+        return Math.max(floor, Math.min(steadyTargetSize, indexDataSize / bound));
     }
 
     /**
-     * Coarse "could an early split fire at this size" gate, mirroring {@link #needSplit}. Used to admit
-     * a reshard candidate; the split job factory re-decides authoritatively per index.
+     * Child count for the adaptive target: {@code floor(dataSize / target)} once a tablet is worth at
+     * least two of them, and 1 otherwise.
+     *
+     * <p>Both halves of that are what make the rule self-limiting. Flooring gives
+     * {@code sum(floor(s_i / T)) <= sum(s_i) / T}, which is the bound itself when {@code T} is the
+     * index's size divided by the bound -- so the index cannot pass it however its data is spread over
+     * however many tablets, and nothing needs to track a remaining budget. Requiring two whole targets
+     * rather than the size rule's one and a half is what keeps that true: a tablet of 1.6 targets would
+     * otherwise round to two children of 0.8 each, more tablets than its share and each still under
+     * size.
      */
-    public static boolean needEarlySplit(long dataSize) {
-        if (!Config.tablet_reshard_enable_early_split) {
-            return false;
+    public static int adaptiveSplitCount(long dataSize, long target) {
+        if (target <= 0 || dataSize / 2 < target) {
+            return 1;
         }
-        long target = earlySplitTargetSize();
-        // calcSplitCount reads a non-positive target as a FORCED split count (-8 means "split into 8"),
-        // and tablet_reshard_min_split_size has no positivity validator, so guard it here.
-        return target > 0 && calcSplitCount(dataSize, target) > 1;
+        return (int) Math.min((long) Config.tablet_reshard_max_split_count, dataSize / target);
     }
 
     /*
@@ -151,8 +177,10 @@ public class TabletReshardUtils {
         long quotient = dataSize / targetSize;
         long remainder = dataSize - quotient * targetSize;
         long halfTargetCeil = targetSize / 2 + (targetSize & 1L);
+        // No lower bound needed: dataSize has already passed ceil(1.5 * targetSize) above, so the
+        // quotient is at least 1 and the remainder is at least half the target, which rounds up. Two is
+        // the smallest answer this can produce.
         long n = (remainder >= halfTargetCeil) ? quotient + 1 : quotient;
-        n = Math.max(2L, n);
         return (int) Math.min((long) Config.tablet_reshard_max_split_count, n);
     }
 
@@ -206,7 +234,7 @@ public class TabletReshardUtils {
      * again. min() with the node count keeps a single-node warehouse, whose floor is 2, from widening
      * for a parallelism it does not have.
      */
-    public static int earlySplitBound(int computeNodeCount) {
+    public static int adaptiveSplitBound(int computeNodeCount) {
         return computeNodeCount == 0 ? 0
                 : Math.min(computeNodeCount,
                         parallelismFloor(computeNodeCount, Config.tablet_reshard_max_split_count));

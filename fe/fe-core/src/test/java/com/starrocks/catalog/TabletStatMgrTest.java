@@ -713,7 +713,7 @@ public class TabletStatMgrTest {
         // TabletStatMgr runs on every FE, but reshard is leader-only. Without this, every follower
         // would resolve a compute-node count per eligible table on every scan, and the probe behind
         // that resolution reaches StarMgr.
-        runScan(false, 4, 5L << 30);
+        runScan(false, 4, 8L << 30);
         assertEquals(0, NODE_COUNT_RESOLUTIONS.get(), "a follower must not resolve a compute-node count");
     }
 
@@ -722,17 +722,17 @@ public class TabletStatMgrTest {
         // The companion to the above: the same fixture on a leader must reach the probe exactly once,
         // so the follower case above is demonstrably about the leader flag and not about the fixture
         // failing to reach the code at all.
-        runScan(true, 4, 5L << 30);
+        runScan(true, 4, 8L << 30);
         assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
                 "a leader must resolve the compute-node count exactly once per eligible table");
     }
 
     @Test
     public void emitsTheEarlySignalOnlyForUnderProvisionedIndexes() {
-        // 4 compute nodes -> early ceiling 4; an index holding 3 tablets sits below it. The largest is
-        // neither the first nor the last the scan walks, so a fold that keeps the wrong one of them
-        // cannot land on the right answer by accident.
-        assertEquals(5L << 30, runScan(true, 4, 3L << 30, 5L << 30, 4L << 30));
+        // 4 nodes -> bound 4. 22 GiB over that bound wants 5.5 GiB tablets, so only a tablet worth two
+        // of them splits: 12 GiB does, 6 and 4 do not. The largest is neither the first nor the last the
+        // scan walks, so a fold that keeps the wrong one cannot land on the right answer by accident.
+        assertEquals(12L << 30, runScan(true, 4, 6L << 30, 12L << 30, 4L << 30));
         assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
                 "the merge floor and the early ceiling must derive from ONE probed sample per table");
     }
@@ -740,7 +740,7 @@ public class TabletStatMgrTest {
     @Test
     public void emitsNoEarlySignalWhenTheIndexIsAtTheCeiling() {
         // 2 compute nodes -> early ceiling 2, and the index already holds 2 tablets.
-        assertEquals(0L, runScan(true, 2, 5L << 30, 5L << 30));
+        assertEquals(0L, runScan(true, 2, 8L << 30, 8L << 30));
     }
 
     @Test
@@ -748,12 +748,12 @@ public class TabletStatMgrTest {
         // 1 compute node -> early ceiling min(1, floor 2) = 1, so even a one-tablet index is already at
         // it. This is the one live-warehouse tablet count where the ceiling and the merge floor differ,
         // so it is what keeps the ceiling from being replaced by the floor already in scope.
-        assertEquals(0L, runScan(true, 1, 5L << 30));
+        assertEquals(0L, runScan(true, 1, 8L << 30));
     }
 
     @Test
     public void emitsNoEarlySignalWhenTheNodeCountIsUnavailable() {
-        assertEquals(0L, runScan(true, 0, 5L << 30),
+        assertEquals(0L, runScan(true, 0, 8L << 30),
                 "an unresolved node count keeps the merge floor at 0 and emits no early signal");
     }
 }

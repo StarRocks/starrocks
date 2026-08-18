@@ -135,7 +135,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 long totalRowCount = 0L;
                 long maxTabletSize = 0L;
                 long minAdjacentTabletPairSize = Long.MAX_VALUE;
-                long maxUnderProvisionedTabletSize = 0L;
+                long maxAdaptiveSplitTabletSize = 0L;
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
@@ -151,7 +151,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 int parallelismFloor = computeNodeCount == 0 ? 0
                         : TabletReshardUtils.parallelismFloor(
                                 computeNodeCount, Config.tablet_reshard_max_split_count);
-                int earlyBound = TabletReshardUtils.earlySplitBound(computeNodeCount);
+                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -172,16 +172,20 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // The early bound sits at or below the merge floor, so no index can be
                                 // under-provisioned and mergeable at once: the two rules can never pull
                                 // one index back and forth.
-                                boolean underProvisioned = tablets.size() < earlyBound;
+                                // The index's own target: narrowed while it has less parallelism
+                                // than the warehouse can drive, the steady-state target once it does.
+                                long indexTarget = TabletReshardUtils.adaptiveTargetSize(
+                                        index.getDataSize(true), Config.tablet_reshard_target_size,
+                                        adaptiveBound);
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
-                                    if (underProvisioned) {
-                                        maxUnderProvisionedTabletSize =
-                                                Math.max(maxUnderProvisionedTabletSize, dataSize);
+                                    if (TabletReshardUtils.adaptiveSplitCount(dataSize, indexTarget) > 1) {
+                                        maxAdaptiveSplitTabletSize =
+                                                Math.max(maxAdaptiveSplitTabletSize, dataSize);
                                     }
                                     if (!(tablet instanceof LakeTablet)
                                             || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
@@ -235,7 +239,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 if (reshardEligible) {
                     GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
                             db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize,
-                            maxUnderProvisionedTabletSize);
+                            maxAdaptiveSplitTabletSize);
                 }
             }
         }

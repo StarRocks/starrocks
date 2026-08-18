@@ -59,7 +59,6 @@ public class SplitTabletJobEarlyTest {
     private static OlapTable table;
     private long savedTarget;
     private long savedMinSplit;
-    private boolean savedEnableEarly;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -79,10 +78,8 @@ public class SplitTabletJobEarlyTest {
     public void setUp() {
         savedTarget = Config.tablet_reshard_target_size;
         savedMinSplit = Config.tablet_reshard_min_split_size;
-        savedEnableEarly = Config.tablet_reshard_enable_early_split;
         Config.tablet_reshard_target_size = 10L << 30;
         Config.tablet_reshard_min_split_size = 2L << 30;
-        Config.tablet_reshard_enable_early_split = true;
     }
 
     @AfterEach
@@ -105,7 +102,6 @@ public class SplitTabletJobEarlyTest {
         }
         Config.tablet_reshard_target_size = savedTarget;
         Config.tablet_reshard_min_split_size = savedMinSplit;
-        Config.tablet_reshard_enable_early_split = savedEnableEarly;
     }
 
     private MaterializedIndex baseIndex() {
@@ -136,17 +132,15 @@ public class SplitTabletJobEarlyTest {
     }
 
     /**
-     * Mirrors what the factory computes per job: the early rule is off when disabled by config, when
-     * the statement names an explicit target size, or when the warehouse has no usable node.
+     * Mirrors what the factory resolves per job: a zero bound is how it says "leave the target alone",
+     * which is what an explicit target size in the statement, or an unresolved warehouse, produces.
      */
     private Map<Long, Integer> plan(int computeNodeCount, SplitTabletClause clause) {
         boolean explicitTarget = clause.getProperties() != null
                 && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
-        long earlyTarget = Config.tablet_reshard_enable_early_split && !explicitTarget
-                ? TabletReshardUtils.earlySplitTargetSize() : 0L;
+        int bound = explicitTarget ? 0 : TabletReshardUtils.adaptiveSplitBound(computeNodeCount);
         return Deencapsulation.invoke(SplitTabletJobFactory.class, "planIndexSplits",
-                baseIndex(), clause.getTabletReshardTargetSize(), earlyTarget,
-                TabletReshardUtils.earlySplitBound(computeNodeCount));
+                baseIndex(), clause.getTabletReshardTargetSize(), bound);
     }
 
     /** Base index gets one tablet of earlyOnlySize; a second visible index gets one of normalSize. */
@@ -176,34 +170,28 @@ public class SplitTabletJobEarlyTest {
 
     @Test
     public void earlyRuleFiresOnlyWhereTheNormalRuleDeclines() {
-        List<Long> ids = setTabletDataSizes(3L << 30);   // below the 15 GiB normal threshold
+        List<Long> ids = setTabletDataSizes(4L << 30);   // below the 15 GiB normal threshold
         assertEquals(Map.of(ids.get(0), 2), plan(8, new SplitTabletClause()));
         assertTrue(plan(1, new SplitTabletClause()).isEmpty(), "cn=1 -> ceiling 1 -> never applies");
         assertTrue(plan(0, new SplitTabletClause()).isEmpty(), "cn=0 -> unresolved -> never applies");
     }
 
     @Test
-    public void headroomIsSpentInOrderAndNeverExceedsTheBound() {
-        // n=3, cn=5 -> bound 5, headroom 2. All three are below the normal split threshold, so the
-        // early rule is what decides. Which tablets receive the headroom is deliberately unspecified
-        // -- the walk follows the index's own order -- but the total added must never pass the bound,
-        // because that is what keeps auto-merge from wanting the index narrower again.
+    public void theIndexNeverPassesTheBoundHoweverItsDataIsSpread() {
+        // Uneven sizes are the shape that breaks a per-tablet rule that rounds to nearest: each tablet
+        // rounds up independently and the total overshoots. Flooring makes sum(floor(s/T)) <= sum(s)/T,
+        // which is the bound itself, so no budget has to be tracked across the walk.
         setTabletDataSizes(4L << 30, 12L << 30, 1L << 30);
-        Map<Long, Integer> plan = plan(5, new SplitTabletClause());
-        int added = plan.values().stream().mapToInt(k -> k - 1).sum();
-        assertEquals(2, added, "exactly the headroom is spent, no more");
-        assertEquals(5, 3 + added, "the index lands on the bound, never past it");
+        int after = 3 + plan(5, new SplitTabletClause()).values().stream().mapToInt(k -> k - 1).sum();
+        assertTrue(after <= 5, "landed on " + after + ", bound is 5");
+
+        // Tablets just over one and a half targets are the other shape: splitting them in two would be
+        // more tablets than their share and each child still under target, so they must not split.
+        setTabletDataSizes(5L << 30, 5L << 30, 5L << 30, 1L << 30, 1L << 30);
+        int after2 = 5 + plan(5, new SplitTabletClause()).values().stream().mapToInt(k -> k - 1).sum();
+        assertTrue(after2 <= 5, "landed on " + after2 + ", bound is 5");
     }
 
-    @Test
-    public void equalSizesKeepRangeOrderAndTheCatalogListIsNotReordered() {
-        List<Long> ids = setTabletDataSizes(4L << 30, 4L << 30, 4L << 30);
-        List<Long> before = baseIndex().getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-        Map<Long, Integer> plan = plan(4, new SplitTabletClause());   // ceiling 4, headroom 1
-        assertEquals(Map.of(ids.get(0), 2), plan, "a stable sort gives the tie to the first in range order");
-        assertEquals(before, baseIndex().getTablets().stream().map(Tablet::getId).collect(Collectors.toList()),
-                "getTablets() returns the live range-ordered list; never sort it in place");
-    }
 
     @Test
     public void planningNeverReordersTheCatalogTabletList() {
@@ -222,20 +210,10 @@ public class SplitTabletJobEarlyTest {
         assertTrue(plan(1, new SplitTabletClause()).isEmpty(), "n > ceiling");
     }
 
-    @Test
-    public void nonPositiveMinimumSplitSizeDisablesTheEarlyRule() {
-        // A single tablet below the normal threshold: a two-tablet fixture would let a normal split
-        // elsewhere in the index exhaust headroom before this tablet is reached, masking the guard.
-        setTabletDataSizes(3L << 30);
-        for (long badMin : new long[] {0L, -8L}) {
-            Config.tablet_reshard_min_split_size = badMin;
-            assertTrue(plan(8, new SplitTabletClause()).isEmpty(), "no early split at min_split_size " + badMin);
-        }
-    }
 
     @Test
     public void explicitTargetSizePropertySuppressesTheEarlyRule() {
-        setTabletDataSizes(3L << 30);
+        setTabletDataSizes(4L << 30);
         Map<String, String> props =
                 Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, String.valueOf(10L << 30));
         SplitTabletClause clause = new SplitTabletClause(null, null, props);
@@ -247,24 +225,18 @@ public class SplitTabletJobEarlyTest {
     public void manualSplitWithoutPropertiesKeepsTheEarlyRule() {
         // AstBuilder#visitSplitTabletClause always hands over a non-null map, empty when the statement
         // carried no PROPERTIES clause at all; the factory must not read "non-null" as "explicit".
-        List<Long> ids = setTabletDataSizes(3L << 30);
+        List<Long> ids = setTabletDataSizes(4L << 30);
         SplitTabletClause clause = new SplitTabletClause(null, null, new HashMap<>());
         clause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
         assertEquals(Map.of(ids.get(0), 2), plan(8, clause));
     }
 
-    @Test
-    public void disabledFlagSuppressesTheEarlyRule() {
-        setTabletDataSizes(3L << 30);
-        Config.tablet_reshard_enable_early_split = false;
-        assertTrue(plan(8, new SplitTabletClause()).isEmpty());
-    }
 
     @Test
     public void anEligibleEarlyPlanIsMaterializedIntoAJob() throws Exception {
         // The one POSITIVE end-to-end test: every other test above suppresses, refuses or bypasses the
         // early path, so only this one drives the real factory from clause to materialized job.
-        setTabletDataSizes(3L << 30);
+        setTabletDataSizes(4L << 30);
         // The factory resolves the node count itself, so stub the resolver.
         new MockUp<TabletReshardUtils>() {
             @Mock
@@ -283,7 +255,7 @@ public class SplitTabletJobEarlyTest {
         // Companion to anEligibleEarlyPlanIsMaterializedIntoAJob, for the clause shape
         // AstBuilder#visitSplitTabletClause produces for `ALTER TABLE t SPLIT TABLET` with no
         // PROPERTIES: getProperties() returns a new empty HashMap, never null.
-        setTabletDataSizes(3L << 30);
+        setTabletDataSizes(4L << 30);
         new MockUp<TabletReshardUtils>() {
             @Mock
             public static int safeComputeNodeCountForTable(long tableId) {
@@ -306,7 +278,7 @@ public class SplitTabletJobEarlyTest {
         // The two sizes must live in separate indexes: in one index the 100 GiB tablet's normal split
         // exhausts headroom before the 3 GiB tablet is reached, masking the guard regardless of its
         // presence (the same headroom-masking the planner-level test avoids with a single tablet).
-        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
+        setTwoIndexesWithSizes(/*adaptiveOnly=*/ 4L << 30, /*normal=*/ 100L << 30);
         SplitTabletClause manualClause = new SplitTabletClause(null, null, new HashMap<>());
         manualClause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
         List<SplitTabletClause> clauses = List.of(new SplitTabletClause(), manualClause);
@@ -325,7 +297,7 @@ public class SplitTabletJobEarlyTest {
 
     @Test
     public void anExplicitTabletListIsPlannedByTheUnchangedBranch() throws Exception {
-        List<Long> ids = setTabletDataSizes(3L << 30);
+        List<Long> ids = setTabletDataSizes(4L << 30);
         SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(ids.get(0))), null);
         clause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
         assertThrows(StarRocksException.class,
@@ -377,7 +349,7 @@ public class SplitTabletJobEarlyTest {
         // the 100 GiB tablet's normal split zeroes headroom before the 3 GiB tablet is reached, so the
         // assertion would read 10 for any node count and could not tell a resolved 0 from a count the
         // constructor never resolved at all.
-        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
+        setTwoIndexesWithSizes(/*adaptiveOnly=*/ 4L << 30, /*normal=*/ 100L << 30);
         new MockUp<TabletReshardUtils>() {
             @Mock
             public static int safeComputeNodeCountForTable(long tableId) {

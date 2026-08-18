@@ -605,17 +605,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。自 v4.1.5 和 v4.2.0 起，当物化索引的 Tablet 数量少于其所属仓库的计算节点数时，该参数还会作为此阶段的 Tablet 目标大小，因此调大该值也会推迟提前拆分的时机。参见 `tablet_reshard_enable_early_split`。此阶段产生的 Tablet 大小可能暂时小于该值。
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂所能采用的最小目标大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数时，分裂会以“每个计算节点一个 Tablet”对应的大小为目标，并以该参数为下限，Tablet 达到该目标的两倍时才会分裂。因此调大该参数也会推迟此类分裂；将其设置为大于或等于 `tablet_reshard_target_size` 即可关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。自 v4.1.5 和 v4.2.0 起，当物化索引的 Tablet 数量少于其所属仓库的计算节点数时，该参数还会作为此阶段的 Tablet 目标大小，因此调大该值也会推迟提前拆分的时机。此阶段产生的 Tablet 大小可能暂时小于该值。
 - 引入版本: v4.1.0
-
-### `tablet_reshard_enable_early_split`
-
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 当物化索引的 Tablet 数量少于其所属仓库的计算节点数时，是否允许该索引按 `tablet_reshard_min_split_size` 触发拆分，而无需等到 `tablet_reshard_target_size`。该参数在此规则下作为目标 Tablet 大小，因此触发阈值为其 1.5 倍（默认 2 GB 时即 3 GB）。新建分区初始只有一个 Tablet，在其增长到足以拆分之前，只能由一个计算节点承接写入。该配置项可让这类分区更快获得集群级别的写入并行度，在持续导入场景下效果尤为明显。提前拆分仅在按大小拆分的规则不会触发拆分时生效，且不会使索引的 Tablet 数量超过其所属仓库的计算节点数。将该配置项设置为 `false` 后，拆分将完全由 `tablet_reshard_target_size` 决定；已经开始的作业不受影响。该配置仅在存算分离模式下生效。
-- 引入版本: v4.1.5, v4.2.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
 

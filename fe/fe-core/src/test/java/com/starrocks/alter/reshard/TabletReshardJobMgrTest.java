@@ -874,27 +874,26 @@ public class TabletReshardJobMgrTest {
 
     @Test
     public void splitPlanSignatureChangesForEachNewInput() {
-        long max = Config.tablet_reshard_target_size * 4;
-        long early = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
-        long base = TabletReshardJobMgr.splitPlanSignature(max, early);
-
         long savedMin = Config.tablet_reshard_min_split_size;
-        boolean savedFlag = Config.tablet_reshard_enable_early_split;
         try {
+            long max = Config.tablet_reshard_target_size * 4;
+            long adaptive = Config.tablet_reshard_min_split_size * 4;
+            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive);
+
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive),
+                    "a larger max tablet changes the size rule's answer");
+
             Config.tablet_reshard_min_split_size = savedMin * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early), "min_split_size");
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive),
+                    "min_split_size moves the adaptive target");
             Config.tablet_reshard_min_split_size = savedMin;
 
-            Config.tablet_reshard_enable_early_split = !savedFlag;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early), "enable flag");
-            Config.tablet_reshard_enable_early_split = savedFlag;
-
-            // No node-count term: the scan decides under-provisioning against the current count, so a
-            // warehouse resize shows up as the early signal itself appearing or vanishing.
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, early * 8), "early count");
+            // No node-count term: the scan decides against the current count, so a warehouse resize
+            // shows up as the adaptive signal itself appearing or vanishing.
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8),
+                    "a different adaptive-split tablet size");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;
-            Config.tablet_reshard_enable_early_split = savedFlag;
         }
     }
 

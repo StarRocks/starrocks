@@ -4856,15 +4856,6 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
-    @ConfField(mutable = true, comment = "Whether a materialized index whose tablet count is below "
-            + "the compute-node count of its warehouse may split at tablet_reshard_min_split_size "
-            + "instead of waiting for tablet_reshard_target_size, so a freshly created "
-            + "range-distribution partition reaches cluster-wide parallelism sooner. The early rule "
-            + "only applies where the size-based rule would not split at all, and never drives an "
-            + "index above the compute-node count. Only takes effect for tables in clusters with "
-            + "run_mode=shared_data.")
-    public static boolean tablet_reshard_enable_early_split = true;
-
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
             + "INSERT INTO ... SELECT FROM FILES() loads. Default on as of v4.1.0 after the GA gate. "
             + "Set to false to disable cluster-wide. The session variable enable_tablet_pre_split "
