@@ -28,6 +28,22 @@ namespace starrocks::lake {
 
 namespace {
 
+<<<<<<< HEAD
+=======
+// Cheap drop-in for `get_numeric_statistics()` on the publish hot path: a single
+// virtual call returning a 13×int64 struct, no heap alloc / no strings / no vector.
+// Plain POSIX (shared-nothing UT) returns all zero via the base default. Callers
+// always pass non-null `_rf.get()` (set in `init()`) or non-null fresh `rf.get()`
+// (from `ASSIGN_OR_RETURN`), so the only guard we need is against the rare case
+// where the underlying file's stream pointer comes back null.
+io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
+    auto stream = rf->stream();
+    return stream ? stream->get_io_stats_snapshot() : io::IoStatsSnapshot{};
+}
+
+} // namespace
+
+>>>>>>> 63f7162942 ([BugFix] Drop corrupted local cache when PK index SST compaction hits corruption (#77481))
 Status drop_corrupted_sstable_cache(const std::string& path) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     if (!config::lake_clear_corrupted_cache_data) {
@@ -46,8 +62,6 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
     return Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
 #endif
 }
-
-} // namespace
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
                                     Cache* cache, bool need_filter) {
