@@ -313,7 +313,7 @@ public class ResourceGroupAnalyzer {
                     } else {
                         memUsedPctLimit = Double.parseDouble(value);
                     }
-                    if (memUsedPctLimit < 0.0 || memUsedPctLimit > 1.0) {
+                    if (!Double.isFinite(memUsedPctLimit) || memUsedPctLimit < 0.0 || memUsedPctLimit > 1.0) {
                         throw new SemanticException(
                                 "mem_used_pct_limit should range from 0.00(include) to 1.00(include), " +
                                         "takes effect when greater than 0.00 ");
