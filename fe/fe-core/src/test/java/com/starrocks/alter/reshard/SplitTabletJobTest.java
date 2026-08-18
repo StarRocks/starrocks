@@ -719,6 +719,7 @@ public class SplitTabletJobTest {
         splitJob.endTransactionId = 5000L;
 
         Set<Long> ignoredCompactionTxnIds = Set.of(7L, 8L);
+        splitJob.addCleanupExcludedTransactionId(42L);
         AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
         AtomicReference<Set<Long>> excludeTxnIdsArg = new AtomicReference<>();
         new MockUp<CompactionMgr>() {
@@ -742,6 +743,13 @@ public class SplitTabletJobTest {
         // the returned ignored txn ids to the wait; while the wait is unsatisfied the job stays CLEANING.
         splitJob.runCleaningJob();
         Assertions.assertEquals(splitJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
+        Assertions.assertEquals(Set.of(7L, 8L, 42L), excludeTxnIdsArg.get());
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+
+        // Once the pre-split caller stops waiting, its transaction may start writing at any moment,
+        // so the next cleaning cycle must wait for it again.
+        splitJob.clearCleanupExcludedTransactionIds();
+        splitJob.runCleaningJob();
         Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
         Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
     }
