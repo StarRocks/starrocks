@@ -74,7 +74,6 @@ void leave_dctx_alloc_scope() {
 }
 } // namespace
 
-
 RuntimeEnv::RuntimeEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
 
 RuntimeEnv::~RuntimeEnv() {

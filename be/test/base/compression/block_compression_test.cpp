@@ -36,9 +36,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <iostream>
 #include <set>
-#include <atomic>
 #include <thread>
 
 #include "base/compression/compression_context_pool_singletons.h"
