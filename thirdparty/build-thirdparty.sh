@@ -1283,10 +1283,12 @@ build_jemalloc() {
     # time one, but aborts on a larger one. If not defined, it falls back to the
     # the build system's _SC_PAGESIZE, which in many architectures can vary. Set
     # this to 64K (2^16) for arm architecture, and default 4K on x86 for performance.
-    local addition_opts=" --with-lg-page=12"
+    local addition_opts
     if [[ $MACHINE_TYPE == "aarch64" ]] ; then
-        # change to 64K for arm architecture
+        # 64K for arm architecture
         addition_opts=" --with-lg-page=16"
+    else
+        addition_opts=" --with-lg-page=12"
     fi
     # build jemalloc with release
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
@@ -1297,11 +1299,39 @@ build_jemalloc() {
     mkdir -p ${TP_INSTALL_DIR}/jemalloc/lib-static/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.so* ${TP_INSTALL_DIR}/jemalloc/lib-shared/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.a ${TP_INSTALL_DIR}/jemalloc/lib-static/
-    # build jemalloc with debug options
+    # build jemalloc with debug options. Each subsequent ./configure below
+    # reuses this same source tree with different flags (page size,
+    # --disable-static, --enable-debug); autotools' generated Makefile
+    # doesn't reliably detect a configure-option change and rebuild the
+    # affected objects, so force a clean rebuild before every configure
+    # pass after the first.
+    make distclean
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
     make install
+
+    if [[ $MACHINE_TYPE == "aarch64" ]] ; then
+        # arm64 kernels vary between 4K and 64K pages depending on distro/kernel
+        # config. The 64K release/debug builds above are the safe default
+        # (work on any runtime page size <= 64K), but waste memory via larger
+        # chunk granularity on the common 4K-page case. Build matching 4K
+        # release and debug variants so downstream consumers can pick the
+        # pair matching the host via getconf PAGESIZE.
+        local page4k_opts=" --with-lg-page=12"
+
+        make distclean
+        CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --disable-cxx --disable-libdl $page4k_opts
+        make -j$PARALLEL
+        make install
+
+        make distclean
+        CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl $page4k_opts
+        make -j$PARALLEL
+        make install
+    fi
 }
 
 # google benchmark
