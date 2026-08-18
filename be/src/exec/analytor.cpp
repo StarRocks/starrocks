@@ -306,7 +306,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 // materializing the whole partition.
                 // `lead ... IGNORE NULLS` and `first_value`/`last_value` IGNORE NULLS still require the full materialized data.
                 const bool is_lag_ignore_nulls = (fname == "lag");
-                if (!(is_lag_ignore_nulls && config::pipeline_analytic_enable_lag_ignore_nulls_streaming)) {
+                if (!(is_lag_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
                     _need_partition_materializing = true;
                 }
             }

@@ -1226,7 +1226,7 @@ CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 // `lag(... ) IGNORE NULLS` only looks backward, so it can be evaluated in streaming mode with
 // watermark-based eviction of the input buffer instead of materializing the whole partition.
 // Set to false to fall back to the legacy whole-partition materializing behavior.
-CONF_mBool(pipeline_analytic_enable_lag_ignore_nulls_streaming, "true");
+CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // only used in DCHECK

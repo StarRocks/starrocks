@@ -14,7 +14,7 @@
 
 // Benchmark: peak input-buffer retention of `lag(col, 1) IGNORE NULLS` in the Analytor operator,
 // comparing the legacy whole-partition materializing path against the streaming + watermark-eviction
-// path (config::pipeline_analytic_enable_lag_ignore_nulls_streaming).
+// path (config::pipeline_analytic_enable_ignore_nulls_streaming).
 //
 // The headline metric is the profile counter `PeakBufferedRows` (high-water-mark of rows retained in
 // Analytor::_input_chunks), reported as a custom benchmark counter. Wall-clock time is incidental.
@@ -107,7 +107,7 @@ static ColumnPtr make_value_chunk_column(Pattern pattern, int64_t begin, int64_t
 static void BM_LagIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool streaming) {
     for (auto _ : bstate) {
         bstate.PauseTiming();
-        config::pipeline_analytic_enable_lag_ignore_nulls_streaming = streaming;
+        config::pipeline_analytic_enable_ignore_nulls_streaming = streaming;
         // Fine-grained eviction so PeakBufferedRows reflects the algorithmic bound rather than the
         // eviction batch size (default 128 chunks would otherwise set a ~128-chunk floor).
         config::pipeline_analytic_removable_chunk_num = 4;

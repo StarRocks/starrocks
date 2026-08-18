@@ -1143,7 +1143,7 @@ ColumnPtr build_nullable_int_column(const std::vector<OptInt>& vals, size_t begi
 // Drive the real Analytor and return the lag output for each input row (in input order).
 std::vector<OptInt> run_analytor_lag(const std::vector<OptInt>& input, int64_t offset, bool streaming,
                                      int64_t chunk_rows) {
-    config::pipeline_analytic_enable_lag_ignore_nulls_streaming = streaming;
+    config::pipeline_analytic_enable_ignore_nulls_streaming = streaming;
     // Small eviction batch so the streaming path actually evicts/contracts many times over the run.
     config::pipeline_analytic_removable_chunk_num = 2;
 
