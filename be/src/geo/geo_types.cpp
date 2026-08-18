@@ -563,8 +563,7 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
 }
 #endif
 
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
-                      double* max_x, double* max_y) {
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y) {
     if (shape == nullptr) return false;
 
     auto update = [&](const S2Point& pt) {
@@ -622,14 +621,12 @@ static constexpr double kGeoEarthRadiusM = 6371008.8;
 
 double geo_line_length_meters(const GeoShape* shape) {
     if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) return 0.0;
-    return static_cast<const GeoLine*>(shape)->polyline()->GetLength().radians() *
-           kGeoEarthRadiusM;
+    return static_cast<const GeoLine*>(shape)->polyline()->GetLength().radians() * kGeoEarthRadiusM;
 }
 
 double geo_polygon_area_sq_meters(const GeoShape* shape) {
     if (!shape || shape->type() != GEO_SHAPE_POLYGON) return 0.0;
-    return static_cast<const GeoPolygon*>(shape)->polygon()->GetArea() *
-           kGeoEarthRadiusM * kGeoEarthRadiusM;
+    return static_cast<const GeoPolygon*>(shape)->polygon()->GetArea() * kGeoEarthRadiusM * kGeoEarthRadiusM;
 }
 
 double geo_polygon_perimeter_meters(const GeoShape* shape) {
@@ -663,14 +660,12 @@ bool geo_is_valid(const GeoShape* shape) {
 bool geo_polygon_intersects(const GeoShape* a, const GeoShape* b) {
     if (!a || !b) return false;
     if (a->type() == GEO_SHAPE_POLYGON && b->type() == GEO_SHAPE_POLYGON) {
-        return static_cast<const GeoPolygon*>(a)->polygon()->Intersects(
-                *static_cast<const GeoPolygon*>(b)->polygon());
+        return static_cast<const GeoPolygon*>(a)->polygon()->Intersects(*static_cast<const GeoPolygon*>(b)->polygon());
     }
     if (a->type() == GEO_SHAPE_POLYGON) return a->contains(b);
     if (b->type() == GEO_SHAPE_POLYGON) return b->contains(a);
     if (a->type() == GEO_SHAPE_POINT && b->type() == GEO_SHAPE_POINT) {
-        return *static_cast<const GeoPoint*>(a)->point() ==
-               *static_cast<const GeoPoint*>(b)->point();
+        return *static_cast<const GeoPoint*>(a)->point() == *static_cast<const GeoPoint*>(b)->point();
     }
     double ax0, ay0, ax1, ay1, bx0, by0, bx1, by1;
     if (!geo_bounding_box(a, &ax0, &ay0, &ax1, &ay1)) return false;
@@ -728,8 +723,7 @@ int geo_polygon_loop_vertex_count(const GeoShape* shape, int loop_idx) {
     return poly->loop(loop_idx)->num_vertices();
 }
 
-bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j,
-                                 double* x, double* y) {
+bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j, double* x, double* y) {
     if (!shape || shape->type() != GEO_SHAPE_POLYGON) return false;
     const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
     if (loop_idx < 0 || loop_idx >= poly->num_loops()) return false;

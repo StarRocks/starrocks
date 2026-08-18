@@ -221,8 +221,7 @@ public:
 
 // Compute the axis-aligned bounding box of any GeoShape.
 // Returns false if the shape is null or has no vertices.
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
-                      double* max_x, double* max_y);
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y);
 
 // ---------------------------------------------------------------------------
 // S2-dependent helpers — implemented in geo_types.cpp, usable without
@@ -266,7 +265,6 @@ int geo_polygon_loop_count(const GeoShape* shape);
 int geo_polygon_loop_vertex_count(const GeoShape* shape, int loop_idx);
 
 // Coordinates of the j-th vertex of the loop_idx-th loop of a POLYGON.
-bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j,
-                                 double* x, double* y);
+bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j, double* x, double* y);
 
 } // namespace starrocks
