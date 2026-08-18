@@ -1095,8 +1095,7 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_hits_and_stays_bounded) {
     ASSERT_EQ(after_first_page, after_one_dict_many_pages)
             << "pages after the first re-allocated a context: the cache is not hitting";
     // 8 dictionaries over 5 rounds, still at most the 4 slots
-    ASSERT_LE(after_cycling_all - before, 4 * one_ctx)
-            << "the per-thread context set grew past kDictDCtxCacheSize";
+    ASSERT_LE(after_cycling_all - before, 4 * one_ctx) << "the per-thread context set grew past kDictDCtxCacheSize";
     // the failed page cost its context its slot
     ASSERT_LT(after_failure, after_cycling_all) << "a context that failed mid-decompression was kept";
     // and nothing survives the thread
