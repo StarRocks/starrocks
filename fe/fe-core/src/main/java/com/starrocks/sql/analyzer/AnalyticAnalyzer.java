@@ -164,7 +164,7 @@ public class AnalyticAnalyzer {
     private static void verifyWindowFrame(AnalyticExpr analyticExpr) {
         if (analyticExpr.getOrderByElements().isEmpty()) {
             // Allow geospatial clustering window functions without ORDER BY
-            String fnName = analyticExpr.getFnCall().getFnName().getFunction().toLowerCase();
+            String fnName = analyticExpr.getFnCall().getFunctionName().toLowerCase();
             if (!NO_ORDER_BY_REQUIRED.contains(fnName)) {
                 throw new SemanticException("Windowing clause requires ORDER BY clause: " + ExprToSql.toSql(analyticExpr),
                         analyticExpr.getPos());
