@@ -14,12 +14,6 @@
 
 // S2 geometry headers must be included first to avoid int64 typedef
 // conflicts with gutil/strings/fastmem.h (pulled in by function_helper.h).
-#include <s2/s2earth.h>
-#include <s2/s2latlng.h>
-#include <s2/s2loop.h>
-#include <s2/s2polygon.h>
-#include <s2/s2polyline.h>
-
 #include "exprs/geometry_functions.h"
 
 #include <s2/s2earth.h>
