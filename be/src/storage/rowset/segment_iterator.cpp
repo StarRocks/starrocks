@@ -1998,10 +1998,29 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
     std::unique_ptr<ColumnIterator> base_iter;
     if (dense_base_hit != nullptr) {
         // Base = the bottom DENSE `.cols` file (today's positional whole-column replacement).
-        // Route through the lake metacache (footer parsed once) with the scan's cache options.
-        ASSIGN_OR_RETURN(auto dense_seg,
-                         _segment->new_dcg_segment(*dense_base_hit->dcg, dense_base_hit->file_idx, _opts.tablet_schema,
-                                                   _opts.lake_io_opts, _opts.lake_io_opts.fill_metadata_cache));
+        //
+        // Resolve the key and REUSE an already-open Segment for this file. `_dcg_segments` is the
+        // only owner of these Segments, and a ColumnIterator holds a RAW ColumnReader* into the
+        // Segment it was built from (scalar_column_iterator.h). This used to open a fresh Segment
+        // unconditionally and then overwrite the map entry, which dropped the previous owner while
+        // column iterators built earlier in this same scan were still pointing into it -- a
+        // use-after-free, deterministic rather than racy, whenever one dense `.cols` file carries two
+        // or more columns and at least one of them also has a sparse overlay. The legacy path
+        // (_get_dcg_segment) has always reused; only this one did not.
+        //
+        // Look up BEFORE opening: `if (!count) map[k] = fresh;` would be equally wrong the other way,
+        // leaving base_iter pointing into a Segment that dies at the end of this function.
+        ASSIGN_OR_RETURN(auto dense_file_key, dense_base_hit->dcg->column_file_by_idx(
+                                                      parent_name(_segment->file_name()), dense_base_hit->file_idx));
+        std::shared_ptr<Segment> dense_seg;
+        if (auto it = _dcg_segments.find(dense_file_key); it != _dcg_segments.end()) {
+            dense_seg = it->second;
+        } else {
+            ASSIGN_OR_RETURN(dense_seg, _segment->new_dcg_segment(*dense_base_hit->dcg, dense_base_hit->file_idx,
+                                                                  _opts.tablet_schema, _opts.lake_io_opts,
+                                                                  _opts.lake_io_opts.fill_metadata_cache));
+            _dcg_segments[dense_file_key] = dense_seg;
+        }
         ASSIGN_OR_RETURN(base_iter, dense_seg->new_column_iterator(column, path));
         RandomAccessFileOptions opts = base_raf_opts;
         if (dense_seg->encryption_info()) {
@@ -2012,10 +2031,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_build_overlay_column
         base_opts.read_file = dense_file.get();
         _column_files[cid] = std::move(dense_file);
         RETURN_IF_ERROR(base_iter->init(base_opts));
-        // Keep the dense `.cols` Segment cached just like the legacy path.
-        ASSIGN_OR_RETURN(auto dense_file_key, dense_base_hit->dcg->column_file_by_idx(
-                                                      parent_name(_segment->file_name()), dense_base_hit->file_idx));
-        _dcg_segments[dense_file_key] = dense_seg;
     } else {
         // Base = the original segment column (unchanged rows fall back to base).
         ASSIGN_OR_RETURN(base_iter, _segment->new_column_iterator_or_default(column, path));

@@ -1864,9 +1864,22 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
     std::unique_ptr<ColumnIterator> base_iter;
     if (has_dense_base) {
         const Hit& bottom = *dense_base_hit;
-        // Route through the metacache (footer parsed once) and fill caches per lake_io_opts.
-        ASSIGN_OR_RETURN(auto dense_seg, ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema,
-                                                                      lake_io_opts, lake_io_opts.fill_metadata_cache));
+        // REUSE an already-open Segment for this `.cols` file. ctx.dcg_segments is the only owner,
+        // and a ColumnIterator holds a RAW ColumnReader* into the Segment it was built from, so
+        // opening a fresh Segment here and overwriting the map entry below dropped the previous
+        // owner while iterators built earlier for OTHER columns of the same file were still using
+        // it -- a deterministic use-after-free, not a race. get_lake_dcg_segment has always reused;
+        // this path did not.
+        ASSIGN_OR_RETURN(auto dense_file_key,
+                         bottom.dcg->column_file_by_idx(parent_name(ctx.segment->file_name()), bottom.file_idx));
+        std::shared_ptr<Segment> dense_seg;
+        if (auto it = ctx.dcg_segments.find(dense_file_key); it != ctx.dcg_segments.end()) {
+            dense_seg = it->second;
+        } else {
+            ASSIGN_OR_RETURN(dense_seg, ctx.segment->new_dcg_segment(*bottom.dcg, bottom.file_idx, read_tablet_schema,
+                                                                     lake_io_opts, lake_io_opts.fill_metadata_cache));
+            ctx.dcg_segments[dense_file_key] = dense_seg;
+        }
         RandomAccessFileOptions ropts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                       .buffer_size = lake_io_opts.buffer_size,
                                       .skip_disk_cache = lake_io_opts.skip_disk_cache};
@@ -1883,8 +1896,6 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
         ColumnIteratorOptions base_opts = iter_opts;
         base_opts.read_file = ctx.dcg_read_files[dense_seg->file_name()].get();
         RETURN_IF_ERROR(base_iter->init(base_opts));
-        // cache the dense segment for reuse, mirroring get_lake_dcg_segment
-        ctx.dcg_segments[dense_seg->file_name()] = dense_seg;
     } else {
         // Base = original segment column, read through the outer base segment read file.
         ASSIGN_OR_RETURN(base_iter, ctx.segment->new_column_iterator_or_default(column, nullptr));
