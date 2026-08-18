@@ -113,6 +113,7 @@ public class Util {
         TYPE_STRING_MAP.put(PrimitiveType.JSON, "json");
         TYPE_STRING_MAP.put(PrimitiveType.VARBINARY, "varbinary(%d)");
         TYPE_STRING_MAP.put(PrimitiveType.VARIANT, "variant");
+        TYPE_STRING_MAP.put(PrimitiveType.GEOMETRY, "geometry");
     }
 
     private static class CmdWorker extends Thread {
