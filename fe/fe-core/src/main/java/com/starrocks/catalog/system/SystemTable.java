@@ -35,6 +35,7 @@ import com.starrocks.catalog.system.information.TableBookmarkPartitionsSystemTab
 import com.starrocks.catalog.system.information.TableBookmarkReferencesSystemTable;
 import com.starrocks.catalog.system.information.TableBookmarkSummarySystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
+import com.starrocks.catalog.system.information.TabletReshardJobsTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.information.TemporaryTablesTable;
@@ -93,6 +94,7 @@ public class SystemTable extends Table {
                     .add(TableBookmarkReferencesSystemTable.NAME)
                     .add(TableBookmarkSummarySystemTable.NAME)
                     .add(TablesConfigSystemTable.NAME)
+                    .add(TabletReshardJobsTable.NAME)
                     .add(TaskRunsSystemTable.NAME)
                     .add(TasksSystemTable.NAME)
                     .add(TemporaryTablesTable.NAME)
