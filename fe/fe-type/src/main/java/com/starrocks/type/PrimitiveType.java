@@ -193,6 +193,10 @@ public enum PrimitiveType {
         // BINARY
         builder.putAll(VARBINARY, BASIC_TYPE_LIST);
 
+        // GEOMETRY — VARCHAR/CHAR can be implicitly cast to GEOMETRY (via ST_GeomFromText)
+        builder.put(VARCHAR, GEOMETRY);
+        builder.put(CHAR, GEOMETRY);
+
         // JSON
         builder.putAll(JSON, JSON);
         builder.putAll(JSON, NULL_TYPE);

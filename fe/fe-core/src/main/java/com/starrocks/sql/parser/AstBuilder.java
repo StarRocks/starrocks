@@ -9918,6 +9918,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             index = IndexDef.IndexType.NGRAMBF;
         } else if (indexTypeContext.VECTOR() != null) {
             index = IndexDef.IndexType.VECTOR;
+        } else if (indexTypeContext.GIST() != null) {
+            index = IndexDef.IndexType.GIST;
         } else {
             throw new ParsingException("Not specify index type");
         }

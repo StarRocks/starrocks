@@ -156,10 +156,19 @@ public class AnalyticAnalyzer {
         }
     }
 
+    // Geospatial clustering functions process the full partition and do not
+    // require an ORDER BY for their results to be meaningful.
+    private static final java.util.Set<String> NO_ORDER_BY_REQUIRED =
+            new java.util.HashSet<>(java.util.Arrays.asList("st_clusterdbscan", "st_clusterkmeans"));
+
     private static void verifyWindowFrame(AnalyticExpr analyticExpr) {
         if (analyticExpr.getOrderByElements().isEmpty()) {
-            throw new SemanticException("Windowing clause requires ORDER BY clause: " + ExprToSql.toSql(analyticExpr),
-                    analyticExpr.getPos());
+            // Allow geospatial clustering window functions without ORDER BY
+            String fnName = analyticExpr.getFnCall().getFnName().getFunction().toLowerCase();
+            if (!NO_ORDER_BY_REQUIRED.contains(fnName)) {
+                throw new SemanticException("Windowing clause requires ORDER BY clause: " + ExprToSql.toSql(analyticExpr),
+                        analyticExpr.getPos());
+            }
         }
 
         AnalyticWindow windowFrame = analyticExpr.getWindow();
