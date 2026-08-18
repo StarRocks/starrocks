@@ -37,6 +37,8 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,8 @@ import java.util.Map;
  * target tablet count.
  */
 final class TablePreSplitSource implements InsertPreSplitSource {
+
+    private static final Logger LOG = LogManager.getLogger(TablePreSplitSource.class);
 
     @Override
     public boolean configEnabled() {
@@ -239,10 +243,26 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         }
         org.apache.iceberg.Snapshot snapshot = icebergTable.getNativeTable().currentSnapshot();
         if (snapshot == null || snapshot.summary() == null) {
+            LOG.info("Pre-split: Iceberg source {} exposes no current snapshot summary, so the load's "
+                    + "input size is unknown", sourceTable.getName());
             return Estimates.ZERO;
         }
-        return new Estimates(parseNonNegativeLong(snapshot.summary().get("total-files-size")),
+        Estimates estimates = new Estimates(parseNonNegativeLong(snapshot.summary().get("total-files-size")),
                 parseNonNegativeLong(snapshot.summary().get("total-records")));
+        if (estimates.totalBytes() == 0L || estimates.totalRows() == 0L) {
+            // These summary keys are written by whichever engine produced the snapshot, so a writer
+            // that omits them leaves the sampler with no size at all. That degrades silently and in
+            // two directions at once: pickSamplingRate falls back to 1.0, so every predicate-matching
+            // row reaches the ORDER BY rand() LIMIT instead of a small Bernoulli sample, and
+            // selectPreSplitTabletCount sizes zero bytes down to the minimum two tablets. Log it so
+            // an unsplit load is attributable rather than looking like a successful pre-split.
+            LOG.warn("Pre-split: Iceberg source {} snapshot {} reports total-files-size={} and "
+                            + "total-records={}, so the load cannot be sized from the snapshot; "
+                            + "sampling will not be rate-limited and the split count falls to the minimum",
+                    sourceTable.getName(), snapshot.snapshotId(),
+                    snapshot.summary().get("total-files-size"), snapshot.summary().get("total-records"));
+        }
+        return estimates;
     }
 
     private static long parseNonNegativeLong(String value) {

@@ -505,6 +505,59 @@ public class InsertPreSplitHookTableTest {
                 TablePreSplitSource.sourceEstimates(icebergTable));
     }
 
+    // The snapshot-summary keys below are written by whichever engine produced the snapshot, not by
+    // StarRocks, so a source table can legitimately arrive without them. These lock down what
+    // pre-split then does, because the degradation is silent at the SQL level.
+
+    private static IcebergTable mockIcebergTableWithSummary(Map<String, String> summary) {
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        if (summary == null) {
+            when(nativeTable.currentSnapshot()).thenReturn(null);
+            return icebergTable;
+        }
+        org.apache.iceberg.Snapshot snapshot = mock(org.apache.iceberg.Snapshot.class);
+        when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        when(snapshot.summary()).thenReturn(summary);
+        return icebergTable;
+    }
+
+    @Test
+    public void testIcebergSourceWithoutCurrentSnapshotEstimatesZero() {
+        // An empty (never-written) Iceberg table has no current snapshot.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(null)));
+    }
+
+    @Test
+    public void testIcebergSourceMissingSummaryTotalsEstimatesZero() {
+        // The case most likely to bite in production: a snapshot exists and the scan works, but the
+        // writer never recorded the totals, so pre-split has no size to work from.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(Map.of("operation", "append"))));
+    }
+
+    @Test
+    public void testIcebergSourceWithUnparseableSummaryTotalsEstimatesZero() {
+        // Never propagate a partially-parsed size: one bad key must not be combined with a good one
+        // into a ratio that over- or under-splits.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(
+                        Map.of("total-files-size", "not-a-number", "total-records", "-17"))));
+    }
+
+    @Test
+    public void testZeroSourceEstimateRemovesTheSamplingRateLimit() {
+        // The consequence of the three cases above, asserted end-to-end so it cannot regress
+        // unnoticed: a zero byte estimate makes the Bernoulli rate 1.0, so every predicate-matching
+        // row reaches the ORDER BY rand() LIMIT rather than a small sample. On a large Iceberg
+        // snapshot that turns a cheap sample into a top-N over the whole filtered input.
+        Assertions.assertEquals(1.0, AbstractSqlSampleSubqueryExecutor.pickSamplingRate(0L));
+        Assertions.assertTrue(AbstractSqlSampleSubqueryExecutor.pickSamplingRate(872000000000L) < 1.0e-4,
+                "a sized snapshot must still be sampled at a small rate");
+    }
+
     @Test
     public void testUnmappableSortKeyShortCircuits() throws Exception {
         // Target sort key references a column the source projection cannot supply
