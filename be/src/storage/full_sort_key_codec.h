@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "column/chunk.h"
 #include "column/schema.h"
 #include "common/status.h"
 #include "storage/variant_tuple.h"
@@ -49,5 +50,27 @@ Status decode_full_sort_key(const Slice& encoded, const Schema& schema, const st
 // must only be enabled for a segment when this predicate holds for its sort key; otherwise
 // the writer must fall back to the legacy short-key index.
 bool is_full_sort_key_encodable(const Schema& schema, const std::vector<uint32_t>& sort_key_idxes);
+
+// Returns true if any row in the requested range encodes to a full sort key longer than |limit|.
+// Mirrors SeekTuple::_full_sort_key_encode byte for byte without materialising the encoding, the way
+// PrimaryKeyEncoder::encode_exceed_limit does for the primary key. |sort_key_idxes| indexes |chunk|'s
+// columns, in encoding order -- the size is order-sensitive, because a non-final variable-length
+// column escapes its embedded NULs and gains a terminator while the final one does neither.
+// Returns false when there is nothing to measure: an empty sort key, an empty range, or a column that
+// is not encodable.
+bool full_sort_key_exceed_limit(const Schema& schema, const std::vector<ColumnId>& sort_key_idxes, const Chunk& chunk,
+                                size_t offset, size_t len, size_t limit);
+
+// Rejects the requested rows if any encodes to a full sort key longer than
+// config::sort_key_limit_size. Carries the gate as well as the size test so that no caller can get
+// the gate wrong: it is a no-op when the sort key is empty or not encodable, or when the configured
+// limit is not positive. Note it does NOT consult enable_full_sort_key_index -- admission and the
+// segment writer would otherwise sample that mutable flag at different moments and could disagree.
+//
+// Call from every path that admits rows or re-encodes an existing sort key. Compaction and
+// post-commit segment rewrites deliberately do not call it, because a failure there runs after the
+// transaction commits and would put the tablet into an error state instead of rejecting a request.
+Status check_sort_key_size(const Schema& schema, const std::vector<ColumnId>& sort_key_idxes, const Chunk& chunk,
+                           size_t offset, size_t len);
 
 } // namespace starrocks
