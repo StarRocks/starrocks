@@ -59,6 +59,15 @@ class StreamLoader {
 
     private final List<String> columns;
 
+    /**
+     * Load without an explicit column list. The JSON keys are then mapped to the table columns by
+     * name, and a key without a matching column is ignored instead of failing the batch, so a
+     * payload produced by a newer FE still loads into a table that predates the new column.
+     */
+    public StreamLoader(String db, String tbl) {
+        this(db, tbl, null);
+    }
+
     public StreamLoader(String db, String tbl, List<String> columns) {
         this.columns = columns;
         this.loadUrlStr = String.format(LOAD_URL_PATTERN, db, tbl);
@@ -81,15 +90,16 @@ class StreamLoader {
             return new Response(HttpStatus.SC_PRECONDITION_FAILED, "doesn't found available be node");
         }
         URI uri = new URI("http", null, be.get().getHost(), be.get().getHttpPort(), loadUrlStr, null, null);
-        HttpRequest request = HttpRequest.newBuilder(uri)
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                 .header("Authorization", "Basic " + authEncoding)
                 .header("Content-Type", "text/plain; charset=UTF-8")
                 .header("format", "json")
                 .header("label", label)
-                .header("columns", String.join(",", columns))
-                .header("strip_outer_array", "true")
-                .PUT(HttpRequest.BodyPublishers.ofString(sb))
-                .build();
+                .header("strip_outer_array", "true");
+        if (columns != null) {
+            builder.header("columns", String.join(",", columns));
+        }
+        HttpRequest request = builder.PUT(HttpRequest.BodyPublishers.ofString(sb)).build();
 
         HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 

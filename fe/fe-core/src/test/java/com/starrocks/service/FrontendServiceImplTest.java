@@ -234,13 +234,20 @@ public class FrontendServiceImplTest {
         String nodeName = self.getNodeName();
 
         Assertions.assertTrue(impl.checkIsInternalLoad(host, nodeName, "_statistics_", "query_history", host));
-        Assertions.assertTrue(impl.checkIsInternalLoad(host, nodeName, "_statistics_", "starrocks_audit_tbl", host));
+        Assertions.assertTrue(
+                impl.checkIsInternalLoad(host, nodeName, "starrocks_audit_db__", "starrocks_audit_tbl__", host));
         // Any other table, database or credential must be rejected.
         Assertions.assertFalse(impl.checkIsInternalLoad(host, nodeName, "_statistics_", "column_statistics", host));
-        Assertions.assertFalse(impl.checkIsInternalLoad(host, nodeName, "other_db", "starrocks_audit_tbl", host));
-        Assertions.assertFalse(impl.checkIsInternalLoad(host, "bad-token", "_statistics_", "starrocks_audit_tbl", host));
+        Assertions.assertFalse(impl.checkIsInternalLoad(host, nodeName, "other_db", "starrocks_audit_tbl__", host));
         Assertions.assertFalse(
-                impl.checkIsInternalLoad("203.0.113.9", nodeName, "_statistics_", "starrocks_audit_tbl", "203.0.113.9"));
+                impl.checkIsInternalLoad(host, "bad-token", "starrocks_audit_db__", "starrocks_audit_tbl__", host));
+        Assertions.assertFalse(impl.checkIsInternalLoad("203.0.113.9", nodeName, "starrocks_audit_db__",
+                "starrocks_audit_tbl__", "203.0.113.9"));
+        // The two whitelisted pairs must not be crossed over.
+        Assertions.assertFalse(
+                impl.checkIsInternalLoad(host, nodeName, "_statistics_", "starrocks_audit_tbl__", host));
+        Assertions.assertFalse(
+                impl.checkIsInternalLoad(host, nodeName, "starrocks_audit_db__", "query_history", host));
     }
 
     @Test

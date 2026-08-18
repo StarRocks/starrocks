@@ -27,7 +27,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class AuditLoaderTest {
 
@@ -147,7 +150,7 @@ public class AuditLoaderTest {
 
     @Test
     public void testRunCycleEnabledTableNotReadyKeepsBuffer() {
-        // The _statistics_ database does not exist in this harness, so ensureAuditTable fails and
+        // The audit database does not exist in this harness, so ensureAuditTable fails and
         // the cycle must leave buffered rows untouched (retry when the table becomes available).
         AuditLoaderMgr mgr = new AuditLoaderMgr();
         boolean orig = Config.enable_audit_loader;
@@ -260,4 +263,38 @@ public class AuditLoaderTest {
         }
     }
 
+    @Test
+    public void testJsonKeysMatchTableColumns() throws Exception {
+        // The load sends no column list, so the BE maps the JSON keys onto the table columns by
+        // name; the column order of the live table is irrelevant. Both sides come from
+        // COLUMN_SPECS, and a name drifting apart would silently leave that column NULL instead of
+        // failing the batch, so pin the generated DDL and the generated row together here.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        List<String> ddlColumns = new ArrayList<>();
+        Matcher matcher = Pattern.compile("^ {2}`([^`]+)`", Pattern.MULTILINE)
+                .matcher(mgr.buildCreateTableSql());
+        while (matcher.find()) {
+            ddlColumns.add(matcher.group(1));
+        }
+        JsonObject obj = JsonParser.parseString(mgr.formatRowJson(baseEvent())).getAsJsonObject();
+        Assertions.assertEquals(ddlColumns, List.copyOf(obj.keySet()));
+        Assertions.assertFalse(ddlColumns.isEmpty());
+    }
+
+    @Test
+    public void testCreateTableSqlShape() throws Exception {
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        String ddl = mgr.buildCreateTableSql();
+        Assertions.assertTrue(ddl.contains("DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)"));
+        Assertions.assertTrue(ddl.contains("PARTITION BY date_trunc('day', `timestamp`)"));
+        Assertions.assertTrue(ddl.contains("\"partition_live_number\" = \"30\""));
+    }
+
+    @Test
+    public void testCorrectReplicationNumWithoutTableIsNoop() {
+        // The audit table does not exist in this harness: the self-heal must return quietly
+        // instead of throwing, otherwise it would kill the daemon cycle.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        Assertions.assertDoesNotThrow(mgr::correctReplicationNum);
+    }
 }
