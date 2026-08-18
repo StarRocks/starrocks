@@ -15,11 +15,13 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -32,6 +34,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -92,6 +95,22 @@ public class MvUtilsTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+    }
+
+    @Test
+    public void testContainsTimeTravelScanDetectsMysqlTemporalClause() {
+        // A MySQL temporal read keeps the clause on the scan operator and leaves the version range empty,
+        // so a version-range check alone misses it. This is the same second representation that
+        // AnalyzerUtils#prohibitTimeTravelQuery has to handle on the definition side.
+        MysqlTable mysqlTable = new MysqlTable();
+        LogicalMysqlScanOperator ordinaryScan = new LogicalMysqlScanOperator(mysqlTable, Maps.newHashMap(),
+                Maps.newHashMap(), Operator.DEFAULT_LIMIT, null, null);
+        Assertions.assertFalse(MvUtils.containsTimeTravelScan(OptExpression.create(ordinaryScan)));
+
+        LogicalMysqlScanOperator temporalScan = new LogicalMysqlScanOperator(mysqlTable, Maps.newHashMap(),
+                Maps.newHashMap(), Operator.DEFAULT_LIMIT, null, null);
+        temporalScan.setTemporalClause("FOR SYSTEM_TIME AS OF '2026-01-01 00:00:00'");
+        Assertions.assertTrue(MvUtils.containsTimeTravelScan(OptExpression.create(temporalScan)));
     }
 
     @Test
