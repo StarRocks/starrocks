@@ -28,6 +28,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
+#include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
@@ -284,6 +285,31 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
+                ASSERT_EQ("{f1:1}", dst_column->debug_item(0));
+            }
+
+            // The predicate-evaluation path: a predicate on a struct subfield reads that column by
+            // rowid through a FillSubfieldIterator, and the caller empties the column first, so every
+            // rowid has to come back as a row. Routing this through fetch_subfield_by_rowid leaves an
+            // already-materialized leaf field untouched -- a scalar iterator inherits a
+            // fetch_subfield_by_rowid that does nothing -- and the segment iterator then rejects the
+            // short column with "col size not equal to ordinal col size".
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_f1_column = Int32Column::create();
+                MutableColumns dst_columns;
+                dst_columns.emplace_back(std::move(dst_f1_column));
+                auto dst_column = StructColumn::create(std::move(dst_columns), {"f1"});
+
+                auto rowid_column = FixedLengthColumn<rowid_t>::create();
+                rowid_column->append(0);
+
+                FillSubfieldIterator fill_iter(0, path.get(), iter.get());
+                st = fill_iter.fetch_values_by_rowid_for_predicate_evaluate(*rowid_column, dst_column.get());
+                ASSERT_TRUE(st.ok()) << st.to_string();
+                ASSERT_EQ(rowid_column->size(), dst_column->size());
                 ASSERT_EQ("{f1:1}", dst_column->debug_item(0));
             }
         }

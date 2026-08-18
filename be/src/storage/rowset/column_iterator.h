@@ -247,6 +247,9 @@ public:
         return next_batch(range, dst);
     }
 
+    // Fills in the subfields that were left unmaterialized in an already-populated column, so an
+    // iterator without subfields of its own has nothing to do. Do NOT use it to read a column from
+    // scratch: see fetch_values_by_rowid_for_predicate_evaluate.
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
     virtual Status null_count(size_t* count) { return Status::OK(); };
