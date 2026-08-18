@@ -1223,7 +1223,7 @@ CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
-// `lag(... ) IGNORE NULLS` only looks backward, so it can be evaluated in streaming mode with
+// `window_fun(... ) IGNORE NULLS` can be evaluated in streaming mode with
 // watermark-based eviction of the input buffer instead of materializing the whole partition.
 // Set to false to fall back to the legacy whole-partition materializing behavior.
 CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
