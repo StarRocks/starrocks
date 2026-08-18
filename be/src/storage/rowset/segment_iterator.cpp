@@ -2065,7 +2065,15 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             // together after every column iterator exists, so regions from different columns can
             // merge into one read.
             if (_cross_column_stream == nullptr) {
-                ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
+                // Prefer the size already carried in the segment metadata: get_size() on a remote
+                // stream is a remote stat round trip, and this runs once per (segment, column
+                // group) -- ~100k times in a wide-table compaction.
+                int64_t file_size;
+                if (_segment->file_info().size.has_value()) {
+                    file_size = _segment->file_info().size.value();
+                } else {
+                    ASSIGN_OR_RETURN(file_size, rfile->get_size());
+                }
                 _cross_column_stream =
                         std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
                 auto options = SharedBufferedInputStream::CoalesceOptions{
