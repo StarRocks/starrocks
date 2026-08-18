@@ -20,6 +20,9 @@ import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.aws.AwsCloudConfigurationProvider;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfiguration;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudCredential;
@@ -28,11 +31,14 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TCloudConfiguration;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Pins the near-expiry re-vend contract of
@@ -50,7 +56,32 @@ public class IcebergScanNodeVendedRefreshTest {
     private static CloudConfiguration vendedConfig(String token, long expiresAtMs) {
         GCPCloudCredential credential = new GCPCloudCredential("", false, "", "", "", "",
                 token, String.valueOf(expiresAtMs));
-        return new GCPCloudConfiguration(credential);
+        GCPCloudConfiguration config = new GCPCloudConfiguration(credential);
+        // The factory sets this for real vended credentials; this fixture bypasses the factory.
+        config.setVendedCredentialExpiresAtMs(expiresAtMs);
+        return config;
+    }
+
+    private static CloudConfiguration awsVendedConfig(String token, Long expiresAtMs) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
+        properties.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
+        properties.put(S3FileIOProperties.SESSION_TOKEN, token);
+        if (expiresAtMs != null) {
+            properties.put(AwsCloudConfigurationProvider.S3_SESSION_TOKEN_EXPIRES_AT_MS, String.valueOf(expiresAtMs));
+        }
+        return CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(properties, "");
+    }
+
+    private static CloudConfiguration azureVendedConfig(String sasToken, Long expiresAtMs) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(AzureCloudConfigurationProvider.ADLS_SAS_TOKEN + "account.dfs.core.windows.net", sasToken);
+        if (expiresAtMs != null) {
+            properties.put(AzureCloudConfigurationProvider.ADLS_SAS_TOKEN_EXPIRES_AT_MS
+                    + "account.dfs.core.windows.net", String.valueOf(expiresAtMs));
+        }
+        return CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(
+                properties, "abfss://container@account.dfs.core.windows.net/p");
     }
 
     private static Long expirationOf(TCloudConfiguration tCloudConfiguration) {
@@ -128,19 +159,58 @@ public class IcebergScanNodeVendedRefreshTest {
     @Test
     public void testMissingExpirationDoesNotReload() {
         IcebergScanNode node = newNode("tok1", System.currentTimeMillis() + 60_000L);
-        // An empty access token serializes no expiration property.
-        node.setCloudConfiguration(vendedConfig("", 0));
+        // A config the factory did not stamp with an expiry (e.g. non-vended credentials).
+        GCPCloudCredential credential = new GCPCloudCredential("", false, "", "", "", "", "tok1", "0");
+        node.setCloudConfiguration(new GCPCloudConfiguration(credential));
         Assertions.assertNull(node.refreshVendedCloudConfigurationIfNearExpiry(3000_000L));
         Assertions.assertEquals(0, reloadCalls);
     }
 
     @Test
-    public void testMalformedExpirationDoesNotReload() {
-        IcebergScanNode node = newNode("tok1", System.currentTimeMillis() + 60_000L);
-        GCPCloudCredential credential = new GCPCloudCredential("", false, "", "", "", "", "tok1", "soon");
-        node.setCloudConfiguration(new GCPCloudConfiguration(credential));
+    public void testAwsNearExpiryRevendsFreshSessionToken() {
+        long newExpiry = System.currentTimeMillis() + HOUR_MS;
+        IcebergScanNode node = newNode("tok1", 1);
+        node.setCloudConfiguration(awsVendedConfig("aws-tok1", System.currentTimeMillis() + 60_000L));
+        freshConfig = awsVendedConfig("aws-tok2", newExpiry);
+
+        TCloudConfiguration refreshed = node.refreshVendedCloudConfigurationIfNearExpiry(3000_000L);
+        Assertions.assertNotNull(refreshed);
+        Assertions.assertEquals("aws-tok2", refreshed.getCloud_properties().get("aws.s3.session_token"));
+        Assertions.assertEquals(1, reloadCalls);
+        Assertions.assertEquals(newExpiry, node.getCloudConfiguration().getVendedCredentialExpiresAtMs());
+    }
+
+    @Test
+    public void testAwsWithoutExpiryDoesNotReload() {
+        IcebergScanNode node = newNode("tok1", 1);
+        // Catalog vends AWS session credentials without s3.session-token-expires-at-ms.
+        node.setCloudConfiguration(awsVendedConfig("aws-tok1", null));
         Assertions.assertNull(node.refreshVendedCloudConfigurationIfNearExpiry(3000_000L));
         Assertions.assertEquals(0, reloadCalls);
+    }
+
+    @Test
+    public void testAzureNearExpiryRevendsFreshSasToken() {
+        IcebergScanNode node = newNode("tok1", 1);
+        node.setCloudConfiguration(azureVendedConfig("sv=2024&sig=one", System.currentTimeMillis() + 60_000L));
+        freshConfig = azureVendedConfig("sv=2024&sig=two", System.currentTimeMillis() + HOUR_MS);
+
+        TCloudConfiguration refreshed = node.refreshVendedCloudConfigurationIfNearExpiry(3000_000L);
+        Assertions.assertNotNull(refreshed);
+        Assertions.assertEquals(1, reloadCalls);
+        Assertions.assertTrue(refreshed.getCloud_properties().toString().contains("sig=two"));
+    }
+
+    @Test
+    public void testAzureExpiryFromEmbeddedSasSe() {
+        IcebergScanNode node = newNode("tok1", 1);
+        // No expires-at-ms property: the expiry comes from the SAS token's own URL-encoded se= param.
+        node.setCloudConfiguration(azureVendedConfig("sv=2024&se=2020-01-01T00%3A00%3A00Z&sig=one", null));
+        freshConfig = azureVendedConfig("sv=2024&sig=two", System.currentTimeMillis() + HOUR_MS);
+
+        TCloudConfiguration refreshed = node.refreshVendedCloudConfigurationIfNearExpiry(3000_000L);
+        Assertions.assertNotNull(refreshed);
+        Assertions.assertEquals(1, reloadCalls);
     }
 
     @Test
