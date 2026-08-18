@@ -489,7 +489,6 @@ public class PhysicalPartitionTest {
         Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
     }
 
-<<<<<<< HEAD
     @Test
     public void testCopyForBookmark() {
         MaterializedIndex base = new MaterializedIndex(101L, IndexState.NORMAL);
@@ -528,7 +527,8 @@ public class PhysicalPartitionTest {
         copy.addMaterializedIndex(extraBase, true);
         Assertions.assertEquals(extraBase.getId(), copy.getLatestBaseIndex().getId());
         Assertions.assertEquals(newerBase.getId(), src.getLatestBaseIndex().getId());
-=======
+    }
+
     /** An index carrying {@code tabletNum} tablets, registered without touching the inverted index. */
     private static MaterializedIndex newIndexWithTablets(long indexId, long metaId, int tabletNum) {
         MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
@@ -639,6 +639,5 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(9, partition.getActualBucketNum(new RandomDistributionInfo(9)));
         Assertions.assertEquals(9, partition.getActualBucketNum(
                 new HashDistributionInfo(9, distributionColumns)));
->>>>>>> 8786405fa29... [BugFix] Report the real tablet count as Buckets for range-distribution partitions (#77465)
     }
 }
