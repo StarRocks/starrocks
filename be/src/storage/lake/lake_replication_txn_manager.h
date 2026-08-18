@@ -16,6 +16,8 @@
 
 #include <atomic>
 #include <functional>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "common/status.h"
@@ -41,6 +43,13 @@ class TabletManager;
 class LakeReplicationTxnManager {
 public:
     using ReplicationTask = std::function<Status()>;
+
+    struct ExistingFileInfo {
+        std::string filename;
+        std::string encryption_meta;
+        bool shared = false;
+    };
+    using ExistingFileMap = std::unordered_map<std::string, ExistingFileInfo>;
 
     explicit LakeReplicationTxnManager(lake::TabletManager* tablet_manager)
             : _tablet_manager(tablet_manager)
@@ -71,9 +80,8 @@ public:
     // For files that replicated from source storage, we keep the `uuid` part of file name, and use it to decide if the file
     // is already replicated to target storage. Map from UUID to target filename.
     // Also, in order to support file encryption, we also need to keep the encryption meta.
-    Status build_existed_filename_uuids_map(
-            const TabletMetadataPtr& target_data_version_tablet_meta,
-            std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids);
+    Status build_existed_filename_uuids_map(const TabletMetadataPtr& target_data_version_tablet_meta,
+                                            ExistingFileMap& existed_filename_uuids);
 
     // Helper function to create replication txn log with converted metadata
     // generate and replace file names to adapt for target storage
@@ -86,8 +94,7 @@ public:
 
     // Helper functions for filename conversion and building file mappings
     StatusOr<bool> determine_final_filename(
-            const std::string& src_filename, TTransactionId txn_id,
-            const std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids,
+            const std::string& src_filename, TTransactionId txn_id, const ExistingFileMap& existed_filename_uuids,
             std::string& final_filename, int64_t target_tablet_id, const std::string& src_data_dir,
             std::map<std::string, std::string>& file_locations,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map);
