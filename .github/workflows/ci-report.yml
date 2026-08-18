@@ -124,7 +124,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Download FE UT XML
         id: download-ut-xml
@@ -280,7 +281,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   # sonarcloud-fe-checker:
   SONAR_FE_CHECKER:
@@ -298,7 +299,7 @@ jobs:
       BRANCH: ${{ needs.INFO.outputs.BASE_REF }}
       HEAD_REF: ${{ needs.INFO.outputs.HEAD_REF }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         id: checkout_code
         with:
           fetch-depth: 0
@@ -385,7 +386,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - uses: actions/checkout@v6
         with:
@@ -505,7 +507,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
           eci rm ${{ steps.merge.outputs.ECI_ID }} || true
           rm -rf ${{ steps.merge.outputs.COV_LOG }} ${{ steps.merge.outputs.COV_XML }} ${{ steps.merge.outputs.RES_FILE }}
 
@@ -520,7 +522,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Download Java Extension UT XML
         id: download-ut-xml
@@ -604,7 +607,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   SQL-Tester-REPORT:
     runs-on: [self-hosted, quick]
@@ -616,7 +619,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: INFO
         id: info
@@ -698,7 +702,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Download Admit XML
         id: download-admit-xml
@@ -781,7 +786,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: NOTIFY
         run: |
@@ -791,4 +797,4 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*

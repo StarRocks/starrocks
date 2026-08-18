@@ -205,7 +205,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -f ${{ steps.run_ut.outputs.BE_LOG }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   fe-ut:
     runs-on: [self-hosted, normal]
@@ -219,8 +219,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -285,7 +285,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   clang-tidy-full-ubuntu:
     runs-on: [self-hosted, normal]
@@ -317,7 +317,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_clang_tidy.outputs.RES_FILE }}
           rm -f ${{ steps.run_clang_tidy.outputs.RES_LOG }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   build:
     runs-on: [self-hosted, normal]
@@ -339,7 +339,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: UPDATE ECI & RUN BUILD
         id: run_build
@@ -378,7 +379,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_build.outputs.RES_FILE }}
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
-          rm -rf ${{ github.workspace }}
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   test_filter:
     runs-on: [self-hosted, normal]
@@ -401,7 +402,9 @@ jobs:
       IS_SELF_BUILD: ${{ steps.set_output.outputs.IS_SELF_BUILD }}
     steps:
       - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+        run: |
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Download Build Artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
@@ -594,7 +597,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -706,4 +710,4 @@ jobs:
       - name: Clean
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*

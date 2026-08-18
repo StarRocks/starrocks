@@ -45,10 +45,10 @@ jobs:
       BUILD_TYPE:    Release
     steps:
       - name: Clean Workspace
-        run: rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+        run: git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -129,4 +129,4 @@ jobs:
 
       - name: Clean ENV
         if: always()
-        run: rm -rf ${{ github.workspace }}/*
+        run: git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*

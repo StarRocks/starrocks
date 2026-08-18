@@ -80,6 +80,9 @@ jobs:
           fetch-depth: 1
           ref: refs/heads/${{ github.base_ref }}
           sparse-checkout: .github
+          # Isolated path: keeps this shallow+sparse checkout from flipping the
+          # shared workspace clone between shallow/full and sparse/full states.
+          path: base-ref
 
       - name: Branch Access Check
         id: branch_access_check
@@ -87,7 +90,7 @@ jobs:
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
-          status=$(cat .github/.status || echo open)
+          status=$(cat base-ref/.github/.status || echo open)
           if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
             exit 0
           elif [[ "${status}" == "feature-freeze" && "${PR_TITLE}" == *"[Feature]"* ]]; then
@@ -254,8 +257,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Update Image (${{ matrix.linux }})
         id: update-image
@@ -281,7 +284,7 @@ jobs:
               cd ci-tool && source lib/init.sh
               ./bin/elastic-cluster.sh --delete
           fi
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
     runs-on: ubuntu-latest
@@ -390,7 +393,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.BE_LOG }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   fe-checker:
     runs-on: [self-hosted, light]
@@ -496,8 +499,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -544,7 +547,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   Teardown:
     runs-on: [self-hosted, normal]
@@ -580,7 +583,7 @@ jobs:
 
       - name: Clean
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   # Phase 0: report run + jobs metrics to CI Metrics API (non-blocking, TLS)
   report-metrics:

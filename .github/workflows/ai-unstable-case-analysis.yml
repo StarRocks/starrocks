@@ -133,4 +133,7 @@ jobs:
 
       - name: Clean ENV
         if: always()
-        run: rm -rf /tmp/unstable-ai-${GITHUB_RUN_ID} ${{ github.workspace }}/* || true
+        run: |
+          rm -rf /tmp/unstable-ai-${GITHUB_RUN_ID} || true
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/* || true

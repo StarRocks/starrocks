@@ -126,6 +126,9 @@ jobs:
           fetch-depth: 1
           ref: refs/heads/${{ github.base_ref }}
           sparse-checkout: .github
+          # Isolated path: keeps this shallow+sparse checkout from flipping the
+          # shared workspace clone between shallow/full and sparse/full states.
+          path: base-ref
 
       - name: Branch Access Check
         id: branch_access_check
@@ -133,7 +136,7 @@ jobs:
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
-          status=$(cat .github/.status || echo open)
+          status=$(cat base-ref/.github/.status || echo open)
           if [[ "${PR_TITLE}" == *"[Tool]"* ]]; then
             exit 0
           elif [[ "${status}" == "feature-freeze" && "${PR_TITLE}" == *"[Feature]"* ]]; then
@@ -308,8 +311,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Update Image (${{ matrix.linux }})
         id: update-image
@@ -337,7 +340,7 @@ jobs:
             cd ci-tool && source lib/init.sh
             ./bin/elastic-cluster.sh --delete
           fi
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   be-architecture:
     runs-on: ubuntu-latest
@@ -587,7 +590,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.BE_LOG }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   clang-tidy:
     runs-on: [self-hosted, normal]
@@ -608,8 +611,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -640,7 +643,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_clang_tidy.outputs.RES_FILE }}
           rm -f ${{ steps.run_clang_tidy.outputs.RES_LOG }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   fe-checker:
     runs-on: [self-hosted, light]
@@ -799,8 +802,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -851,7 +854,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   test-checker:
     runs-on: [self-hosted, light]
@@ -913,7 +916,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: check sync
         id: check-sync
@@ -970,7 +974,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
-          
+          # Full history: keeps the reused workspace clone unshallow so every
+          # follow-up fetch stays incremental.
+          fetch-depth: 0
+
       - name: UPDATE ECI & RUN BUILD
         id: run_build
         shell: bash
@@ -1043,7 +1050,9 @@ jobs:
       pre_commit_job_status_dict: ${{ needs.build.outputs.pre_commit_job_status_dict}}
     steps:
       - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+        run: |
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Choose mode
         id: choose-mode
@@ -1080,7 +1089,7 @@ jobs:
         if: always()
         run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   docgen:
     runs-on: [self-hosted, normal]
@@ -1187,7 +1196,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -1247,7 +1257,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   restart-fe:
     runs-on: [self-hosted, normal]
@@ -1263,7 +1273,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
@@ -1273,7 +1284,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   restart-be:
     runs-on: [self-hosted, normal]
@@ -1290,7 +1301,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
@@ -1306,7 +1318,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   admit:
     runs-on: [self-hosted, normal]
@@ -1324,7 +1336,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -1374,7 +1387,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   restart-fe-after-admit:
     runs-on: [self-hosted, normal]
@@ -1391,7 +1404,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Restart FE (${{needs.deploy.outputs.be_list}})
         run: |
@@ -1407,7 +1421,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   restart-be-after-admit:
     runs-on: [self-hosted, normal]
@@ -1424,7 +1438,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
@@ -1440,7 +1455,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   Teardown:
     runs-on: [self-hosted, quick]
@@ -1499,7 +1514,7 @@ jobs:
         if: always()
         run: |
           rm -f $CONF_FILE
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   # Phase 0: report run + jobs metrics to CI Metrics API (non-blocking, TLS)
   report-metrics:

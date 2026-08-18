@@ -69,7 +69,7 @@ jobs:
 
       - name: Checkout PR Code
         if: steps.check_lint.outputs.result == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: refs/pull/${{ steps.pr_number.outputs.pr_number }}/merge
           fetch-depth: 0

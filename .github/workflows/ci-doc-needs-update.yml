@@ -43,7 +43,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           # Checkout the merged commit so we can run the diff script
@@ -56,7 +56,7 @@ jobs:
       # let an upstream change execute with elevated permissions. Bump this SHA
       # intentionally when upgrading the engine.
       - name: Check out the drift engine
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: StarRocks/doc-config-drift
           ref: dfd6f7285de5fa069dc1cddfe35c6833b0ad6c34  # doc-config-drift main @ 2026-07-22

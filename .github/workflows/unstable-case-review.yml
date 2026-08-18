@@ -123,7 +123,7 @@ jobs:
           rm -f  "${{ steps.run_ut.outputs.RES_FILE }}"  || true
           rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
           rm -rf "${{ steps.run_ut.outputs.FE_REPORT_DIR }}" || true
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   # ─── BE-UT ───────────────────────────────────────────────────────────────
   be-ut-review:
@@ -161,7 +161,7 @@ jobs:
         run: |
           rm -f  "${{ steps.run_ut.outputs.RES_FILE }}"  || true
           rm -f  "${{ steps.run_ut.outputs.RES_LOG }}"   || true
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   # ─── Deploy SR + SQL-Tester + Teardown (single job, same runner) ─────────
   sql-tester-review:
@@ -179,10 +179,10 @@ jobs:
       sql_oss_path: ${{ steps.run.outputs.sql_oss_path }}
     steps:
       - name: Clean Workspace
-        run: rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+        run: git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -257,7 +257,7 @@ jobs:
 
       - name: Clean ENV
         if: always()
-        run: rm -rf ${{ github.workspace }}/*
+        run: git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   # ─── Generate report & update JSON ───────────────────────────────────────
   report:
@@ -430,4 +430,4 @@ jobs:
         if: always()
         run: |
           rm -rf "${{ steps.gen.outputs.WORK_DIR }}" || true
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*

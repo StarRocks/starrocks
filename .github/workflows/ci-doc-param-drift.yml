@@ -43,7 +43,7 @@ jobs:
       # runs with a write-scoped token, so we must not execute scripts from the
       # PR head (which is untrusted). We run the checker from the trusted base
       # checkout and separately fetch the PR diff to identify new params.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
           fetch-depth: 0

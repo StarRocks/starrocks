@@ -55,7 +55,8 @@ jobs:
     steps:
       - name: CLEAN & ENV
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
           if [[ ! -e "${DIFF_FILE_PATH}" ]]; then
             echo "::error::diff file: ${DIFF_FILE_PATH} not exist!"
             exit 1
@@ -131,6 +132,6 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
           eci rm ${{ steps.merge_report.outputs.ECI_ID }} || true
           rm -rf ${{ steps.merge_report.outputs.COV_XML }} ${{ steps.merge_report.outputs.COV_LOG }} ${{ steps.merge_report.outputs.RES_FILE }}

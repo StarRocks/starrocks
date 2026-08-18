@@ -39,4 +39,4 @@ jobs:
       - name: clean
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*

@@ -63,7 +63,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout the latest code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.PAT }}
           fetch-depth: 0
@@ -99,13 +99,13 @@ jobs:
           fi
 
       - name: Checkout the latest code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.PAT }}
           fetch-depth: 0
 
       - name: checkout tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: StarRocks/elastic-service
           path: './elastic-service'

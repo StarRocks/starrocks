@@ -100,7 +100,8 @@ jobs:
 
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -147,7 +148,9 @@ jobs:
           fi
 
       - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+        run: |
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Apply ECS cluster
         id: apply
@@ -241,7 +244,8 @@ jobs:
 
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
         uses: actions/checkout@v6

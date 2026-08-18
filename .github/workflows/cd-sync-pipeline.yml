@@ -134,11 +134,13 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        # v6: resets leftover sparse state and local branches on a reused
+        # workspace, and persists credentials outside .git/config.
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -164,7 +166,7 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/elastic-cluster.sh --delete
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
     runs-on: [self-hosted, normal]
@@ -177,8 +179,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Check Result
         run: |
@@ -216,8 +218,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -300,8 +302,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1

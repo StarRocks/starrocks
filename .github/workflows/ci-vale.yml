@@ -33,7 +33,7 @@ jobs:
         id: branch
         run: echo "branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

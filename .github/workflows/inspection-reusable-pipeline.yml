@@ -101,7 +101,9 @@ jobs:
       deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
     steps:
       - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+        run: |
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Apply for resources
         id: apply_resource
@@ -127,7 +129,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   SQL-Tester:
     runs-on: [self-hosted, normal]
@@ -142,7 +144,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -193,7 +196,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   restart-fe:
     runs-on: [self-hosted, normal]
@@ -207,7 +210,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
@@ -217,7 +221,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   restart-be:
     runs-on: [self-hosted, normal]
@@ -237,7 +241,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
@@ -248,7 +253,7 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/*
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   admit:
     runs-on: [self-hosted, normal]
@@ -264,7 +269,8 @@ jobs:
     steps:
       - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          # Keep .git so actions/checkout reuses the clone and fetches incrementally
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
 
       - name: BRANCH INFO
         id: branch
@@ -305,7 +311,7 @@ jobs:
 
       - name: Clean ENV
         if: always()
-        run: rm -rf ${{ github.workspace }}/*
+        run: git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
 
   clean:
     runs-on: [self-hosted, normal]

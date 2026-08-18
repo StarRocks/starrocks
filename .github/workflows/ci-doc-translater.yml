@@ -67,7 +67,7 @@ jobs:
           echo "head_repo_name=$(echo $PR_JSON | jq -r '.head.repo.full_name')" >> $GITHUB_OUTPUT
 
       - name: Checkout PR (Untrusted Content)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.DOCS_PUSH_PAT }}
           repository: ${{ steps.pr_data.outputs.head_repo_name }}
@@ -82,7 +82,7 @@ jobs:
           git fetch upstream ${{ steps.pr_data.outputs.base_sha }}
 
       - name: Checkout Trusted Tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: StarRocks/doc-translator
           ref: 'v1.0.1'

@@ -24,6 +24,12 @@ Map the local scripts and GitHub workflows that enforce structural rules, run va
 - Structural rules should be enforced by small repo-local scripts with actionable error messages.
 - CI path filters must stay aligned with the files each checker owns.
 - Generated handbook or AGENTS content should be validated mechanically when a generator exists.
+- Self-hosted jobs must never `rm -rf` the runner workspace: all jobs of a repo share one
+  workspace per runner, so a nuke forces the next `actions/checkout` into a full re-clone.
+  Clean with `git -C ${{ github.workspace }} clean -ffdxq` (falling back to `rm -rf` when no
+  repo exists) so the clone is reused and fetches stay incremental. Workspace-root checkouts
+  use `fetch-depth: 0`; shallow or sparse checkouts go to a dedicated `path:` so they never
+  flip the shared clone between shallow/full or sparse/full states.
 
 ## Test and Validation
 
