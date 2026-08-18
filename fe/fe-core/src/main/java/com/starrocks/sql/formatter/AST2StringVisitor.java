@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
@@ -1096,8 +1097,16 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 tableRef.getTableName(), tableRef.getPos());
         sb.append(tableName.toSql());
 
+        // The parenthesized clause carries column names, index definitions, or both.
+        List<String> parenthesizedItems = new ArrayList<>();
         if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(stmt.getColumnNames())) {
-            sb.append(" (").append(joinBackQuoted(stmt.getColumnNames())).append(")");
+            stmt.getColumnNames().forEach(c -> parenthesizedItems.add(ParseUtil.backquote(c)));
+        }
+        if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(createStmt.getIndexDefs())) {
+            createStmt.getIndexDefs().forEach(d -> parenthesizedItems.add(d.toSql()));
+        }
+        if (!parenthesizedItems.isEmpty()) {
+            sb.append(" (").append(String.join(",", parenthesizedItems)).append(")");
         }
 
         String engineName = createStmt.getEngineName();
@@ -1114,7 +1123,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         }
 
         if (StringUtils.isNotEmpty(createStmt.getComment())) {
-            sb.append(" COMMENT \"").append(createStmt.getComment()).append("\"");
+            sb.append(" COMMENT \"")
+                    .append(CatalogUtils.addEscapeCharacter(createStmt.getComment()))
+                    .append("\"");
         }
 
         if (createStmt.getPartitionDesc() != null) {

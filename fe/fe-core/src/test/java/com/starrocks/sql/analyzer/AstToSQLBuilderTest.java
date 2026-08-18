@@ -391,6 +391,15 @@ public class AstToSQLBuilderTest {
                         "CREATE TABLE `t4` PARTITION BY RANGE(`dt`) DISTRIBUTED BY HASH(dt) AS SELECT `dt`\nFROM `t0`"},
                 {"CREATE TABLE t5 ORDER BY (v1) AS SELECT v1, v2 FROM t0",
                         "CREATE TABLE `t5` ORDER BY (`v1`) AS SELECT `v1`, `v2`\nFROM `t0`"},
+                {"CREATE TABLE t7 (c1, c2, INDEX idx1 (c1) USING BITMAP) AS SELECT v1, v2 FROM t0",
+                        "CREATE TABLE `t7` (`c1`,`c2`,INDEX idx1 (`c1`) USING BITMAP COMMENT '') " +
+                                "AS SELECT `v1`, `v2`\nFROM `t0`"},
+                // Index definitions alone must not drop the parenthesized clause.
+                {"CREATE TABLE t8 (INDEX idx1 (c1) USING BITMAP) AS SELECT v1 AS c1 FROM t0",
+                        "CREATE TABLE `t8` (INDEX idx1 (`c1`) USING BITMAP COMMENT '') AS SELECT `v1` AS `c1`\nFROM `t0`"},
+                // A double quote inside the comment must be escaped to keep the output legal SQL.
+                {"CREATE TABLE t9 COMMENT 'say \"hello\"' AS SELECT v1 FROM t0",
+                        "CREATE TABLE `t9` COMMENT \"say \\\"hello\\\"\" AS SELECT `v1`\nFROM `t0`"},
         };
         for (String[] c : cases) {
             StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
