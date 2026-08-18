@@ -34,6 +34,10 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
         connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
         connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+        // This suite counts AGGREGATE nodes to pin down aggregate push-down. q44/q65 spell the same
+        // derived table twice, so enable_common_subquery_cte would compute it once and change the counts
+        // for reasons unrelated to push-down; CommonSubqueryCTETest covers that win instead.
+        connectContext.getSessionVariable().setEnableCommonSubqueryCte(false);
     }
 
     @AfterAll
@@ -41,6 +45,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         FeConstants.unitTestView = true;
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
         connectContext.getSessionVariable().setEnableInnerJoinToSemi(true);
+        connectContext.getSessionVariable().setEnableCommonSubqueryCte(true);
     }
 
     private String check(int mode, String sql, int aggNum) throws Exception {

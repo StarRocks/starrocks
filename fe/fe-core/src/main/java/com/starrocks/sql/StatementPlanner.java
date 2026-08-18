@@ -39,6 +39,7 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -74,6 +75,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
@@ -128,6 +130,11 @@ public class StatementPlanner {
 
         boolean needWholePhaseLock = true;
         PlannerMetaLocker plannerMetaLocker = null;
+        // Common-subquery hoisting rewrites the parsed statement in place, because there is no general AST
+        // copier in the FE. Undo it once planning is done so that the parsed tree callers keep hold of - the
+        // audit log, query dump and any re-planning - is the one the parser produced, per the AST immutability
+        // rule in fe/AGENTS.md. The ExecPlan is already built by then and does not reference the AST.
+        CommonSubqueryCTEHoister.HoistRecord[] hoisted = new CommonSubqueryCTEHoister.HoistRecord[1];
         // 1. For all queries, we need db lock when analyze phase
         try (var guard = session.bindScope();
                 var ignoredBudget = StatisticsLoadBudget.openScope(session)) {
@@ -136,7 +143,7 @@ public class StatementPlanner {
 
             plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
-            analyzeStatement(stmt, session, plannerMetaLocker);
+            analyzeStatement(stmt, session, plannerMetaLocker, hoisted);
 
             // Authorization check
             if (!session.isBypassAuthorizerCheck()) {
@@ -189,6 +196,9 @@ public class StatementPlanner {
             }
             throw e;
         } finally {
+            if (hoisted[0] != null) {
+                hoisted[0].revert();
+            }
             if (needWholePhaseLock && plannerMetaLocker != null) {
                 unLock(plannerMetaLocker);
             }
@@ -225,6 +235,16 @@ public class StatementPlanner {
     @VisibleForTesting
     protected static boolean analyzeStatement(StatementBase statement, ConnectContext session,
                                               PlannerMetaLocker locker) {
+        return analyzeStatement(statement, session, locker, new CommonSubqueryCTEHoister.HoistRecord[1]);
+    }
+
+    /**
+     * @param hoisted single-element out parameter receiving the common-subquery rewrite, so that
+     *                {@link #plan} can undo it once planning is finished
+     */
+    protected static boolean analyzeStatement(StatementBase statement, ConnectContext session,
+                                              PlannerMetaLocker locker,
+                                              CommonSubqueryCTEHoister.HoistRecord[] hoisted) {
         boolean deferredLock = false;
         Runnable takeLock = () -> {
             try (Timer lockerTime = Tracers.watchScope("Lock")) {
@@ -291,7 +311,7 @@ public class StatementPlanner {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
                 }
                 takeLock.run();
-                analyzeWithCommonSubqueryCte(statement, session);
+                hoisted[0] = analyzeWithCommonSubqueryCte(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
             }
@@ -312,11 +332,12 @@ public class StatementPlanner {
      * The fallback exists so that a body no one anticipated degrades into the original plan instead of a
      * failed query.
      */
-    private static void analyzeWithCommonSubqueryCte(StatementBase statement, ConnectContext session) {
+    private static CommonSubqueryCTEHoister.HoistRecord analyzeWithCommonSubqueryCte(StatementBase statement,
+                                                                                     ConnectContext session) {
         if (!(statement instanceof QueryStatement)
                 || !session.getSessionVariable().isEnableCommonSubqueryCte()) {
             Analyzer.analyze(statement, session);
-            return;
+            return null;
         }
 
         CommonSubqueryCTEHoister.HoistRecord record;
@@ -325,11 +346,11 @@ public class StatementPlanner {
         } catch (Exception e) {
             LOG.warn("failed to hoist common subqueries, fall back to the original statement", e);
             Analyzer.analyze(statement, session);
-            return;
+            return null;
         }
         if (record.isEmpty()) {
             Analyzer.analyze(statement, session);
-            return;
+            return null;
         }
 
         try {
@@ -338,15 +359,56 @@ public class StatementPlanner {
             LOG.debug("common subquery hoisting produced an unanalyzable statement, reverting", e);
             record.revert();
             Analyzer.analyze(statement, session);
-            return;
+            return null;
         }
 
         // The pre-analysis guards read SQL text, which cannot see through a view - views are only expanded
-        // during analysis. Re-check the hoisted bodies now that they are resolved, so that e.g. two derived
-        // tables reading a view that calls rand() are not silently made to agree.
-        if (CommonSubqueryCTEHoister.isUnsafeAfterAnalysis(record)) {
+        // during analysis. Re-check the hoisted bodies now that they are resolved, so that two derived tables
+        // reading a view that calls rand(), or one carrying a LIMIT, are not silently made to agree.
+        //
+        // Then stand down if any materialized view could apply. Both checks need resolved tables, which is
+        // why they run here and not before analysis.
+        if (CommonSubqueryCTEHoister.isUnsafeAfterAnalysis(record) || hasRelatedMaterializedView(statement, session)) {
             record.revert();
             Analyzer.analyze(statement, session);
+            return null;
+        }
+        return record;
+    }
+
+    /**
+     * Whether any materialized view could rewrite this query, in which case common-subquery hoisting must
+     * get out of the way.
+     *
+     * <p><b>Why the two cannot coexist.</b> Materialized-view rewrite recognizes a query by its AST.
+     * Text-based matching turns the query's AST into a {@code CachingMvPlanContextBuilder.AstKey} - the SQL
+     * rendered by {@code AST2SQLVisitor} - and looks that string up in the map of MV definitions
+     * ({@code AST_TO_MV_MAP}, filled by {@code getAstKeysOfMV} from {@code MaterializedView#getDefineQueryParseNode}).
+     * Hoisting rewrites the query's AST but not the MV's: {@code CREATE MATERIALIZED VIEW} is analyzed by
+     * {@code MaterializedViewAnalyzer} and never passes through this planner, so its definition keeps the
+     * original shape. The two strings stop being equal and the MV is simply never found - the query silently
+     * loses its rewrite, with no error and nothing in the plan to hint at why.
+     *
+     * <p>An MV usually saves far more than computing one subquery twice, so it wins. Normalizing the MV side
+     * instead would mean hoisting every MV definition before its cache key is computed, which couples this
+     * pass to a persisted cache key - a much larger commitment than the optimization is worth.
+     *
+     * <p>The test is deliberately coarse: any related MV at all, whether or not it would actually have
+     * matched. Erring towards "leave the query alone" only ever costs this optimization, never a rewrite.
+     */
+    private static boolean hasRelatedMaterializedView(StatementBase statement, ConnectContext session) {
+        SessionVariable sessionVariable = session.getSessionVariable();
+        if (sessionVariable.isDisableMaterializedViewRewrite() || !sessionVariable.isEnableMaterializedViewRewrite()) {
+            return false;
+        }
+        try {
+            Set<Table> tables = Sets.newHashSet(AnalyzerUtils.collectAllTable(statement).values());
+            return !tables.isEmpty() && !MvUtils.getRelatedMvs(
+                    session, sessionVariable.getNestedMvRewriteMaxLevel(), tables).isEmpty();
+        } catch (Exception e) {
+            // Never let this probe decide a query's fate; on doubt, keep the rewrite off.
+            LOG.debug("failed to look up related materialized views, keeping the original statement", e);
+            return true;
         }
     }
 

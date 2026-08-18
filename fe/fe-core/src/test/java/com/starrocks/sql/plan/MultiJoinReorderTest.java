@@ -37,6 +37,9 @@ public class MultiJoinReorderTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        // These cases deliberately spell the same derived table twice to build the shape they are
+        // testing; enable_common_subquery_cte would share it and dissolve that shape.
+        connectContext.getSessionVariable().setEnableCommonSubqueryCte(false);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 

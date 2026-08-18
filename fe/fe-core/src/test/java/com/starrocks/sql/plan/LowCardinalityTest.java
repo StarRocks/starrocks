@@ -39,6 +39,9 @@ public class LowCardinalityTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        // These cases deliberately spell the same derived table twice to build the shape they are
+        // testing; enable_common_subquery_cte would share it and dissolve that shape.
+        connectContext.getSessionVariable().setEnableCommonSubqueryCte(false);
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE supplier_nullable ( S_SUPPKEY     INTEGER NOT NULL,\n" +
                 "                             S_NAME        CHAR(25) NOT NULL,\n" +

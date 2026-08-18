@@ -81,6 +81,11 @@ import java.util.regex.Pattern;
  * the memo (see {@code RelationTransformer#buildCTEAnchorAndProducer}) and
  * {@code CostModel#visitPhysicalCTEAnchor} arbitrates against {@code cbo_cte_reuse_rate}.
  *
+ * <p><b>Materialized views take priority.</b> MV rewrite recognizes a query by its AST, and rewriting that
+ * AST makes the query stop matching an MV whose definition was never rewritten. The caller therefore skips
+ * this optimization entirely for any query that touches a table with a related MV; see
+ * {@code StatementPlanner#hasRelatedMaterializedView} for the mechanism and the reasoning.
+ *
  * <p><b>Correlation.</b> A derived table that reads an outer column cannot be recognized before name
  * resolution, so this pass does not try. What makes that safe is the choice of destination: hoisting to
  * the <em>outermost</em> query block means the body is analyzed against an essentially empty outer scope,
@@ -260,13 +265,15 @@ public final class CommonSubqueryCTEHoister {
         }
 
         Set<String> words = words(sql);
-        // Only the genuinely per-call functions matter. The time functions in
-        // FunctionSet#nonDeterministicTimeFunctions are folded to one constant per query, so two
-        // occurrences already agree and sharing changes nothing.
+        // Cheap pre-filter only; isUnsafeAfterAnalysis is what actually decides, because a view's body is
+        // invisible here. See isUnsharableFunction for why the time functions are not in this set.
         for (String fn : FunctionSet.nonDeterministicFunctions) {
             if (words.contains(fn)) {
                 return null;
             }
+        }
+        if (words.contains(FunctionSet.ANY_VALUE)) {
+            return null;
         }
         // The same characters can bind to different objects when a WITH shadows a name at one site but
         // not at the other. Cheap over-approximation: refuse any body that mentions a CTE name at all.
@@ -283,9 +290,10 @@ public final class CommonSubqueryCTEHoister {
      * to be unsafe to share after all.
      *
      * <p>The pre-analysis guards work on SQL text, which cannot see through a view: views are only expanded
-     * inside {@link QueryAnalyzer}, so a derived table reading a view whose definition calls {@code rand()}
-     * looks perfectly deterministic beforehand. Sharing it would make two references return the same random
-     * values instead of independent ones. Here the bodies are fully resolved, so the check is authoritative.
+     * inside {@link QueryAnalyzer}, so a derived table reading a view whose definition calls {@code rand()} or
+     * carries a {@code LIMIT} looks perfectly safe beforehand. Sharing it would make two references agree where
+     * they were previously free to differ. Here the bodies are fully resolved and view bodies are reachable, so
+     * this check is the authoritative one; the textual guards are only a cheap pre-filter.
      */
     public static boolean isUnsafeAfterAnalysis(HoistRecord record) {
         for (CTERelation cte : record.added) {
@@ -293,12 +301,20 @@ public final class CommonSubqueryCTEHoister {
             new AstTraverser<Void, Void>() {
                 @Override
                 public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-                    String name = expr.getFunctionName();
-                    if (name != null && FunctionSet.nonDeterministicFunctions.contains(name.toLowerCase(Locale.ROOT))) {
+                    if (isUnsharableFunction(expr.getFunctionName())) {
                         found[0] = true;
                         return null;
                     }
                     return super.visitFunctionCall(expr, context);
+                }
+
+                @Override
+                public Void visitQueryRelation(QueryRelation node, Void context) {
+                    if (node.hasLimit()) {
+                        found[0] = true;
+                        return null;
+                    }
+                    return super.visitQueryRelation(node, context);
                 }
             }.visit(cte.getCteQueryStatement());
             if (found[0]) {
@@ -306,6 +322,25 @@ public final class CommonSubqueryCTEHoister {
             }
         }
         return false;
+    }
+
+    /**
+     * Functions whose result two identical occurrences may legitimately disagree on today, so that sharing them
+     * would narrow behaviour the query never promised.
+     *
+     * <p>Deliberately narrow. {@code FunctionSet#nonDeterministicTimeFunctions} is <em>not</em> included: those
+     * fold to one constant per query, so two occurrences already agree. {@code any_value} is, because it is
+     * defined as picking an arbitrary member of its group. Note that this does not cover every under-specified
+     * aggregate - {@code group_concat} / {@code array_agg} without an ORDER BY, or {@code min_by} / {@code max_by}
+     * on ties, are arbitrary in the same way - but deciding that in general needs a notion of order sensitivity
+     * the FE does not have today.
+     */
+    private static boolean isUnsharableFunction(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase(Locale.ROOT);
+        return FunctionSet.nonDeterministicFunctions.contains(lower) || FunctionSet.ANY_VALUE.equals(lower);
     }
 
     private static boolean containsParameter(QueryStatement stmt) {

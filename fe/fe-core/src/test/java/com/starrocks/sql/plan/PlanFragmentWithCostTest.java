@@ -55,6 +55,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        // These cases deliberately spell the same derived table twice to build the shape they are
+        // testing; enable_common_subquery_cte would share it and dissolve that shape.
+        connectContext.getSessionVariable().setEnableCommonSubqueryCte(false);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
