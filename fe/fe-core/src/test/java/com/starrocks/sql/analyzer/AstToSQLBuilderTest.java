@@ -363,4 +363,51 @@ public class AstToSQLBuilderTest {
         Assertions.assertDoesNotThrow(() -> Analyzer.analyze(again, AnalyzeTestUtil.getConnectContext()),
                 () -> "deparsed form no longer analyzes: " + temp);
     }
+
+    @Test
+    public void testCreateTableAsSelect() {
+        // CTAS used to have no deparse visitor and fell through to visitNode() which returns an empty
+        // string, so the profile and audit log of a CTAS in a multi-statement request showed no SQL.
+        String[][] cases = {
+                {"CREATE TABLE t1 AS SELECT v1, v2 FROM t0",
+                        "CREATE TABLE `t1` AS SELECT `v1`, `v2`\nFROM `t0`"},
+                {"CREATE TABLE IF NOT EXISTS db1.t1 (c1, c2) COMMENT \"test ctas\" " +
+                        "DISTRIBUTED BY HASH(c1) BUCKETS 8 " +
+                        "PROPERTIES('replication_num'='1') AS SELECT v1, v2 FROM t0 WHERE v1 > 1",
+                        "CREATE TABLE IF NOT EXISTS `db1`.`t1` (`c1`,`c2`) COMMENT \"test ctas\" " +
+                                "DISTRIBUTED BY HASH(c1) BUCKETS 8 " +
+                                "PROPERTIES (\"replication_num\" = \"1\") AS SELECT `v1`, `v2`\nFROM `t0`\nWHERE `v1` > 1"},
+                {"CREATE TEMPORARY TABLE t2 AS SELECT v1 FROM t0",
+                        "CREATE TEMPORARY TABLE `t2` AS SELECT `v1`\nFROM `t0`"},
+                {"CREATE TABLE t3 PRIMARY KEY (c1) DISTRIBUTED BY HASH(c1) AS SELECT v1 AS c1 FROM t0",
+                        "CREATE TABLE `t3` PRIMARY KEY(`c1`) DISTRIBUTED BY HASH(c1) AS SELECT `v1` AS `c1`\nFROM `t0`"},
+                {"CREATE TABLE t4 PARTITION BY (dt) AS SELECT dt, v1 FROM t0",
+                        "CREATE TABLE `t4` PARTITION BY LIST(`dt`) AS SELECT `dt`, `v1`\nFROM `t0`"},
+                {"CREATE TABLE t4 PARTITION BY date_trunc('day', dt) AS SELECT dt, v1 FROM t0",
+                        "CREATE TABLE `t4` PARTITION BY date_trunc('day', `dt`) AS SELECT `dt`, `v1`\nFROM `t0`"},
+                {"CREATE TABLE t4 PARTITION BY RANGE(dt) " +
+                        "(START ('2021-01-01') END ('2021-01-10') EVERY (INTERVAL 1 DAY)) " +
+                        "DISTRIBUTED BY HASH(dt) AS SELECT dt FROM t0",
+                        "CREATE TABLE `t4` PARTITION BY RANGE(`dt`) DISTRIBUTED BY HASH(dt) AS SELECT `dt`\nFROM `t0`"},
+                {"CREATE TABLE t5 ORDER BY (v1) AS SELECT v1, v2 FROM t0",
+                        "CREATE TABLE `t5` ORDER BY (`v1`) AS SELECT `v1`, `v2`\nFROM `t0`"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            Assertions.assertEquals(c[1], AstToSQLBuilder.toSQL(stmt), c[0]);
+            // Regression: the fallback path used to hand out the visitor's empty string as-is.
+            Assertions.assertEquals(c[1], AstToSQLBuilder.toSQLOrDefault(stmt, c[0]), c[0]);
+        }
+    }
+
+    @Test
+    public void testCreateTableAsSelectHidesCredentials() {
+        String sql = "CREATE TABLE t6 PROPERTIES ('aws.s3.access_key'='abc', 'aws.s3.secret_key'='def') " +
+                "AS SELECT v1 FROM t0";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals(
+                "CREATE TABLE `t6` PROPERTIES (\"aws.s3.access_key\" = \"***\", \"aws.s3.secret_key\" = \"***\") " +
+                        "AS SELECT `v1`\nFROM `t0`",
+                AstToSQLBuilder.toSQL(stmt));
+    }
 }
