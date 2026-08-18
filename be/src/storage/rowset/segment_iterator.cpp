@@ -602,6 +602,11 @@ private:
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
+    // Cross-column coalescing (LakeIOOptions::coalesce_across_columns): every coalesce-enabled
+    // column of this segment shares this one stream, and their IO ranges are registered in a single
+    // batch so adjacent column regions merge into few large reads. Owned here; _column_files stays
+    // empty for those columns.
+    std::unique_ptr<SharedBufferedInputStream> _cross_column_stream;
     ColumnDecoders _column_decoders;
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
@@ -1155,8 +1160,28 @@ Status SegmentIterator::_init_scan_range_and_context() {
     }
     _range_iter = _scan_range.new_iterator();
 
-    for (auto column_index : _io_coalesce_column_index) {
-        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+    if (_cross_column_stream != nullptr) {
+        // Cross-column mode: collect every coalesce column's ranges and register them in one batch
+        // on the shared stream -- set_io_ranges sorts and merges ranges whose gap is within
+        // io_coalesce_read_max_distance_size, so adjacent column regions become one read.
+        std::vector<SharedBufferedInputStream::IORange> all_ranges;
+        for (auto column_index : _io_coalesce_column_index) {
+            auto vec_or = _column_iterators[column_index]->get_io_range_vec(_scan_range, nullptr);
+            if (vec_or.status().is_not_supported()) {
+                // Unregistered regions fall back to direct reads on the shared stream, so a column
+                // that cannot enumerate its ranges stays correct -- it just does not coalesce.
+                continue;
+            }
+            RETURN_IF_ERROR(vec_or.status());
+            for (auto e : *vec_or) {
+                all_ranges.emplace_back(e.first, e.second);
+            }
+        }
+        RETURN_IF_ERROR(_cross_column_stream->set_io_ranges(all_ranges));
+    } else {
+        for (auto column_index : _io_coalesce_column_index) {
+            RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        }
     }
     return Status::OK();
 }
@@ -2034,8 +2059,25 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
+        if (_opts.lake_io_opts.coalesce_across_columns && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
+            // One stream for the whole segment; ranges of all coalesce columns are registered
+            // together after every column iterator exists, so regions from different columns can
+            // merge into one read.
+            if (_cross_column_stream == nullptr) {
+                ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
+                _cross_column_stream = std::make_unique<SharedBufferedInputStream>(
+                        rfile->stream(), _segment->file_name(), file_size);
+                auto options = SharedBufferedInputStream::CoalesceOptions{
+                        .max_dist_size = config::io_coalesce_read_max_distance_size,
+                        .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+                _cross_column_stream->set_coalesce_options(options);
+            }
+            iter_opts.read_file = _cross_column_stream.get();
+            iter_opts.is_io_coalesce = true;
+            _io_coalesce_column_index.emplace_back(cid);
+        } else if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
+                   _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
             auto shared_buffered_input_stream =
                     std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);

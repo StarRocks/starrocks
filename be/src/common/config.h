@@ -2288,6 +2288,16 @@ CONF_mInt32(compaction_merge_child_buffers, "1");
 // the same memory the metadata cache would have used for them, scoped to the task lifetime.
 CONF_mBool(lake_compaction_hold_input_segments, "true");
 
+// Let a vertical compaction switch to direct object-storage reads (bypassing the data cache) when
+// the cache demonstrably cannot hold its working set. The decision is made after the second column
+// group: the first pass warms the cache, so remote bytes on the second pass mean the cache did not
+// retain the working set -- warm or adequate caches read ~zero remote bytes there and never
+// trigger the switch. Direct reads also merge each segment's column regions into few large reads
+// (see LakeIOOptions::coalesce_across_columns).
+CONF_mBool(enable_lake_compaction_data_cache_bypass, "true");
+// Remote bytes the second column-group pass must reach before the bypass engages.
+CONF_mInt64(lake_compaction_data_cache_bypass_threshold_mb, "32");
+
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");
 // Maximum number of log entries to keep in memory buffer (per CN/BE)

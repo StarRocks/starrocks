@@ -65,6 +65,11 @@ private:
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;
+    // Set after the second column-group pass when its remote-read volume shows the data cache is
+    // not retaining the working set; later passes then read object storage directly with
+    // cross-column IO coalescing. Never set on warm or adequate caches (their second pass reads
+    // ~zero remote bytes), so cache-served compactions keep the exact current behavior.
+    bool _bypass_data_cache = false;
 };
 
 } // namespace starrocks::lake

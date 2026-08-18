@@ -78,6 +78,11 @@ struct LakeIOOptions {
     // them all, which is CPU-bound and proportional to the column count.
     bool hold_segments = false;
     bool use_page_cache = false;
+    // Compaction direct-read mode: route every coalesce-enabled column of a segment through one
+    // shared SharedBufferedInputStream and register all their IO ranges in a single batch, so
+    // adjacent column regions merge into few large object-storage reads. Only meaningful together
+    // with skip_disk_cache; per-column read amplification is what it removes.
+    bool coalesce_across_columns = false;
     bool cache_file_only = false; // only used for CACHE SELECT
     // Callback to warmup SST files, invoked at most once per tablet during CACHE SELECT.
     // Protected by sst_warmup_done (CAS guard) to ensure single execution across segments.

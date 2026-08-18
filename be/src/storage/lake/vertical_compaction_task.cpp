@@ -122,6 +122,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             SCOPED_RAW_TIMER(&_context->stats->mask_io_ns);
             RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
+        const int64_t remote_bytes_before = _context->stats->io_bytes_read_remote;
         int64_t column_group_ns = 0;
         {
             SCOPED_RAW_TIMER(&column_group_ns);
@@ -132,6 +133,22 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             _context->stats->vertical_key_group_ns += column_group_ns;
         } else {
             _context->stats->vertical_value_group_ns += column_group_ns;
+        }
+        // Decide direct reads after the second pass: the first pass warms the data cache, so remote
+        // bytes on the second pass mean the cache did not retain the working set and every later
+        // pass would re-read it remotely through cache-block churn. Warm or adequate caches read
+        // ~zero remote bytes here and never switch.
+        if (i == 1 && !_bypass_data_cache && config::enable_lake_compaction_data_cache_bypass &&
+            column_group_size > 2) {
+            const int64_t pass_remote_mb =
+                    (_context->stats->io_bytes_read_remote - remote_bytes_before) / (1024 * 1024);
+            if (pass_remote_mb >= config::lake_compaction_data_cache_bypass_threshold_mb) {
+                _bypass_data_cache = true;
+                LOG(INFO) << "Vertical compaction switching to direct object-storage reads, tablet: "
+                          << _tablet.id() << ", txn: " << _txn_id
+                          << ", second-pass remote MB: " << pass_remote_mb
+                          << ", remaining column groups: " << (column_group_size - i - 1);
+            }
         }
     }
 
@@ -272,9 +289,15 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
-    reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
+    // In bypass mode the pass reads object storage directly: no cache fill (the cache demonstrably
+    // cannot retain the working set), no cache lookup, and all of a segment's column regions merged
+    // into few large reads instead of per-column cache-block churn.
+    reader_params.lake_io_opts = {.fill_data_cache = !_bypass_data_cache &&
+                                                     config::lake_enable_vertical_compaction_fill_data_cache,
+                                  .skip_disk_cache = _bypass_data_cache,
                                   .buffer_size = read_buffer_size(),
-                                  .hold_segments = config::lake_compaction_hold_input_segments};
+                                  .hold_segments = config::lake_compaction_hold_input_segments,
+                                  .coalesce_across_columns = _bypass_data_cache};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and
