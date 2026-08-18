@@ -382,7 +382,8 @@ public class StatisticExecutor {
             String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                     "cast(" + version + " as bigint), " +
                     "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
-                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnName +
+                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as " +
+                    StatisticUtils.quoting("_dict_merge_" + columnName) +
                     " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
             return executeStatisticDQLWithoutContext(sql);
         } else {
@@ -412,7 +413,8 @@ public class StatisticExecutor {
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + columnRef + ", " +
-                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnAlias +
+                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as " +
+                StatisticUtils.quoting("_dict_merge_" + columnAlias) +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         return executeStatisticDQLWithoutContext(sql);
