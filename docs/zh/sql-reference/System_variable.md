@@ -619,6 +619,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **默认值**：true
 * **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
+### enable_insert_select_external_auto_refresh
+
+* **描述**：INSERT INTO ... SELECT 或 INSERT OVERWRITE ... SELECT 语句从基于文件系统的 External Catalog 表读取数据时，是否在查询规划前自动触发对源表元数据缓存的刷新，以保证导入读取最新数据。刷新失败的表现取决于 Connector：会上报刷新失败的 Connector（例如 Hive、Hudi、Delta Lake）会使语句报错，且错误信息中会说明如何关闭刷新（例如元数据服务拒绝访问时）；部分 Connector 则只记录日志并忽略刷新失败。如果源表本身已不存在于元数据服务中，错误信息会直接说明该表已不存在，此时关闭刷新也无济于事。将该变量设置为 `false` 可跳过刷新，直接使用缓存的元数据进行规划（与普通 SELECT 行为一致）。注意：SUBMIT TASK 创建的任务在执行时不会继承提交会话的变量。如需为任务关闭刷新，请使用 `SET GLOBAL`，或在 SUBMIT 关键字后紧跟 `SET_VAR` Hint，例如 `SUBMIT /*+ SET_VAR(enable_insert_select_external_auto_refresh=false) */ TASK ...`。
+* **默认值**：true
+* **数据类型**：Boolean
+* **引入版本**：v3.5.8、v4.0.1、v4.1.0
+
 ### enable_insert_strict
 
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。

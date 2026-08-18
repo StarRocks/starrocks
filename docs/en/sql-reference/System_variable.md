@@ -732,6 +732,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: true
 * **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
 
+### enable_insert_select_external_auto_refresh
+
+* **Description**: Whether an INSERT INTO ... SELECT or INSERT OVERWRITE ... SELECT statement that reads from a filesystem-backed external catalog table automatically triggers a refresh of the source table's cached metadata before query planning, so that the load reads the freshest data. How a refresh failure surfaces depends on the connector: connectors that report refresh failures (for example, Hive, Hudi, and Delta Lake) fail the statement with an error that shows how to disable the refresh (for example, when the metastore denies access), while some connectors log and ignore refresh failures. If the source table itself no longer exists in the metastore, the error says so instead, and disabling the refresh does not help. Set this variable to `false` to skip the refresh and plan with the cached metadata, which matches the behavior of a plain SELECT. Note that task runs created by SUBMIT TASK do not inherit the submitting session's variables. To disable the refresh for a task, use `SET GLOBAL`, or place a `SET_VAR` hint immediately after the SUBMIT keyword, for example, `SUBMIT /*+ SET_VAR(enable_insert_select_external_auto_refresh=false) */ TASK ...`.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v3.5.8, v4.0.1, v4.1.0
+
 ### enable_insert_strict
 
 * **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.

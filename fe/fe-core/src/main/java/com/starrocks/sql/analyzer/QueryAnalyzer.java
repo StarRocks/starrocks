@@ -47,7 +47,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -109,7 +111,9 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2177,9 +2181,45 @@ public class QueryAnalyzer {
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
-            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            try {
+                metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            } catch (StarRocksConnectorException e) {
+                // Rethrow with the same type so the failure keeps its error classification; only the
+                // message changes. The connector's own message and root cause stay in the cause chain,
+                // which StmtExecutor unwinds into the client-facing error, so they are not repeated here.
+                String qualifiedName = catalogName + "." + dbName + "." + tableName.getTbl();
+                if (isDroppedTableRefreshFailure(e)) {
+                    // Say so instead of advising to plan from the stale cached object of a dropped table.
+                    throw new StarRocksConnectorException(
+                            "External table " + qualifiedName + " no longer exists in the metastore.", e);
+                }
+                throw new StarRocksConnectorException(String.format(
+                        "Auto refresh of external table %s before INSERT failed. To plan with the cached "
+                                + "metadata instead, run `SET %s = false` (task runs created by SUBMIT TASK do not "
+                                + "inherit session variables, so use SET GLOBAL or a SET_VAR hint right after SUBMIT).",
+                        qualifiedName, SessionVariable.ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH), e);
+            }
             Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
             return refreshedTable != null ? refreshedTable : resolvedTable;
+        }
+
+        /**
+         * The Hive and Delta Lake caching metastores react to the metastore reporting the table as gone
+         * (a NoSuchObjectException, which the reflective RPC client delivers as the target of an
+         * InvocationTargetException) by invalidating their cached table entry and rethrowing the RPC
+         * failure wrapped in one more StarRocksConnectorException. That rewrap is the signal recognized
+         * here. Later RPCs of the same refresh (partition names, statistics) can also surface a
+         * NoSuchObjectException, but without the rewrap and without invalidating the cache, so scanning
+         * the whole cause chain for the exception type would misreport a live table as dropped. A catalog
+         * with the metastore cache disabled has no entry to invalidate, so a drop there also arrives
+         * without the rewrap and gets the disable-the-refresh advice, which is still correct in that setup.
+         */
+        private static boolean isDroppedTableRefreshFailure(StarRocksConnectorException e) {
+            if (!(e.getCause() instanceof StarRocksConnectorException rpcFailure)) {
+                return false;
+            }
+            return rpcFailure.getCause() instanceof InvocationTargetException invocation
+                    && invocation.getTargetException() instanceof NoSuchObjectException;
         }
 
         @Override

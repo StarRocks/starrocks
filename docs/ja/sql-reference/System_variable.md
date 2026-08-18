@@ -613,6 +613,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト値**：true
 * **導入バージョン**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
+### enable_insert_select_external_auto_refresh
+
+* **説明**: INSERT INTO ... SELECT または INSERT OVERWRITE ... SELECT ステートメントがファイルシステムベースの External Catalog テーブルから読み取る際に、クエリプランニングの前にソーステーブルのメタデータキャッシュのリフレッシュを自動的にトリガーして最新データを読み取るかどうか。リフレッシュ失敗時の動作は Connector に依存します。リフレッシュ失敗を報告する Connector（例えば Hive、Hudi、Delta Lake）では、ステートメントはリフレッシュを無効にする方法を案内するエラーで失敗します（例えばメタストアがアクセスを拒否した場合）。一部の Connector はリフレッシュ失敗をログに記録して無視します。ソーステーブル自体がメタストアに存在しなくなっている場合は、エラーはその旨を報告し、リフレッシュを無効にしても解決しません。この変数を `false` に設定するとリフレッシュをスキップし、キャッシュされたメタデータでプランニングします（通常の SELECT と同じ動作）。なお、SUBMIT TASK で作成されたタスクの実行は、送信セッションの変数を継承しません。タスクでリフレッシュを無効にするには、`SET GLOBAL` を使用するか、SUBMIT キーワードの直後に `SET_VAR` ヒントを置いてください。例：`SUBMIT /*+ SET_VAR(enable_insert_select_external_auto_refresh=false) */ TASK ...`。
+* **デフォルト**: true
+* **データ型**: Boolean
+* **導入バージョン**: v3.5.8, v4.0.1, v4.1.0
+
 ### enable_insert_strict
 
 * **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
