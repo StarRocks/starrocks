@@ -1,0 +1,50 @@
+-- name: test_scan_predicate_reuse_subfield_prune
+-- Bug: PullUpScanPredicateRule mints a scan projection slot for every subfield node its
+-- SubfieldCollector walks, the intermediate ones included: for `s1.s2[1].a` it maps `s1.s2`,
+-- `s1.s2[1]` and `s1.s2[1].a`, while replaceScalarOperator only substitutes the outermost one into
+-- the predicate. The dead `s1.s2` slot holds the whole ARRAY<STRUCT<a, b>>, but the rule runs after
+-- PruneSubfieldRule has already fixed the scan's ColumnAccessPath to /s1/s2/INDEX/a, so the scan
+-- emits an array whose `b` field holds no rows. A MERGING-EXCHANGE then reads out of bounds:
+--   FixedLengthColumnBase<int>::append <- StructColumn::append <- ArrayColumn::append
+--   <- Chunk::append <- ChunkSliceTemplate::cutoff <- CascadeChunkMerger::get_next
+-- SIGSEGV, release builds included. Workaround: set enable_scan_predicate_expr_reuse = false.
+drop database if exists test_scan_predicate_reuse_subfield_prune;
+create database test_scan_predicate_reuse_subfield_prune;
+use test_scan_predicate_reuse_subfield_prune;
+
+create table scs3 (
+  v1 bigint null,
+  str string null,
+  s1 struct<s1 int, s2 array<struct<a int, b int>>, s3 map<int,int>, s4 struct<e int, f int>>
+) duplicate key(v1)
+distributed by hash(v1) buckets 3 properties("replication_num"="1");
+
+insert into scs3 values
+  (1, 'aa', row(1, [row(1,11), row(2,21)], map{1:101}, row(1,1))),
+  (2, '5',  row(2, [row(5,12), row(6,22)], map{1:102}, row(2,2))),
+  (3, '7',  row(3, [row(7,13), row(8,23)], map{1:103}, row(3,3))),
+  (4, '9',  row(4, [row(9,14), row(0,24)], map{1:104}, row(4,4)));
+
+-- the low-cardinality rewrite would put its own never-materialized dict slot first, which the
+-- deserializer's top-level row-count guard rejects before the merger ever sees the array
+set cbo_enable_low_cardinality_optimize = false;
+
+-- `s1.s2[1].a` in both the predicate and the output list; ORDER BY forces a MERGING-EXCHANGE
+select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1 limit 2;
+
+-- same shape, wider projection - this is the statement the fuzzer found
+select map_size(s1.s3), s1.s2[1].a, s1.s3[1], s1.s4.f from scs3
+where str in ('aa', (s1.s2[1].a), 'ii', 'cc') order by v1 limit 2;
+
+-- no LIMIT still goes through the merging exchange
+select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1;
+
+-- reading `b` as well must keep both fields in the access path
+select s1.s2[1].a, s1.s2[1].b from scs3 where str = s1.s2[1].a order by v1;
+
+-- nothing may project the bare `s1.s2` out of the scan: that slot needs all of /s1/s2, which the
+-- access path does not deliver
+function: assert_explain_verbose_contains('select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1 limit 2', 'ColumnAccessPath: [/s1/s2/INDEX/a]')
+function: assert_explain_not_contains('select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1 limit 2', '].s2[true]\n')
+
+drop database test_scan_predicate_reuse_subfield_prune;
