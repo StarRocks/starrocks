@@ -14,13 +14,16 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.base.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.Subquery;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,6 +35,7 @@ import java.util.Set;
 /**
  * Maps each target sort-key / partition column to the source column name to sample,
  * given a parsed {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}.
+ * Non-key target columns may be expressions over the source relation and are left unmapped.
  *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
@@ -114,28 +118,47 @@ final class InsertSelectSourceColumns {
         } else {
             List<String[]> outputs = new ArrayList<>(items.size());
             for (SelectListItem item : items) {
-                if (item.isStar() || !(item.getExpr() instanceof SlotRef slotRef)) {
+                if (item.isStar()) {
                     return null;
                 }
-                if (slotRef.getTblName() != null
-                        && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
-                    return null;
+                String outputName = item.getAlias();
+                String sourceName = null;
+                if (item.getExpr() instanceof SlotRef slotRef) {
+                    if (slotRef.getTblName() != null
+                            && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
+                        return null;
+                    }
+                    sourceName = sourceColumnMap.get(slotRef.getColName().toLowerCase());
+                    if (sourceName == null) {
+                        return null;
+                    }
+                    if (outputName == null) {
+                        outputName = slotRef.getColName();
+                    }
+                } else {
+                    if (byName && outputName == null) {
+                        // The target position of an expression is unknown for BY NAME without an alias.
+                        return null;
+                    }
+                    if (!referencesOnlySource(item.getExpr(), sourceColumnMap, normalizedSourceName, sourceAlias)) {
+                        return null;
+                    }
                 }
-                String sourceName = sourceColumnMap.get(slotRef.getColName().toLowerCase());
-                if (sourceName == null) {
-                    return null;
-                }
-                String outputName = item.getAlias() != null ? item.getAlias() : slotRef.getColName();
                 outputs.add(new String[] {outputName, sourceName});
             }
             if (byName) {
+                Set<String> outputNames = new HashSet<>();
                 for (String[] output : outputs) {
-                    if (targetToSource.put(output[0].toLowerCase(), output[1]) != null) {
+                    String targetName = output[0].toLowerCase();
+                    if (!outputNames.add(targetName)) {
                         return null;   // duplicate output name
+                    }
+                    if (output[1] != null) {
+                        targetToSource.put(targetName, output[1]);
                     }
                 }
                 // Exact-set match: output names must be exactly the target non-generated columns.
-                if (!targetToSource.keySet().equals(targetNames(targetCols))) {
+                if (!outputNames.equals(targetNames(targetCols))) {
                     return null;
                 }
             } else {
@@ -143,7 +166,10 @@ final class InsertSelectSourceColumns {
                     return null;
                 }
                 for (int i = 0; i < targetCols.size(); i++) {
-                    targetToSource.put(targetCols.get(i).getName().toLowerCase(), outputs.get(i)[1]);
+                    String sourceName = outputs.get(i)[1];
+                    if (sourceName != null) {
+                        targetToSource.put(targetCols.get(i).getName().toLowerCase(), sourceName);
+                    }
                 }
             }
         }
@@ -157,6 +183,51 @@ final class InsertSelectSourceColumns {
             return null;
         }
         return new InsertSelectSourceColumns(sortKeyNames, partitionNames);
+    }
+
+    /**
+     * Returns {@code true} when every reference inside a non-{@link SlotRef} projection resolves to
+     * the source relation the caller already resolved and authorized.
+     *
+     * <p>The hook runs pre-analysis, so nothing the analyzer would have rejected has been rejected
+     * yet when the reshard is submitted. Every SELECT item used to be a bare source column, which
+     * made that safe implicitly; now that expressions are admitted, the same invariant is enforced
+     * explicitly -- no subquery of any shape, and every slot names a visible source column with the
+     * source's own qualifier (or none). Otherwise a projection over an unauthorized table or an
+     * unknown column would reshard the target on behalf of a statement that never runs.
+     *
+     * <p>Function calls themselves stay allowed: the sampler never evaluates a non-key projection,
+     * it only projects the mapped source columns, so the expression's own semantics cannot skew the
+     * sampled row set.
+     */
+    private static boolean referencesOnlySource(
+            Expr expr, Map<String, String> sourceColumnMap,
+            TableName normalizedSourceName, String sourceAlias) {
+        List<Expr> rejected = new ArrayList<>();
+        expr.collectAll((Predicate<Expr>) e -> isForeignReference(
+                e, sourceColumnMap, normalizedSourceName, sourceAlias), rejected);
+        return rejected.isEmpty();
+    }
+
+    private static boolean isForeignReference(
+            Expr expr, Map<String, String> sourceColumnMap,
+            TableName normalizedSourceName, String sourceAlias) {
+        // Any subquery shape (scalar, IN-subquery, EXISTS holds its Subquery as a child) reads
+        // relations the hook never resolved or authorized.
+        if (expr instanceof Subquery) {
+            return true;
+        }
+        if (expr instanceof SlotRef slot) {
+            if (slot.getTblName() != null
+                    && !matchesSource(slot.getTblName(), normalizedSourceName, sourceAlias)) {
+                return true;
+            }
+            // A null column name (e.g. a struct-subfield slot) is not resolvable against the
+            // source schema here, so treat it as foreign rather than guessing.
+            return slot.getColName() == null
+                    || !sourceColumnMap.containsKey(slot.getColName().toLowerCase());
+        }
+        return false;
     }
 
     private static Set<String> targetNames(List<Column> targetCols) {
