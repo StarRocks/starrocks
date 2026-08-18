@@ -383,6 +383,15 @@ CONF_mBool(enable_full_sort_key_index, "true");
 // go-forward rollback with no data rewrite. Tablet split / range-split compaction are NOT gated by
 // this switch (they consume the full page by presence). Default true.
 CONF_mBool(enable_full_sort_key_index_read, "true");
+
+// Maximum size in bytes of one row's encoded full sort key. Mirrors primary_key_limit_size. A load,
+// Spark push, or schema change that would admit a row with a wider sort key fails with a
+// non-retryable error, which bounds the size of the full sort key index page and the memory it
+// occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a
+// failure there runs after commit and would put the tablet into an error state. The check applies
+// whenever the sort key can be encoded, independently of enable_full_sort_key_index, so that
+// admission and segment writing cannot disagree. A non-positive value disables it.
+CONF_mInt32(sort_key_limit_size, "1024");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // Vault config if using vault for TDE
 CONF_mString(vault_addr, "");

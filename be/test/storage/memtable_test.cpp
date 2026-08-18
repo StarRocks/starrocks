@@ -23,9 +23,11 @@
 #include <unordered_set>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/chunk_helper.h"
@@ -35,6 +37,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
+#include "storage/non_retryable_load_errors.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -508,6 +511,157 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(res.ok());
     ASSERT_FALSE(_mem_table->finalize().ok());
+}
+
+// The sort key size guard mirrors the primary key one above: it rejects a row whose encoded sort key
+// exceeds config::sort_key_limit_size, so that no admitted row can later produce an over-limit full
+// sort key index entry. DUP_KEYS exercises the _sort() branch of finalize().
+TEST_F(MemTableTest, testDupKeysSortKeySizeLimit) {
+    const string path = "./MemTableTest_testDupKeysSortKeySizeLimit";
+    MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::DUP_KEYS), "pk varchar,v1 int", path);
+
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    const size_t n = 16;
+    string wide(200, 's');
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+    for (size_t i = 0; i < n; i++) {
+        Datum v;
+        v.set_slice(wide);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+        v.set_int32(static_cast<int32_t>(i));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    // A single trailing VARCHAR encodes to 1 marker byte plus the value, unescaped.
+    const int32_t encoded_size = static_cast<int32_t>(wide.size()) + 1;
+
+    config::sort_key_limit_size = encoded_size - 1;
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    auto st = _mem_table->finalize();
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message())) << st.to_string();
+}
+
+TEST_F(MemTableTest, testDupKeysSortKeyExactlyAtLimitAccepted) {
+    const string path = "./MemTableTest_testDupKeysSortKeyExactlyAtLimitAccepted";
+    MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::DUP_KEYS), "pk varchar,v1 int", path);
+
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    const size_t n = 16;
+    string wide(200, 's');
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+    for (size_t i = 0; i < n; i++) {
+        Datum v;
+        v.set_slice(wide);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+        v.set_int32(static_cast<int32_t>(i));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    // Exactly at the limit is accepted; the guard rejects only what exceeds it.
+    config::sort_key_limit_size = static_cast<int32_t>(wide.size()) + 1;
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+}
+
+// A primary key table whose sort key is a separate value column exercises the aggregate branch of
+// finalize(), and shows the guard bounds the sort key rather than the primary key.
+TEST_F(MemTableTest, testPrimaryKeysSeparateSortKeySizeLimit) {
+    const string path = "./MemTableTest_testPrimaryKeysSeparateSortKeySizeLimit";
+    MySetUp(create_tablet_schema("pk bigint,v1 varchar", 1, KeysType::PRIMARY_KEYS, {1}),
+            "pk bigint,v1 varchar,__op tinyint", path);
+
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    const size_t n = 16;
+    string wide(200, 's');
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+    for (size_t i = 0; i < n; i++) {
+        Datum v;
+        v.set_int64(static_cast<int64_t>(i));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+        v.set_slice(wide);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+        v.set_int8(TOpType::UPSERT);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
+    }
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    config::sort_key_limit_size = 32;
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    auto st = _mem_table->finalize();
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message())) << st.to_string();
+
+    // A non-positive limit disables the guard entirely.
+    config::sort_key_limit_size = -1;
+    MySetUp(create_tablet_schema("pk bigint,v1 varchar", 1, KeysType::PRIMARY_KEYS, {1}),
+            "pk bigint,v1 varchar,__op tinyint", path);
+    ASSERT_TRUE(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+}
+
+// The extra sort key ordering is what bounds the ordering a column-mode upsert will be materialised
+// under after commit. It is order-sensitive: a non-final variable-length column escapes its embedded
+// NULs and gains a terminator, while the final one does neither. Here the schema's own sort key and
+// the forward extra ordering both sit at or under the limit, and only the reversed one exceeds it --
+// so this fails if the extra ordering is not actually checked, or is checked in the wrong order.
+TEST_F(MemTableTest, testExtraSortKeyOrderingIsChecked) {
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+
+    // c0 = "x", c1 = 59 NUL bytes. [c0,c1] encodes to 64 bytes, [c1,c0] to 123.
+    string c0("x");
+    string c1(59, '\0');
+    const int32_t limit = 64;
+
+    auto build = [&](const string& path, const std::vector<ColumnId>& extra) {
+        MySetUp(create_tablet_schema("pk varchar,v1 varchar", 1, KeysType::DUP_KEYS), "pk varchar,v1 varchar", path);
+        config::sort_key_limit_size = limit;
+        _mem_table->set_extra_sort_key_idxes(extra);
+        const size_t n = 8;
+        shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
+        for (size_t i = 0; i < n; i++) {
+            Datum v;
+            v.set_slice(c0);
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
+            v.set_slice(c1);
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
+        }
+        // A non-trivial selection, so the check runs over exactly the admitted rows.
+        vector<uint32_t> indexes = {5, 1, 6};
+        CHECK(_mem_table->insert(*chunk, indexes.data(), 0, indexes.size()).ok());
+        return _mem_table->finalize();
+    };
+
+    // The schema's own sort key is column 0 alone: 1 marker + 1 byte, far under the limit.
+    // Forward extra ordering [c0,c1] is exactly at the limit, so it is accepted.
+    ASSERT_TRUE(build("./MemTableTest_testExtraSortKeyForward", {0, 1}).ok());
+
+    // Reversed extra ordering [c1,c0] is 123 bytes and must be rejected, even though the schema's own
+    // sort key still passes.
+    auto st = build("./MemTableTest_testExtraSortKeyReversed", {1, 0});
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message())) << st.to_string();
 }
 
 TEST_F(MemTableTest, test_metrics) {
