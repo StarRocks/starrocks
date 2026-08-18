@@ -226,14 +226,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
+          # Always mark sr-synced: it is the provenance the branch-mode reverse sync
+          # reuses. A cherry-pick conflict is resolved on the StarRocks PR side, so it
+          # must NOT withhold the marker — withholding it would wrongly block this fix's
+          # CD backports from reverse-syncing. On conflict, ALSO tag cd-sync-conflict for
+          # visibility (the SR PR still needs manual conflict resolution).
+          LABEL_ARGS=(-f "labels[]=sr-synced")
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' ]]; then
-            MARK="cd-sync-conflict"
-          else
-            MARK="sr-synced"
+            LABEL_ARGS+=(-f "labels[]=cd-sync-conflict")
           fi
           gh api -X POST \
             "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
-            -f "labels[]=${MARK}" || echo "::warning::failed to add ${MARK} to ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
+            "${LABEL_ARGS[@]}" || echo "::warning::failed to label ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
           PR_URL="${{ steps.create_pr.outputs.pr_url }}"
           if [[ -n "${PR_URL}" ]]; then
             gh api -X POST \
@@ -417,14 +421,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
+          # Always mark sr-synced: it is the provenance the branch-mode reverse sync
+          # reuses. A cherry-pick conflict is resolved on the StarRocks PR side, so it
+          # must NOT withhold the marker — withholding it would wrongly block this fix's
+          # CD backports from reverse-syncing. On conflict, ALSO tag cd-sync-conflict for
+          # visibility (the SR PR still needs manual conflict resolution).
+          LABEL_ARGS=(-f "labels[]=sr-synced")
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' ]]; then
-            MARK="cd-sync-conflict"
-          else
-            MARK="sr-synced"
+            LABEL_ARGS+=(-f "labels[]=cd-sync-conflict")
           fi
           gh api -X POST \
             "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
-            -f "labels[]=${MARK}" || echo "::warning::failed to add ${MARK} to ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
+            "${LABEL_ARGS[@]}" || echo "::warning::failed to label ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
           PR_URL="${{ steps.create_pr.outputs.pr_url }}"
           if [[ -n "${PR_URL}" ]]; then
             gh api -X POST \
