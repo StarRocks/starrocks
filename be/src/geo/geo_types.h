@@ -221,6 +221,45 @@ public:
 
 // Compute the axis-aligned bounding box of any GeoShape.
 // Returns false if the shape is null or has no vertices.
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y);
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
+                      double* max_x, double* max_y);
+
+// ---------------------------------------------------------------------------
+// S2-dependent helpers — implemented in geo_types.cpp, usable without
+// including any S2 header (all parameters / return values are primitives).
+// ---------------------------------------------------------------------------
+
+// Arc length of a LINESTRING in metres.  Returns 0 for non-line shapes.
+double geo_line_length_meters(const GeoShape* shape);
+
+// Area of a POLYGON in square metres.  Returns 0 for non-polygon shapes.
+double geo_polygon_area_sq_meters(const GeoShape* shape);
+
+// Perimeter of a POLYGON (sum over all loops) in metres.  Returns 0 for
+// non-polygon shapes.
+double geo_polygon_perimeter_meters(const GeoShape* shape);
+
+// Compute the centroid of any shape.  For a POINT returns the point itself.
+// For a LINESTRING returns the midpoint at half arc-length.
+// For a POLYGON returns the S2-weighted area centroid.
+// Returns false if the shape is null or has no vertices.
+bool geo_shape_centroid(const GeoShape* shape, double* x, double* y);
+
+// Number of vertices in a LINESTRING (0 for other types).
+int geo_line_vertex_count(const GeoShape* shape);
+
+// Coordinates of the i-th vertex of a LINESTRING as degrees.
+// Returns false if shape is not a LINESTRING or i is out of range.
+bool geo_line_vertex_at(const GeoShape* shape, int i, double* x, double* y);
+
+// Number of loops in a POLYGON (0 for other types).
+int geo_polygon_loop_count(const GeoShape* shape);
+
+// Number of vertices in the loop_idx-th loop of a POLYGON.
+int geo_polygon_loop_vertex_count(const GeoShape* shape, int loop_idx);
+
+// Coordinates of the j-th vertex of the loop_idx-th loop of a POLYGON.
+bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j,
+                                 double* x, double* y);
 
 } // namespace starrocks

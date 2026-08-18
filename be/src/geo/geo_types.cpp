@@ -563,7 +563,8 @@ bool GeoMultiPolygon::contains(const GeoShape* rhs) {
 }
 #endif
 
-bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, double* max_x, double* max_y) {
+bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y,
+                      double* max_x, double* max_y) {
     if (shape == nullptr) return false;
 
     auto update = [&](const S2Point& pt) {
@@ -611,6 +612,103 @@ bool geo_bounding_box(const GeoShape* shape, double* min_x, double* min_y, doubl
     }
 
     return *min_x <= *max_x;
+}
+
+// ---------------------------------------------------------------------------
+// S2-dependent helper implementations
+// ---------------------------------------------------------------------------
+
+static constexpr double kGeoEarthRadiusM = 6371008.8;
+
+double geo_line_length_meters(const GeoShape* shape) {
+    if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) return 0.0;
+    return static_cast<const GeoLine*>(shape)->polyline()->GetLength().radians() *
+           kGeoEarthRadiusM;
+}
+
+double geo_polygon_area_sq_meters(const GeoShape* shape) {
+    if (!shape || shape->type() != GEO_SHAPE_POLYGON) return 0.0;
+    return static_cast<const GeoPolygon*>(shape)->polygon()->GetArea() *
+           kGeoEarthRadiusM * kGeoEarthRadiusM;
+}
+
+double geo_polygon_perimeter_meters(const GeoShape* shape) {
+    if (!shape || shape->type() != GEO_SHAPE_POLYGON) return 0.0;
+    const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
+    double perim = 0.0;
+    for (int i = 0; i < poly->num_loops(); ++i) {
+        const S2Loop* loop = poly->loop(i);
+        int n = loop->num_vertices();
+        for (int j = 0; j < n; ++j) {
+            S2LatLng a(loop->vertex(j));
+            S2LatLng b(loop->vertex((j + 1) % n));
+            perim += a.GetDistance(b).radians() * kGeoEarthRadiusM;
+        }
+    }
+    return perim;
+}
+
+bool geo_shape_centroid(const GeoShape* shape, double* x, double* y) {
+    if (!shape) return false;
+    S2Point centroid;
+    switch (shape->type()) {
+    case GEO_SHAPE_POINT:
+        *x = static_cast<const GeoPoint*>(shape)->x();
+        *y = static_cast<const GeoPoint*>(shape)->y();
+        return true;
+    case GEO_SHAPE_LINE_STRING:
+        centroid = static_cast<const GeoLine*>(shape)->polyline()->Interpolate(0.5);
+        break;
+    case GEO_SHAPE_POLYGON:
+        centroid = static_cast<const GeoPolygon*>(shape)->polygon()->GetCentroid();
+        break;
+    default:
+        return false;
+    }
+    S2LatLng ll(centroid);
+    *x = ll.lng().degrees();
+    *y = ll.lat().degrees();
+    return true;
+}
+
+int geo_line_vertex_count(const GeoShape* shape) {
+    if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) return 0;
+    return static_cast<const GeoLine*>(shape)->polyline()->num_vertices();
+}
+
+bool geo_line_vertex_at(const GeoShape* shape, int i, double* x, double* y) {
+    if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) return false;
+    const S2Polyline* pl = static_cast<const GeoLine*>(shape)->polyline();
+    if (i < 0 || i >= pl->num_vertices()) return false;
+    S2LatLng ll(pl->vertex(i));
+    *x = ll.lng().degrees();
+    *y = ll.lat().degrees();
+    return true;
+}
+
+int geo_polygon_loop_count(const GeoShape* shape) {
+    if (!shape || shape->type() != GEO_SHAPE_POLYGON) return 0;
+    return static_cast<const GeoPolygon*>(shape)->polygon()->num_loops();
+}
+
+int geo_polygon_loop_vertex_count(const GeoShape* shape, int loop_idx) {
+    if (!shape || shape->type() != GEO_SHAPE_POLYGON) return 0;
+    const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
+    if (loop_idx < 0 || loop_idx >= poly->num_loops()) return 0;
+    return poly->loop(loop_idx)->num_vertices();
+}
+
+bool geo_polygon_loop_vertex_at(const GeoShape* shape, int loop_idx, int j,
+                                 double* x, double* y) {
+    if (!shape || shape->type() != GEO_SHAPE_POLYGON) return false;
+    const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
+    if (loop_idx < 0 || loop_idx >= poly->num_loops()) return false;
+    const S2Loop* loop = poly->loop(loop_idx);
+    if (j < 0 || j >= loop->num_vertices()) return false;
+    S2LatLng ll(loop->vertex(j));
+    *x = ll.lng().degrees();
+    *y = ll.lat().degrees();
+    return true;
 }
 
 } // namespace starrocks

@@ -12,15 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// S2 geometry headers must be included first to avoid int64 typedef
-// conflicts with gutil/strings/fastmem.h (pulled in by function_helper.h).
 #include "exprs/geometry_functions.h"
-
-#include <s2/s2earth.h>
-#include <s2/s2latlng.h>
-#include <s2/s2loop.h>
-#include <s2/s2polygon.h>
-#include <s2/s2polyline.h>
 
 #include <cmath>
 #include <iomanip>
@@ -334,7 +326,6 @@ StatusOr<ColumnPtr> GeometryFunctions::st_within(FunctionContext* ctx, const Col
 // Shared helpers
 // ============================================================================
 
-static constexpr double kEarthRadiusMeters = 6371008.8; // S2Earth::RadiusMeters()
 
 // Decode geometry from a GEOMETRY column row; returns nullptr on null/invalid.
 static std::unique_ptr<GeoShape> decode_geom(const ColumnViewer<TYPE_GEOMETRY>& viewer, int row) {
@@ -350,11 +341,11 @@ static int count_points(const GeoShape* shape) {
     case GEO_SHAPE_POINT:
         return 1;
     case GEO_SHAPE_LINE_STRING:
-        return static_cast<const GeoLine*>(shape)->polyline()->num_vertices();
+        return geo_line_vertex_count(shape);
     case GEO_SHAPE_POLYGON: {
-        const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
         int n = 0;
-        for (int i = 0; i < poly->num_loops(); ++i) n += poly->loop(i)->num_vertices();
+        int nl = geo_polygon_loop_count(shape);
+        for (int i = 0; i < nl; ++i) n += geo_polygon_loop_vertex_count(shape, i);
         return n;
     }
     default:
@@ -380,10 +371,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_x_geom(FunctionContext* ctx, const Col
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_POINT) {
-            result.append_null();
-            continue;
-        }
+        if (!shape || shape->type() != GEO_SHAPE_POINT) { result.append_null(); continue; }
         result.append(static_cast<const GeoPoint*>(shape.get())->x());
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -396,10 +384,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_y_geom(FunctionContext* ctx, const Col
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_POINT) {
-            result.append_null();
-            continue;
-        }
+        if (!shape || shape->type() != GEO_SHAPE_POINT) { result.append_null(); continue; }
         result.append(static_cast<const GeoPoint*>(shape.get())->y());
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -412,27 +397,14 @@ StatusOr<ColumnPtr> GeometryFunctions::st_geometry_type(FunctionContext* ctx, co
     ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         const char* name = nullptr;
         switch (shape->type()) {
-        case GEO_SHAPE_POINT:
-            name = "ST_Point";
-            break;
-        case GEO_SHAPE_LINE_STRING:
-            name = "ST_LineString";
-            break;
-        case GEO_SHAPE_POLYGON:
-            name = "ST_Polygon";
-            break;
-        case GEO_SHAPE_CIRCLE:
-            name = "ST_CircularString";
-            break;
-        default:
-            name = "ST_Unknown";
-            break;
+        case GEO_SHAPE_POINT:       name = "ST_Point";       break;
+        case GEO_SHAPE_LINE_STRING: name = "ST_LineString";  break;
+        case GEO_SHAPE_POLYGON:     name = "ST_Polygon";     break;
+        case GEO_SHAPE_CIRCLE:      name = "ST_CircularString"; break;
+        default:                    name = "ST_Unknown";     break;
         }
         result.append(Slice(name));
     }
@@ -445,10 +417,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_srid(FunctionContext* ctx, const Colum
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (viewer.is_null(row)) { result.append_null(); continue; }
         result.append(4326);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -461,10 +430,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_is_valid(FunctionContext* ctx, const C
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         bool valid = true;
         switch (shape->type()) {
         case GEO_SHAPE_POLYGON:
@@ -487,10 +453,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_is_empty(FunctionContext* ctx, const C
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
-        if (viewer.is_null(row)) {
-            result.append(true);
-            continue;
-        }
+        if (viewer.is_null(row)) { result.append(true); continue; }
         auto v = viewer.value(row);
         std::unique_ptr<GeoShape> shape(GeoShape::from_encoded(v.data, v.size));
         result.append(shape == nullptr);
@@ -504,10 +467,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_ndims(FunctionContext* ctx, const Colu
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (viewer.is_null(row)) { result.append_null(); continue; }
         result.append(2);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -520,10 +480,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_npoints(FunctionContext* ctx, const Co
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         result.append(count_points(shape.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -535,10 +492,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_num_geometries(FunctionContext* ctx, c
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (viewer.is_null(row)) { result.append_null(); continue; }
         result.append(1);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -581,12 +535,8 @@ StatusOr<ColumnPtr> GeometryFunctions::st_length(FunctionContext* ctx, const Col
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) {
-            result.append_null();
-            continue;
-        }
-        const S2Polyline* poly = static_cast<const GeoLine*>(shape.get())->polyline();
-        result.append(poly->GetLength().radians() * kEarthRadiusMeters);
+        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) { result.append_null(); continue; }
+        result.append(geo_line_length_meters(shape.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
@@ -598,12 +548,8 @@ StatusOr<ColumnPtr> GeometryFunctions::st_area(FunctionContext* ctx, const Colum
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_POLYGON) {
-            result.append(0.0);
-            continue;
-        }
-        const S2Polygon* poly = static_cast<const GeoPolygon*>(shape.get())->polygon();
-        result.append(poly->GetArea() * kEarthRadiusMeters * kEarthRadiusMeters);
+        if (!shape || shape->type() != GEO_SHAPE_POLYGON) { result.append(0.0); continue; }
+        result.append(geo_polygon_area_sq_meters(shape.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
@@ -615,22 +561,8 @@ StatusOr<ColumnPtr> GeometryFunctions::st_perimeter(FunctionContext* ctx, const 
     ColumnBuilder<TYPE_DOUBLE> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_POLYGON) {
-            result.append(0.0);
-            continue;
-        }
-        const S2Polygon* poly = static_cast<const GeoPolygon*>(shape.get())->polygon();
-        double perim = 0.0;
-        // Sum lengths of all loops (outer ring + holes)
-        for (int i = 0; i < poly->num_loops(); ++i) {
-            const S2Loop* loop = poly->loop(i);
-            for (int j = 0; j < loop->num_vertices(); ++j) {
-                S2LatLng a(loop->vertex(j));
-                S2LatLng b(loop->vertex((j + 1) % loop->num_vertices()));
-                perim += a.GetDistance(b).radians() * kEarthRadiusMeters;
-            }
-        }
-        result.append(perim);
+        if (!shape || shape->type() != GEO_SHAPE_POLYGON) { result.append(0.0); continue; }
+        result.append(geo_polygon_perimeter_meters(shape.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
@@ -641,7 +573,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_perimeter(FunctionContext* ctx, const 
 
 // Shared helper: decode two geometry values; returns false if either is null/invalid.
 static bool decode_two(const ColumnViewer<TYPE_GEOMETRY>& av, const ColumnViewer<TYPE_GEOMETRY>& bv, int row,
-                       std::unique_ptr<GeoShape>& a, std::unique_ptr<GeoShape>& b) {
+                        std::unique_ptr<GeoShape>& a, std::unique_ptr<GeoShape>& b) {
     a = decode_geom(av, row);
     b = decode_geom(bv, row);
     return a && b;
@@ -651,7 +583,8 @@ static bool decode_two(const ColumnViewer<TYPE_GEOMETRY>& av, const ColumnViewer
 static bool shapes_intersect(const GeoShape* a, const GeoShape* b) {
     // Polygon × Polygon — use S2Polygon::Intersects (includes shared boundary)
     if (a->type() == GEO_SHAPE_POLYGON && b->type() == GEO_SHAPE_POLYGON) {
-        return static_cast<const GeoPolygon*>(a)->polygon()->Intersects(*static_cast<const GeoPolygon*>(b)->polygon());
+        return static_cast<const GeoPolygon*>(a)->polygon()->Intersects(
+                *static_cast<const GeoPolygon*>(b)->polygon());
     }
     // Polygon × Point — Contains covers interior + boundary
     if (a->type() == GEO_SHAPE_POLYGON) return a->contains(b);
@@ -676,10 +609,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_intersects(FunctionContext* ctx, const
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         result.append(shapes_intersect(a.get(), b.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -692,10 +622,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_disjoint(FunctionContext* ctx, const C
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         result.append(!shapes_intersect(a.get(), b.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -707,19 +634,13 @@ StatusOr<ColumnPtr> GeometryFunctions::st_equals(FunctionContext* ctx, const Col
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
-        if (av.is_null(row) || bv.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (av.is_null(row) || bv.is_null(row)) { result.append_null(); continue; }
         auto va = av.value(row);
         auto vb = bv.value(row);
         // Re-decode and re-encode both to get canonical form, then compare
         std::unique_ptr<GeoShape> a(GeoShape::from_encoded(va.data, va.size));
         std::unique_ptr<GeoShape> b(GeoShape::from_encoded(vb.data, vb.size));
-        if (!a || !b) {
-            result.append_null();
-            continue;
-        }
+        if (!a || !b) { result.append_null(); continue; }
         std::string ea, eb;
         a->encode_to(&ea);
         b->encode_to(&eb);
@@ -735,10 +656,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_covers(FunctionContext* ctx, const Col
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         result.append(a->contains(b.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -751,10 +669,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_covered_by(FunctionContext* ctx, const
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         result.append(b->contains(a.get()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -769,10 +684,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_touches(FunctionContext* ctx, const Co
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         bool intersects = shapes_intersect(a.get(), b.get());
         bool touches = intersects && !a->contains(b.get()) && !b->contains(a.get());
         result.append(touches);
@@ -791,31 +703,26 @@ StatusOr<ColumnPtr> GeometryFunctions::st_envelope(FunctionContext* ctx, const C
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         // For a point, envelope is the point itself
         if (shape->type() == GEO_SHAPE_POINT) {
             result.append(Slice(viewer.value(row).data, viewer.value(row).size));
             continue;
         }
         double x0, y0, x1, y1;
-        if (!geo_bounding_box(shape.get(), &x0, &y0, &x1, &y1)) {
-            result.append_null();
-            continue;
-        }
+        if (!geo_bounding_box(shape.get(), &x0, &y0, &x1, &y1)) { result.append_null(); continue; }
         // Build WKT polygon for MBR and parse it back to GEOMETRY
         std::ostringstream wkt;
-        wkt << std::setprecision(12) << "POLYGON ((" << x0 << " " << y0 << ", " << x1 << " " << y0 << ", " << x1 << " "
-            << y1 << ", " << x0 << " " << y1 << ", " << x0 << " " << y0 << "))";
+        wkt << std::setprecision(12)
+            << "POLYGON ((" << x0 << " " << y0 << ", "
+                            << x1 << " " << y0 << ", "
+                            << x1 << " " << y1 << ", "
+                            << x0 << " " << y1 << ", "
+                            << x0 << " " << y0 << "))";
         std::string s = wkt.str();
         GeoParseStatus st;
         std::unique_ptr<GeoShape> env(GeoShape::from_wkt(s.data(), s.size(), &st));
-        if (!env) {
-            result.append_null();
-            continue;
-        }
+        if (!env) { result.append_null(); continue; }
         std::string buf;
         env->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -830,34 +737,11 @@ StatusOr<ColumnPtr> GeometryFunctions::st_centroid(FunctionContext* ctx, const C
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
-        S2Point centroid_s2;
-        switch (shape->type()) {
-        case GEO_SHAPE_POINT:
-            centroid_s2 = *static_cast<const GeoPoint*>(shape.get())->point();
-            break;
-        case GEO_SHAPE_LINE_STRING: {
-            // Midpoint at half-length
-            const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
-            centroid_s2 = pl->Interpolate(0.5);
-            break;
-        }
-        case GEO_SHAPE_POLYGON:
-            centroid_s2 = static_cast<const GeoPolygon*>(shape.get())->polygon()->GetCentroid();
-            break;
-        default:
-            result.append_null();
-            continue;
-        }
-        S2LatLng ll(centroid_s2);
+        if (!shape) { result.append_null(); continue; }
+        double cx = 0, cy = 0;
+        if (!geo_shape_centroid(shape.get(), &cx, &cy)) { result.append_null(); continue; }
         GeoPoint pt;
-        if (pt.from_coord(ll.lng().degrees(), ll.lat().degrees()) != GEO_PARSE_OK) {
-            result.append_null();
-            continue;
-        }
+        if (pt.from_coord(cx, cy) != GEO_PARSE_OK) { result.append_null(); continue; }
         std::string buf;
         pt.encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -880,15 +764,13 @@ StatusOr<ColumnPtr> GeometryFunctions::st_make_line(FunctionContext* ctx, const 
         const auto* pa = static_cast<const GeoPoint*>(a.get());
         const auto* pb = static_cast<const GeoPoint*>(b.get());
         std::ostringstream wkt;
-        wkt << std::setprecision(12) << "LINESTRING (" << pa->x() << " " << pa->y() << ", " << pb->x() << " " << pb->y()
-            << ")";
+        wkt << std::setprecision(12)
+            << "LINESTRING (" << pa->x() << " " << pa->y() << ", "
+                              << pb->x() << " " << pb->y() << ")";
         std::string s = wkt.str();
         GeoParseStatus st;
         std::unique_ptr<GeoShape> line(GeoShape::from_wkt(s.data(), s.size(), &st));
-        if (!line) {
-            result.append_null();
-            continue;
-        }
+        if (!line) { result.append_null(); continue; }
         std::string buf;
         line->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -916,10 +798,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_as_geojson(FunctionContext* ctx, const
     ColumnBuilder<TYPE_VARCHAR> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         std::ostringstream os;
         os << std::setprecision(10);
         switch (shape->type()) {
@@ -931,32 +810,35 @@ StatusOr<ColumnPtr> GeometryFunctions::st_as_geojson(FunctionContext* ctx, const
             break;
         }
         case GEO_SHAPE_LINE_STRING: {
-            const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
+            int nv = geo_line_vertex_count(shape.get());
             os << R"({"type":"LineString","coordinates":[)";
-            for (int i = 0; i < pl->num_vertices(); ++i) {
+            for (int i = 0; i < nv; ++i) {
                 if (i) os << ",";
-                S2LatLng ll(pl->vertex(i));
-                geojson_coords(os, ll.lng().degrees(), ll.lat().degrees());
+                double vx, vy;
+                geo_line_vertex_at(shape.get(), i, &vx, &vy);
+                geojson_coords(os, vx, vy);
             }
             os << "]}";
             break;
         }
         case GEO_SHAPE_POLYGON: {
-            const S2Polygon* poly = static_cast<const GeoPolygon*>(shape.get())->polygon();
+            int nl = geo_polygon_loop_count(shape.get());
             os << R"({"type":"Polygon","coordinates":[)";
-            for (int i = 0; i < poly->num_loops(); ++i) {
+            for (int i = 0; i < nl; ++i) {
                 if (i) os << ",";
-                const S2Loop* loop = poly->loop(i);
+                int nv = geo_polygon_loop_vertex_count(shape.get(), i);
                 os << "[";
-                for (int j = 0; j < loop->num_vertices(); ++j) {
+                for (int j = 0; j < nv; ++j) {
                     if (j) os << ",";
-                    S2LatLng ll(loop->vertex(j));
-                    geojson_coords(os, ll.lng().degrees(), ll.lat().degrees());
+                    double vx, vy;
+                    geo_polygon_loop_vertex_at(shape.get(), i, j, &vx, &vy);
+                    geojson_coords(os, vx, vy);
                 }
                 // Close ring
-                S2LatLng ll0(loop->vertex(0));
+                double x0, y0;
+                geo_polygon_loop_vertex_at(shape.get(), i, 0, &x0, &y0);
                 os << ",";
-                geojson_coords(os, ll0.lng().degrees(), ll0.lat().degrees());
+                geojson_coords(os, x0, y0);
                 os << "]";
             }
             os << "]}";
@@ -983,32 +865,22 @@ StatusOr<ColumnPtr> GeometryFunctions::st_dimension(FunctionContext* ctx, const 
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         int dim = 0;
         switch (shape->type()) {
-        case GEO_SHAPE_LINE_STRING:
-            dim = 1;
-            break;
-        case GEO_SHAPE_POLYGON:
-            dim = 2;
-            break;
-        default:
-            dim = 0;
-            break;
+        case GEO_SHAPE_LINE_STRING: dim = 1; break;
+        case GEO_SHAPE_POLYGON:     dim = 2; break;
+        default:                    dim = 0; break;
         }
         result.append(dim);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-// Helper: encode a single S2Point as a GeoPoint GEOMETRY value.
-static std::string encode_s2point(const S2Point& pt) {
-    S2LatLng ll(pt);
+// Helper: encode (x,y) degrees as a GeoPoint GEOMETRY value.
+static std::string encode_xy_as_point(double x, double y) {
     GeoPoint gp;
-    gp.from_coord(ll.lng().degrees(), ll.lat().degrees());
+    gp.from_coord(x, y);
     std::string buf;
     gp.encode_to(&buf);
     return buf;
@@ -1021,16 +893,10 @@ StatusOr<ColumnPtr> GeometryFunctions::st_start_point(FunctionContext* ctx, cons
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) {
-            result.append_null();
-            continue;
-        }
-        const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
-        if (pl->num_vertices() == 0) {
-            result.append_null();
-            continue;
-        }
-        std::string buf = encode_s2point(pl->vertex(0));
+        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) { result.append_null(); continue; }
+        double x, y;
+        if (!geo_line_vertex_at(shape.get(), 0, &x, &y)) { result.append_null(); continue; }
+        std::string buf = encode_xy_as_point(x, y);
         result.append(Slice(buf.data(), buf.size()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1043,17 +909,12 @@ StatusOr<ColumnPtr> GeometryFunctions::st_end_point(FunctionContext* ctx, const 
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) {
-            result.append_null();
-            continue;
-        }
-        const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
-        int n = pl->num_vertices();
-        if (n == 0) {
-            result.append_null();
-            continue;
-        }
-        std::string buf = encode_s2point(pl->vertex(n - 1));
+        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) { result.append_null(); continue; }
+        int n = geo_line_vertex_count(shape.get());
+        if (n == 0) { result.append_null(); continue; }
+        double x, y;
+        if (!geo_line_vertex_at(shape.get(), n - 1, &x, &y)) { result.append_null(); continue; }
+        std::string buf = encode_xy_as_point(x, y);
         result.append(Slice(buf.data(), buf.size()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1062,22 +923,18 @@ StatusOr<ColumnPtr> GeometryFunctions::st_end_point(FunctionContext* ctx, const 
 // ST_PointN(GEOMETRY, INT) → GEOMETRY  — 1-based index
 StatusOr<ColumnPtr> GeometryFunctions::st_point_n(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_GEOMETRY> geom_viewer(columns[0]);
-    ColumnViewer<TYPE_INT> idx_viewer(columns[1]);
+    ColumnViewer<TYPE_INT>      idx_viewer(columns[1]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(geom_viewer, row);
         if (!shape || shape->type() != GEO_SHAPE_LINE_STRING || idx_viewer.is_null(row)) {
-            result.append_null();
-            continue;
+            result.append_null(); continue;
         }
-        const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
         int idx = idx_viewer.value(row) - 1; // convert 1-based to 0-based
-        if (idx < 0 || idx >= pl->num_vertices()) {
-            result.append_null();
-            continue;
-        }
-        std::string buf = encode_s2point(pl->vertex(idx));
+        double x, y;
+        if (!geo_line_vertex_at(shape.get(), idx, &x, &y)) { result.append_null(); continue; }
+        std::string buf = encode_xy_as_point(x, y);
         result.append(Slice(buf.data(), buf.size()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1090,25 +947,15 @@ StatusOr<ColumnPtr> GeometryFunctions::st_is_closed(FunctionContext* ctx, const 
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
-        if (shape->type() == GEO_SHAPE_POLYGON) {
-            result.append(true);
-            continue;
-        }
-        if (shape->type() != GEO_SHAPE_LINE_STRING) {
-            result.append_null();
-            continue;
-        }
-        const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
-        int n = pl->num_vertices();
-        if (n < 2) {
-            result.append(n == 0);
-            continue;
-        }
-        result.append(pl->vertex(0) == pl->vertex(n - 1));
+        if (!shape) { result.append_null(); continue; }
+        if (shape->type() == GEO_SHAPE_POLYGON) { result.append(true); continue; }
+        if (shape->type() != GEO_SHAPE_LINE_STRING) { result.append_null(); continue; }
+        int n = geo_line_vertex_count(shape.get());
+        if (n < 2) { result.append(n == 0); continue; }
+        double x0, y0, xn, yn;
+        geo_line_vertex_at(shape.get(), 0, &x0, &y0);
+        geo_line_vertex_at(shape.get(), n - 1, &xn, &yn);
+        result.append(x0 == xn && y0 == yn);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
@@ -1120,14 +967,13 @@ StatusOr<ColumnPtr> GeometryFunctions::st_is_ring(FunctionContext* ctx, const Co
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) {
-            result.append_null();
-            continue;
-        }
-        const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
-        int n = pl->num_vertices();
-        bool closed = (n >= 2) && (pl->vertex(0) == pl->vertex(n - 1));
-        bool simple = pl->IsValid(); // S2 validates no self-intersections
+        if (!shape || shape->type() != GEO_SHAPE_LINE_STRING) { result.append_null(); continue; }
+        int n = geo_line_vertex_count(shape.get());
+        double x0, y0, xn, yn;
+        geo_line_vertex_at(shape.get(), 0, &x0, &y0);
+        geo_line_vertex_at(shape.get(), n - 1, &xn, &yn);
+        bool closed = (n >= 2) && (x0 == xn && y0 == yn);
+        bool simple = static_cast<const GeoLine*>(shape.get())->polyline()->IsValid();
         result.append(closed && simple);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1140,10 +986,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_is_simple(FunctionContext* ctx, const 
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         bool simple = true;
         switch (shape->type()) {
         case GEO_SHAPE_LINE_STRING:
@@ -1152,8 +995,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_is_simple(FunctionContext* ctx, const 
         case GEO_SHAPE_POLYGON:
             simple = static_cast<const GeoPolygon*>(shape.get())->polygon()->IsValid();
             break;
-        default:
-            break;
+        default: break;
         }
         result.append(simple);
     }
@@ -1167,13 +1009,8 @@ StatusOr<ColumnPtr> GeometryFunctions::st_num_interior_rings(FunctionContext* ct
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_POLYGON) {
-            result.append_null();
-            continue;
-        }
-        const S2Polygon* poly = static_cast<const GeoPolygon*>(shape.get())->polygon();
-        // Loop 0 is the exterior ring; loops 1+ are holes
-        int holes = std::max(0, poly->num_loops() - 1);
+        if (!shape || shape->type() != GEO_SHAPE_POLYGON) { result.append_null(); continue; }
+        int holes = std::max(0, geo_polygon_loop_count(shape.get()) - 1);
         result.append(holes);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1186,33 +1023,25 @@ StatusOr<ColumnPtr> GeometryFunctions::st_exterior_ring(FunctionContext* ctx, co
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape || shape->type() != GEO_SHAPE_POLYGON) {
-            result.append_null();
-            continue;
-        }
-        const S2Polygon* poly = static_cast<const GeoPolygon*>(shape.get())->polygon();
-        if (poly->num_loops() == 0) {
-            result.append_null();
-            continue;
-        }
-        const S2Loop* loop = poly->loop(0);
+        if (!shape || shape->type() != GEO_SHAPE_POLYGON) { result.append_null(); continue; }
+        int nv = geo_polygon_loop_vertex_count(shape.get(), 0);
+        if (nv == 0) { result.append_null(); continue; }
         std::ostringstream wkt;
         wkt << std::setprecision(12) << "LINESTRING (";
-        for (int j = 0; j < loop->num_vertices(); ++j) {
+        for (int j = 0; j < nv; ++j) {
             if (j) wkt << ", ";
-            S2LatLng ll(loop->vertex(j));
-            wkt << ll.lng().degrees() << " " << ll.lat().degrees();
+            double vx, vy;
+            geo_polygon_loop_vertex_at(shape.get(), 0, j, &vx, &vy);
+            wkt << vx << " " << vy;
         }
         // Close the ring
-        S2LatLng ll0(loop->vertex(0));
-        wkt << ", " << ll0.lng().degrees() << " " << ll0.lat().degrees() << ")";
+        double x0, y0;
+        geo_polygon_loop_vertex_at(shape.get(), 0, 0, &x0, &y0);
+        wkt << ", " << x0 << " " << y0 << ")";
         std::string s = wkt.str();
         GeoParseStatus st;
         std::unique_ptr<GeoShape> line(GeoShape::from_wkt(s.data(), s.size(), &st));
-        if (!line) {
-            result.append_null();
-            continue;
-        }
+        if (!line) { result.append_null(); continue; }
         std::string buf;
         line->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -1233,10 +1062,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_overlaps(FunctionContext* ctx, const C
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         bool intersects = shapes_intersect(a.get(), b.get());
         // Overlaps = intersects AND neither fully contains the other
         bool overlaps = intersects && !a->contains(b.get()) && !b->contains(a.get());
@@ -1254,10 +1080,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_crosses(FunctionContext* ctx, const Co
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         std::unique_ptr<GeoShape> a, b;
-        if (!decode_two(av, bv, row, a, b)) {
-            result.append_null();
-            continue;
-        }
+        if (!decode_two(av, bv, row, a, b)) { result.append_null(); continue; }
         // ST_Crosses applies to geometries of different dimensions
         bool intersects = shapes_intersect(a.get(), b.get());
         bool crosses = intersects && !a->contains(b.get()) && !b->contains(a.get());
@@ -1269,30 +1092,23 @@ StatusOr<ColumnPtr> GeometryFunctions::st_crosses(FunctionContext* ctx, const Co
 // ST_DWithin(GEOMETRY, GEOMETRY, DOUBLE) → BOOLEAN  — within distance in metres (points only)
 StatusOr<ColumnPtr> GeometryFunctions::st_dwithin(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_GEOMETRY> av(columns[0]), bv(columns[1]);
-    ColumnViewer<TYPE_DOUBLE> dv(columns[2]);
+    ColumnViewer<TYPE_DOUBLE>   dv(columns[2]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         auto a = decode_geom(av, row);
         auto b = decode_geom(bv, row);
-        if (!a || !b || dv.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (!a || !b || dv.is_null(row)) { result.append_null(); continue; }
         double threshold = dv.value(row);
         // For polygon containment: use contains as a conservative check
-        if (a->contains(b.get()) || b->contains(a.get())) {
-            result.append(true);
-            continue;
-        }
+        if (a->contains(b.get()) || b->contains(a.get())) { result.append(true); continue; }
         // For point-to-point: use great-circle distance
         if (a->type() == GEO_SHAPE_POINT && b->type() == GEO_SHAPE_POINT) {
             const auto* pa = static_cast<const GeoPoint*>(a.get());
             const auto* pb = static_cast<const GeoPoint*>(b.get());
             double dist = 0.0;
             if (!GeoPoint::st_distance_sphere(pa->x(), pa->y(), pb->x(), pb->y(), &dist)) {
-                result.append_null();
-                continue;
+                result.append_null(); continue;
             }
             result.append(dist <= threshold);
         } else {
@@ -1300,8 +1116,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_dwithin(FunctionContext* ctx, const Co
             double ax0, ay0, ax1, ay1, bx0, by0, bx1, by1;
             if (!geo_bounding_box(a.get(), &ax0, &ay0, &ax1, &ay1) ||
                 !geo_bounding_box(b.get(), &bx0, &by0, &bx1, &by1)) {
-                result.append_null();
-                continue;
+                result.append_null(); continue;
             }
             // MBR overlap → definitely within some distance
             bool mbr_overlap = ax0 <= bx1 && ax1 >= bx0 && ay0 <= by1 && ay1 >= by0;
@@ -1321,10 +1136,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_geom_from_geojson(FunctionContext* ctx
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
-        if (viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (viewer.is_null(row)) { result.append_null(); continue; }
         auto json = viewer.value(row).to_string();
 
         // Extract "type" field
@@ -1347,36 +1159,20 @@ StatusOr<ColumnPtr> GeometryFunctions::st_geom_from_geojson(FunctionContext* ctx
         if (type == "Point") {
             // "coordinates":[lng,lat]
             auto cs = json.find("\"coordinates\"");
-            if (cs == std::string::npos) {
-                result.append_null();
-                continue;
-            }
+            if (cs == std::string::npos) { result.append_null(); continue; }
             auto lb = json.find('[', cs);
             auto rb = json.find(']', lb);
-            if (lb == std::string::npos || rb == std::string::npos) {
-                result.append_null();
-                continue;
-            }
+            if (lb == std::string::npos || rb == std::string::npos) { result.append_null(); continue; }
             std::string coords = json.substr(lb + 1, rb - lb - 1);
             auto comma = coords.find(',');
-            if (comma == std::string::npos) {
-                result.append_null();
-                continue;
-            }
+            if (comma == std::string::npos) { result.append_null(); continue; }
             wkt = "POINT (" + coords.substr(0, comma) + " " + coords.substr(comma + 1) + ")";
         } else if (type == "LineString") {
             // coordinates:[[x,y],[x,y],...]
             auto cs = json.find("\"coordinates\"");
-            if (cs == std::string::npos) {
-                result.append_null();
-                continue;
-            }
-            auto lb = json.find('[', cs);
-            lb = json.find('[', lb + 1);
-            if (lb == std::string::npos) {
-                result.append_null();
-                continue;
-            }
+            if (cs == std::string::npos) { result.append_null(); continue; }
+            auto lb = json.find('[', cs); lb = json.find('[', lb + 1);
+            if (lb == std::string::npos) { result.append_null(); continue; }
             std::ostringstream ws;
             ws << "LINESTRING (";
             bool first = true;
@@ -1399,17 +1195,9 @@ StatusOr<ColumnPtr> GeometryFunctions::st_geom_from_geojson(FunctionContext* ctx
         } else if (type == "Polygon") {
             // coordinates:[[[x,y],...]] — first ring only
             auto cs = json.find("\"coordinates\"");
-            if (cs == std::string::npos) {
-                result.append_null();
-                continue;
-            }
-            auto lb = json.find('[', cs);
-            lb = json.find('[', lb + 1);
-            lb = json.find('[', lb + 1);
-            if (lb == std::string::npos) {
-                result.append_null();
-                continue;
-            }
+            if (cs == std::string::npos) { result.append_null(); continue; }
+            auto lb = json.find('[', cs); lb = json.find('[', lb + 1); lb = json.find('[', lb + 1);
+            if (lb == std::string::npos) { result.append_null(); continue; }
             std::ostringstream ws;
             ws << "POLYGON ((";
             bool first = true;
@@ -1430,16 +1218,12 @@ StatusOr<ColumnPtr> GeometryFunctions::st_geom_from_geojson(FunctionContext* ctx
             ws << "))";
             wkt = ws.str();
         } else {
-            result.append_null();
-            continue;
+            result.append_null(); continue;
         }
 
         GeoParseStatus st;
         std::unique_ptr<GeoShape> shape(GeoShape::from_wkt(wkt.data(), wkt.size(), &st));
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         std::string buf;
         shape->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -1455,20 +1239,14 @@ static constexpr double kPi = 3.14159265358979323846;
 
 StatusOr<ColumnPtr> GeometryFunctions::st_buffer(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_GEOMETRY> geom_viewer(columns[0]);
-    ColumnViewer<TYPE_DOUBLE> rad_viewer(columns[1]);
+    ColumnViewer<TYPE_DOUBLE>   rad_viewer(columns[1]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(geom_viewer, row);
-        if (!shape || rad_viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (!shape || rad_viewer.is_null(row)) { result.append_null(); continue; }
         double r = rad_viewer.value(row);
-        if (r < 0) {
-            result.append_null();
-            continue;
-        }
+        if (r < 0) { result.append_null(); continue; }
 
         double cx = 0, cy = 0;
         if (shape->type() == GEO_SHAPE_POINT) {
@@ -1476,10 +1254,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_buffer(FunctionContext* ctx, const Col
             cy = static_cast<const GeoPoint*>(shape.get())->y();
         } else {
             double x0, y0, x1, y1;
-            if (!geo_bounding_box(shape.get(), &x0, &y0, &x1, &y1)) {
-                result.append_null();
-                continue;
-            }
+            if (!geo_bounding_box(shape.get(), &x0, &y0, &x1, &y1)) { result.append_null(); continue; }
             cx = (x0 + x1) / 2.0;
             cy = (y0 + y1) / 2.0;
             r += std::max(x1 - x0, y1 - y0) / 2.0;
@@ -1501,10 +1276,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_buffer(FunctionContext* ctx, const Col
         std::string s = wkt.str();
         GeoParseStatus st;
         std::unique_ptr<GeoShape> buf_shape(GeoShape::from_wkt(s.data(), s.size(), &st));
-        if (!buf_shape) {
-            result.append_null();
-            continue;
-        }
+        if (!buf_shape) { result.append_null(); continue; }
         std::string buf;
         buf_shape->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -1514,53 +1286,59 @@ StatusOr<ColumnPtr> GeometryFunctions::st_buffer(FunctionContext* ctx, const Col
 
 // ST_ConvexHull(GEOMETRY) → GEOMETRY — minimum convex enclosing polygon
 // Uses Andrew's monotone chain algorithm on all vertices.
-static std::vector<std::pair<double, double>> collect_vertices(const GeoShape* shape) {
-    std::vector<std::pair<double, double>> pts;
-    auto add_s2 = [&](const S2Point& p) {
-        S2LatLng ll(p);
-        pts.emplace_back(ll.lng().degrees(), ll.lat().degrees());
-    };
+static std::vector<std::pair<double,double>> collect_vertices(const GeoShape* shape) {
+    std::vector<std::pair<double,double>> pts;
     switch (shape->type()) {
     case GEO_SHAPE_POINT:
-        add_s2(*static_cast<const GeoPoint*>(shape)->point());
+        pts.emplace_back(static_cast<const GeoPoint*>(shape)->x(),
+                         static_cast<const GeoPoint*>(shape)->y());
         break;
     case GEO_SHAPE_LINE_STRING: {
-        const S2Polyline* pl = static_cast<const GeoLine*>(shape)->polyline();
-        for (int i = 0; i < pl->num_vertices(); ++i) add_s2(pl->vertex(i));
-        break;
-    }
-    case GEO_SHAPE_POLYGON: {
-        const S2Polygon* poly = static_cast<const GeoPolygon*>(shape)->polygon();
-        for (int i = 0; i < poly->num_loops(); ++i) {
-            const S2Loop* loop = poly->loop(i);
-            for (int j = 0; j < loop->num_vertices(); ++j) add_s2(loop->vertex(j));
+        int nv = geo_line_vertex_count(shape);
+        for (int i = 0; i < nv; ++i) {
+            double vx, vy;
+            if (geo_line_vertex_at(shape, i, &vx, &vy)) pts.emplace_back(vx, vy);
         }
         break;
     }
-    default:
+    case GEO_SHAPE_POLYGON: {
+        int nl = geo_polygon_loop_count(shape);
+        for (int i = 0; i < nl; ++i) {
+            int nv = geo_polygon_loop_vertex_count(shape, i);
+            for (int j = 0; j < nv; ++j) {
+                double vx, vy;
+                if (geo_polygon_loop_vertex_at(shape, i, j, &vx, &vy)) pts.emplace_back(vx, vy);
+            }
+        }
         break;
+    }
+    default: break;
     }
     return pts;
 }
 
-static std::vector<std::pair<double, double>> andrew_chain_hull(std::vector<std::pair<double, double>> pts) {
+static std::vector<std::pair<double,double>> andrew_chain_hull(
+        std::vector<std::pair<double,double>> pts) {
     int n = (int)pts.size();
     if (n < 3) return pts;
     std::sort(pts.begin(), pts.end());
-    std::vector<std::pair<double, double>> hull;
-    auto cross = [](const std::pair<double, double>& O, const std::pair<double, double>& A,
-                    const std::pair<double, double>& B) {
-        return (A.first - O.first) * (B.second - O.second) - (A.second - O.second) * (B.first - O.first);
+    std::vector<std::pair<double,double>> hull;
+    auto cross = [](const std::pair<double,double>& O, const std::pair<double,double>& A,
+                    const std::pair<double,double>& B) {
+        return (A.first - O.first) * (B.second - O.second)
+             - (A.second - O.second) * (B.first - O.first);
     };
     // Lower hull
     for (int i = 0; i < n; ++i) {
-        while (hull.size() >= 2 && cross(hull[hull.size() - 2], hull[hull.size() - 1], pts[i]) <= 0) hull.pop_back();
+        while (hull.size() >= 2 && cross(hull[hull.size()-2], hull[hull.size()-1], pts[i]) <= 0)
+            hull.pop_back();
         hull.push_back(pts[i]);
     }
     // Upper hull
     int lower_size = (int)hull.size() + 1;
     for (int i = n - 2; i >= 0; --i) {
-        while ((int)hull.size() >= lower_size && cross(hull[hull.size() - 2], hull[hull.size() - 1], pts[i]) <= 0)
+        while ((int)hull.size() >= lower_size &&
+               cross(hull[hull.size()-2], hull[hull.size()-1], pts[i]) <= 0)
             hull.pop_back();
         hull.push_back(pts[i]);
     }
@@ -1574,15 +1352,9 @@ StatusOr<ColumnPtr> GeometryFunctions::st_convex_hull(FunctionContext* ctx, cons
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(viewer, row);
-        if (!shape) {
-            result.append_null();
-            continue;
-        }
+        if (!shape) { result.append_null(); continue; }
         auto pts = collect_vertices(shape.get());
-        if (pts.empty()) {
-            result.append_null();
-            continue;
-        }
+        if (pts.empty()) { result.append_null(); continue; }
         if (pts.size() == 1) {
             // Single point — return the point
             result.append(Slice(viewer.value(row).data, viewer.value(row).size));
@@ -1605,10 +1377,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_convex_hull(FunctionContext* ctx, cons
         std::string s = wkt.str();
         GeoParseStatus st;
         std::unique_ptr<GeoShape> ch(GeoShape::from_wkt(s.data(), s.size(), &st));
-        if (!ch) {
-            result.append_null();
-            continue;
-        }
+        if (!ch) { result.append_null(); continue; }
         std::string buf;
         ch->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
@@ -1618,30 +1387,29 @@ StatusOr<ColumnPtr> GeometryFunctions::st_convex_hull(FunctionContext* ctx, cons
 
 // ST_Simplify(GEOMETRY, DOUBLE tolerance) → GEOMETRY — Douglas-Peucker simplification
 // Works on LINESTRING and POLYGON outer ring.
-static double point_line_dist(const std::pair<double, double>& p, const std::pair<double, double>& a,
-                              const std::pair<double, double>& b) {
+static double point_line_dist(const std::pair<double,double>& p,
+                               const std::pair<double,double>& a,
+                               const std::pair<double,double>& b) {
     double dx = b.first - a.first, dy = b.second - a.second;
     if (dx == 0 && dy == 0) {
         double ex = p.first - a.first, ey = p.second - a.second;
-        return std::sqrt(ex * ex + ey * ey);
+        return std::sqrt(ex*ex + ey*ey);
     }
-    double t = ((p.first - a.first) * dx + (p.second - a.second) * dy) / (dx * dx + dy * dy);
+    double t = ((p.first - a.first)*dx + (p.second - a.second)*dy) / (dx*dx + dy*dy);
     t = std::max(0.0, std::min(1.0, t));
-    double ex = p.first - (a.first + t * dx), ey = p.second - (a.second + t * dy);
-    return std::sqrt(ex * ex + ey * ey);
+    double ex = p.first - (a.first + t*dx), ey = p.second - (a.second + t*dy);
+    return std::sqrt(ex*ex + ey*ey);
 }
 
-static void dp_simplify(const std::vector<std::pair<double, double>>& pts, int start, int end, double tol,
-                        std::vector<bool>& keep) {
+static void dp_simplify(const std::vector<std::pair<double,double>>& pts,
+                         int start, int end, double tol,
+                         std::vector<bool>& keep) {
     if (end <= start + 1) return;
     double max_dist = 0;
     int max_idx = start;
     for (int i = start + 1; i < end; ++i) {
         double d = point_line_dist(pts[i], pts[start], pts[end]);
-        if (d > max_dist) {
-            max_dist = d;
-            max_idx = i;
-        }
+        if (d > max_dist) { max_dist = d; max_idx = i; }
     }
     if (max_dist > tol) {
         keep[max_idx] = true;
@@ -1652,40 +1420,30 @@ static void dp_simplify(const std::vector<std::pair<double, double>>& pts, int s
 
 StatusOr<ColumnPtr> GeometryFunctions::st_simplify(FunctionContext* ctx, const Columns& columns) {
     ColumnViewer<TYPE_GEOMETRY> geom_viewer(columns[0]);
-    ColumnViewer<TYPE_DOUBLE> tol_viewer(columns[1]);
+    ColumnViewer<TYPE_DOUBLE>   tol_viewer(columns[1]);
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_GEOMETRY> result(size);
     for (int row = 0; row < size; ++row) {
         auto shape = decode_geom(geom_viewer, row);
-        if (!shape || tol_viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
+        if (!shape || tol_viewer.is_null(row)) { result.append_null(); continue; }
         double tol = tol_viewer.value(row);
-        if (tol < 0) {
-            result.append_null();
-            continue;
-        }
+        if (tol < 0) { result.append_null(); continue; }
 
-        std::vector<std::pair<double, double>> pts;
+        std::vector<std::pair<double,double>> pts;
         bool is_polygon = (shape->type() == GEO_SHAPE_POLYGON);
 
         if (shape->type() == GEO_SHAPE_LINE_STRING) {
-            const S2Polyline* pl = static_cast<const GeoLine*>(shape.get())->polyline();
-            for (int i = 0; i < pl->num_vertices(); ++i) {
-                S2LatLng ll(pl->vertex(i));
-                pts.emplace_back(ll.lng().degrees(), ll.lat().degrees());
+            int nv = geo_line_vertex_count(shape.get());
+            for (int i = 0; i < nv; ++i) {
+                double vx, vy;
+                if (geo_line_vertex_at(shape.get(), i, &vx, &vy)) pts.emplace_back(vx, vy);
             }
         } else if (is_polygon) {
-            const S2Polygon* poly = static_cast<const GeoPolygon*>(shape.get())->polygon();
-            if (poly->num_loops() == 0) {
-                result.append_null();
-                continue;
-            }
-            const S2Loop* loop = poly->loop(0);
-            for (int i = 0; i < loop->num_vertices(); ++i) {
-                S2LatLng ll(loop->vertex(i));
-                pts.emplace_back(ll.lng().degrees(), ll.lat().degrees());
+            int nv = geo_polygon_loop_vertex_count(shape.get(), 0);
+            if (nv == 0) { result.append_null(); continue; }
+            for (int i = 0; i < nv; ++i) {
+                double vx, vy;
+                if (geo_polygon_loop_vertex_at(shape.get(), 0, i, &vx, &vy)) pts.emplace_back(vx, vy);
             }
         } else {
             // For points just return as-is
@@ -1695,26 +1453,19 @@ StatusOr<ColumnPtr> GeometryFunctions::st_simplify(FunctionContext* ctx, const C
         }
 
         int n = (int)pts.size();
-        if (n < 2) {
-            result.append_null();
-            continue;
-        }
+        if (n < 2) { result.append_null(); continue; }
 
         std::vector<bool> keep(n, false);
-        keep[0] = keep[n - 1] = true;
-        dp_simplify(pts, 0, n - 1, tol, keep);
+        keep[0] = keep[n-1] = true;
+        dp_simplify(pts, 0, n-1, tol, keep);
 
-        std::vector<std::pair<double, double>> simplified;
-        for (int i = 0; i < n; ++i)
-            if (keep[i]) simplified.push_back(pts[i]);
+        std::vector<std::pair<double,double>> simplified;
+        for (int i = 0; i < n; ++i) if (keep[i]) simplified.push_back(pts[i]);
 
         std::ostringstream wkt;
         wkt << std::setprecision(12);
         if (is_polygon) {
-            if (simplified.size() < 3) {
-                result.append_null();
-                continue;
-            }
+            if (simplified.size() < 3) { result.append_null(); continue; }
             wkt << "POLYGON ((";
             for (size_t i = 0; i < simplified.size(); ++i) {
                 if (i) wkt << ", ";
@@ -1723,10 +1474,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_simplify(FunctionContext* ctx, const C
             // close ring
             wkt << ", " << simplified[0].first << " " << simplified[0].second << "))";
         } else {
-            if (simplified.size() < 2) {
-                result.append_null();
-                continue;
-            }
+            if (simplified.size() < 2) { result.append_null(); continue; }
             wkt << "LINESTRING (";
             for (size_t i = 0; i < simplified.size(); ++i) {
                 if (i) wkt << ", ";
@@ -1737,10 +1485,7 @@ StatusOr<ColumnPtr> GeometryFunctions::st_simplify(FunctionContext* ctx, const C
         std::string s = wkt.str();
         GeoParseStatus st;
         std::unique_ptr<GeoShape> sim(GeoShape::from_wkt(s.data(), s.size(), &st));
-        if (!sim) {
-            result.append_null();
-            continue;
-        }
+        if (!sim) { result.append_null(); continue; }
         std::string buf;
         sim->encode_to(&buf);
         result.append(Slice(buf.data(), buf.size()));
