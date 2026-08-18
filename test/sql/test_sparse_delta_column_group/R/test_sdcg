@@ -334,3 +334,62 @@ select pk, get_json_int(j, '$.x'), c2 from t where pk <= 3 order by pk;
 drop database test_sdcg_ctype force;
 -- result:
 -- !result
+
+-- name: test_sdcg_shared_dense_base_two_columns @cloud
+create database test_sdcg_share;
+-- result:
+-- !result
+use test_sdcg_share;
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t select generate_series, generate_series*10, generate_series*100, generate_series*1000 from table(generate_series(1, 70000));
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+insert into t (pk, c1, c2) select generate_series, generate_series*10+1, generate_series*100+1 from table(generate_series(1, 40000));
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+insert into t (pk, c2) select generate_series, generate_series*100+2 from table(generate_series(1, 300));
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+select count(*) from t where pk <= 40000 and c1 is not null and c2 is not null;
+-- result:
+40000
+-- !result
+select count(*) from t where pk <= 40000 and c1 = pk*10+1;
+-- result:
+40000
+-- !result
+select count(*) from t where pk <= 300 and c2 = pk*100+2;
+-- result:
+300
+-- !result
+select count(*) from t where pk between 301 and 40000 and c2 = pk*100+1;
+-- result:
+39700
+-- !result
+select count(*) from t where c3 = pk*1000;
+-- result:
+70000
+-- !result
+drop database test_sdcg_share force;
+-- result:
+-- !result

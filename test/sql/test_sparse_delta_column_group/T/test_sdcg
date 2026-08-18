@@ -120,3 +120,32 @@ sync;
 set cbo_json_v2_rewrite = false;
 select pk, get_json_int(j, '$.x'), c2 from t where pk <= 3 order by pk;
 drop database test_sdcg_ctype force;
+
+-- name: test_sdcg_shared_dense_base_two_columns @cloud
+create database test_sdcg_share;
+use test_sdcg_share;
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t select generate_series, generate_series*10, generate_series*100, generate_series*1000 from table(generate_series(1, 70000));
+sync;
+-- One dense `.cols` file carrying BOTH c1 and c2: K/M = 40000/70000 = 0.57 is above
+-- sdcg_dense_threshold, so this multi-column update takes the dense path.
+set partial_update_mode = 'column';
+insert into t (pk, c1, c2) select generate_series, generate_series*10+1, generate_series*100+1 from table(generate_series(1, 40000));
+sync;
+-- A sparse overlay on the HIGHER-cid column of that pair. The cid order matters: column iterators are
+-- built in cid order, so c1 (no overlay) is built first from the shared dense segment, and c2's
+-- overlay path then used to open a SECOND segment for the same file and overwrite the map entry that
+-- owned the first -- freeing it while c1's iterator still held a raw ColumnReader* into it.
+insert into t (pk, c2) select generate_series, generate_series*100+2 from table(generate_series(1, 300));
+sync;
+-- The discriminating read: touching BOTH columns at once. Reading either column ALONE succeeds even
+-- on a broken build, because only one iterator exists; it is the pair that exposes the dangling one.
+-- Before the fix this failed with "Bad page: checksum mismatch" on the .cols file.
+select count(*) from t where pk <= 40000 and c1 is not null and c2 is not null;
+select count(*) from t where pk <= 40000 and c1 = pk*10+1;
+select count(*) from t where pk <= 300 and c2 = pk*100+2;
+select count(*) from t where pk between 301 and 40000 and c2 = pk*100+1;
+select count(*) from t where c3 = pk*1000;
+drop database test_sdcg_share force;
