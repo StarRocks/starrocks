@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
@@ -75,6 +76,35 @@ public abstract class TabletReshardJob implements Writable {
 
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
+
+    // Reason of a publish failure the job is currently retrying, or null while every partition's
+    // publish is healthy. The state lives per partition (see
+    // ReshardingPhysicalPartition#publishFailureReason) rather than on the job, so a partition that
+    // recovers stops reporting even while a sibling is still retrying, and it is never journaled --
+    // a publish failure is always retried and never terminal. Surfaced through getInfo() so
+    // information_schema.tablet_reshard_jobs explains a job stuck retrying a publish instead of
+    // showing an empty ERROR_MESSAGE.
+    protected abstract String anyPublishFailureReason();
+
+    // ERROR_MESSAGE for information_schema.tablet_reshard_jobs: a terminal error always wins, and
+    // otherwise the reason of a publish the job is still retrying.
+    //
+    // Only RUNNING retries a publish, so the reason is reported only in that state. That gate is what
+    // keeps a reason from outliving the retry it describes: a partition can be dropped mid-job (DROP
+    // PARTITION / TRUNCATE are permitted while the table is in TABLET_RESHARD), after which the
+    // publish loop skips it and no publish result can clear its reason. runRunningJob() clears it on
+    // that skip, but the gate also covers any future early-return added to the loop -- otherwise a
+    // finished job would keep advertising a failure that already stopped being retried.
+    protected String reportedErrorMessage() {
+        if (errorMessage != null) {
+            return errorMessage;
+        }
+        if (jobState != JobState.RUNNING) {
+            return "";
+        }
+        String publishFailureReason = anyPublishFailureReason();
+        return publishFailureReason == null ? "" : "publish version failed (retrying): " + publishFailureReason;
+    }
 
     // The warehouse this job should run its compute work (shard creation + publish) in. Set by the
     // pre-split caller to the triggering load's warehouse; null for an online split / merge (and for a
@@ -337,6 +367,54 @@ public abstract class TabletReshardJob implements Writable {
     protected abstract void registerReshardingTabletsOnRestart();
 
     public abstract TTabletReshardJobsItem getInfo();
+
+    /**
+     * Admission-time reservation body, shared by the split and merge jobs. The caller runs it under
+     * the table WRITE lock: the table must be NORMAL, every index the job is about to reshard must
+     * still be the live version of its index meta, and only then does the table flip to
+     * {@code TABLET_RESHARD}.
+     *
+     * <p>All three steps belong in one lock scope. The job was built from a snapshot the factory took
+     * under a lock it has since released, so the layout can have moved on; and the state flip is what
+     * stops it from moving again, because the factories and this method both require NORMAL, so no
+     * second reshard job can be admitted while this one holds the table. Validating before the flip
+     * and under the same lock is therefore the only point at which "these indexes are live" can be
+     * established and stay true for the rest of the job.
+     */
+    protected static void reserveTableForReshard(long dbId, OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw new TabletReshardException(
+                    "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
+        }
+        checkReshardingIndexesStillLatest(dbId, olapTable, reshardingPhysicalPartitions);
+        olapTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+    }
+
+    private static void checkReshardingIndexesStillLatest(long dbId, OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        String dbName = db == null ? "" : db.getFullName();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                // Dropped in the same gap (DROP PARTITION / TRUNCATE are permitted alongside a reshard).
+                // Every later step of the job already skips a partition that is missing, so this is not
+                // a reason to reject the job.
+                continue;
+            }
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                // The new index the job will install carries the source index's meta id, so the meta id
+                // is still available even when the source index itself is already gone.
+                TabletReshardUtils.checkIndexStillLatest(physicalPartition,
+                        reshardingIndex.getMaterializedIndexId(),
+                        reshardingIndex.getMaterializedIndex().getMetaId(),
+                        dbName, olapTable.getName());
+            }
+        }
+    }
 
     /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
