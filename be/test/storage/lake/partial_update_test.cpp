@@ -1711,22 +1711,33 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_reads_base_segment_th
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
-// A publish touches every base segment holding a row it updates. When that working set does not fit in
-// the metacache, inserting all of them evicts as fast as it fills -- the hit rate stays at zero while
-// every insert still pays eviction and memory accounting, and the tablet metadata and schemas sharing
-// the cache get flushed out with it. Measured on a cluster at 2.2x slower than not caching at all, so
-// publish stops inserting once the cache is out of room.
+// A publish reads every base segment holding a row it updates. Once that set exceeds the metacache,
+// inserting all of them evicts as fast as it fills -- the hit rate stays at zero while every insert
+// still pays eviction and memory accounting, and the tablet metadata and schemas sharing the cache get
+// flushed out with it. Measured on a cluster at 2.2x slower than not caching at all, so publish stops
+// inserting once its own working set no longer fits.
 //
-// The decision is observed directly through a sync point rather than through the cache contents: an
-// undersized cache drops oversized inserts on its own, so "the segment is not cached" is true whether
-// or not the guard exists and would make this a test that cannot fail.
-TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_a_full_metacache) {
+// Three things this test has to get right, all learned the hard way:
+//   - It observes the decision through a sync point, not the resulting cache contents. An undersized
+//     cache drops oversized inserts by itself, so "the segment is not cached" holds with or without
+//     the gate and would make the test unable to fail.
+//   - It needs more than one base segment per measurement: the size estimate is seeded from the first
+//     segment a publish opens, so a single-segment publish never reaches the decision under test.
+//   - The two measurements need independent base segments. A partial update rewrites every row it
+//     touches into one new segment, so measuring twice over the same keys would leave the second
+//     measurement with a single base segment to read.
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_when_working_set_exceeds_cache) {
     if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
         GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
     }
 
     // TestBase constructs its TabletManager with this metacache capacity.
     constexpr int64_t kDefaultMetacacheLimit = 1024 * 1024;
+    constexpr int kRanges = 6;
+    constexpr int kRangeSize = kChunkSize / kRanges;
+    static_assert(kChunkSize % kRanges == 0);
+    constexpr int kHalfKeys = kChunkSize / 2;
+
     const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
     std::vector<bool> fill_decisions;
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1740,15 +1751,12 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_a_full_
                                           [&](void* arg) { fill_decisions.push_back(*static_cast<bool*>(arg)); });
     config::lake_pk_partial_update_use_segment_cache = true;
 
-    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
-    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
-    std::vector<uint32_t> indexes(kChunkSize);
-    std::iota(indexes.begin(), indexes.end(), 0);
-
     const auto tablet_id = _tablet_metadata->id();
     int64_t version = 1;
 
     auto write_and_publish = [&](const Chunk& chunk, bool row_mode_partial_update) {
+        std::vector<uint32_t> indexes(chunk.num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
         const auto txn_id = next_id();
         DeltaWriterBuilder builder;
         builder.set_tablet_manager(_tablet_mgr.get())
@@ -1768,20 +1776,25 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_a_full_
         ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
     };
 
-    write_and_publish(chunk_full, /*row_mode_partial_update=*/false);
+    for (int range = 0; range < kRanges; ++range) {
+        write_and_publish(generate_data(kRangeSize, range, false, 3), /*row_mode_partial_update=*/false);
+    }
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(kRanges, base_metadata->rowsets_size());
 
-    // Room to spare: publish fills the cache.
+    // Room to spare: every base segment this publish reads is cached.
     fill_decisions.clear();
-    write_and_publish(chunk_partial, /*row_mode_partial_update=*/true);
-    ASSERT_FALSE(fill_decisions.empty()) << "the base-segment read did not run";
+    write_and_publish(generate_data(kHalfKeys, 0, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 2, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::all_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
-    // No room at all: publish still reads, but stops adding pressure.
+    // No room: the first segment still seeds the size estimate, and everything after it is skipped.
     _tablet_mgr->update_metacache_limit(0);
     fill_decisions.clear();
-    write_and_publish(chunk_partial, /*row_mode_partial_update=*/true);
-    ASSERT_FALSE(fill_decisions.empty()) << "the base-segment read did not run";
-    EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
+    write_and_publish(generate_data(kHalfKeys, 1, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 2, fill_decisions.size()) << "expected one decision per base segment read";
+    EXPECT_TRUE(fill_decisions[0]) << "the first segment seeds the estimate";
+    EXPECT_TRUE(std::none_of(fill_decisions.begin() + 1, fill_decisions.end(), [](bool v) { return v; }));
 
     _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));

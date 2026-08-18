@@ -1867,6 +1867,8 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
     //     later readers defaults in place of the stored data.
     //
     // Callers that cannot honour both must pass `allow_segment_cache=false`.
+    const size_t touched_segment_count = rowids_by_rssid.size();
+    size_t segment_mem_estimate = 0;
     auto fetch_values_from_segment =
             [&](const FileInfo& segment_info, uint32_t segment_id, uint32_t segment_id_in_rowset,
                 const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
@@ -1888,16 +1890,27 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             // a cached entry turns the open into a no-op. LakeIOOptions is left at its defaults to
             // keep the data-cache behaviour identical to the static Segment::open below.
             //
-            // Only insert while the metacache still has room. A publish touches every base segment
-            // holding a row it updates, so when that working set does not fit, inserting all of them
-            // evicts as fast as it fills: the hit rate stays at zero, every insert pays eviction and
-            // memory accounting, and the tablet metadata and schemas sharing this cache get flushed
-            // out too. Measured at 2.2x slower than not caching at all. Above capacity we still take
-            // whatever the cache already holds and simply stop adding pressure.
-            bool fill_meta_cache = tablet_mgr->metacache()->memory_usage() < tablet_mgr->metacache()->capacity();
+            // Only insert when this publish's own base segments can fit. A publish reads every base
+            // segment holding a row it updates, so once that set exceeds the cache, inserting all of
+            // them evicts as fast as it fills: the hit rate stays at zero, every insert still pays
+            // eviction and memory accounting, and the tablet metadata and schemas sharing this cache
+            // get flushed out with it. Measured at 2.2x slower than not caching at all.
+            //
+            // The estimate comes from the first segment this publish opens, since a Segment's cost is
+            // dominated by one column reader per schema column and is therefore near-uniform across
+            // the segments of one tablet. Note that comparing the cache's own usage against its
+            // capacity does NOT work: an LRU evicts to stay under capacity, so it always reports
+            // room even while it thrashes.
+            bool fill_meta_cache = true;
+            if (segment_mem_estimate > 0) {
+                fill_meta_cache = touched_segment_count * segment_mem_estimate <= tablet_mgr->metacache()->capacity();
+            }
             TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &fill_meta_cache);
             segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{}, fill_meta_cache,
                                                tablet_schema);
+            if (segment.ok() && segment_mem_estimate == 0) {
+                segment_mem_estimate = (*segment)->mem_usage();
+            }
         } else {
             segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema);
         }
