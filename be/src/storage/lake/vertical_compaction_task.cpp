@@ -138,8 +138,11 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         // bytes on the second pass mean the cache did not retain the working set and every later
         // pass would re-read it remotely through cache-block churn. Warm or adequate caches read
         // ~zero remote bytes here and never switch.
+        // Direct reads only pay off when the per-pass merged reads are issued concurrently: measured
+        // serially they are slightly slower than cache-block churn (3710s vs 3136s on the
+        // 1000-column shape), so the switch additionally requires the parallel merge prefill.
         if (i == 1 && !_bypass_data_cache && config::enable_lake_compaction_data_cache_bypass &&
-            column_group_size > 2) {
+            config::enable_compaction_parallel_merge_init && column_group_size > 2) {
             const int64_t pass_remote_mb =
                     (_context->stats->io_bytes_read_remote - remote_bytes_before) / (1024 * 1024);
             if (pass_remote_mb >= config::lake_compaction_data_cache_bypass_threshold_mb) {
