@@ -21,11 +21,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.CloneExpr;
+import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -36,6 +40,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -60,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
 
 public class QueryTransformer {
@@ -326,6 +332,13 @@ public class QueryTransformer {
                     .stream().map(OrderByElement::getExpr).collect(Collectors.toList()));
         }
 
+        // PARTITION BY/ORDER BY of a window may contain subqueries. They have to be turned into Apply
+        // operators before the expressions below are translated, because that translation has no
+        // OptExprBuilder to plan them with: a scalar subquery would become a SubqueryOperator which no rule
+        // ever eliminates (and the FE would end up serializing a TExprNode without a node_type), and an
+        // IN/EXISTS subquery would dereference the null builder.
+        subOpt = windowSubquery(subOpt, projectExpressions);
+
         final ExpressionMapping expressionMapping = subOpt.getExpressionMapping();
         boolean allColumnRef = true;
         Map<Expr, ColumnRefOperator> tempMapping = new HashMap<>();
@@ -405,6 +418,67 @@ public class QueryTransformer {
         }
 
         return subOpt;
+    }
+
+    /**
+     * Plan every subquery used by a window's PARTITION BY/ORDER BY expressions into an Apply operator on top of
+     * subOpt, and record the resulting column reference in the expression mapping so that any later translation of
+     * the enclosing expression resolves it to that column instead of building a new SubqueryOperator.
+     */
+    private OptExprBuilder windowSubquery(OptExprBuilder subOpt, List<Expr> projectExpressions) {
+        for (Expr expression : projectExpressions) {
+            subOpt = windowSubquery(subOpt, expression);
+        }
+        return subOpt;
+    }
+
+    private OptExprBuilder windowSubquery(OptExprBuilder subOpt, Expr expression) {
+        if (subOpt.getExpressionMapping().get(expression) != null) {
+            return subOpt;
+        }
+
+        // Only the expression that consumes a subquery as a whole can be planned: a quantified/existential
+        // predicate becomes the Apply itself, so translating its Subquery child on its own would both lose the
+        // predicate and turn a multi-row subquery into a scalar one. Anything else is descended into, so that a
+        // subquery buried in e.g. abs((select ...)) still gets planned.
+        if (!ownsSubquery(expression)) {
+            for (Expr child : expression.getChildren()) {
+                subOpt = windowSubquery(subOpt, child);
+            }
+            return subOpt;
+        }
+
+        Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
+        ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
+                subOpt.getExpressionMapping(), columnRefFactory, session, cteContext, subOpt,
+                subqueryPlaceholders, false);
+        Pair<ScalarOperator, OptExprBuilder> pair =
+                SubqueryUtils.rewriteScalarOperator(scalarOperator, subOpt, subqueryPlaceholders);
+        subOpt = pair.second;
+        if (!pair.first.isColumnRef()) {
+            throw new StarRocksPlannerException(
+                    "subquery in window partition by/order by is not supported", INTERNAL_ERROR);
+        }
+        subOpt.getExpressionMapping().put(expression, (ColumnRefOperator) pair.first);
+        return subOpt;
+    }
+
+    /**
+     * Whether the expression is the one SqlToScalarOperatorTranslator turns into an Apply, i.e. the ones whose
+     * visitor needs a non-null OptExprBuilder. Everything else treats a subquery as an ordinary child.
+     */
+    private static boolean ownsSubquery(Expr expression) {
+        if (expression instanceof Subquery) {
+            return true;
+        } else if (expression instanceof ExistsPredicate) {
+            return expression.getChild(0) instanceof Subquery;
+        } else if (expression instanceof MultiInPredicate) {
+            MultiInPredicate predicate = (MultiInPredicate) expression;
+            return predicate.getChild(predicate.getNumberOfColumns()) instanceof Subquery;
+        } else if (expression instanceof InPredicate) {
+            return expression.getChild(1) instanceof Subquery;
+        }
+        return false;
     }
 
     private OptExprBuilder limit(OptExprBuilder subOpt, LimitElement limit) {
