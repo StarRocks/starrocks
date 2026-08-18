@@ -1004,9 +1004,13 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_memory_is_accounted_and_returned) {
     ASSERT_GE(peak - before, 1024u) << "a ZSTD_DCtx is tens of KB, not a handful of bytes";
     // and handed back when the thread exited
     ASSERT_EQ(before, dict_dctx_cache_memory_bytes()) << "the context was not returned at thread exit";
-    // the scope was entered and left in pairs, around both the create and the free
-    ASSERT_GT(g_scope_enters.load(), 0);
-    ASSERT_EQ(g_scope_enters.load(), g_scope_leaves.load());
+    // Exactly two scopes, and the count is what pins them: one around ZSTD_createDCtx for
+    // the single dictionary this thread used, one around ZSTD_freeDCtx when the thread's
+    // cache was destroyed at exit (the other three slots are empty and return before the
+    // scope). "Entered as many times as left" is not enough -- deleting the scope from
+    // either site alone still leaves it paired, at 1/1.
+    ASSERT_EQ(2, g_scope_enters.load()) << "the allocation scope did not wrap both the create and the free";
+    ASSERT_EQ(2, g_scope_leaves.load());
 }
 
 // Everything above proves the cache decodes correctly. None of it proves the cache does
@@ -1080,11 +1084,16 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_hits_and_stays_bounded) {
 
         // 3. DISCARD: a page that fails to decode must cost that context its slot, not
         //    be handed out again. Output equality cannot see this; the counter can.
-        std::string garbage = arms[0].compressed;
-        garbage[garbage.size() / 2] ^= 0xFF;
+        //    Truncate rather than flip a byte: a short frame is always an error, while a
+        //    flipped byte is only usually one -- zstd sets no frame checksum here and a
+        //    raw-content dictionary carries no dictID, so roughly one flip position in six
+        //    decodes "successfully" into wrong bytes, and which ones depends on the level
+        //    and the data.
+        std::string truncated = arms[0].compressed.substr(0, arms[0].compressed.size() / 2);
         std::string got(arms[0].body.size(), '\0');
         Slice g(got);
-        ASSERT_FALSE(codec->decompress(Slice(garbage), &g, arms[0].ddict.get()).ok());
+        ASSERT_FALSE(codec->decompress(Slice(truncated), &g, arms[0].ddict.get()).ok())
+                << "a half frame decoded";
         after_failure = dict_dctx_cache_memory_bytes();
     });
     t.join();
@@ -1108,6 +1117,10 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_hits_and_stays_bounded) {
 // no dictionary at all, and must FAIL rather than hand back plausible-looking bytes. The
 // page checksum covers the compressed body, so it passes either way -- the only thing
 // standing between a downgraded cluster and silent wrong answers is that zstd refuses.
+// It does refuse -- measured over 232 pages across two real corpora -- but note zstd does
+// not *promise* to: no frame checksum is set and a raw-content dictionary carries no
+// dictID. What makes this case robust rather than lucky is that the frame's backreferences
+// point into a window the decoder does not have, not a checksum catching it.
 TEST_F(BlockCompressionTest, dict_page_cannot_be_decoded_without_its_dictionary) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
