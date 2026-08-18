@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -45,6 +47,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -173,15 +176,17 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testTargetPartitionSpecShortCircuits() throws Exception {
-        // INSERT INTO t PARTITION(p1) SELECT * FROM src restricts the load to
-        // specific target partitions. Pre-split must not sample the whole source
-        // and pre-create partitions outside that set.
+    public void testTargetPartitionSpecBuildsRestrictedTemporaryScope() {
         InsertStmt stmt = simpleTableInsertStmt();
         when(stmt.isSpecifyPartitionNames()).thenReturn(true);
+        when(stmt.getTargetPartitionNames()).thenReturn(
+                new PartitionRef(List.of("p1_temp"), true, NodePosition.ZERO));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.fromInsert(stmt);
+
+        Assertions.assertTrue(scope.isSpecified());
+        Assertions.assertTrue(scope.isTemporary());
+        Assertions.assertEquals("p1_temp", scope.mappedCatalogName("P1_TEMP"));
     }
 
     @Test
@@ -482,6 +487,22 @@ public class InsertPreSplitHookTableTest {
 
             fixture.assertNoSubmit();
         }
+    }
+
+    @Test
+    public void testIcebergSourceIsSupportedAndUsesSnapshotTotals() {
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        org.apache.iceberg.Snapshot snapshot = mock(org.apache.iceberg.Snapshot.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        when(snapshot.summary()).thenReturn(Map.of(
+                "total-files-size", "872000000000",
+                "total-records", "3500000000"));
+
+        Assertions.assertTrue(TablePreSplitSource.isSupportedSourceTable(icebergTable));
+        Assertions.assertEquals(new Estimates(872000000000L, 3500000000L),
+                TablePreSplitSource.sourceEstimates(icebergTable));
     }
 
     @Test

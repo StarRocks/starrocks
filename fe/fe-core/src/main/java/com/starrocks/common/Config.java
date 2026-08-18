@@ -4862,7 +4862,8 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads (INSERT-from-OLAP-table). Default on as of "
+            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
+            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
             + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
             + "enable_tablet_pre_split must also be true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;

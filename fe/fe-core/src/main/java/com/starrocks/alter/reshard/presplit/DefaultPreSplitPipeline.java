@@ -162,14 +162,14 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             LoadKind loadKind, ComputeResource loadComputeResource) {
         MetaTierSampler metaTierSampler;
         if (loadKind == LoadKind.INSERT_FROM_TABLE || table.getPartitionInfo().isPartitioned()) {
-            // INSERT_FROM_TABLE always uses the data tier: an OLAP source table has no
-            // Parquet/ORC file footer for the meta tier to read.
+            // INSERT_FROM_TABLE always uses the SQL data tier so internal OLAP and external
+            // Iceberg sources share one sampling path without depending on file-footer access.
             // Partitioned tables also force data tier: meta tier per-column min/max is
             // lossy under expression-based partitioning.
             metaTierSampler = (request, requestedTabletCount) -> {
                 throw new MetaTierUnavailableException(
                         loadKind == LoadKind.INSERT_FROM_TABLE
-                                ? "INSERT-from-table forces data tier (OLAP source has no Parquet/ORC footer)"
+                                ? "INSERT-from-table uses the SQL data-tier sampler"
                                 : "partitioned table forces data tier (meta tier per-column min/max "
                                         + "is lossy under expression-based partitioning)");
             };

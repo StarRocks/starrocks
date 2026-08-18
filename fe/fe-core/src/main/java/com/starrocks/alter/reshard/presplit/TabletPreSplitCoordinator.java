@@ -612,6 +612,19 @@ public final class TabletPreSplitCoordinator {
                 ctx, loadComputeResource, sampledSecondaryIndexMetaIds, true, overwriteTransactionId);
     }
 
+    /**
+     * Static-overwrite / explicit INSERT counterpart for temporary partitions that already exist.
+     * No transaction is excluded from cleanup: unlike dynamic overwrite, the static overwrite
+     * transaction has not been opened before this synchronous pre-split wait.
+     */
+    public static PreSplitOutcome submitForExistingTemporaryPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds) {
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, sampledSecondaryIndexMetaIds, true, -1L);
+    }
+
     private static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
             int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,

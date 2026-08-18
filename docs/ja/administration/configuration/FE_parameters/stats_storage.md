@@ -668,7 +668,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込み（INSERT-from-OLAP-table）に対して、サンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
+- 説明：ソースが内部 OLAP テーブルまたは外部 Iceberg テーブルである `INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`

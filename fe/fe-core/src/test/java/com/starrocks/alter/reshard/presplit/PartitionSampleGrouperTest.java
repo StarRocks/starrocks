@@ -259,6 +259,54 @@ public class PartitionSampleGrouperTest {
     }
 
     @Test
+    public void staticOverwriteMapsLogicalPartitionToExistingTemporaryPartition() {
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        installPartitionWithTablets(
+                table, "p20260526_job101", 9001L, List.of(8001L), 0L, true);
+        SampleSet samples = sampleSetOf(List.of(tuple(Variant.of(DateType.DATE, "2026-05-26"))));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.staticOverwrite(
+                List.of("p20260526"), List.of("p20260526_job101"));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.groupSpecified(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of(), scope);
+
+            assertEquals(1, out.size());
+            assertEquals("p20260526_job101", out.get(0).partitionName());
+            assertTrue(out.get(0).existsInCatalog());
+            assertNull(out.get(0).analyzedClause(), "an explicit target must never be auto-created");
+        }
+    }
+
+    @Test
+    public void explicitScopeDropsSampleForPartitionOutsideTargetList() {
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        SampleSet samples = sampleSetOf(List.of(tuple(Variant.of(DateType.DATE, "2026-05-26"))));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.staticOverwrite(
+                List.of("p20260527"), List.of("p20260527_job101"));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.groupSpecified(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of(), scope);
+
+            assertTrue(out.isEmpty());
+            Mockito.verify(table, Mockito.never()).getPartition("p20260526_job101", true);
+        }
+    }
+
+    @Test
     public void singlePartitionValueProducesOneGroup() {
         Column dateCol = new Column("d", DateType.DATE);
         OlapTable table = stubTable(List.of(dateCol));
@@ -1003,6 +1051,13 @@ public class PartitionSampleGrouperTest {
     private static void installPartitionWithTablets(OlapTable table, String partitionName,
                                                     long physicalPartitionId,
                                                     List<Long> tabletIds, long rowCount) {
+        installPartitionWithTablets(table, partitionName, physicalPartitionId, tabletIds, rowCount, false);
+    }
+
+    private static void installPartitionWithTablets(OlapTable table, String partitionName,
+                                                    long physicalPartitionId,
+                                                    List<Long> tabletIds, long rowCount,
+                                                    boolean temporary) {
         Partition partition = mock(Partition.class);
         PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
         when(physicalPartition.getId()).thenReturn(physicalPartitionId);
@@ -1020,7 +1075,10 @@ public class PartitionSampleGrouperTest {
         when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
-        when(table.getPartition(partitionName)).thenReturn(partition);
+        when(table.getPartition(partitionName, temporary)).thenReturn(partition);
+        if (!temporary) {
+            when(table.getPartition(partitionName)).thenReturn(partition);
+        }
     }
 
     private static Tuple tuple(Variant... values) {

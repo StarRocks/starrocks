@@ -178,6 +178,40 @@ public class PreSplitFlowTest {
     }
 
     @Test
+    public void staticOverwriteRoutesThroughExistingTemporaryPartitionFlow() {
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        SampleSet samples = new SampleSet(List.of(), List.of(), new Estimates(1234L, 0L));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.staticOverwrite(
+                List.of("p1"), List.of("p1_job"));
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.groupSpecified(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), eq(1234L), any(), eq(scope)))
+                    .thenReturn(List.of(mock(PartitionSamples.class)));
+            coordinator.when(() -> TabletPreSplitCoordinator.submitForExistingTemporaryPartitionsCombined(
+                            any(), any(), anyList(), anyInt(), any(), any(), any()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+            PreSplitFlow.runStaticOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                    () -> false, mock(ConnectContext.class), scope);
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForExistingTemporaryPartitionsCombined(
+                    eq(database), eq(table), anyList(), anyInt(), any(), any(), any()), times(1));
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
     public void dynamicOverwriteRevokesCleanupExclusionAfterAwait() {
         // The await is fail-safe, so it can return with the job still pre-CLEANING while the
         // overwrite transaction is about to start writing. The exclusion must not survive it.
