@@ -5,7 +5,7 @@ s_1   Array<String>,
 i_1   Array<BigInt>,
 f_1   Array<Double>,
 d_1   Array<DECIMAL(26, 2)>,
-d_2   Array<DECIMAL64(4, 3)>,
+d_2   Array<DECIMAL64(14, 3)>,
 d_3   Array<DECIMAL128(25, 19)>,
 d_4   Array<DECIMAL32(8, 5)> ,
 d_5   Array<DECIMAL(16, 3)>,
@@ -2499,7 +2499,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 29. D
 -- !result
 select array_concat(ai_1, d_2) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 29. Detail message: No matching function with signature: array_concat(array<array<bigint(20)>>, array<DECIMAL64(4,3)>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 29. Detail message: No matching function with signature: array_concat(array<array<bigint(20)>>, array<DECIMAL64(14,3)>).')
 -- !result
 select array_concat(ai_1, d_6) from array_test order by pk;
 -- result:
@@ -2892,7 +2892,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 43. D
 -- !result
 select array_concat([[1,2,3], [2,3,4]], d_2) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 43. Detail message: No matching function with signature: array_concat(array<array<tinyint(4)>>, array<DECIMAL64(4,3)>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 43. Detail message: No matching function with signature: array_concat(array<array<tinyint(4)>>, array<DECIMAL64(14,3)>).')
 -- !result
 select array_concat([[1,2,3], [2,3,4]], ['a', 'b', 'c']) from array_test order by pk;
 -- result:
@@ -3029,7 +3029,7 @@ E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 43. 
 -- !result
 select array_sort(array_intersect(ai_1, d_2)) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 43. Detail message: No matching function with signature: array_intersect(array<array<bigint(20)>>, array<DECIMAL64(4,3)>).')
+E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 43. Detail message: No matching function with signature: array_intersect(array<array<bigint(20)>>, array<DECIMAL64(14,3)>).')
 -- !result
 select array_sort(array_intersect(ai_1, NULL)) from array_test order by pk;
 -- result:
@@ -3085,7 +3085,7 @@ E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 44. 
 -- !result
 select array_sort(array_intersect(aas_1, d_2)) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 44. Detail message: No matching function with signature: array_intersect(array<array<array<varchar(65533)>>>, array<DECIMAL64(4,3)>).')
+E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 44. Detail message: No matching function with signature: array_intersect(array<array<array<varchar(65533)>>>, array<DECIMAL64(14,3)>).')
 -- !result
 select array_sort(array_intersect(aad_1, s_1)) from array_test order by pk;
 -- result:
@@ -3105,7 +3105,7 @@ E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 44. 
 -- !result
 select array_sort(array_intersect(aad_1, d_2)) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 44. Detail message: No matching function with signature: array_intersect(array<array<array<DECIMAL128(26,2)>>>, array<DECIMAL64(4,3)>).')
+E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 44. Detail message: No matching function with signature: array_intersect(array<array<array<DECIMAL128(26,2)>>>, array<DECIMAL64(14,3)>).')
 -- !result
 select array_sort(array_intersect(aad_1, ai_1)) from array_test order by pk;
 -- result:
