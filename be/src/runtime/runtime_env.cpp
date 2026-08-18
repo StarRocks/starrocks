@@ -57,18 +57,28 @@ namespace {
 // restores, so an inner one cannot overwrite what the outer one has to put back.
 thread_local MemTracker* tls_saved_dctx_tracker = nullptr;
 thread_local int tls_dctx_scope_depth = 0;
+thread_local bool tls_dctx_switched = false;
 
 void enter_dctx_alloc_scope() {
     if (tls_dctx_scope_depth++ > 0) return;
+    // Nothing to attribute to, and -- more to the point -- nothing to touch. The free
+    // side of this scope runs from a thread_local destructor at thread exit, which can
+    // happen while or after the environment is torn down; reading or writing the
+    // thread's CurrentThread there is exactly what must be avoided.
+    if (!RuntimeEnv::is_init()) return;
     tls_saved_dctx_tracker = CurrentThread::mem_tracker();
-    if (RuntimeEnv::is_init()) {
-        (void)tls_thread_status.set_mem_tracker(RuntimeEnv::GetInstance()->process_mem_tracker());
-    }
+    tls_dctx_switched = true;
+    (void)tls_thread_status.set_mem_tracker(RuntimeEnv::GetInstance()->process_mem_tracker());
 }
 
 void leave_dctx_alloc_scope() {
     if (--tls_dctx_scope_depth > 0) return;
     tls_dctx_scope_depth = 0;
+    // Restore only what was actually switched: a scope that did not swap must not put
+    // anything back, or it would flush the thread's allocation cache for no reason and
+    // touch state the enter side deliberately left alone.
+    if (!tls_dctx_switched) return;
+    tls_dctx_switched = false;
     (void)tls_thread_status.set_mem_tracker(tls_saved_dctx_tracker);
     tls_saved_dctx_tracker = nullptr;
 }
