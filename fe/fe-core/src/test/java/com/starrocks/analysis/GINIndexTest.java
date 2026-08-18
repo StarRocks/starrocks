@@ -22,6 +22,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
@@ -42,6 +43,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
@@ -127,6 +129,58 @@ public class GINIndexTest extends PlanTestBase {
                 SemanticException.class,
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
                 "The inverted index does not support shared data mode");
+    }
+
+    @Test
+    public void testCheckInvertedIndexLowerCasesPropertyKeys() {
+        Column c = new Column("f2", Type.STRING, true);
+
+        Map<String, String> upperCaseKey = new HashMap<>();
+        upperCaseKey.put(IMP_LIB.name().toUpperCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name().toLowerCase(Locale.ROOT));
+        Assertions.assertDoesNotThrow(() -> InvertedIndexUtil.checkInvertedIndexValid(c, upperCaseKey, KeysType.DUP_KEYS));
+        Assertions.assertEquals(InvertedIndexImpType.CLUCENE.name().toLowerCase(Locale.ROOT),
+                upperCaseKey.get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+        Assertions.assertFalse(upperCaseKey.containsKey(IMP_LIB.name().toUpperCase(Locale.ROOT)));
+
+        // Values stay untouched: only keys are case-folded.
+        Map<String, String> mixedCaseKeys = new HashMap<>();
+        mixedCaseKeys.put("Imp_Lib", InvertedIndexImpType.CLUCENE.name().toUpperCase(Locale.ROOT));
+        mixedCaseKeys.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY.toUpperCase(Locale.ROOT),
+                InvertedIndexUtil.INVERTED_INDEX_PARSER_ENGLISH);
+        Assertions.assertDoesNotThrow(() -> InvertedIndexUtil.checkInvertedIndexValid(c, mixedCaseKeys, KeysType.DUP_KEYS));
+        Assertions.assertEquals(InvertedIndexImpType.CLUCENE.name().toUpperCase(Locale.ROOT),
+                mixedCaseKeys.get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+        Assertions.assertEquals(InvertedIndexUtil.INVERTED_INDEX_PARSER_ENGLISH,
+                mixedCaseKeys.get(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY));
+        Assertions.assertTrue(mixedCaseKeys.keySet().stream().allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT))));
+
+        Map<String, String> collidingKeys = new HashMap<>();
+        collidingKeys.put(IMP_LIB.name().toUpperCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name().toLowerCase(Locale.ROOT));
+        collidingKeys.put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name().toUpperCase(Locale.ROOT));
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Duplicated index property for GIN after lower-casing the key: " + IMP_LIB.name().toLowerCase(Locale.ROOT),
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c, collidingKeys, KeysType.DUP_KEYS));
+    }
+
+    @Test
+    public void testUpperCaseImpLibReachesBeAsLowerCaseKey() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_upper_case_imp_lib` (\n" +
+                "  `k` int NOT NULL COMMENT \"\",\n" +
+                "  `v` varchar(50) NOT NULL COMMENT \"\",\n" +
+                "  INDEX gin_v (`v`) USING GIN(\"IMP_LIB\" = \"clucene\", \"PARSER\" = \"english\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", \"replicated_storage\" = \"false\");");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "t_upper_case_imp_lib");
+        TOlapTableIndex olapIndex = table.getIndexes().get(0).toThrift();
+        // BE fails the load with "Can not get inverted imp type" unless the key lands here exactly as imp_lib.
+        Assertions.assertEquals("clucene", olapIndex.getCommon_properties().get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+        Assertions.assertEquals(InvertedIndexUtil.INVERTED_INDEX_PARSER_ENGLISH,
+                olapIndex.getIndex_properties().get(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY));
+        starRocksAssert.dropTable("t_upper_case_imp_lib");
     }
 
     @Test

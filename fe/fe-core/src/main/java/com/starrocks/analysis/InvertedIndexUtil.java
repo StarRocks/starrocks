@@ -26,8 +26,10 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
@@ -86,6 +88,8 @@ public class InvertedIndexUtil {
             throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
+        lowerCasePropertyKeys(properties);
+
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
         if (properties.containsKey(impLibKey)) {
             String impValue = properties.get(impLibKey);
@@ -105,6 +109,23 @@ public class InvertedIndexUtil {
 
         // add default properties
         addDefaultProperties(properties);
+    }
+
+    // BE finds the GIN properties by exact lower-case key, so any other spelling must be folded before storing.
+    private static void lowerCasePropertyKeys(Map<String, String> properties) {
+        if (properties.keySet().stream().allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT)))) {
+            return;
+        }
+        Map<String, String> lowerCased = new LinkedHashMap<>();
+        for (Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
+            if (lowerCased.containsKey(key)) {
+                throw new SemanticException("Duplicated index property for GIN after lower-casing the key: " + key);
+            }
+            lowerCased.put(key, entry.getValue());
+        }
+        properties.clear();
+        properties.putAll(lowerCased);
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
