@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AstTraverser;
@@ -315,7 +316,11 @@ public final class CommonSubqueryCTEHoister {
             new AstTraverser<Void, Void>() {
                 @Override
                 public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-                    if (isUnsharableFunction(expr.getFunctionName())) {
+                    // A UDF's body is opaque to us and may well return something different per call, while
+                    // the name check below only recognizes built-ins. Analysis has resolved the function by
+                    // now, which is the only point where the two can be told apart at all.
+                    Function fn = expr.getFn();
+                    if ((fn != null && fn.isUdf()) || isUnsharableFunction(expr.getFunctionName())) {
                         found[0] = true;
                         return null;
                     }
@@ -342,12 +347,13 @@ public final class CommonSubqueryCTEHoister {
      * Functions whose result two identical occurrences may legitimately disagree on today, so that sharing them
      * would narrow behaviour the query never promised.
      *
-     * <p>Deliberately narrow. {@code FunctionSet#nonDeterministicTimeFunctions} is <em>not</em> included: those
-     * fold to one constant per query, so two occurrences already agree. {@code any_value} is, because it is
-     * defined as picking an arbitrary member of its group. Note that this does not cover every under-specified
-     * aggregate - {@code group_concat} / {@code array_agg} without an ORDER BY, or {@code min_by} / {@code max_by}
-     * on ties, are arbitrary in the same way - but deciding that in general needs a notion of order sensitivity
-     * the FE does not have today.
+     * <p>Deliberately narrow, and only half the story - the caller also rejects every UDF outright, since a
+     * user-defined body could return anything per call and no name list can know. {@code
+     * FunctionSet#nonDeterministicTimeFunctions} is <em>not</em> included: those fold to one constant per
+     * query, so two occurrences already agree. {@code any_value} is, because it is defined as picking an
+     * arbitrary member of its group. What remains uncovered is the under-specified built-in aggregates -
+     * {@code group_concat} / {@code array_agg} without an ORDER BY, or {@code min_by} / {@code max_by} on ties -
+     * because deciding that in general needs a notion of order sensitivity the FE does not have today.
      */
     private static boolean isUnsharableFunction(String name) {
         if (name == null) {

@@ -213,6 +213,10 @@ public class CommonSubqueryCTETest extends TPCDSPlanTestBase {
         assertEquals(2, scanCount(sql, "store_sales"));
     }
 
+    // Note: the UDF guard (isUnsafeAfterAnalysis rejecting Function#isUdf) has no unit test here. A UDF that
+    // survives to the plan as a UDF - rather than a SQL-bodied one, which is inlined and deterministic anyway -
+    // needs a real Java or Python artifact, which a plan test cannot set up.
+
     /** A relation type the allowlist does not recognize must not be hoisted. */
     @Test
     public void testUnrecognizedRelationNotShared() throws Exception {
