@@ -524,7 +524,7 @@ description: "Alphabetical i - p"
 
 - 类型：计数器
 - 单位：计数
-- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败时增加。
+- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败，或 Compaction 读取输入 SST 文件时检测到数据损坏时增加。
 
 ## `pk_index_sst_write_error_total`
 
