@@ -135,6 +135,10 @@ ColumnReader::~ColumnReader() {
     if (_zstd_compression_ddict != nullptr) {
         MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
                                  _zstd_compression_ddict->mem_usage());
+        // Free under the same tracker the allocation was charged to. Eviction runs on
+        // whatever thread happened to trigger it, so without this the process tracker
+        // would keep the charge while an unrelated query's tracker went negative.
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
         _zstd_compression_ddict.reset();
     }
     MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
@@ -542,7 +546,24 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                             RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
                             // ZSTD copies the dictionary bytes internally, so the
                             // page handle may be released after create().
-                            auto ddict_or = compression::ZstdDDict::create(body);
+                            //
+                            // That copy is a plain malloc, and malloc is hooked, so without
+                            // a scope it is charged to whatever tracker the first reader of
+                            // this segment happens to be running under -- usually a query's.
+                            // The dictionary then outlives that query, for as long as the
+                            // segment stays in the metacache, and is freed on whichever
+                            // thread evicts it. Pointing the allocation at the process
+                            // tracker moves the charge to where the memory actually lives
+                            // instead of adding a second one; the explicit consume below is
+                            // on the parentless metadata tree, which is what sizes the
+                            // metacache and does not participate in process accounting.
+                            // ~ColumnReader releases under the same scope.
+                            StatusOr<std::unique_ptr<compression::ZstdDDict>> ddict_or;
+                            {
+                                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(
+                                        RuntimeEnv::GetInstance()->process_mem_tracker());
+                                ddict_or = compression::ZstdDDict::create(body);
+                            }
                             RETURN_IF_ERROR(ddict_or.status());
                             _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
                             // The DDict holds its own copy of the dictionary and lives as long
