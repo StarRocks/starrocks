@@ -803,6 +803,9 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
     ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
+    // Verify before decoding: a corrupt del file that still deserializes cleanly would erase the
+    // wrong primary keys.
+    RETURN_IF_ERROR(verify_del_file_crc32c(del_meta, params.tablet->id(), read_buffer));
     auto col = pk_column->clone();
     using Serd = serde::ColumnArraySerde;
     const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());

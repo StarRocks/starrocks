@@ -33,6 +33,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/crc32c.h"
 #include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
@@ -850,6 +851,67 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_num_rows) {
     EXPECT_EQ(100, total); // 40 + 60 + 0
     EXPECT_TRUE(rowset.del_files(0).has_num_rows());
     EXPECT_FALSE(rowset.del_files(2).has_num_rows());
+}
+
+// The del file checksum rules: absent means "not recorded" and is always accepted (a del file
+// written before the field existed, or by the replication path), a recorded checksum is enforced,
+// and the config turns verification off entirely.
+TEST_F(MetaFileTest, test_verify_del_file_crc32c) {
+    const std::string content = "0123456789abcdef";
+    const std::string corrupted = "0123456789abcdeF";
+    const uint32_t good = crc32c::Mask(crc32c::Value(content.data(), content.size()));
+
+    FileMetaPB file_meta;
+    file_meta.set_name("0000000000000001_d.del");
+    EXPECT_FALSE(file_meta.has_crc32c());
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, content));
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, corrupted));
+
+    file_meta.set_crc32c(good);
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, content));
+    EXPECT_TRUE(verify_del_file_crc32c(file_meta, 42, corrupted).is_corruption());
+
+    // Same rules on the persisted metadata type.
+    DelfileWithRowsetId del_meta;
+    del_meta.set_name(file_meta.name());
+    EXPECT_OK(verify_del_file_crc32c(del_meta, 42, corrupted));
+    del_meta.set_crc32c(good);
+    EXPECT_OK(verify_del_file_crc32c(del_meta, 42, content));
+    EXPECT_TRUE(verify_del_file_crc32c(del_meta, 42, corrupted).is_corruption());
+
+    const bool old_check = config::lake_enable_del_file_crc_check;
+    config::lake_enable_del_file_crc_check = false;
+    EXPECT_OK(verify_del_file_crc32c(file_meta, 42, corrupted));
+    EXPECT_OK(verify_del_file_crc32c(del_meta, 42, corrupted));
+    config::lake_enable_del_file_crc_check = old_check;
+}
+
+// apply must carry dels_meta.crc32c into the persisted del file metadata, and leave it absent when
+// the writer recorded none (older writer / replication).
+TEST_F(MetaFileTest, test_apply_opwrite_del_crc32c) {
+    const int64_t tablet_id = 31012;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    auto* d1 = op_write.add_dels_meta();
+    d1->set_name("d1.del");
+    d1->set_crc32c(0x12345678);
+    op_write.add_dels_meta()->set_name("d2.del"); // no checksum recorded
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.del_files_size());
+    ASSERT_TRUE(rowset.del_files(0).has_crc32c());
+    EXPECT_EQ(0x12345678u, rowset.del_files(0).crc32c());
+    EXPECT_FALSE(rowset.del_files(1).has_crc32c());
 }
 
 // batch path: op_write.del_num_rows is carried through batch_apply_opwrite/set_final_rowset.
