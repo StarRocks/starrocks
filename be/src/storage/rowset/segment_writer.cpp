@@ -51,6 +51,7 @@
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
 #include "storage/base/short_key_index.h"
 #include "storage/chunk_variant_helper.h"
 #include "storage/full_sort_key_codec.h"
@@ -520,6 +521,29 @@ Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
     return Status::OK();
 }
 
+// Sort-key positions only: materializing the whole row allocates tens of GB when a value column holds a huge ARRAY.
+Status SegmentWriter::_append_sort_key_index_entry(const Chunk& chunk, size_t row) {
+    TRY_CATCH_BAD_ALLOC({
+        std::vector<Datum> values(chunk.num_columns());
+        for (uint32_t idx : _sort_column_indexes) {
+            // SeekTuple encodes an out-of-range sort column as NULL; leave the slot unset rather than indexing OOB.
+            if (idx < values.size()) {
+                values[idx] = chunk.get_column_by_index(idx)->get(row);
+            }
+        }
+        SeekTuple tuple(*chunk.schema(), std::move(values));
+        // The legacy truncated short key index is ALWAYS built (footer field 9).
+        size_t keys = _tablet_schema->num_short_key_columns();
+        RETURN_IF_ERROR(_index_builder->add_item(tuple.short_key_encode(keys, _sort_column_indexes, 0)));
+        // When enabled, ADDITIONALLY record the full untruncated sort key at the SAME block boundary.
+        if (_full_sort_key_index) {
+            RETURN_IF_ERROR(
+                    _full_sort_key_index_builder->add_item(tuple.full_sort_key_encode(_sort_column_indexes, 0)));
+        }
+    });
+    return Status::OK();
+}
+
 Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
@@ -557,16 +581,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
-                SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
-                // The legacy truncated short key index is ALWAYS built (footer field 9).
-                size_t keys = _tablet_schema->num_short_key_columns();
-                RETURN_IF_ERROR(_index_builder->add_item(tuple.short_key_encode(keys, _sort_column_indexes, 0)));
-                // When enabled, ADDITIONALLY record the full untruncated sort key for the SAME block
-                // boundary -> shared block geometry with the legacy index.
-                if (_full_sort_key_index) {
-                    RETURN_IF_ERROR(_full_sort_key_index_builder->add_item(
-                            tuple.full_sort_key_encode(_sort_column_indexes, 0)));
-                }
+                RETURN_IF_ERROR(_append_sort_key_index_entry(chunk, i));
             }
             // Sort-key sample: take one tuple every _sort_key_sample_row_interval
             // rows. Samples are at 0-indexed rows interval, 2*interval, 3*interval,
