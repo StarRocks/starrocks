@@ -225,6 +225,23 @@ public class MergeTabletJob extends TabletReshardJob {
                         || publishResult.publishState() == PublishState.FAILED) {
                     // Publish not started or publish failed
                     allPartitionFinished = false;
+<<<<<<< HEAD
+=======
+                    // Remember why THIS partition's publish failed so a job stuck retrying can
+                    // explain itself; without it ERROR_MESSAGE is empty and the cause lives only in
+                    // fe.log. Kept until this partition publishes (an IN_PROGRESS retry must not
+                    // blank it) and scoped per partition so recovery here is not masked by a
+                    // sibling partition that is still retrying.
+                    if (publishResult.publishState() == PublishState.FAILED) {
+                        reshardingPhysicalPartition.setPublishFailureReason(publishResult.failureReason());
+                        // A failed publish is retried until it succeeds, but only once its backoff has
+                        // elapsed: resubmitting the same doomed publish on every tick of the reshard
+                        // daemon is what turned one stuck publish into a hot loop.
+                        if (!reshardingPhysicalPartition.isPublishRetryDue()) {
+                            continue;
+                        }
+                    }
+>>>>>>> 5fcbcc9cca ([BugFix] Pace and report reshard publish retries instead of spinning silently (#77691))
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
