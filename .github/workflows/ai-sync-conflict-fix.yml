@@ -42,8 +42,12 @@ concurrency:
 env:
   UPSTREAM_REPO: StarRocks/starrocks
   # SLACK_BOT_TOKEN is an existing repo secret (used by ci-report / ai-sr-skills / etc.).
-  # The Slack channel is hardcoded in the ci-tool scripts, so it is not passed here.
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+  # Slack channel id — single source of truth is the repo variable SYNC_CONFLICT_SLACK_CHANNEL,
+  # so switching channels (trial C0AN4UZ83L5 -> stable #phx-cd-rd-ci C0APHDFLAQ7) is a variable
+  # edit, not a code change. If the variable is unset, SLACK_CHANNEL is empty and the ci-tool
+  # scripts degrade to log-only (they guard on a non-empty channel), never leaking to a wrong one.
+  SLACK_CHANNEL: ${{ vars.SYNC_CONFLICT_SLACK_CHANNEL }}
 
 jobs:
   # -- Fast path: labeled(conflict), single PR ------------------------------------------------
