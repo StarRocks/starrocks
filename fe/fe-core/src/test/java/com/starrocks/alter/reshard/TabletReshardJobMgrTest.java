@@ -43,6 +43,16 @@ public class TabletReshardJobMgrTest {
     // enclosing test method; the counters it writes live here instead. Reset before each test.
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
 
+    private static void stubCountingNodeCount() {
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                NODE_COUNT_RESOLUTIONS.incrementAndGet();
+                return 8;
+            }
+        };
+    }
+
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
         private long tableId = 0;
@@ -429,7 +439,7 @@ public class TabletReshardJobMgrTest {
 
         int before = mgr.getTabletReshardJobs().size();
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(before + 1, mgr.getTabletReshardJobs().size());
     }
@@ -442,7 +452,7 @@ public class TabletReshardJobMgrTest {
         // Phase 1: admission open — pre-seed one candidate so the set is non-empty.
         mockLeaderAdmissionOpen();
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         Assertions.assertEquals(1, mgr.getReshardCandidateCount(),
                 "pre-seeded candidate should be present while admission is open");
 
@@ -465,7 +475,7 @@ public class TabletReshardJobMgrTest {
         // admission open, addReshardCandidate must drop it rather than queue a no-op candidate.
         long belowSplit = TabletReshardUtils.splitThreshold(Config.tablet_reshard_target_size) - 1;
         int before = mgr.getReshardCandidateCount();
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), belowSplit, Long.MAX_VALUE, 0L);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), belowSplit, Long.MAX_VALUE, 0L, 0);
         Assertions.assertEquals(before, mgr.getReshardCandidateCount(),
                 "non-actionable signal (below split threshold, no merge) must not be queued");
     }
@@ -476,10 +486,10 @@ public class TabletReshardJobMgrTest {
         mockLeaderAdmissionOpen();
         long target = Config.tablet_reshard_target_size;
         // First actionable mark seeds the table's candidate.
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), target * 2, Long.MAX_VALUE, 0L);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), target * 2, Long.MAX_VALUE, 0L, 0);
         int afterFirst = mgr.getReshardCandidateCount();
         // A second mark for the same table must coalesce (exercise the merge remap), not add a new entry.
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), target * 4, Long.MAX_VALUE, 0L);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), target * 4, Long.MAX_VALUE, 0L, 0);
         Assertions.assertEquals(afterFirst, mgr.getReshardCandidateCount(),
                 "repeated marks for one table coalesce into a single candidate");
     }
@@ -504,7 +514,7 @@ public class TabletReshardJobMgrTest {
         long mergePairBelowThreshold =
                 TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold, 0L);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertTrue(mergeCalled[0],
                 "drain must route a sub-threshold merge candidate to a merge job");
@@ -531,14 +541,14 @@ public class TabletReshardJobMgrTest {
 
         // Round 1: first over-threshold observation -> one split job fired, table latched.
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, splitCalls[0], "first over-threshold scan must fire exactly one split");
         Assertions.assertTrue(mgr.hasSizeSplitLatch(reshardTable.getId()), "table must be latched after firing");
 
         // Round 2: same size -> same signature (identical fallback leaves layout + requested count unchanged) -> suppressed.
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, splitCalls[0], "an unchanged split request must not re-fire (loop broken)");
     }
@@ -563,10 +573,10 @@ public class TabletReshardJobMgrTest {
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, splitCalls[0], "suppressed while nothing changed");
 
@@ -576,7 +586,7 @@ public class TabletReshardJobMgrTest {
         pp.setDataVersion(pp.getDataVersion() + 1);
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(2, splitCalls[0], "a data change (dataVersion bump) must re-arm the split");
     }
@@ -601,15 +611,15 @@ public class TabletReshardJobMgrTest {
             TabletReshardJobMgr mgr = new TabletReshardJobMgr();
             long big = originalTarget * 8; // calcSplitCount ~ 8
             oversizedTablet.setDataSize(big);
-            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE, 0L);
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE, 0L, 0);
             mgr.runAfterCatalogReadyForTest();
-            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE, 0L);
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE, 0L, 0);
             mgr.runAfterCatalogReadyForTest();
             Assertions.assertEquals(1, splitCalls[0], "suppressed at unchanged split count");
 
             // Raise the target so calcSplitCount(big, target) drops -> requested split count changes -> re-arm.
             Config.tablet_reshard_target_size = big / 2; // calcSplitCount ~ 2, different from ~8
-            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE, 0L);
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE, 0L, 0);
             mgr.runAfterCatalogReadyForTest();
             Assertions.assertEquals(2, splitCalls[0], "a changed requested split count must re-arm the split");
         } finally {
@@ -644,15 +654,15 @@ public class TabletReshardJobMgrTest {
             Assertions.assertEquals(2, TabletReshardUtils.calcSplitCount(huge, originalTarget));
             Assertions.assertEquals(2, TabletReshardUtils.calcSplitCount(huge, originalTarget * 3));
 
-            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), huge, Long.MAX_VALUE, 0L);
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), huge, Long.MAX_VALUE, 0L, 0);
             mgr.runAfterCatalogReadyForTest();
-            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), huge, Long.MAX_VALUE, 0L);
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), huge, Long.MAX_VALUE, 0L, 0);
             mgr.runAfterCatalogReadyForTest();
             Assertions.assertEquals(1, splitCalls[0], "suppressed while config + layout unchanged (count capped)");
 
             // Change target: the max count stays capped at 2, but the raw target config in the fingerprint changes.
             Config.tablet_reshard_target_size = originalTarget * 3;
-            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), huge, Long.MAX_VALUE, 0L);
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), huge, Long.MAX_VALUE, 0L, 0);
             mgr.runAfterCatalogReadyForTest();
             Assertions.assertEquals(2, splitCalls[0],
                     "a config change must re-arm even when the max tablet's computed count is capped/unchanged");
@@ -716,14 +726,14 @@ public class TabletReshardJobMgrTest {
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertTrue(splitFired[0], "initial split must fire");
         Assertions.assertTrue(mgr.hasSizeSplitLatch(reshardTable.getId()), "latched after firing");
 
         // A drain where needSplit is false (only a merge signal) must forget the size-split latch entry.
         long mergePairBelowThreshold = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold, 0L);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertFalse(mgr.hasSizeSplitLatch(reshardTable.getId()),
                 "dropping below the split threshold must forget the latch so future growth re-arms");
@@ -745,10 +755,10 @@ public class TabletReshardJobMgrTest {
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
 
         Assertions.assertEquals(2, attempts[0], "a creation failure records nothing and must retry, not suppress");
@@ -771,7 +781,7 @@ public class TabletReshardJobMgrTest {
 
         mockLeaderAdmissionOpen();
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
-                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE, 0L, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertTrue(mgr.hasSizeSplitLatch(reshardTable.getId()), "latched after firing");
 
@@ -792,9 +802,9 @@ public class TabletReshardJobMgrTest {
         // Three marks with the largest neither first nor last: with only an ascending pair, a remap
         // mutated to keep the incoming value would return the same answer as Math.max and the
         // assertion could not tell the two apart.
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small);
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small * 4);
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small * 2);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small, 0);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small * 4, 0);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small * 2, 0);
         Assertions.assertEquals(1, mgr.getReshardCandidateCount());
         // The coalesced candidate must carry the larger early signal.
         Assertions.assertEquals(small * 4, mgr.peekMaxUnderProvisionedTabletSize(reshardTable.getId()));
@@ -823,7 +833,7 @@ public class TabletReshardJobMgrTest {
         // Early-only: no split signal (0L) and no merge signal (Long.MAX_VALUE), so nothing but the
         // third field can produce a job.
         long earlySize = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, earlySize);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, earlySize, 0);
         Assertions.assertEquals(1, mgr.getReshardCandidateCount(), "the early-only candidate must be queued");
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, splitCalls[0], "the drain must hand the early signal to the trigger");
@@ -859,15 +869,15 @@ public class TabletReshardJobMgrTest {
         long small = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
         long large = small * 4;
 
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, splitCalls[0], "first early observation must fire");
 
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, splitCalls[0], "an unchanged early signal must stay suppressed");
 
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, large);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, large, 0);
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(2, splitCalls[0], "a changed early child count must re-arm the split");
     }
@@ -902,56 +912,42 @@ public class TabletReshardJobMgrTest {
     }
 
     @Test
-    public void anOrdinarySizeSplitResolvesNoNodeCountInTheTrigger() {
+    public void theTriggerReusesTheBoundItsProducerAlreadyResolved() {
         mockLeaderAdmissionOpen();
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                NODE_COUNT_RESOLUTIONS.incrementAndGet();
-                return 8;
-            }
-        };
+        stubCountingNodeCount();
         // A local manager, and the counter zeroed as late as possible: the singleton's scheduler
         // thread ticks every 10 ms, and a candidate an earlier test left queued would resolve too.
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
-        // Both resolutions happen while deciding, before any tablet is actually planned, so leave
-        // the table too small to split: a real job here would replace the shared tablet this class
-        // hands to every other test.
+        // Leave the table too small to split: a real job here would replace the shared tablet this
+        // class hands to every other test, and the resolution under test happens before planning.
         oversizedTablet.setDataSize(0);
-        NODE_COUNT_RESOLUTIONS.set(0);
-        // A plain oversized tablet and no adaptive signal: the plan is the size rule's alone, so the
-        // trigger resolves nothing and only the factory does. Resolving the warehouse probes StarMgr,
-        // and this path had no such call before the adaptive rule existed.
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L);
-        Assertions.assertEquals(1, NODE_COUNT_RESOLUTIONS.get(), "size-only split must not resolve in the trigger");
 
-        // With an adaptive signal the bound IS a plan input, so the trigger resolves it once for the
-        // suppression signature -- a resized warehouse has to re-arm a latched table -- and the factory
-        // resolves its own, because an explicit ALTER TABLE ... SPLIT TABLET reaches it with no trigger
-        // ahead of it. Neither resolution scales with the index.
+        // Resolving a warehouse probes StarMgr, and whoever raised the candidate already paid for it,
+        // so the trigger resolves nothing of its own -- on either path. The adaptive path is the one
+        // that would hurt: a skewed index parked at the bound keeps signalling and keeps being
+        // suppressed, so it would pay that round trip on every scan, forever. The single resolution
+        // left is the factory's, for the plan it builds.
         NODE_COUNT_RESOLUTIONS.set(0);
         Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                0L, Long.MAX_VALUE, Config.tablet_reshard_min_split_size * 4);
-        Assertions.assertEquals(2, NODE_COUNT_RESOLUTIONS.get(), "adaptive split resolves for signature and plan");
+                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L, 0);
+        Assertions.assertEquals(1, NODE_COUNT_RESOLUTIONS.get(), "size-only split resolves only in the factory");
+
+        NODE_COUNT_RESOLUTIONS.set(0);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, Long.MAX_VALUE, Config.tablet_reshard_min_split_size * 4, 8);
+        Assertions.assertEquals(1, NODE_COUNT_RESOLUTIONS.get(), "adaptive split resolves only in the factory");
     }
 
     @Test
     public void noNodeCountResolutionWhenTheTableIsNotNormal() {
         mockLeaderAdmissionOpen();
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                NODE_COUNT_RESOLUTIONS.incrementAndGet();
-                return 8;
-            }
-        };
+        stubCountingNodeCount();
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
         reshardTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
         NODE_COUNT_RESOLUTIONS.set(0);
         try {
             Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                    Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L);
+                    Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L, 0);
         } finally {
             reshardTable.setState(OlapTable.OlapTableState.NORMAL);
         }

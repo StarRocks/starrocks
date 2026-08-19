@@ -239,7 +239,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 if (reshardEligible) {
                     GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
                             db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize,
-                            maxAdaptiveSplitTabletSize);
+                            maxAdaptiveSplitTabletSize, adaptiveBound);
                 }
             }
         }

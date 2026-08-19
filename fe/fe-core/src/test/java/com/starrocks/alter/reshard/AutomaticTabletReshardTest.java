@@ -89,7 +89,7 @@ public class AutomaticTabletReshardTest {
 
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L, 0);
     }
 
     @Test
@@ -107,7 +107,7 @@ public class AutomaticTabletReshardTest {
 
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L);
+                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L, 0);
     }
 
     @Test
@@ -126,7 +126,7 @@ public class AutomaticTabletReshardTest {
         long pairSumBelowThreshold = TabletReshardUtils.mergePairThreshold(t) - 1;
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                0L, pairSumBelowThreshold, 0L);
+                0L, pairSumBelowThreshold, 0L, 0);
         org.junit.jupiter.api.Assertions.assertTrue(mergeCalled[0],
                 "merge job should be created when minAdjacentPair < mergePairThreshold");
     }
@@ -147,7 +147,7 @@ public class AutomaticTabletReshardTest {
         long atThreshold = TabletReshardUtils.mergePairThreshold(t);
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                0L, atThreshold, 0L);
+                0L, atThreshold, 0L, 0);
         org.junit.jupiter.api.Assertions.assertFalse(mergeCalled[0],
                 "merge must not trigger at the exact threshold (strict <)");
     }
@@ -169,7 +169,7 @@ public class AutomaticTabletReshardTest {
         long justBelow = TabletReshardUtils.splitThreshold(t) - 1;
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                justBelow, Long.MAX_VALUE, 0L);
+                justBelow, Long.MAX_VALUE, 0L, 0);
         org.junit.jupiter.api.Assertions.assertFalse(splitCalled[0],
                 "split must not trigger one byte below splitThreshold");
     }
@@ -190,9 +190,9 @@ public class AutomaticTabletReshardTest {
         // A local manager: the singleton's scheduler thread ticks every 10 ms and would drain the
         // candidate out from under the assertion below.
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
-        mgr.addReshardCandidate(db.getId(), table.getId(), 0L, pairSumBelowThreshold, 0L);
+        mgr.addReshardCandidate(db.getId(), table.getId(), 0L, pairSumBelowThreshold, 0L, 0);
         assertEquals(1, mgr.getReshardCandidateCount(), "a merge-only candidate must still be queued");
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, pairSumBelowThreshold, 0L);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, pairSumBelowThreshold, 0L, 0);
         assertTrue(mergeCalled[0]);
     }
 
@@ -216,7 +216,7 @@ public class AutomaticTabletReshardTest {
         long pairSumBelowThreshold =
                 TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, pairSumBelowThreshold, earlySize);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, pairSumBelowThreshold, earlySize, 0);
         assertTrue(mergeCalled[0], "merge must still run when the early split produced nothing");
     }
 
@@ -236,11 +236,11 @@ public class AutomaticTabletReshardTest {
 
         long earlySize = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, Long.MAX_VALUE, earlySize);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, Long.MAX_VALUE, earlySize, 0);
         assertTrue(mgr.hasSizeSplitLatch(table.getId()));
 
         // Same signals again: the latch suppresses, control falls through, the tombstone survives.
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, Long.MAX_VALUE, earlySize);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table, 0L, Long.MAX_VALUE, earlySize, 0);
         assertTrue(mgr.hasSizeSplitLatch(table.getId()),
                 "falling through to merge must not erase a live early signal's suppression");
     }

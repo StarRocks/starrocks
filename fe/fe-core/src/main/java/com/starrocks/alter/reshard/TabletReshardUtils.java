@@ -248,9 +248,17 @@ public class TabletReshardUtils {
      * build. Returns a value in [1, tablet_reshard_max_split_count].
      */
     public static int computeParallelismFloor(long tableId) {
-        ComputeResource computeResource =
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
-        return parallelismFloor(computeNodeCount(computeResource), Config.tablet_reshard_max_split_count);
+        return parallelismFloor(computeNodeCountForTable(tableId), Config.tablet_reshard_max_split_count);
+    }
+
+    /**
+     * The single resolution the auto-merge floor and the adaptive-split bound share. Keeping them on
+     * one path is what makes them consistent within a decision, which is what stops the two rules
+     * pulling one index back and forth.
+     */
+    private static int computeNodeCountForTable(long tableId) {
+        return computeNodeCount(GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getBackgroundComputeResource(tableId));
     }
 
     /**
@@ -265,8 +273,7 @@ public class TabletReshardUtils {
      */
     public static int safeComputeNodeCountForTable(long tableId) {
         try {
-            return computeNodeCount(GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId));
+            return computeNodeCountForTable(tableId);
         } catch (RuntimeException e) {
             LOG.warn("Compute node count unavailable for table {}; reshard sizing will fall back.", tableId, e);
             return 0;

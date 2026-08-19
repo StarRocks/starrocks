@@ -53,6 +53,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SplitTabletJobEarlyTest {
+    // A JMockit @Mock for a static method must itself be static, so it cannot read a local of the
+    // enclosing helper; the stubbed count lives here instead.
+    private static int stubbedNodeCount;
+
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static Database db;
@@ -158,6 +162,16 @@ public class SplitTabletJobEarlyTest {
         partition.createRollupIndex(rollup);
     }
 
+    private static void stubNodeCount(int nodeCount) {
+        stubbedNodeCount = nodeCount;
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                return stubbedNodeCount;
+            }
+        };
+    }
+
     @Test
     public void earlyRuleNeverOverridesANormalSplit() {
         // n=1, cn=8 -> ceiling 8, headroom 7. A 16 GiB tablet clears the 15 GiB normal threshold
@@ -250,12 +264,7 @@ public class SplitTabletJobEarlyTest {
         // early path, so only this one drives the real factory from clause to materialized job.
         setTabletDataSizes(4L << 30);
         // The factory resolves the node count itself, so stub the resolver.
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                return 8;
-            }
-        };
+        stubNodeCount(8);
 
         TabletReshardJob job =
                 new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
@@ -268,12 +277,7 @@ public class SplitTabletJobEarlyTest {
         // AstBuilder#visitSplitTabletClause produces for `ALTER TABLE t SPLIT TABLET` with no
         // PROPERTIES: getProperties() returns a new empty HashMap, never null.
         setTabletDataSizes(4L << 30);
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                return 8;
-            }
-        };
+        stubNodeCount(8);
 
         SplitTabletClause clause = new SplitTabletClause(null, null, new HashMap<>());
         clause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
@@ -362,12 +366,7 @@ public class SplitTabletJobEarlyTest {
         // assertion would read 10 for any node count and could not tell a resolved 0 from a count the
         // constructor never resolved at all.
         setTwoIndexesWithSizes(/*adaptiveOnly=*/ 4L << 30, /*normal=*/ 100L << 30);
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                return 0;
-            }
-        };
+        stubNodeCount(0);
         // The factory resolves its own count, gets 0, and disables the early rule.
         TabletReshardJob job =
                 new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();

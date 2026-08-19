@@ -79,11 +79,15 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // TabletStatMgr scan: the largest tablet (split), the smallest adjacent fresh-pair sum (merge) and
     // the largest tablet living in an index that still has fewer tablets than the warehouse can drive
     // in parallel (early split; 0 when there is none). Long.MAX_VALUE is the "no merge" identity, so a
-    // split-only publish mark and a split+merge periodic mark compose by (max, min, max) regardless of
-    // arrival order. Self-contained (carries db/table id) so the drain needs no side key. Transient
-    // (not persisted): leader failover falls back to the scan.
+    // split-only publish mark and a split+merge periodic mark compose by (max, min, max, max)
+    // regardless of arrival order. adaptiveBound rides along because the scan has already resolved it
+    // -- resolving a warehouse probes StarMgr -- and it is a plan input the drain would otherwise have
+    // to fetch again; taking the max prefers a producer that resolved it over one that passed 0.
+    // Self-contained (carries db/table id) so the drain needs no side key. Transient (not persisted):
+    // leader failover falls back to the scan.
     private record ReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                                    long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize) {
+                                    long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize,
+                                    int adaptiveBound) {
     }
 
     // tableId (globally unique) -> coalesced reshard candidate awaiting a drain evaluation.
@@ -98,16 +102,17 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // queued.
     public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
             long minAdjacentTabletPairSize) {
-        addReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize, 0L);
+        addReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize, 0L, 0);
     }
 
     /**
      * As above, plus the largest tablet of an index that still holds fewer tablets than the warehouse
-     * can drive in parallel. Only the periodic scan knows that, because only it walks an index's tablet
-     * list; every other producer passes 0 through the overload above.
+     * can drive in parallel, and the bound that judgement was made against. Only the periodic scan
+     * knows either, because only it walks an index's tablet list and it has already resolved the
+     * warehouse; every other producer passes 0 through the overload above.
      */
     public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-            long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize) {
+            long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
         if (!isLeaderAdmissionOpen()) {
             return;
         }
@@ -120,12 +125,13 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         }
         reshardCandidates.merge(tableId,
                 new ReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize,
-                        maxAdaptiveSplitTabletSize),
+                        maxAdaptiveSplitTabletSize, adaptiveBound),
                 (existing, incoming) -> new ReshardCandidate(existing.dbId(), existing.tableId(),
                         Math.max(existing.maxTabletSize(), incoming.maxTabletSize()),
                         Math.min(existing.minAdjacentTabletPairSize(), incoming.minAdjacentTabletPairSize()),
                         Math.max(existing.maxAdaptiveSplitTabletSize(),
-                                incoming.maxAdaptiveSplitTabletSize())));
+                                incoming.maxAdaptiveSplitTabletSize()),
+                        Math.max(existing.adaptiveBound(), incoming.adaptiveBound())));
     }
 
     public TabletReshardJobMgr() {
@@ -199,7 +205,8 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
      * own lock.
      */
     private void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize,
-                                      long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize) {
+                                      long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize,
+                                      int adaptiveBound) {
         if (!isLeaderAdmissionOpen()) {
             return;
         }
@@ -214,19 +221,6 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
             boolean adaptiveSignal = maxAdaptiveSplitTabletSize > 0;
             if (normalSignal || adaptiveSignal) {
-                // Only the adaptive rule's plan depends on the bound, and the planner is strictly
-                // the stricter of the two tests -- it also demands headroom -- so no adaptive signal
-                // means no adaptive work, and the plan is the size rule's alone. Skipping the
-                // resolution there keeps an ordinary size-based split the pure local arithmetic it
-                // was: resolving the warehouse probes StarMgr.
-                //
-                // Resolved outside any table lock -- the drain holds none. The factory resolves it
-                // again for the plan it builds; a resize between the two only means this fingerprint
-                // describes a slightly different bound, which the next scan reconciles.
-                int adaptiveBound = adaptiveSignal
-                        ? TabletReshardUtils.adaptiveSplitBound(
-                                TabletReshardUtils.safeComputeNodeCountForTable(tableId))
-                        : 0;
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
                         splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize, adaptiveBound));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
@@ -440,7 +434,8 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 continue;
             }
             triggerTabletReshard(db, (OlapTable) table, candidate.maxTabletSize(),
-                    candidate.minAdjacentTabletPairSize(), candidate.maxAdaptiveSplitTabletSize());
+                    candidate.minAdjacentTabletPairSize(), candidate.maxAdaptiveSplitTabletSize(),
+                    candidate.adaptiveBound());
         }
     }
 

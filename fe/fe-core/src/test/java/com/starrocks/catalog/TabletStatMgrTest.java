@@ -78,6 +78,9 @@ public class TabletStatMgrTest {
     // an instance field of the test; what the compute-node stub answers, and how often it was asked,
     // lives here instead. Reset at the start of every scan.
     private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
+    // The bound the scan handed to the drain on the last runScan.
+    private static int capturedBound;
+
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
 
     // The scan fixture is the only thing here that registers a database in the singleton metastore, so
@@ -669,6 +672,7 @@ public class TabletStatMgrTest {
      */
     private long runScan(boolean leader, int stubbedNodeCount, long... tabletSizes) {
         long[] captured = {-1L};
+        capturedBound = -1;
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
         NODE_COUNT_RESOLUTIONS.set(0);
 
@@ -682,21 +686,22 @@ public class TabletStatMgrTest {
             @Mock
             public static int safeComputeNodeCountForTable(long tableId) {
                 // Answer the stub only on the FIRST call. A second resolution would mean the merge floor
-                // and the early ceiling came from different samples, which a warehouse resize could make
-                // inconsistent, so make that show up as a wrong answer rather than a silent pass.
+                // and the adaptive bound came from different samples, which a warehouse resize could
+                // make inconsistent, so make that show up as a wrong answer rather than a silent pass.
                 return NODE_COUNT_RESOLUTIONS.incrementAndGet() == 1 ? STUBBED_NODE_COUNT.get() : 1;
             }
         };
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
-                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
-                captured[0] = maxUnderProvisionedTabletSize;
+                    long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
+                captured[0] = maxAdaptiveSplitTabletSize;
+                capturedBound = adaptiveBound;
             }
         };
 
         int savedMaxSplitCount = Config.tablet_reshard_max_split_count;
-        // Pinned above every node count used below so the early ceiling is governed by the node count;
+        // Pinned above every node count used below so the bound is governed by the node count;
         // a change to this default must not be able to flatten these cases into each other.
         Config.tablet_reshard_max_split_count = 1024;
         try {
@@ -706,6 +711,15 @@ public class TabletStatMgrTest {
             Config.tablet_reshard_max_split_count = savedMaxSplitCount;
         }
         return captured[0];
+    }
+
+    @Test
+    public void theScanHandsTheDrainTheBoundItResolved() {
+        // The drain folds this into its suppression fingerprint and the planner spends it as headroom.
+        // Resolving it again down there would re-probe StarMgr for a number the scan is already
+        // holding -- and would keep paying for it on every scan of an index that stays suppressed.
+        runScan(true, 4, 8L << 30);
+        assertEquals(4, capturedBound, "the scan must hand over the bound it resolved");
     }
 
     @Test
