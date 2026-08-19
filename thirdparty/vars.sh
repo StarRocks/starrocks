@@ -501,13 +501,13 @@ BENCHGEN_NAME=benchgen-26.03.11.tar.gz
 BENCHGEN_SOURCE=benchgen-26.03.11
 BENCHGEN_MD5SUM="fd97eb82eb4c629d7916b6d012c7e81d"
 
-# paimon-cpp, pinned to specific commit
+# paimon-cpp
 # NOTE: all its third-party deps are BUNDLED and downloaded by its own cmake
 # at build time (network required when building this package)
-PAIMON_CPP_DOWNLOAD="https://github.com/apache/paimon-cpp/archive/92e7e55a8de56b26a90da5f7dbf29966bad41c8e.zip"
-PAIMON_CPP_NAME="paimon-cpp-92e7e55a8de56b26a90da5f7dbf29966bad41c8e.zip"
-PAIMON_CPP_SOURCE="paimon-cpp-92e7e55a8de56b26a90da5f7dbf29966bad41c8e"
-PAIMON_CPP_MD5SUM="9043ba9c138cba75f893565dc9d962a3"
+PAIMON_CPP_DOWNLOAD="https://github.com/apache/paimon-cpp/releases/download/v0.3.0/apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_NAME="apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_SOURCE="paimon-cpp-0.3.0"
+PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
