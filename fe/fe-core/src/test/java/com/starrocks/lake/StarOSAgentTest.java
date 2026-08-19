@@ -71,11 +71,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
 import java.util.OptionalInt;
-=======
 import java.util.concurrent.atomic.AtomicInteger;
->>>>>>> 428ec50fad8... [Enhancement] Release the reshard output shards' placement pin when the job finishes (#76945)
 import java.util.concurrent.atomic.AtomicLong;
 
 public class StarOSAgentTest {
