@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -296,5 +297,82 @@ public class AuditLoaderTest {
         // instead of throwing, otherwise it would kill the daemon cycle.
         AuditLoaderMgr mgr = new AuditLoaderMgr();
         Assertions.assertDoesNotThrow(mgr::correctReplicationNum);
+    }
+
+    @Test
+    public void testOfferEventSkipsUnformattableEvent() {
+        // A malformed event must be dropped by the producer path instead of propagating out of
+        // offerEvent, which runs on the shared audit-event worker thread.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        Assertions.assertDoesNotThrow(() -> mgr.offerEvent(null));
+        Assertions.assertEquals(0, mgr.bufferedRows());
+        Assertions.assertEquals(0, mgr.bufferedBytes());
+    }
+
+    @Test
+    public void testFlushWithEmptyBufferSendsNothing() {
+        // Empty-batch guard: an idle cluster must not open a load transaction at all, otherwise
+        // every interval would abort one (the defect this feature was designed to avoid).
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        long origInterval = Config.audit_loader_load_interval_seconds;
+        try {
+            Config.audit_loader_load_interval_seconds = 0;
+            Assertions.assertDoesNotThrow(mgr::maybeFlush);
+            Assertions.assertEquals(0, mgr.bufferedRows());
+        } finally {
+            Config.audit_loader_load_interval_seconds = origInterval;
+        }
+    }
+
+    @Test
+    public void testFlushStopsBatchAtByteCap() {
+        // A batch must stop at the byte cap rather than sending everything buffered, so one cycle
+        // cannot build a payload larger than the configured maximum.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        long origCap = Config.audit_loader_batch_max_bytes;
+        long origInterval = Config.audit_loader_load_interval_seconds;
+        try {
+            Config.audit_loader_batch_max_bytes = 1024 * 1024;
+            mgr.offerEvent(baseEvent());
+            mgr.offerEvent(baseEvent());
+            long bytesBefore = mgr.bufferedBytes();
+            // Shrink the cap below two rows so the batch loop has to break after the first one.
+            Config.audit_loader_batch_max_bytes = bytesBefore / 2;
+            Config.audit_loader_load_interval_seconds = 0;
+            mgr.maybeFlush();
+            // No BE can serve the load here, so every row stays queued for the next cycle.
+            Assertions.assertEquals(2, mgr.bufferedRows());
+            Assertions.assertEquals(bytesBefore, mgr.bufferedBytes());
+        } finally {
+            Config.audit_loader_batch_max_bytes = origCap;
+            Config.audit_loader_load_interval_seconds = origInterval;
+            mgr.clearBuffer();
+        }
+    }
+
+    @Test
+    public void testCorrectReplicationNumWithExistingTable() throws Exception {
+        // With the table present the self-heal must compare against the cluster expectation and
+        // return quietly when they already match, never throwing out of the daemon cycle.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.createDefaultCtx());
+        starRocksAssert.withDatabase(AuditLoaderMgr.AUDIT_DB_NAME);
+        starRocksAssert.withTable(mgr.buildCreateTableSql());
+        try {
+            Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDb(AuditLoaderMgr.AUDIT_DB_NAME));
+            Assertions.assertDoesNotThrow(mgr::correctReplicationNum);
+            // The table now exists, so a cycle must reach the flush stage instead of bailing out.
+            boolean orig = Config.enable_audit_loader;
+            try {
+                Config.enable_audit_loader = true;
+                Assertions.assertDoesNotThrow(mgr::runAfterCatalogReady);
+            } finally {
+                Config.enable_audit_loader = orig;
+                mgr.clearBuffer();
+            }
+        } finally {
+            starRocksAssert.dropTable(AuditLoaderMgr.AUDIT_DB_NAME + "." + AuditLoaderMgr.AUDIT_TABLE_NAME);
+        }
     }
 }
