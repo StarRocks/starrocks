@@ -866,6 +866,81 @@ TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_detects_corruption) {
     EXPECT_TRUE(meta_v3.status().is_not_found()) << meta_v3.status();
 }
 
+// A checksum mismatch is most plausibly a corrupted block in the local data cache, not in remote
+// storage, so the read drops that cache and tries once more. Simulate exactly that: corrupt the del
+// file, then have the cache-drop hook restore the original bytes -- standing in for the retry reading
+// through to an intact remote object -- and the publish must then succeed instead of failing.
+TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_retries_after_dropping_cache) {
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_one_txn(make_op_chunk(n, 0, true, _slot_cid_map))).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    auto delete_txn = write_one_txn(make_op_chunk(n, 0, /*upsert=*/false, _slot_cid_map));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, delete_txn));
+    ASSERT_GE(txn_log->op_write().dels_meta_size(), 1);
+    const std::string del_path = _tablet_mgr->del_location(tablet_id, txn_log->op_write().dels_meta(0).name());
+
+    // Keep the good bytes, then corrupt the file in place (length-preserving, as in the sibling test).
+    std::string good_bytes;
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(del_path));
+        ASSIGN_OR_ABORT(good_bytes, rf->read_all());
+        ASSERT_FALSE(good_bytes.empty());
+        auto corrupted = good_bytes;
+        corrupted[corrupted.size() - 1] = static_cast<char>(corrupted[corrupted.size() - 1] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, del_path));
+        ASSERT_OK(wf->append(Slice(corrupted)));
+        ASSERT_OK(wf->close());
+    }
+
+    // The drop is a no-op on a non-shared-data build, so force it to report success and, at the same
+    // moment, restore the file -- that is what dropping a corrupt cached block achieves in production.
+    int drop_calls = 0;
+    const std::string sync_point = "lake::drop_corrupted_del_file_cache";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        ++drop_calls;
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, del_path));
+        CHECK_OK(wf->append(Slice(good_bytes)));
+        CHECK_OK(wf->close());
+        *(Status*)arg = Status::OK();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack(sync_point);
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, delete_txn).status());
+    EXPECT_EQ(1, drop_calls) << "the cache drop should have been attempted exactly once";
+    EXPECT_EQ(0, read_rows(tablet_id, 3)) << "the retried del file should have applied";
+}
+
 // Spill path: the op-aware parallel merge must preserve in-transaction upsert/delete order. Drive the
 // default spill path (enable_load_spill=true) with parallel merge and tiny merge batches so a key that is
 // deleted and then re-upserted across flushes resolves across merge batches; the re-upsert (higher global
