@@ -311,7 +311,11 @@ if [ -e /proc/cpuinfo ] ; then
 fi
 
 if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
-    ENABLE_FAULT_INJECTION=OFF
+    # TEST-BUILD ONLY -- DO NOT MERGE UPSTREAM.
+    # Flipped to ON so a TSP-produced binary carries FIU_ENABLE (be/CMakeLists.txt:425) and the
+    # fault-injection tests can drive failpoints from SQL. TSP's build submit exposes no way to set
+    # this environment variable, so the branch has to carry it. Revert before opening any PR.
+    ENABLE_FAULT_INJECTION=ON
 fi
 
 HELP=0
