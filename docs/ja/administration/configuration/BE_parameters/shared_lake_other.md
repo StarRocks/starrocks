@@ -77,6 +77,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: グレースフルシャットダウンを完了する前に、少なくとも1件のフロントエンドからの heartbeat 応答で SHUTDOWN 状態が返されるのを待つかどうかを決定します。有効にすると、heartbeat RPC を介して SHUTDOWN の確認が返されるまでグレースフルシャットダウン処理は継続され、フロントエンドが通常の2回のハートビート間隔内で終了状態を検出するための十分な時間を確保します。
 - 導入バージョン: v3.4.5
 
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- デフォルト: 268435456
+- タイプ: Long
+- 単位: バイト
+- 変更可能: はい
+- 説明: CN が 1 件の `/api/cloudnative/dump_tablet_metadata` リクエストを同期処理するときの追跡対象メモリ予算です。バイト単位の厳密な上限ではなく、標準の MemTracker の集計粒度を使用します。メタデータの検査、機密フィールドのマスキング、JSON シリアライズを対象としますが、CN のメタデータキャッシュに既に格納されているメタデータと非同期 HTTP 出力バッファは対象外です。各リクエストは受付時に取得した値を使用します。この値が `0` 以下の場合、新しいリクエストは fail-closed で拒否されます。
+- 導入バージョン: v4.1.5
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- デフォルト: 33554432
+- タイプ: Long
+- 単位: バイト
+- 変更可能: はい
+- 説明: 1 件の `/api/cloudnative/dump_tablet_metadata` リクエストが返す完全な JSON レスポンスの最大バイト数です。HTTP 出力バッファへ渡す前にサイズを検査します。各リクエストは受付時に取得した値を使用します。この値が `0` 以下の場合、新しいリクエストは fail-closed で拒否されます。
+- 導入バージョン: v4.1.5
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: リクエスト
+- 変更可能: はい
+- 説明: 1 台の CN で同時に受け付ける `/api/cloudnative/dump_tablet_metadata` リクエスト数の上限です。各リクエストは HTTP request が解放されるまで 1 スロットを使用します。値を増やすと新しいリクエストに直ちに反映されます。値を減らしても受付済みのリクエストはキャンセルされず、アクティブ数が新しい上限未満になるまで新しいリクエストは拒否されます。この値が `0` 以下の場合、新しいリクエストは fail-closed で拒否されます。
+- 導入バージョン: v4.1.5
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - デフォルト: 1048576

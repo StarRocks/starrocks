@@ -77,6 +77,33 @@ This topic introduces the following types of BE configurations:
 - Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
 - Introduced in: v3.4.5
 
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- Default: 268435456
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The tracked memory budget for synchronous allocations made while processing one `/api/cloudnative/dump_tablet_metadata` request on a CN. It uses the standard MemTracker accounting granularity rather than enforcing a byte-exact ceiling. It covers metadata inspection, sensitive-field redaction, and JSON serialization, but not the metadata already stored in the CN metadata cache or the asynchronous HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.1.5
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- Default: 33554432
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of the complete JSON response for one `/api/cloudnative/dump_tablet_metadata` request. The size is checked before the response is handed to the HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.1.5
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- Default: 1
+- Type: Int
+- Unit: Requests
+- Is mutable: Yes
+- Description: The maximum number of `/api/cloudnative/dump_tablet_metadata` requests admitted concurrently on one CN. A request continues to occupy one slot until its HTTP request is released. Increasing the value applies immediately to new requests. Decreasing it does not cancel admitted requests, and new requests are rejected until the active count is below the new limit. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.1.5
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
