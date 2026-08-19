@@ -148,10 +148,14 @@ public class TabletStatMgr extends FrontendDaemon {
                 // One resolution per eligible table, feeding both the merge floor and the early bound.
                 int computeNodeCount = reshardEligible
                         ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
+                // One sample of the split cap as well as of the node count: both the merge floor and
+                // the adaptive bound derive from it, and a change landing between two reads would put
+                // the floor above the bound -- the overlap that lets this scan emit a merge signal and
+                // an adaptive-split signal for the same index.
+                int maxSplitCount = Config.tablet_reshard_max_split_count;
                 int parallelismFloor = computeNodeCount == 0 ? 0
-                        : TabletReshardUtils.parallelismFloor(
-                                computeNodeCount, Config.tablet_reshard_max_split_count);
-                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount);
+                        : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
+                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount, maxSplitCount);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {

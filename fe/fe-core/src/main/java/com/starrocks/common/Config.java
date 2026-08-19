@@ -4840,14 +4840,9 @@ public class Config extends ConfigBase {
      * floors its child count and will not act until a tablet is worth two whole targets, so unlike
      * the size rule it does not produce children below the target it aimed at.
      */
-    @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
-            + "Bounds compute-node alignment so a small load on a large cluster is not split into many "
-            + "tiny tablets. Should be no larger than tablet_reshard_target_size. Also the lower bound "
-            + "on the target size an index splits at while it holds fewer tablets than its warehouse "
-            + "has compute nodes, capped by tablet_reshard_max_split_count -- that target aims at one "
-            + "tablet per such slot and is floored here -- so raising it also delays early splitting. "
-            + "Setting it at or above tablet_reshard_target_size turns that off, leaving only the "
-            + "size-based rule.")
+    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
+            + "bound on the target an under-provisioned index splits at. Should be no larger than "
+            + "tablet_reshard_target_size; setting it at or above that disables the adaptive split.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "

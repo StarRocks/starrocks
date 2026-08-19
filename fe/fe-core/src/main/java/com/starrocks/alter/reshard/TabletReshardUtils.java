@@ -254,9 +254,18 @@ public class TabletReshardUtils {
      * nodes than that cap bounds at the cap rather than at its node count.
      */
     public static int adaptiveSplitBound(int computeNodeCount) {
+        return adaptiveSplitBound(computeNodeCount, Config.tablet_reshard_max_split_count);
+    }
+
+    /**
+     * As above, against a caller-supplied split cap. A caller that also derives the auto-merge floor
+     * must take one sample of {@code tablet_reshard_max_split_count} and pass it to both: the config is
+     * mutable, and a change landing between two reads yields a floor above this bound -- which is the
+     * overlap that lets one scan emit a merge signal and an adaptive-split signal for the same index.
+     */
+    public static int adaptiveSplitBound(int computeNodeCount, int maxSplitCount) {
         return computeNodeCount == 0 ? 0
-                : Math.min(computeNodeCount,
-                        parallelismFloor(computeNodeCount, Config.tablet_reshard_max_split_count));
+                : Math.min(computeNodeCount, parallelismFloor(computeNodeCount, maxSplitCount));
     }
 
     /**

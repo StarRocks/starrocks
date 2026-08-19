@@ -277,6 +277,25 @@ public class TabletReshardUtilsTest {
     }
 
     @Test
+    public void theBoundIsDerivedFromTheCapItIsGivenNotTheLiveConfig() {
+        int saved = Config.tablet_reshard_max_split_count;
+        try {
+            // A caller that derives the merge floor and this bound from one decision must sample the
+            // cap once and hand it to both. If this re-read the live config instead, a change landing
+            // between the two reads would put the floor above the bound -- an index could then be
+            // mergeable and under-provisioned at the same time, which is the overlap the bound exists
+            // to prevent. The two values below are the ones that make that visible.
+            Config.tablet_reshard_max_split_count = 2;
+            assertEquals(50, TabletReshardUtils.adaptiveSplitBound(50, 100),
+                    "the bound must come from the cap it was given");
+            assertEquals(2, TabletReshardUtils.parallelismFloor(50, Config.tablet_reshard_max_split_count),
+                    "and this is the floor the live config would have produced -- above that bound");
+        } finally {
+            Config.tablet_reshard_max_split_count = saved;
+        }
+    }
+
+    @Test
     public void anUnresolvableWarehouseIsFatalToThePlannerAndSurvivableToTheScan() {
         new MockUp<WarehouseManager>() {
             @Mock
