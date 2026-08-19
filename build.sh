@@ -812,6 +812,14 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+        if is_aarch64_host && [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc-pg4k/lib/libjemalloc.so.2 ]]; then
+            mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-pg4k
+            cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-pg4k/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-pg4k/libjemalloc.so.2
+        fi
+        if is_aarch64_host && [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug-pg4k/lib/libjemalloc.so.2 ]]; then
+            mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg-pg4k
+            cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug-pg4k/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg-pg4k/libjemalloc.so.2
+        fi
     fi
     if starrocks_is_darwin; then
         starrocks_write_output_be_host_dylib_manifest "${STARROCKS_OUTPUT}/be"

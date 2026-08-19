@@ -155,11 +155,23 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 # ================= jemalloc section =====================
 # Enable jemalloc and set LD_LIBRARY_PATH based on mode
 # Note: This must come after other LD_LIBRARY_PATH configuration to ensure jemalloc paths take precedence
+jemalloc_dir=$STARROCKS_HOME/lib/jemalloc
+jemalloc_pg4k_dir=$STARROCKS_HOME/lib/jemalloc-pg4k
 if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc-dbg:$LD_LIBRARY_PATH
-else
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc:$LD_LIBRARY_PATH
+    jemalloc_dir=$STARROCKS_HOME/lib/jemalloc-dbg
+    jemalloc_pg4k_dir=$STARROCKS_HOME/lib/jemalloc-dbg-pg4k
 fi
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # arm64 kernels vary between 4K and 64K pages. lib/jemalloc(-dbg) is built
+    # for the 64K worst case (safe on any page size <= 64K); prefer the 4K
+    # build when it's present and matches the host, to cut memory
+    # fragmentation from the larger page granularity.
+    os_page_size=$(getconf PAGESIZE 2>/dev/null)
+    if [[ "${os_page_size}" == "4096" && -d "$jemalloc_pg4k_dir" ]]; then
+        jemalloc_dir=$jemalloc_pg4k_dir
+    fi
+fi
+export LD_LIBRARY_PATH=$jemalloc_dir:$LD_LIBRARY_PATH
 
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
