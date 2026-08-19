@@ -298,11 +298,11 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-        String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
-                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
+        String sql = Deencapsulation.invoke(job, "buildCollectDefaultBucket",
+                db, region, ImmutableMap.of("a", "10"), "r_name");
 
         Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
-                "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
+                "cast(cast(greatest(0, count(`r_name`) - 10) as bigint) as varchar), ',0]]')"), sql);
         Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
         Assertions.assertFalse(sql.contains("histogram("), sql);
         Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);

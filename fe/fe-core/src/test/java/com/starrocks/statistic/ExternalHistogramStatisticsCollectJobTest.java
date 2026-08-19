@@ -129,7 +129,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             String expectedV7HistogramSql = """
                     SELECT cast(7 as INT), 'v7',
                     concat('[["Infinity","Infinity",',
-                        cast(greatest(0, count(`v7`) - 10) as varchar),
+                        cast(cast(greatest(0, count(`v7`) - 10) as bigint) as varchar),
                         ',0]]')
                     FROM `hive0`.`test`.`t0_stats`
                     """;

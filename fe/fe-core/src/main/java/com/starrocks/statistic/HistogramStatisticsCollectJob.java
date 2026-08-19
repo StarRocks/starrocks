@@ -15,7 +15,6 @@
 package com.starrocks.statistic;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -38,7 +37,6 @@ import org.apache.velocity.VelocityContext;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -46,10 +44,14 @@ import static com.starrocks.statistic.HistogramStatisticsUtils.batchInsertPrefix
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBatchInsertPrefix;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsLiteral;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsSql;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildDefaultBucketExpr;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildMcvJson;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildMostCommonValues;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildStatsTargetColumnNames;
 import static com.starrocks.statistic.HistogramStatisticsUtils.createInsertStmt;
+import static com.starrocks.statistic.HistogramStatisticsUtils.formatSampleRatio;
 import static com.starrocks.statistic.HistogramStatisticsUtils.normalizeBucketsForHll;
+import static com.starrocks.statistic.HistogramStatisticsUtils.putMcvExclude;
 import static com.starrocks.statistic.HistogramStatisticsUtils.quoteSqlString;
 import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
@@ -292,20 +294,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 normalizeBucketsForHll(getSingleHistogramResult(buckets, columnName).histogram), columnName);
     }
 
-    private Map<String, String> buildMostCommonValues(List<TStatisticData> mcv, double sampleRatio) {
-        Map<String, String> mostCommonValues = new HashMap<>();
-        for (TStatisticData tStatisticData : mcv) {
-            if (sampleRatio > 0.0 && sampleRatio < 1.0) {
-                long count = Long.parseLong(tStatisticData.histogram);
-                count = (long) (1.0 * count / sampleRatio);
-                mostCommonValues.put(tStatisticData.columnName, String.valueOf(count));
-            } else {
-                mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
-            }
-        }
-        return mostCommonValues;
-    }
-
     private StatsConstants.HistogramCollectBucketNdvMode getHistogramCollectBucketNdvMode() {
         String mode = properties.get(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE);
         if (mode.equalsIgnoreCase("none")) {
@@ -384,31 +372,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private void addMcvExcludeToContext(VelocityContext context, Map<String, String> mostCommonValues, String columnName,
-                                        Type columnType) {
-        String quoteColumName = StatisticUtils.quoting(table, columnName);
-        if (!mostCommonValues.isEmpty()) {
-            if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
-                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
-            } else {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
-                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
-            }
-        } else {
-            context.put("MCVExclude", "");
-        }
-    }
-
-    private String buildHistogramFunctionWithoutNdv(Database database, Table table, double sampleRatio, Long bucketNum,
-                                          String columnName) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
-        context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRatio);
-
-        return build(context, HISTOGRAM_FUNCTION_WITHOUT_NDV_TEMPLATE);
-    }
-
     private String buildHistogramFunction(Database database, Table table, double sampleRatio, Long bucketNum,
                                           String columnName, boolean withSampleNdv) {
         VelocityContext context = buildBaseContext(database, table, columnName);
@@ -427,22 +390,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                                          boolean withSampleNdv) {
         VelocityContext context = buildBaseContext(database, table, columnName);
         addMcvToContext(context, mostCommonValues);
-        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
+        putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
                 withSampleNdv));
         context.put("totalRows", Config.histogram_max_sample_row_count);
-
-        // TODO: use it by default and remove this switch
-        if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sampleClause = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));
-            context.put("sampleClause", sampleClause);
-            context.put("randFilter", "TRUE");
-        } else {
-            String randFilter = String.format(" rand() <= %f", sampleRatio);
-            context.put("randFilter", randFilter);
-            context.put("sampleClause", "");
-        }
+        addSampleClauseToContext(context, sampleRatio);
 
         return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
     }
@@ -451,20 +404,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                                        Map<String, String> mostCommonValues, String columnName, Type columnType,
                                        boolean withSampleNdv) {
         VelocityContext context = buildBaseContext(database, table, columnName);
-        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
+        putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
                 withSampleNdv));
         context.put("totalRows", Config.histogram_max_sample_row_count);
-
-        if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sampleClause = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));
-            context.put("sampleClause", sampleClause);
-            context.put("randFilter", "TRUE");
-        } else {
-            context.put("randFilter", String.format(" rand() <= %f", sampleRatio));
-            context.put("sampleClause", "");
-        }
+        addSampleClauseToContext(context, sampleRatio);
 
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
     }
@@ -488,29 +433,36 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
     private void addDefaultBucketToContext(VelocityContext context, Table table, double sampleRatio,
                                            Map<String, String> mostCommonValues, String columnName) {
-        String quoteColumName = StatisticUtils.quoting(table, columnName);
-        String countExpr;
-        if (sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String ratioLiteral = BigDecimal.valueOf(sampleRatio).stripTrailingZeros().toPlainString();
-            countExpr = "count(" + quoteColumName + ") / cast(" + ratioLiteral + " as double)";
-            if (Config.enable_use_table_sample_collect_statistics) {
-                context.put("sampleClause", " SAMPLE('percent'='" + formatSamplePercent(sampleRatio) + "')");
-                context.put("randFilter", "");
-            } else {
-                context.put("sampleClause", "");
-                context.put("randFilter", " WHERE rand() <= " + ratioLiteral);
-            }
+        addDefaultBucketSampleClauseToContext(context, sampleRatio);
+        context.put("bucketExpr",
+                buildDefaultBucketExpr(StatisticUtils.quoting(table, columnName), sampleRatio, mostCommonValues));
+    }
+
+    // TODO: use table sample by default and remove this switch
+    private void addSampleClauseToContext(VelocityContext context, double sampleRatio) {
+        if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
+            context.put("sampleClause", String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio)));
+            context.put("randFilter", "TRUE");
         } else {
             context.put("sampleClause", "");
-            context.put("randFilter", "");
-            countExpr = "count(" + quoteColumName + ")";
+            context.put("randFilter", String.format(" rand() <= %f", sampleRatio));
         }
+    }
 
-        long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
-        String nonMcvExpr = "greatest(0, " + countExpr + " - " + mcvSum + ")";
-
-        context.put("bucketExpr",
-                "concat('[[\"Infinity\",\"Infinity\",', cast(cast(" + nonMcvExpr + " as bigint) as varchar), ',0]]')");
+    // Separate from addSampleClauseToContext because the default-bucket templates splice
+    // $sampleClause$randFilter straight onto "FROM `db`.`table`" and have no WHERE of their own, so
+    // the keyword has to travel inside the substituted value here.
+    private void addDefaultBucketSampleClauseToContext(VelocityContext context, double sampleRatio) {
+        if (sampleRatio <= 0.0 || sampleRatio >= 1.0) {
+            context.put("sampleClause", "");
+            context.put("randFilter", "");
+        } else if (Config.enable_use_table_sample_collect_statistics) {
+            context.put("sampleClause", " SAMPLE('percent'='" + formatSamplePercent(sampleRatio) + "')");
+            context.put("randFilter", "");
+        } else {
+            context.put("sampleClause", "");
+            context.put("randFilter", " WHERE rand() <= " + formatSampleRatio(sampleRatio));
+        }
     }
 
     private String buildCollectHistogramWithHllNdv(Database database, Table table, Map<String, String> mostCommonValues,
@@ -535,7 +487,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName, false));
         context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);
-        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
+        putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         return build(context, COLLECT_BUCKETS_WITHOUT_NDV_STATISTIC_TEMPLATE);
     }
