@@ -860,19 +860,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 }
 
-<<<<<<< HEAD
 // Drives create_dv_delete_sink_context() end-to-end via decompose_to_pipeline for a V3 DELETE:
 // format_version >= 3 routes the ICEBERG_DELETE_SINK to the deletion-vector sub-mode (an
 // IcebergDvSinkProvider) and keys the local exchange on _file (output_exprs[0]).
 TEST_F(IcebergTableSinkTest, decompose_to_pipeline_dv_delete_sink) {
     // Delete rows carry [_file, _pos]; create_dv_delete_sink_context requires _file first.
-=======
-// UpdatePlanner derives row-delta data slot nullability from the feeding output expression,
-// so it can be the exact opposite of the target column's Iceberg nullability. Slots are set
-// to that inverted state here to pin that the sink follows the schema, not the slot.
-TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_follows_schema_not_slot) {
-    // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, a, b].
->>>>>>> 295f595ca5f... [BugFix] Enforce Iceberg NOT NULL columns on the write path (#77589)
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
@@ -882,21 +874,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_fol
                              .build();
     auto pos_slot =
             slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
-<<<<<<< HEAD
     TTupleDescriptorBuilder tuple_desc_builder;
     tuple_desc_builder.add_slot(file_slot);
     tuple_desc_builder.add_slot(pos_slot);
-=======
-    // Inverted on purpose: schema says a is nullable and b is NOT NULL, the opposite of these.
-    auto a_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("a").column_pos(2).nullable(false).build();
-    auto b_slot =
-            slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("b").column_pos(3).nullable(true).build();
-    TTupleDescriptorBuilder tuple_desc_builder;
-    tuple_desc_builder.add_slot(file_slot);
-    tuple_desc_builder.add_slot(pos_slot);
-    tuple_desc_builder.add_slot(a_slot);
-    tuple_desc_builder.add_slot(b_slot);
->>>>>>> 295f595ca5f... [BugFix] Enforce Iceberg NOT NULL columns on the write path (#77589)
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
     EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
@@ -904,28 +884,10 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_fol
     _runtime_state->set_desc_tbl(tbl);
 
     TIcebergTable t_iceberg_table;
-<<<<<<< HEAD
     TColumn file_col, pos_col;
     file_col.__set_column_name("_file");
     pos_col.__set_column_name("_pos");
     t_iceberg_table.__set_columns({file_col, pos_col});
-=======
-    TColumn col_a, col_b;
-    col_a.__set_column_name("a");
-    col_b.__set_column_name("b");
-    t_iceberg_table.__set_columns({col_a, col_b});
-
-    TIcebergSchemaField a_field, b_field;
-    a_field.__set_field_id(1);
-    a_field.__set_name("a");
-    a_field.__set_is_optional(true); // schema: a is nullable
-    b_field.__set_field_id(2);
-    b_field.__set_name("b");
-    b_field.__set_is_optional(false); // schema: b is NOT NULL
-    TIcebergSchema iceberg_schema;
-    iceberg_schema.__set_fields({a_field, b_field});
-    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
->>>>>>> 295f595ca5f... [BugFix] Enforce Iceberg NOT NULL columns on the write path (#77589)
 
     TTableDescriptor tdesc;
     tdesc.__set_icebergTable(t_iceberg_table);
@@ -936,7 +898,6 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_fol
     auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
     TDataSink data_sink;
-<<<<<<< HEAD
     data_sink.__set_type(TDataSinkType::ICEBERG_DELETE_SINK);
     TIcebergTableSink iceberg_table_sink;
     iceberg_table_sink.__set_target_table_id(0);
@@ -966,7 +927,63 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_fol
     EXPECT_EQ(dv_ctx->column_slot_map.size(), 2);
     EXPECT_EQ(dv_ctx->column_slot_map.count("_file"), 1);
     EXPECT_EQ(dv_ctx->column_slot_map.count("_pos"), 1);
-=======
+}
+
+// UpdatePlanner derives row-delta data slot nullability from the feeding output expression,
+// so it can be the exact opposite of the target column's Iceberg nullability. Slots are set
+// to that inverted state here to pin that the sink follows the schema, not the slot.
+TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_follows_schema_not_slot) {
+    // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, a, b].
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
+                             .column_name("_file")
+                             .column_pos(0)
+                             .nullable(false)
+                             .build();
+    auto pos_slot =
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
+    // Inverted on purpose: schema says a is nullable and b is NOT NULL, the opposite of these.
+    auto a_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("a").column_pos(2).nullable(false).build();
+    auto b_slot =
+            slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("b").column_pos(3).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(file_slot);
+    tuple_desc_builder.add_slot(pos_slot);
+    tuple_desc_builder.add_slot(a_slot);
+    tuple_desc_builder.add_slot(b_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn col_a, col_b;
+    col_a.__set_column_name("a");
+    col_b.__set_column_name("b");
+    t_iceberg_table.__set_columns({col_a, col_b});
+
+    TIcebergSchemaField a_field, b_field;
+    a_field.__set_field_id(1);
+    a_field.__set_name("a");
+    a_field.__set_is_optional(true); // schema: a is nullable
+    b_field.__set_field_id(2);
+    b_field.__set_name("b");
+    b_field.__set_is_optional(false); // schema: b is NOT NULL
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({a_field, b_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
     data_sink.__set_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK);
     TIcebergTableSink iceberg_table_sink;
     iceberg_table_sink.__set_location("/path/to/table");
@@ -993,7 +1010,6 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_fol
     ASSERT_EQ(row_delta_ctx->data_sink_ctx->nullable.size(), 2);
     EXPECT_TRUE(row_delta_ctx->data_sink_ctx->nullable[0]) << "a is nullable per schema despite its non-nullable slot";
     EXPECT_FALSE(row_delta_ctx->data_sink_ctx->nullable[1]) << "b is NOT NULL per schema despite its nullable slot";
->>>>>>> 295f595ca5f... [BugFix] Enforce Iceberg NOT NULL columns on the write path (#77589)
 }
 
 // Regression for BE crash on UPDATE of an Iceberg table with complex-typed columns
