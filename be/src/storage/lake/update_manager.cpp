@@ -2000,16 +2000,14 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
                                                  params.metadata->id(), params.metadata->version(), rssid));
         }
-        auto rowid_iter = params.container.rssid_to_rowid().find(rssid);
-        if (rowid_iter == params.container.rssid_to_rowid().end()) {
-            return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} has no rowset id",
-                                                 params.metadata->id(), params.metadata->version(), rssid));
-        }
         // `rssid` addresses the segment across the whole tablet and is what the DCG bookkeeping above is
         // keyed by; `rssid - rowset_id` is its index inside its own rowset, which is what a Segment
-        // object must carry as its id.
+        // object must carry as its id. Both maps are filled together by
+        // RssidFileInfoContainer::add_rssid_to_file and keyed by `rowset_id + segment_idx`, so the
+        // membership check above covers this lookup too.
         RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid,
-                                                  rssid - rowid_iter->second, params.tablet_schema, rowids, column_ids,
+                                                  rssid - params.container.rssid_to_rowid().at(rssid),
+                                                  params.tablet_schema, rowids, column_ids,
                                                   /*allow_segment_cache=*/true));
     }
     if (auto_increment_state != nullptr && with_default) {
