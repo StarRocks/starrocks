@@ -3019,8 +3019,48 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     return Status::OK();
 }
 
-void update_next_rowset_id(TabletMetadataPB* metadata) {
-    uint32_t max_end = 1; // invariant: next_rowset_id >= 1
+// Every rowset owns the rssid range [id, id + get_rowset_id_step(rowset)). Two rowsets sharing
+// an rssid make the merged tablet unreadable in a way that only shows up later, at publish or
+// PK-index rebuild time, so verify the invariant before the merged metadata escapes.
+Status check_rowset_rssid_spans_disjoint(const TabletMetadataPB& metadata) {
+    // (span_start -> rowset id), walked in id order so only adjacent spans need comparing.
+    std::map<uint32_t, std::pair<uint32_t, uint32_t>> spans; // start -> (end_exclusive, rowset_id)
+    for (const auto& rowset : metadata.rowsets()) {
+        const uint32_t start = rowset.id();
+        const uint32_t end = start + get_rowset_id_step(rowset);
+        auto [iter, inserted] = spans.try_emplace(start, std::make_pair(end, rowset.id()));
+        if (!inserted) {
+            return Status::Corruption(fmt::format(
+                    "tablet merge produced two rowsets at the same id: tablet={} rowset_id={}", metadata.id(), start));
+        }
+    }
+    uint32_t prev_end = 0;
+    uint32_t prev_id = 0;
+    bool have_prev = false;
+    for (const auto& [start, end_and_id] : spans) {
+        const auto& [end, rowset_id] = end_and_id;
+        if (have_prev && start < prev_end) {
+            return Status::Corruption(fmt::format(
+                    "tablet merge produced overlapping rssid spans: tablet={} rowset {} ends at {} but rowset {} "
+                    "starts at {}",
+                    metadata.id(), prev_id, prev_end, rowset_id, start));
+        }
+        prev_end = end;
+        prev_id = rowset_id;
+        have_prev = true;
+    }
+    return Status::OK();
+}
+
+// |floor| is the highest id space any contributing old tablet had already consumed, projected
+// into the merged space. Without it this function derives the watermark purely from what the
+// merged output still HOLDS, which can sit BELOW what an input had already handed out: a merge
+// that retains only segment_idx 0 of an ancestor rowset lowers the watermark to id+1, a later
+// local write on the merged tablet takes id+1, and a subsequent merge that reunites a same-uid
+// sibling carrying segment_idx 1 and 2 expands that rowset back over the local one -- two
+// rowsets in ONE context sharing an rssid, which no per-context offset can separate.
+void update_next_rowset_id(TabletMetadataPB* metadata, uint32_t floor) {
+    uint32_t max_end = std::max<uint32_t>(1, floor); // invariant: next_rowset_id >= 1
     for (const auto& rowset : metadata->rowsets()) {
         max_end = std::max(max_end, rowset.id() + get_rowset_id_step(rowset));
     }
@@ -3234,7 +3274,27 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));
 
     // Phase 4: Finalize
-    update_next_rowset_id(new_tablet_metadata.get());
+    //
+    // Never let the watermark regress below what a contributing old tablet already handed out:
+    // ids stay monotone across reshards, so a later local write cannot land inside an ancestor
+    // rowset's span that a partial merge is no longer holding. See update_next_rowset_id.
+    uint32_t consumed_id_floor = 1;
+    for (const auto& ctx : merge_contexts) {
+        const int64_t projected = static_cast<int64_t>(ctx.metadata()->next_rowset_id()) + ctx.rssid_offset();
+        consumed_id_floor = std::max<uint32_t>(
+                consumed_id_floor,
+                static_cast<uint32_t>(std::clamp<int64_t>(projected, 1, std::numeric_limits<uint32_t>::max())));
+    }
+    update_next_rowset_id(new_tablet_metadata.get(), consumed_id_floor);
+
+    // Fail closed rather than publish a self-overlapping rssid space. The reservations above
+    // keep newly written metadata clear, but a tablet whose metadata was produced before that
+    // was true can still arrive here with a local rowset sitting inside an ancestor span that
+    // this merge's union re-expands, and no per-context offset can separate two rowsets of the
+    // SAME context. Emitting it would corrupt the merged tablet silently: meta_file.cpp keys
+    // segment_id_to_rowset on rssid, so one rowset shadows the other and a publish either
+    // resolves a key to a rowset that no longer owns it or fails with "unexpected segment id".
+    RETURN_IF_ERROR(check_rowset_rssid_spans_disjoint(*new_tablet_metadata));
 
     // No re-share here: the merged tablet OWNS its segments via the same ownership-transfer
     // model that the identical-tablet and split paths already use. The source old tablets
