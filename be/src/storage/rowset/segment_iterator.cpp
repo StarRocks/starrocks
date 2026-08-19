@@ -2896,8 +2896,8 @@ StatusOr<bool> SegmentIterator::prefetch() {
         // Direct-read mode: pull the registered coalesced ranges into the shared buffers, so the
         // decoding pass finds every byte resident. The budget caps how much one child may hold at
         // once; a child too big to fit reads the rest inline while decoding.
-        ASSIGN_OR_RETURN(bool all, _cross_column_stream->prefetch_registered(
-                                           config::compaction_parallel_merge_prefetch_bytes));
+        ASSIGN_OR_RETURN(bool all,
+                         _cross_column_stream->prefetch_registered(config::compaction_parallel_merge_prefetch_bytes));
         covered &= all;
     }
     // The bytes of a cache-path column can only be made resident in the local data cache, and only
@@ -2912,8 +2912,7 @@ StatusOr<bool> SegmentIterator::prefetch() {
     for (auto& [cid, file] : _column_files) {
         if (auto* sbs = dynamic_cast<SharedBufferedInputStream*>(file.get())) {
             // Per-column coalesced stream (io_coalesce_lake_read_enable): same as above.
-            ASSIGN_OR_RETURN(bool all,
-                             sbs->prefetch_registered(config::compaction_parallel_merge_prefetch_bytes));
+            ASSIGN_OR_RETURN(bool all, sbs->prefetch_registered(config::compaction_parallel_merge_prefetch_bytes));
             covered &= all;
             continue;
         }
