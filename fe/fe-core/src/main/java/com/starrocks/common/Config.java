@@ -4833,18 +4833,21 @@ public class Config extends ConfigBase {
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
      *
      * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
-     * fewer tablets than its warehouse has compute nodes aims at one tablet per node, but never at
-     * less than this -- so raising this to tune pre-split also delays that split. The adaptive walk
+     * fewer tablets than the bound aims at one tablet per slot in it, but never at less than this --
+     * so raising this to tune pre-split also delays that split. The bound is the warehouse's
+     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
+     * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
      * floors its child count and will not act until a tablet is worth two whole targets, so unlike
      * the size rule it does not produce children below the target it aimed at.
      */
     @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
-            + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
-            + "Should be no larger than tablet_reshard_target_size. Also the lower bound on the target size "
-            + "an index splits at while it holds fewer tablets than its warehouse has compute nodes -- that "
-            + "target aims at one tablet per node and is floored here -- so raising it also delays early "
-            + "splitting. Setting it at or above tablet_reshard_target_size turns that off, leaving only "
-            + "the size-based rule.")
+            + "Bounds compute-node alignment so a small load on a large cluster is not split into many "
+            + "tiny tablets. Should be no larger than tablet_reshard_target_size. Also the lower bound "
+            + "on the target size an index splits at while it holds fewer tablets than its warehouse "
+            + "has compute nodes, capped by tablet_reshard_max_split_count -- that target aims at one "
+            + "tablet per such slot and is floored here -- so raising it also delays early splitting. "
+            + "Setting it at or above tablet_reshard_target_size turns that off, leaving only the "
+            + "size-based rule.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "
