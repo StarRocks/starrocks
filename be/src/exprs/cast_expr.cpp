@@ -2141,6 +2141,11 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             }
             return new CastToVariantExpr(node, std::move(from_desc), allow_throw_exception);
         }
+    } else if (to_type == TYPE_GEOMETRY && is_string_type(from_type)) {
+        if (allow_throw_exception) {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_GEOMETRY, true>(node);
+        }
+        return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_GEOMETRY, false>(node);
     } else if (is_binary_type(to_type)) {
         if (is_string_type(from_type)) {
             if (allow_throw_exception) {
@@ -2349,6 +2354,6 @@ static ColumnPtr cast_from_string_to_geometry_fn(ColumnPtr& column) {
 }
 
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
-CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
+CUSTOMIZE_FN_CAST(TYPE_CHAR,    TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
 
 } // namespace starrocks
