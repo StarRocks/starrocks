@@ -1003,6 +1003,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE が Elasticsearch インデックスを取得し、StarRocks 外部テーブルのメタデータを同期する時間間隔。
 - 導入時期：-
 
+### `explain_dict_column_size`
+
+- デフォルト：5
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：`EXPLAIN VERBOSE` の出力において、各スキャンノードの `dict_col` フィールドに表示される低カーディナリティ辞書最適化カラムの最大数。スキャンノードに適用された辞書カラムの数がこの値を超える場合、リストは切り詰められ、省略記号が付加されます。`0` 以下の値は `0` として扱われ、リスト全体が切り詰められます。この項目は `EXPLAIN VERBOSE` の出力にのみ影響し、クエリに対する辞書最適化の適用方法は変更しません。
+- 導入時期：v4.2.0
+
 ### `hive_meta_cache_refresh_interval_s`
 
 - デフォルト：3600 * 2

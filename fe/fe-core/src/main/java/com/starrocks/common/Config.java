@@ -5260,4 +5260,10 @@ public class Config extends ConfigBase {
             + "to BOTH so the graph rerank adds value out-of-box. Per-request override via the search "
             + "'direction' argument. Invalid values fall back to BOTH with a WARN.")
     public static String context_search_default_graph_direction = "BOTH";
+
+    @ConfField(mutable = true, comment = "The maximum number of low-cardinality dictionary-optimized columns listed " +
+            "in the dict_col field of each scan node in EXPLAIN VERBOSE output. When a scan node has more applied " +
+            "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
+            "or equal to 0 are treated as 0, which truncates the list entirely.")
+    public static int explain_dict_column_size = 5;
 }
