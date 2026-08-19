@@ -440,7 +440,21 @@ public class ResourceGroupMgr implements Writable {
 
                 Double spillMemLimitThreshold = changedProperties.getSpillMemLimitThreshold();
                 if (spillMemLimitThreshold != null) {
+<<<<<<< HEAD
                     wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
+=======
+                    alterResourceGroupLog.setSpillMemLimitThreshold(spillMemLimitThreshold);
+                }
+
+                Double memUsedPctLimit = changedProperties.getMemUsedPctLimit();
+                if (memUsedPctLimit != null) {
+                    alterResourceGroupLog.setMemUsedPctLimit(memUsedPctLimit);
+                }
+
+                warehouses = changedProperties.getWarehouses();
+                if (warehouses != null) {
+                    alterResourceGroupLog.setWarehouses(warehouses);
+>>>>>>> c2587ccf00 ([Enhancement] Add a per resource group memory pct limit (#77213))
                 }
 
                 // Type is guaranteed to be immutable during the analyzer phase.
@@ -473,6 +487,69 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+        if (log.getClassifiers() != null) {
+            List<ResourceGroupClassifier> oldClassifiers = wg.getClassifiers();
+            Set<Long> newClassifierIds = log.getClassifiers().stream()
+                    .map(ResourceGroupClassifier::getId).collect(Collectors.toSet());
+            for (ResourceGroupClassifier classifier : oldClassifiers) {
+                if (!newClassifierIds.contains(classifier.getId())) {
+                    classifierMap.remove(classifier.getId());
+                }
+            }
+            for (ResourceGroupClassifier classifier : log.getClassifiers()) {
+                classifierMap.put(classifier.getId(), classifier);
+            }
+            wg.setClassifiers(log.getClassifiers());
+        }
+        if (log.getCpuWeight() != null) {
+            wg.setCpuWeight(log.getCpuWeight());
+            wg.normalizeCpuWeight();
+        }
+        if (log.getCpuWeightPercent() != null) {
+            wg.setCpuWeightPercent(log.getCpuWeightPercent());
+        }
+        if (log.getExclusiveCpuCores() != null) {
+            wg.setExclusiveCpuCores(log.getExclusiveCpuCores());
+        }
+        if (log.getExclusiveCpuPercent() != null) {
+            wg.setExclusiveCpuPercent(log.getExclusiveCpuPercent());
+        }
+        if (log.getMaxCpuCores() != null) {
+            wg.setMaxCpuCores(log.getMaxCpuCores());
+        }
+        if (log.getMemLimit() != null) {
+            wg.setMemLimit(log.getMemLimit());
+        }
+        if (log.getBigQueryMemLimit() != null) {
+            wg.setBigQueryMemLimit(log.getBigQueryMemLimit());
+        }
+        if (log.getBigQueryScanRowsLimit() != null) {
+            wg.setBigQueryScanRowsLimit(log.getBigQueryScanRowsLimit());
+        }
+        if (log.getBigQueryCpuSecondLimit() != null) {
+            wg.setBigQueryCpuSecondLimit(log.getBigQueryCpuSecondLimit());
+        }
+        if (log.getConcurrencyLimit() != null) {
+            wg.setConcurrencyLimit(log.getConcurrencyLimit());
+        }
+        if (log.getSpillMemLimitThreshold() != null) {
+            wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+        }
+        if (log.getMemUsedPctLimit() != null) {
+            wg.setMemUsedPctLimit(log.getMemUsedPctLimit());
+        }
+        if (log.getWarehouses() != null) {
+            wg.setWarehouses(log.getWarehouses());
+        }
+        if (log.getVersion() != 0) {
+            wg.setVersion(log.getVersion());
+        }
+    }
+
+>>>>>>> c2587ccf00 ([Enhancement] Add a per resource group memory pct limit (#77213))
     public void dropResourceGroup(DropResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {

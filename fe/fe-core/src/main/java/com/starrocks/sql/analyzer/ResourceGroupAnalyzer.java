@@ -263,6 +263,23 @@ public class ResourceGroupAnalyzer {
                     continue;
                 }
 
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_USED_PCT_LIMIT)) {
+                    double memUsedPctLimit;
+                    if (value.endsWith("%")) {
+                        value = value.substring(0, value.length() - 1);
+                        memUsedPctLimit = Double.parseDouble(value) / 100;
+                    } else {
+                        memUsedPctLimit = Double.parseDouble(value);
+                    }
+                    if (!Double.isFinite(memUsedPctLimit) || memUsedPctLimit < 0.0 || memUsedPctLimit > 1.0) {
+                        throw new SemanticException(
+                                "mem_used_pct_limit should range from 0.00(include) to 1.00(include), " +
+                                        "takes effect when greater than 0.00 ");
+                    }
+                    resourceGroup.setMemUsedPctLimit(memUsedPctLimit);
+                    continue;
+                }
+
                 if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
                     try {
                         resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
@@ -284,4 +301,129 @@ public class ResourceGroupAnalyzer {
             throw new SemanticException("Unknown property: " + key);
         }
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Analyze CreateResourceGroupStmt for validation only
+     * The actual ResourceGroup construction is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeCreateResourceGroupStmt(CreateResourceGroupStmt stmt) throws SemanticException {
+        // Validate classifiers by converting them (this validates the syntax and format)
+        for (List<Predicate> predicates : stmt.getClassifiers()) {
+            convertPredicateToClassifier(predicates);
+        }
+
+        // Create a temporary ResourceGroup to validate properties
+        ResourceGroup tempResourceGroup = new ResourceGroup();
+        analyzeProperties(tempResourceGroup, stmt.getProperties());
+
+        // Validate required properties exist
+        if (tempResourceGroup.getMemLimit() == null) {
+            throw new SemanticException("property 'mem_limit' is absent");
+        }
+
+        // Set default type if not specified for validation
+        if (tempResourceGroup.getResourceGroupType() == null) {
+            tempResourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        }
+
+        // Validate short query resource group constraints
+        if (tempResourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
+                (tempResourceGroup.getExclusiveCpuCores() != null && tempResourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException("short query resource group should not set exclusive_cpu_cores");
+        }
+
+        // Validate CPU parameters
+        ResourceGroup.validateCpuParameters(tempResourceGroup.getRawCpuWeight(), tempResourceGroup.getCpuWeightPercent(),
+                tempResourceGroup.getExclusiveCpuCores(), tempResourceGroup.getExclusiveCpuPercent(),
+                tempResourceGroup.getMaxCpuCores(),
+                tempResourceGroup.getResourceGroupType(), tempResourceGroup.getWarehouses());
+    }
+
+    /**
+     * Analyze AlterResourceGroupStmt for validation only
+     * The actual ResourceGroup modification is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeAlterResourceGroupStmt(AlterResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+
+        // Validate classifiers by converting them (this validates the syntax and format)
+        if (cmd instanceof AlterResourceGroupStmt.AddClassifiers addClassifiers) {
+            for (List<Predicate> predicates : addClassifiers.getClassifiers()) {
+                convertPredicateToClassifier(predicates);
+            }
+        } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties alterProperties) {
+            // Create a temporary ResourceGroup to validate properties
+            ResourceGroup tempResourceGroup = new ResourceGroup();
+            analyzeProperties(tempResourceGroup, alterProperties.getProperties());
+
+            // Validate that type cannot be changed
+            if (tempResourceGroup.getResourceGroupType() != null) {
+                throw new SemanticException("type of ResourceGroup is immutable");
+            }
+
+            // Validate that at least one property is specified
+            if (tempResourceGroup.getRawCpuWeight() == null &&
+                    tempResourceGroup.getCpuWeightPercent() == null &&
+                    tempResourceGroup.getExclusiveCpuCores() == null &&
+                    tempResourceGroup.getExclusiveCpuPercent() == null &&
+                    tempResourceGroup.getMemLimit() == null &&
+                    tempResourceGroup.getConcurrencyLimit() == null &&
+                    tempResourceGroup.getMaxCpuCores() == null &&
+                    tempResourceGroup.getBigQueryCpuSecondLimit() == null &&
+                    tempResourceGroup.getBigQueryMemLimit() == null &&
+                    tempResourceGroup.getBigQueryScanRowsLimit() == null &&
+                    tempResourceGroup.getSpillMemLimitThreshold() == null &&
+                    tempResourceGroup.getMemUsedPctLimit() == null &&
+                    tempResourceGroup.getWarehouses() == null) {
+                throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent'," +
+                        "'exclusive_cpu_cores','exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit'," +
+                        "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
+                        "'spill_mem_limit_threshold','mem_used_pct_limit','warehouses') should be specified");
+            }
+
+            List<String> warehouses = tempResourceGroup.getWarehouses();
+            if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && warehouses != null && !warehouses.isEmpty()) {
+                throw new SemanticException(
+                        String.format("cannot set non-empty warehouses for builtin resource group [%s]", name));
+            }
+        }
+
+        // Validate builtin resource group constraints
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
+        }
+    }
+
+    public static void analyzeDropResourceGroupStmt(DropResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
+        }
+    }
+
+    private static List<String> parseWarehouses(String warehousesValue) {
+        List<String> warehouses = new ArrayList<>();
+        for (String token : warehousesValue.split(",")) {
+            String name = token.trim();
+            if (!name.isEmpty()) {
+                warehouses.add(name);
+            }
+        }
+
+        Set<String> dedup = new HashSet<>();
+        for (String warehouseName : warehouses) {
+            if (!dedup.add(warehouseName)) {
+                throw new SemanticException(String.format("Duplicate warehouse in warehouses: %s", warehouseName));
+            }
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            if (warehouse == null) {
+                throw new SemanticException(String.format("Unknown warehouse: %s", warehouseName));
+            }
+        }
+        return warehouses;
+    }
+>>>>>>> c2587ccf00 ([Enhancement] Add a per resource group memory pct limit (#77213))
 }
