@@ -232,6 +232,21 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     return Status::OK();
 }
 
+StatusOr<bool> SharedBufferedInputStream::prefetch_registered(int64_t max_bytes) {
+    int64_t loaded = 0;
+    for (auto& [_, sb] : _map) {
+        if (loaded > max_bytes) {
+            return false;
+        }
+        if (sb->buffer.capacity() == 0) {
+            const uint8_t* unused = nullptr;
+            RETURN_IF_ERROR(get_bytes(&unused, sb->offset, 0, sb));
+        }
+        loaded += sb->size;
+    }
+    return true;
+}
+
 void SharedBufferedInputStream::release() {
     _map.clear();
 }
