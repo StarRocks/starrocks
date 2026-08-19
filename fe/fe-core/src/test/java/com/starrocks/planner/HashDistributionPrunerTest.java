@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -230,4 +231,40 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         starRocksAssert.query("select * from test_bucket_prune where dim_dt = '2024-12-29' and dim_class_id = 1")
                 .explainContains("tabletRatio=1/8");
     }
+
+    // A NULL in an IN list never matches a row, so hashing it would pull in a tablet that cannot hold
+    // a match. RangeDistributionPruner has always skipped NULL; this pins that HASH does too, otherwise
+    // `k IN (a, b, NULL)` reads one more tablet than `k IN (a, b)` for nothing.
+    @Test
+    public void nullInListSelectsNoExtraTablet() {
+        List<Long> tabletIds = Lists.newArrayListWithExpectedSize(64);
+        for (long i = 0; i < 64; i++) {
+            tabletIds.add(i);
+        }
+        Column docId = new Column("doc_id", CharType.CHAR, false);
+        List<Column> columns = Lists.newArrayList(docId);
+
+        List<Expr> withoutNull = Lists.newArrayList();
+        withoutNull.add(new StringLiteral("DC000001"));
+        withoutNull.add(new StringLiteral("DC000008"));
+        PartitionColumnFilter plain = new PartitionColumnFilter();
+        plain.setInPredicate(new InPredicate(new SlotRef(null, "doc_id"), withoutNull, false));
+        Map<String, PartitionColumnFilter> plainFilters = Maps.newHashMap();
+        plainFilters.put("doc_id", plain);
+
+        List<Expr> withNull = Lists.newArrayList(withoutNull);
+        withNull.add(new NullLiteral());
+        PartitionColumnFilter nullable = new PartitionColumnFilter();
+        nullable.setInPredicate(new InPredicate(new SlotRef(null, "doc_id"), withNull, false));
+        Map<String, PartitionColumnFilter> nullableFilters = Maps.newHashMap();
+        nullableFilters.put("doc_id", nullable);
+
+        Collection<Long> plainResult = new HashDistributionPruner(tabletIds, columns, plainFilters).prune();
+        Collection<Long> nullableResult = new HashDistributionPruner(tabletIds, columns, nullableFilters).prune();
+
+        Assertions.assertEquals(2, plainResult.size());
+        Assertions.assertEquals(plainResult.size(), nullableResult.size());
+        Assertions.assertTrue(nullableResult.containsAll(plainResult));
+    }
+
 }

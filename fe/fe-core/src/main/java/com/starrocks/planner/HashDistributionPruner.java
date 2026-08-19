@@ -41,6 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -131,6 +132,12 @@ public class HashDistributionPruner implements DistributionPruner {
         int inElementNum = inPredicateLiterals.size();
         int newComplex = inElementNum * complex;
         for (LiteralExpr expr : inPredicateLiterals) {
+            // A NULL entry in an IN list never matches any row (SQL three-valued logic), so it selects
+            // no tablet. Hashing it picks an arbitrary bucket and pulls in a tablet that cannot hold a
+            // match. RangeDistributionPruner already skips NULL for the same reason.
+            if (expr instanceof NullLiteral) {
+                continue;
+            }
             hashKey.pushColumn(expr, keyColumn.getType());
             Collection<Long> subList = prune(columnId + 1, hashKey, newComplex);
             resultSet.addAll(subList);
