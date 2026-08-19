@@ -21,6 +21,7 @@
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
+#include "common/config.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
@@ -33,6 +34,12 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/sstable/block.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
+#include "storage/sstable/iterator.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/table_builder.h"
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
@@ -431,6 +438,303 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     }
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+// Overwrite the 1-byte compression-type trailer of the first data block with an
+// invalid value, reproducing the production "Corruption: bad block type" failure.
+// The block is located through the footer -> index block, so the injection is
+// deterministic no matter whether block checksum verification is enabled (with
+// checksums on, the same read fails as a checksum mismatch -- still Corruption).
+static void corrupt_first_data_block_type_byte(const std::string& path) {
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
+    ASSERT_GT(file_size, sstable::Footer::kEncodedLength);
+    std::string content(file_size, '\0');
+    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
+
+    sstable::Footer footer;
+    Slice footer_input(content.data() + file_size - sstable::Footer::kEncodedLength, sstable::Footer::kEncodedLength);
+    ASSERT_OK(footer.DecodeFrom(&footer_input));
+    sstable::BlockContents index_contents;
+    index_contents.data = Slice(content.data() + footer.index_handle().offset(), footer.index_handle().size());
+    index_contents.cachable = false;
+    index_contents.heap_allocated = false;
+    sstable::Block index_block(index_contents);
+    std::unique_ptr<sstable::Iterator> iter(index_block.NewIterator(sstable::BytewiseComparator()));
+    iter->SeekToFirst();
+    ASSERT_TRUE(iter->Valid());
+    Slice handle_value = iter->value();
+    sstable::BlockHandle first_block;
+    ASSERT_OK(first_block.DecodeFrom(&handle_value));
+    // The compression-type byte sits right after the block payload.
+    size_t type_offset = first_block.offset() + first_block.size();
+    ASSERT_LT(type_offset, content.size());
+    content[type_offset] = 0x7f;
+
+    WritableFileOptions wf_opts;
+    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
+    ASSERT_OK(wf->append(Slice(content)));
+    ASSERT_OK(wf->close());
+}
+
+// Regression test for compaction failing forever with "Corruption: bad block type":
+// a corrupted data block in an input sstable (usually a bad local cache copy) must
+// fail the merge as Corruption AND drop the input sstables' local cache, so the next
+// scheduled compaction round re-reads from remote storage instead of hitting the
+// same bad blocks again.
+TEST_F(LakePersistentIndexTest, test_major_compaction_drops_corrupted_cache) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 5;
+    const int N = 100;
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    for (int i = 0; i < M; ++i) {
+        vector<Key> keys;
+        keys.reserve(N);
+        vector<Slice> key_slices;
+        key_slices.reserve(N);
+        vector<IndexValue> values;
+        values.reserve(N);
+        for (int j = 0; j < N; j++) {
+            keys.emplace_back(j);
+            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+            values.emplace_back(j * 2);
+        }
+        index->prepare(EditVersion(i, 0), 0);
+        vector<IndexValue> upsert_old_values(keys.size());
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        // generate sst files.
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+    }
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    // commit sst files
+    ASSERT_OK(index->commit(&builder));
+
+    // Corrupt the first data block of every committed sstable (the index block and
+    // footer near the file tail stay intact so opening still succeeds), so whichever
+    // subset the merge picks hits the corruption.
+    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+    for (const auto& sst_pb : tablet_metadata_ptr->sstable_meta().sstables()) {
+        corrupt_first_data_block_type_byte(_tablet_mgr->sst_location(tablet_id, sst_pb.filename()));
+    }
+
+    bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    int drop_cnt = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    auto st = LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get());
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    // The local cache of every picked input sstable must have been dropped.
+    ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
+    ASSERT_EQ(txn_log->op_compaction().input_sstables_size(), drop_cnt);
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Overwrite the 1-byte compression-type trailer of the index block, so Table::Open
+// itself fails with Corruption before any data block is read.
+static void corrupt_index_block_type_byte(const std::string& path) {
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
+    ASSERT_GT(file_size, sstable::Footer::kEncodedLength);
+    std::string content(file_size, '\0');
+    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
+
+    sstable::Footer footer;
+    Slice footer_input(content.data() + file_size - sstable::Footer::kEncodedLength, sstable::Footer::kEncodedLength);
+    ASSERT_OK(footer.DecodeFrom(&footer_input));
+    // The compression-type byte sits right after the block payload.
+    size_t type_offset = footer.index_handle().offset() + footer.index_handle().size();
+    ASSERT_LT(type_offset, content.size());
+    content[type_offset] = 0x7f;
+
+    WritableFileOptions wf_opts;
+    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
+    ASSERT_OK(wf->append(Slice(content)));
+    ASSERT_OK(wf->close());
+}
+
+// Same corruption scenario as above, but hit while OPENING an input sstable in the
+// prepare phase (Table::Open reads the index block) instead of while merging. The
+// error escapes through prepare_merging_iterator before the merging iterator or the
+// caller's cleanup handler exists, so the prepare phase itself must drop the local
+// cache of every picked input.
+TEST_F(LakePersistentIndexTest, test_major_compaction_open_corruption_drops_cache) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 5;
+    const int N = 100;
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    for (int i = 0; i < M; ++i) {
+        vector<Key> keys;
+        keys.reserve(N);
+        vector<Slice> key_slices;
+        key_slices.reserve(N);
+        vector<IndexValue> values;
+        values.reserve(N);
+        for (int j = 0; j < N; j++) {
+            keys.emplace_back(j);
+            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+            values.emplace_back(j * 2);
+        }
+        index->prepare(EditVersion(i, 0), 0);
+        vector<IndexValue> upsert_old_values(keys.size());
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        // generate sst files.
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+    }
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    // commit sst files
+    ASSERT_OK(index->commit(&builder));
+
+    // Corrupt the index block of every committed sstable so that opening the first
+    // picked input already fails with Corruption.
+    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+    for (const auto& sst_pb : tablet_metadata_ptr->sstable_meta().sstables()) {
+        corrupt_index_block_type_byte(_tablet_mgr->sst_location(tablet_id, sst_pb.filename()));
+    }
+
+    bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    int drop_cnt = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    auto st = LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get());
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    // prepare_merging_iterator records the full picked input set in txn_log before
+    // opening anything, and the cleanup handler must drop every one of them. On top
+    // of that, PersistentIndexSstable::init drops the failing file once on its own
+    // (it drops and retries before giving up); without the caller-side handling that
+    // single drop would be all we see.
+    ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
+    ASSERT_EQ(txn_log->op_compaction().input_sstables_size() + 1, drop_cnt);
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Replace the sstable at `path` with a freshly built, uncompressed sstable whose
+// single entry carries value bytes that cannot be parsed as IndexValuesWithVerPB
+// (0x00 is an invalid protobuf tag). Block structure, checksum and the
+// compression-type byte are all valid, so reading the block succeeds and the
+// corruption only surfaces when KeyValueMerger::merge parses the value. The new
+// file size is returned through `new_size` so the caller can patch the sstable
+// meta accordingly.
+static void rewrite_sstable_with_garbage_value(const std::string& path, uint64_t* new_size) {
+    WritableFileOptions wf_opts;
+    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
+    sstable::Options options;
+    options.compression = sstable::kNoCompression;
+    sstable::TableBuilder builder(options, wf.get());
+    ASSERT_OK(builder.Add(Slice("garbage_key"), Slice("\x00garbage", 8)));
+    ASSERT_OK(builder.Finish());
+    *new_size = builder.FileSize();
+    ASSERT_OK(wf->close());
+}
+
+// Regression test for corrupted value bytes that survive block reading: with
+// checksum verification off on the compaction read path, garbage inside a value
+// only fails when KeyValueMerger::merge parses it. That parse failure must be
+// classified as Corruption so the input sstables' local cache still gets dropped.
+TEST_F(LakePersistentIndexTest, test_major_compaction_value_parse_corruption_drops_cache) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 5;
+    const int N = 100;
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    for (int i = 0; i < M; ++i) {
+        vector<Key> keys;
+        keys.reserve(N);
+        vector<Slice> key_slices;
+        key_slices.reserve(N);
+        vector<IndexValue> values;
+        values.reserve(N);
+        for (int j = 0; j < N; j++) {
+            keys.emplace_back(j);
+            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+            values.emplace_back(j * 2);
+        }
+        index->prepare(EditVersion(i, 0), 0);
+        vector<IndexValue> upsert_old_values(keys.size());
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        // generate sst files.
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+    }
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    // commit sst files
+    ASSERT_OK(index->commit(&builder));
+
+    // Replace every committed sstable with one whose value bytes cannot be parsed,
+    // patching the recorded file sizes so opening them still succeeds. The merge then
+    // hits the parse failure on its very first key no matter which inputs are picked.
+    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+    for (auto& sst_pb : *tablet_metadata_ptr->mutable_sstable_meta()->mutable_sstables()) {
+        uint64_t new_size = 0;
+        rewrite_sstable_with_garbage_value(_tablet_mgr->sst_location(tablet_id, sst_pb.filename()), &new_size);
+        ASSERT_GT(new_size, 0);
+        sst_pb.set_filesize(new_size);
+    }
+
+    bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    int drop_cnt = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    auto st = LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get());
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    // Opening the inputs succeeds, so the merge-phase handler must drop the local
+    // cache of every picked input sstable.
+    ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
+    ASSERT_EQ(txn_log->op_compaction().input_sstables_size(), drop_cnt);
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
 
 // Regression test for: publish failing with
 //   "metadata is null when loading delvec from file"
