@@ -902,7 +902,7 @@ public class TabletReshardJobMgrTest {
     }
 
     @Test
-    public void nodeCountIsResolvedOnceForTheSignatureAndOnceForThePlan() {
+    public void anOrdinarySizeSplitResolvesNoNodeCountInTheTrigger() {
         mockLeaderAdmissionOpen();
         new MockUp<TabletReshardUtils>() {
             @Mock
@@ -919,13 +919,21 @@ public class TabletReshardJobMgrTest {
         // hands to every other test.
         oversizedTablet.setDataSize(0);
         NODE_COUNT_RESOLUTIONS.set(0);
+        // A plain oversized tablet and no adaptive signal: the plan is the size rule's alone, so the
+        // trigger resolves nothing and only the factory does. Resolving the warehouse probes StarMgr,
+        // and this path had no such call before the adaptive rule existed.
         Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
                 Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L);
-        // Two resolutions, both O(1): the trigger needs the bound to build the suppression
-        // signature (so a resized cluster re-arms it), and the factory resolves its own because
-        // an explicit ALTER TABLE ... SPLIT TABLET reaches it with no trigger ahead of it.
-        // Neither scales with the index, and both read the local node list rather than StarMgr.
-        Assertions.assertEquals(2, NODE_COUNT_RESOLUTIONS.get());
+        Assertions.assertEquals(1, NODE_COUNT_RESOLUTIONS.get(), "size-only split must not resolve in the trigger");
+
+        // With an adaptive signal the bound IS a plan input, so the trigger resolves it once for the
+        // suppression signature -- a resized warehouse has to re-arm a latched table -- and the factory
+        // resolves its own, because an explicit ALTER TABLE ... SPLIT TABLET reaches it with no trigger
+        // ahead of it. Neither resolution scales with the index.
+        NODE_COUNT_RESOLUTIONS.set(0);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, Long.MAX_VALUE, Config.tablet_reshard_min_split_size * 4);
+        Assertions.assertEquals(2, NODE_COUNT_RESOLUTIONS.get(), "adaptive split resolves for signature and plan");
     }
 
     @Test

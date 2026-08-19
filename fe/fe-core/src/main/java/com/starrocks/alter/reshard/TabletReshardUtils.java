@@ -101,10 +101,10 @@ public class TabletReshardUtils {
      * one tablet per usable compute node, whichever is smaller, floored so a nearly empty index is not
      * carved into slivers.
      *
-     * <p>There is no second rule and no second threshold. An index that already holds roughly
-     * {@code indexDataSize / bound} per tablet gets the same answer from {@link #calcSplitCount} as it
-     * would from the steady-state target, so the adaptive term stops applying by itself once the index
-     * is wide enough -- no separate ceiling, and no accounting to stop it overshooting.
+     * <p>The rule retires itself rather than being switched off. As an index widens, this target
+     * climbs toward the steady-state one and meets it, so an index already holding roughly
+     * {@code indexDataSize / bound} per tablet gets the same answer here as the steady-state target
+     * would give -- no separate condition decides when the adaptive phase is over.
      *
      * <p>The floor is clamped to the target. That clamp is what makes
      * {@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switch the adaptive behaviour
@@ -131,13 +131,15 @@ public class TabletReshardUtils {
      * Child count for the adaptive target: {@code floor(dataSize / target)} once a tablet is worth at
      * least two of them, and 1 otherwise.
      *
-     * <p>Both halves of that are what make the rule self-limiting. Flooring gives
-     * {@code sum(floor(s_i / T)) <= sum(s_i) / T}, which is the bound itself when {@code T} is the
-     * index's size divided by the bound -- so the index cannot pass it however its data is spread over
-     * however many tablets, and nothing needs to track a remaining budget. Requiring two whole targets
-     * rather than the size rule's one and a half is what keeps that true: a tablet of 1.6 targets would
-     * otherwise round to two children of 0.8 each, more tablets than its share and each still under
-     * size.
+     * <p>Requiring two whole targets rather than the size rule's one and a half is what keeps every
+     * child worth at least a target: a tablet of 1.6 targets would otherwise round to two children of
+     * 0.8 each, more tablets than its share and each still under size.
+     *
+     * <p>Flooring bounds the children this asks for, but NOT the width of the index. The tablets it
+     * declines still occupy slots and are absent from that sum, so a skewed index would be widened
+     * past its bound -- {@code 8G, 1G, 1G} against a bound of four lands on five. Capping each split
+     * by the slots the index has left is therefore load bearing, and belongs to the caller that knows
+     * them: see {@code SplitTabletJobFactory#planIndexSplits}.
      */
     public static int adaptiveSplitCount(long dataSize, long target) {
         if (target <= 0 || dataSize / 2 < target) {
@@ -197,10 +199,10 @@ public class TabletReshardUtils {
      * can diverge briefly in either direction — a node added but not yet registered is counted here and
      * not by StarOS; a node dropped after losing its starlet port is still held by StarOS and not
      * counted here until StarMgrMetaSyncer reconciles. Both are bounded by the count itself, and both
-     * move the early-split ceiling and the auto-merge floor together, so their disjointness holds.
+     * move the adaptive-split bound and the auto-merge floor together, so their disjointness holds.
      *
      * <p>Shared by pre-split (which sizes a new partition to at least this many tablets), auto-merge
-     * (whose floor derives from it) and early split (whose ceiling does), keeping all three consistent.
+     * (whose floor derives from it) and adaptive split (whose bound does), keeping all three consistent.
      */
     public static int computeNodeCount(ComputeResource computeResource) {
         long workerGroupId = computeResource.getWorkerGroupId();
@@ -257,7 +259,7 @@ public class TabletReshardUtils {
      *
      * <p>Resolves through {@code WarehouseManager#getBackgroundComputeResource}, NOT the probe-free
      * variant: that probe is load bearing — it is why an auto-merge job is rejected before admission
-     * when the warehouse has no usable worker. Using one resolution for both the early-split ceiling
+     * when the warehouse has no usable worker. Using one resolution for both the adaptive-split bound
      * and the auto-merge floor is also what keeps them consistent within a decision, so callers that
      * need both must derive them from a single call.
      */

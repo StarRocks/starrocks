@@ -123,7 +123,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             int k = TabletReshardUtils.calcSplitCount(dataSize, steadyTargetSize);
             if (k <= 1 && headroom > 0) {
                 k = Math.min(TabletReshardUtils.adaptiveSplitCount(dataSize, adaptiveTarget), headroom + 1);
-                headroom = Math.max(0, headroom - (k - 1));
+                headroom -= k - 1;
             }
             if (k > 1) {
                 splitCounts.put(tablet.getId(), k);

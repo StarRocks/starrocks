@@ -214,11 +214,19 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
             boolean adaptiveSignal = maxAdaptiveSplitTabletSize > 0;
             if (normalSignal || adaptiveSignal) {
-                // Resolved here, outside any table lock -- the drain holds none. The factory
-                // resolves it again for the plan it builds; a resize between the two only means this
-                // fingerprint describes a slightly different bound, which the next scan reconciles.
-                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(
-                        TabletReshardUtils.safeComputeNodeCountForTable(tableId));
+                // Only the adaptive rule's plan depends on the bound, and the planner is strictly
+                // the stricter of the two tests -- it also demands headroom -- so no adaptive signal
+                // means no adaptive work, and the plan is the size rule's alone. Skipping the
+                // resolution there keeps an ordinary size-based split the pure local arithmetic it
+                // was: resolving the warehouse probes StarMgr.
+                //
+                // Resolved outside any table lock -- the drain holds none. The factory resolves it
+                // again for the plan it builds; a resize between the two only means this fingerprint
+                // describes a slightly different bound, which the next scan reconciles.
+                int adaptiveBound = adaptiveSignal
+                        ? TabletReshardUtils.adaptiveSplitBound(
+                                TabletReshardUtils.safeComputeNodeCountForTable(tableId))
+                        : 0;
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
                         splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize, adaptiveBound));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
@@ -264,11 +272,10 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 if (normalSignal) {
                     return;
                 }
-            }
-            // Drop stale suppression ONLY when no split signal remains. Clearing it while an early
-            // signal is live would erase the tombstone that stops a deterministic no-progress split from
-            // re-firing on the next unchanged candidate.
-            if (!normalSignal && !adaptiveSignal) {
+            } else {
+                // No split signal at all, so drop any stale suppression and let future growth re-arm.
+                // Clearing it while an adaptive signal is live would erase the tombstone that stops a
+                // deterministic no-progress split from re-firing on the next unchanged candidate.
                 sizeSplitLatch.forgetTable(tableId);
             }
             if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
