@@ -157,6 +157,10 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
     bool _needs_reopen = false;
+    // Set when tablet-local scan key pruning proved every scan key belongs to another tablet. No
+    // reader is created; get_next() reports EOF. Distinct from "no ranges at all", which the storage
+    // layer reads as "scan everything".
+    bool _scan_key_pruned_empty = false;
     ReusableReaderKey _reusable_reader_key;
     RuntimeFilterSnapshots _observed_runtime_filter_snapshots;
 

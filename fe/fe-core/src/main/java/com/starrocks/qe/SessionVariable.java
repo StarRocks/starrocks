@@ -1093,6 +1093,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
+    public static final String ENABLE_TABLET_SCAN_KEY_PRUNE = "enable_tablet_scan_key_prune";
+
     public static final String ENABLE_PREPARE_STMT = "enable_prepare_stmt";
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
@@ -3233,6 +3235,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
+
+    // Sends each scan range the distribution topology of its tablet so the BE keeps only the scan
+    // keys that can live there. Off means FE sends nothing and the BE runs the pre-existing path
+    // unchanged. Read once at plan time and baked into the plan, so flipping it never affects a
+    // query already executing.
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_SCAN_KEY_PRUNE)
+    private boolean enableTabletScanKeyPrune = false;
 
     @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
     private boolean enablePrepareStmt = true;
@@ -6013,6 +6022,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableShortCircuit() {
         return enableShortCircuit && !RunMode.isSharedDataMode();
+    }
+
+    public void setEnableTabletScanKeyPrune(boolean enableTabletScanKeyPrune) {
+        this.enableTabletScanKeyPrune = enableTabletScanKeyPrune;
+    }
+
+    public boolean isEnableTabletScanKeyPrune() {
+        return enableTabletScanKeyPrune;
     }
 
     public boolean isEnablePrepareStmt() {

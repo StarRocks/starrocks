@@ -97,6 +97,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TTabletScanKeyConstraint;
 import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -490,6 +491,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         if (selectedPartitionIds.size() == 0) {
             throw new StarRocksException("Scan node's partition is empty");
         }
+        ConnectContext ctx = ConnectContext.get();
+        TabletScanKeyConstraintBuilder scanKeyConstraintBuilder = ctx != null &&
+                ctx.getSessionVariable().isEnableTabletScanKeyPrune()
+                ? TabletScanKeyConstraintBuilder.create(olapTable, index.indexMetaId,
+                        olapTable.getDefaultDistributionInfo())
+                : null;
+
         List<TScanRangeLocations> newLocations = Lists.newArrayList();
         for (TScanRangeLocations location : locations) {
             TInternalScanRange internalScanRange = location.scan_range.internal_scan_range;
@@ -546,6 +554,19 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     internalRange.setBucket_sequence((int) tabletId);
                 } else {
                     internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
+            }
+
+            // Rebuild rather than copy: this path may resolve a newer materialized index, so a bucket
+            // ordinal carried over from the original plan could describe a stale tablet order. The
+            // ordinal is always derived from selectedTable, whose tablets this scan range now targets.
+            // Only the distribution columns are read from the table default (they are table-wide);
+            // the bucket count comes from selectedTable itself.
+            if (scanKeyConstraintBuilder != null) {
+                TTabletScanKeyConstraint scanKeyConstraint =
+                        scanKeyConstraintBuilder.build(selectedTable, tabletId, 0);
+                if (scanKeyConstraint != null) {
+                    internalRange.setScan_key_constraint(scanKeyConstraint);
                 }
             }
 
@@ -637,6 +658,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
 
+        // Null unless enable_tablet_scan_key_prune is on and the scan is eligible, in which case no
+        // constraint is attached and the BE keeps its pre-existing behaviour.
+        TabletScanKeyConstraintBuilder scanKeyConstraintBuilder = ctx != null &&
+                ctx.getSessionVariable().isEnableTabletScanKeyPrune()
+                ? TabletScanKeyConstraintBuilder.create(olapTable, index.getMetaId(), partition.getDistributionInfo())
+                : null;
+
         checkSomeAliveComputeNode();
 
         // Batch retrieve all tablets' location info in shared-data mode
@@ -674,6 +702,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (gtid > 0) {
                 internalRange.setGtid(gtid);
+            }
+
+            if (scanKeyConstraintBuilder != null) {
+                TTabletScanKeyConstraint scanKeyConstraint =
+                        scanKeyConstraintBuilder.build(index, tabletId, tablets.size());
+                if (scanKeyConstraint != null) {
+                    internalRange.setScan_key_constraint(scanKeyConstraint);
+                }
             }
 
             // random shuffle List && only collect one copy

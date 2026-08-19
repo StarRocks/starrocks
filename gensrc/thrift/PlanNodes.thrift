@@ -126,6 +126,37 @@ struct TKeyRange {
 // - T<subclass>: all other operational parameters that are the same across
 //   all plan fragments
 
+enum TTabletScanKeyConstraintType {
+  HASH_BUCKET = 0
+}
+
+// Lets a scan range tell the BE which scan keys can possibly live on its tablet, so the
+// BE can drop the rest instead of paying a short-key lookup per key per tablet. Carries only
+// the distribution topology, never a value->tablet mapping: the values come from the scan keys
+// the BE already built, so nothing here depends on query parameters (prepared statements and
+// late runtime filters need no extra state).
+struct TTabletScanKeyConstraint {
+  1: required TTabletScanKeyConstraintType type
+
+  // HASH_BUCKET only.
+  // Positions of the distribution columns inside the OlapScanRange tuple, in DDL declaration
+  // order. The tuple is indexed by sort-key position, so a distribution column that is not part
+  // of the selected index's sort key prefix has no position and the constraint is not sent.
+  2: optional list<i32> distribution_key_positions
+  // Ordinal of this tablet within the owning physical partition's full tablet list.
+  3: optional i32 bucket_id
+  // Number of buckets of the owning physical partition -- NOT the number of tablets the query
+  // selected. Bucket counts are per physical partition, so this is per scan range.
+  4: optional i32 bucket_num
+  // Guards against a future change to the hash contract: a BE that does not know the version
+  // falls back to keeping every scan key.
+  5: optional i32 hash_version = 1
+  // True when FE's distribution pruning actually pruned. Only then is "no scan key belongs to
+  // this tablet" impossible-by-construction, so only then does an empty prune result indicate a
+  // broken hash contract rather than a tablet FE could not rule out.
+  6: optional bool pruning_was_exact
+}
+
 struct TInternalScanRange {
   1: required list<Types.TNetworkAddress> hosts
   2: required string schema_hash
@@ -148,6 +179,9 @@ struct TInternalScanRange {
   // skip local disk data cache when access page data
   15: optional bool skip_disk_cache = false;
   16: optional i64 gtid
+  // Unset unless enable_tablet_scan_key_prune is on. Unset means "no tablet-local scan key
+  // pruning", which is the pre-existing behaviour.
+  17: optional TTabletScanKeyConstraint scan_key_constraint
 }
 
 enum TFileFormatType {

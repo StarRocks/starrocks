@@ -404,6 +404,7 @@ SET(DW_TEST_FILES
     ./storage/tablet_meta_test.cpp
     ./storage/tablet_mgr_test.cpp
     ./storage/tablet_schema_helper.cpp
+    ./storage/tablet_scan_key_pruner_test.cpp
     ./storage/tablet_schema_map_test.cpp
     ./storage/tablet_schema_test.cpp
     ./storage/tablet_test.cpp

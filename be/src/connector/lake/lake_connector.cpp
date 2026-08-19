@@ -28,6 +28,7 @@
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
+#include "exec/tablet_scan_key_constraint.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
 #include "compute_env/query/fragment_runtime_state.h"
@@ -295,6 +296,10 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    if (_scan_key_pruned_empty) {
+        // Every scan key was proven to belong to another tablet; no reader was created.
+        return Status::EndOfFile("all scan keys pruned for this tablet");
+    }
     ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
                                                                                   _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
@@ -615,7 +620,33 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
         _runtime_profile->add_info_string("GlobalDictAppliedSlots", std::to_string(_params.global_dictmaps->size()));
     }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    // Tablet-local scan key pruning. Must happen here: after get_tablet() so the tablet schema is
+    // available for typing the keys, and before init_reader_params() so the pruned set is what
+    // becomes segment_read_options.ranges -- the prepared-split rowid cache is sized from that, and
+    // its `size() == _opts.ranges.size()` reuse guard would mismatch if we pruned afterwards.
+    // With enable_tablet_scan_key_prune off no constraint is attached and the call below is untouched.
+    TabletHashBucketConstraint bucket_constraint;
+    if (to_hash_bucket_constraint(_scan_range, &bucket_constraint)) {
+        auto prune_result = TabletScanKeyPruner::prune_hash(bucket_constraint, *_tablet_schema, _scanner_ranges);
+        update_scan_key_prune_profile(_runtime_profile, bucket_constraint, prune_result, _scanner_ranges.size());
+        if (prune_result.exact_empty) {
+            if (bucket_constraint.pruning_was_exact) {
+                // FE selected this tablet because some value hashes here, so this is unreachable
+                // unless FE and BE disagree about the hash contract, or a row sits in the wrong bucket.
+                LOG(WARNING) << "tablet scan key prune emptied a tablet FE selected by hash, tablet="
+                             << _scan_range.tablet_id << " bucket=" << bucket_constraint.bucket_id << "/"
+                             << bucket_constraint.bucket_num;
+            }
+            // Leave _reader/_prj_iter null and report EOF from get_next(). Never pass empty ranges
+            // down: SegmentIterator::_get_row_ranges_by_key_ranges() reads empty ranges as "no
+            // scan-key predicate" and would return the whole segment.
+            _scan_key_pruned_empty = true;
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(init_reader_params(prune_result.ranges));
+    } else {
+        RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    }
     if (glm_ctx != nullptr) {
         int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
         glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets(),

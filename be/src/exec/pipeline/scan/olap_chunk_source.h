@@ -56,6 +56,12 @@ private:
 
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges);
+    // Same work, for the tablet-local pruned view, which borrows ranges owned by OlapScanContext.
+    Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
+    // Both overloads share this body; the range loop dereferences its elements the same way for an
+    // owning and a borrowing container, so neither caller sees a behaviour change.
+    template <typename RangeContainer>
+    Status _init_reader_params_impl(const RangeContainer& key_ranges);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);

@@ -38,6 +38,7 @@
 #include "exec/catalog_scan_metrics.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
+#include "exec/tablet_scan_key_constraint.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -129,6 +130,12 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 }
 
 void OlapChunkSource::update_chunk_exec_stats(RuntimeState* state) {
+    // ScanOperator calls this as soon as has_next_chunk() turns false, which includes the case where
+    // tablet-local scan key pruning finished the tablet before any reader was built. No reader means
+    // no statistics to report.
+    if (_reader == nullptr) {
+        return;
+    }
     if (auto* query_runtime_state = state == nullptr ? nullptr : state->query_runtime_state();
         query_runtime_state != nullptr) {
         int32_t node_id = _scan_op->get_plan_node_id();
@@ -288,6 +295,15 @@ void OlapChunkSource::_decide_chunk_size(bool has_predicate) {
 }
 
 Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
+    return _init_reader_params_impl(key_ranges);
+}
+
+Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges) {
+    return _init_reader_params_impl(key_ranges);
+}
+
+template <typename RangeContainer>
+Status OlapChunkSource::_init_reader_params_impl(const RangeContainer& key_ranges) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
     auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
@@ -620,7 +636,32 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     }
     RETURN_IF_ERROR(_init_glm(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
+    // Tablet-local scan key pruning. With enable_tablet_scan_key_prune off no constraint is attached,
+    // to_hash_bucket_constraint() returns false, and the original call below runs untouched.
+    TabletHashBucketConstraint bucket_constraint;
+    if (_scan_range != nullptr && to_hash_bucket_constraint(*_scan_range, &bucket_constraint)) {
+        auto prune_result =
+                TabletScanKeyPruner::prune_hash(bucket_constraint, *_tablet_schema, _scan_ctx->key_ranges());
+        update_scan_key_prune_profile(_runtime_profile, bucket_constraint, prune_result,
+                                      _scan_ctx->key_ranges().size());
+        if (prune_result.exact_empty && bucket_constraint.pruning_was_exact) {
+            // FE pruned to this tablet because some value hashes here, so this is unreachable unless
+            // FE and BE disagree about the hash contract, or a row sits in the wrong bucket.
+            LOG(WARNING) << "tablet scan key prune emptied a tablet FE selected by hash, tablet="
+                         << _scan_range->tablet_id << " bucket=" << bucket_constraint.bucket_id << "/"
+                         << bucket_constraint.bucket_num;
+        }
+        if (prune_result.exact_empty) {
+            // No scan key can live on this tablet. Report end-of-file instead of handing empty ranges
+            // to the reader: SegmentIterator::_get_row_ranges_by_key_ranges() reads empty ranges as
+            // "no scan-key predicate" and would return the whole segment.
+            _status = Status::EndOfFile("all scan keys pruned for this tablet");
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(_init_reader_params(prune_result.ranges));
+    } else {
+        RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
+    }
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns, reader_columns));
 
     // schema is new object, but fields not
