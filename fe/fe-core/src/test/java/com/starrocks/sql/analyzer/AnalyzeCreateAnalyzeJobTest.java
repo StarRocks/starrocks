@@ -165,8 +165,7 @@ public class AnalyzeCreateAnalyzeJobTest {
         String jobId = jobDesc.get(0);
         Assertions.assertEquals(
                 List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
-                        "{histogram_stats_scope=both, histogram_sample_ratio=1, " +
-                                "histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
+                        "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
                                 "histogram_bucket_num=128}"),
                 jobDesc.subList(1, jobDesc.size() - 3));
 
@@ -179,9 +178,8 @@ public class AnalyzeCreateAnalyzeJobTest {
             jobId = jobDesc.get(0);
             Assertions.assertEquals(
                     List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
-                            "{histogram_stats_scope=both, histogram_sample_ratio=1, " +
-                                    "histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
-                                    "histogram_bucket_num=128}",
+                            "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, " +
+                                    "histogram_mcv_size=100, histogram_bucket_num=128}",
                             "FINISH"),
                     jobDesc.subList(1, jobDesc.size() - 2));
         }

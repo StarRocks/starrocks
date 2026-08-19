@@ -18,8 +18,11 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StatsConstants {
     public static final long DEFAULT_ALL_ID = -1;
@@ -107,7 +110,6 @@ public class StatsConstants {
     public static final String HISTOGRAM_STATS_SCOPE = "histogram_stats_scope";
     public static final String HISTOGRAM_STATS_SCOPE_MCV = "mcv";
     public static final String HISTOGRAM_STATS_SCOPE_BUCKETS = "buckets";
-    public static final String HISTOGRAM_STATS_SCOPE_BOTH = "both";
 
     public static final String HISTOGRAM_COLLECT_BUCKET_NDV_MODE = "histogram_collect_bucket_ndv_mode";
 
@@ -170,6 +172,60 @@ public class StatsConstants {
         NONE,
         SAMPLE,
         HLL
+    }
+
+    // The kinds of statistic a histogram job can collect. Modelled as a set rather than an enum of
+    // combinations so that adding a third kind does not multiply the accepted property values.
+    public enum HistogramStatKind {
+        MCV(HISTOGRAM_STATS_SCOPE_MCV),
+        BUCKETS(HISTOGRAM_STATS_SCOPE_BUCKETS);
+
+        private final String propertyValue;
+
+        HistogramStatKind(String propertyValue) {
+            this.propertyValue = propertyValue;
+        }
+
+        public String propertyValue() {
+            return propertyValue;
+        }
+    }
+
+    public static final String HISTOGRAM_STATS_SCOPE_VALUES = Arrays.stream(HistogramStatKind.values())
+            .map(HistogramStatKind::propertyValue)
+            .collect(Collectors.joining("', '", "'", "'"));
+
+    /**
+     * Parse the {@link #HISTOGRAM_STATS_SCOPE} property into the set of statistic kinds to collect.
+     * A null value - the property is absent - means "collect every kind", so callers do not need to
+     * materialise a default. Otherwise the value is a comma-separated set, e.g. {@code "mcv"} or
+     * {@code "mcv,buckets"}. A value that is present but names no kind is an error rather than a
+     * silent "everything": spelling it out empty is a mistake worth reporting.
+     *
+     * @throws IllegalArgumentException if a kind is unknown, or the value is present but names no kind
+     */
+    public static EnumSet<HistogramStatKind> parseHistogramStatsScope(String rawScope) {
+        if (rawScope == null) {
+            return EnumSet.allOf(HistogramStatKind.class);
+        }
+
+        EnumSet<HistogramStatKind> kinds = EnumSet.noneOf(HistogramStatKind.class);
+        for (String token : rawScope.split(",", -1)) {
+            String kind = token.trim();
+            if (kind.isEmpty()) {
+                continue;
+            }
+            kinds.add(Arrays.stream(HistogramStatKind.values())
+                    .filter(candidate -> candidate.propertyValue().equalsIgnoreCase(kind))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "unknown histogram statistic kind '" + kind + "'")));
+        }
+
+        if (kinds.isEmpty()) {
+            throw new IllegalArgumentException("no histogram statistic kind specified");
+        }
+        return kinds;
     }
 
     public static Map<String, String> buildInitStatsProp() {

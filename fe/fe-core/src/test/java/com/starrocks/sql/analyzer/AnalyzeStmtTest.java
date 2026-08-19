@@ -700,6 +700,33 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testHistogramStatsScope() {
+        // Given the histogram_stats_scope property
+        // CASE WHEN it names a comma-separated subset of the known kinds THEN it is accepted verbatim
+        //      WHEN it is omitted THEN it stays absent, which the collect jobs read as "every kind"
+        //      ELSE it is rejected END
+
+        String prefix = "analyze table db.tbl update histogram on kk1 with 256 buckets ";
+
+        for (String scope : List.of("mcv", "buckets", "mcv,buckets", "buckets,mcv", "MCV, BUCKETS", " mcv , buckets ")) {
+            AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(
+                    prefix + "properties(\"histogram_stats_scope\"=\"" + scope + "\")");
+            // Accepted as written - normalising it would only make SHOW ANALYZE STATUS disagree with the DDL.
+            Assertions.assertEquals(scope, stmt.getProperties().get(StatsConstants.HISTOGRAM_STATS_SCOPE));
+        }
+
+        // Omitted means every kind, so there is no default to materialise.
+        AnalyzeStmt noScope = (AnalyzeStmt) analyzeSuccess(prefix);
+        Assertions.assertFalse(noScope.getProperties().containsKey(StatsConstants.HISTOGRAM_STATS_SCOPE));
+
+        // 'both' was replaced by naming the kinds; a bare unknown kind and an empty set are errors too.
+        for (String invalid : List.of("both", "", " ", ",", "mcv,nonsense", "mcv;buckets")) {
+            analyzeFail(prefix + "properties(\"histogram_stats_scope\"=\"" + invalid + "\")",
+                    "Property 'histogram_stats_scope' must be a comma-separated subset of");
+        }
+    }
+
+    @Test
     public void testDropStats() {
         String sql = "drop stats t0";
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);

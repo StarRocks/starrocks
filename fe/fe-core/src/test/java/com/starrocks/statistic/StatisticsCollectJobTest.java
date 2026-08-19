@@ -600,7 +600,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         stringMcv.put("1", "10");
         stringMcv.put("2", "20");
         String defaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectSingleBucket",
-                db, olapTable, 0.1, stringMcv, "v2", Optional.empty());
+                db, olapTable, 0.1, stringMcv, "v2", VarcharType.VARCHAR, Optional.empty());
         String defaultBucketNormalized = normalize.apply(defaultBucketSql);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
@@ -619,7 +619,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         try {
             Config.enable_use_table_sample_collect_statistics = false;
             String randDefaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob,
-                    "buildCollectSingleBucket", db, olapTable, 0.1, stringMcv, "v2", Optional.empty());
+                    "buildCollectSingleBucket", db, olapTable, 0.1, stringMcv, "v2", VarcharType.VARCHAR,
+                    Optional.empty());
             String randDefaultBucketNormalized = normalize.apply(randDefaultBucketSql);
             Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                             "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
@@ -711,6 +712,17 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assertions.assertTrue(collectedSql.get(0).toLowerCase().contains("histogram_hll_ndv"));
     }
 
+    // The sampled MIN/MAX bounds query, by its IFNULL(MIN(...)) signature. The scope tests assert that no
+    // bounds query runs for a column whose bounds cannot be carried, so they must match on the query itself
+    // rather than on a bare executor call count, which also sees unrelated statistics traffic.
+    private static boolean isSampledBoundsQuery(String sql) {
+        return sql != null && sql.contains("IFNULL(MIN(");
+    }
+
+    private static final String ALL_HISTOGRAM_STATS_SCOPES =
+            StatsConstants.HISTOGRAM_STATS_SCOPE_MCV + "," + StatsConstants.HISTOGRAM_STATS_SCOPE_BUCKETS;
+
+    // A null statScope leaves the property out entirely, which means "collect every kind".
     private static HistogramStatisticsCollectJob histogramStatsWithScopeJob(Database db, OlapTable table, String columnName,
                                                                             Type columnType, String statScope) {
         Map<String, String> properties = new HashMap<>();
@@ -718,7 +730,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
-        properties.put(StatsConstants.HISTOGRAM_STATS_SCOPE, statScope);
+        if (statScope != null) {
+            properties.put(StatsConstants.HISTOGRAM_STATS_SCOPE, statScope);
+        }
 
         return new HistogramStatisticsCollectJob(db, table, Lists.newArrayList(columnName),
                 Lists.newArrayList(columnType), StatsConstants.ScheduleType.ONCE, properties);
@@ -739,7 +753,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         for (Type unparseable : Lists.<Type>newArrayList(VarcharType.VARCHAR, BooleanType.BOOLEAN)) {
             Optional<Pair<String, String>> bounds = Deencapsulation.invoke(job, "sampleColumnMinMax",
-                    connectContext, new StatisticExecutor(), "v2", unparseable, 0.1);
+                    connectContext, new StatisticExecutor(), "v2", unparseable, 0.1, ImmutableMap.of("1", "10"));
 
             Assertions.assertTrue(bounds.isEmpty());
         }
@@ -756,11 +770,16 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         HistogramStatisticsCollectJob job = histogramStatsWithScopeJob(db, olapTable, "v4", DateType.DATE,
                 StatsConstants.HISTOGRAM_STATS_SCOPE_MCV);
 
-        String sql = Deencapsulation.invoke(job, "buildSampleMinMax", db, olapTable, "v4", DateType.DATE, 0.1);
+        String sql = Deencapsulation.invoke(job, "buildSampleMinMax", db, olapTable, "v4", DateType.DATE, 0.1,
+                ImmutableMap.of("2020-01-01", "10"));
 
         Assertions.assertTrue(sql.contains("cast(2 as INT)"), sql);
         Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
         Assertions.assertTrue(sql.contains("cast(IFNULL(MAX(`column_key`), '') as varchar)"), sql);
+        // The bucket's count subtracts the MCV rows, so its bounds must be sampled over the same population.
+        Assertions.assertTrue(sql.contains("and `v4` not in (\"2020-01-01\")"), sql);
+        // No LIMIT: without an ORDER BY it would bias min/max towards an arbitrary scan-order prefix.
+        Assertions.assertFalse(sql.toLowerCase().contains("limit"), sql);
     }
 
     @Test
@@ -786,7 +805,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                boundsQueries.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    boundsQueries.incrementAndGet();
+                }
                 TStatisticData data = new TStatisticData();
                 data.columnName = "0";
                 data.histogram = "4";
@@ -825,11 +846,23 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assertions.assertTrue(collectedSql.get(0).contains("histogram(`column_key`"),
                 "stats collection sql is unexpected. The sql is " + collectedSql.get(0));
 
-        // both scope
+        // both kinds, named explicitly as a set
         mcvQueries.set(0);
         boundsQueries.set(0);
         collectedSql.clear();
-        histogramStatsWithScopeJob(db, olapTable, "v2", IntegerType.BIGINT, StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH)
+        histogramStatsWithScopeJob(db, olapTable, "v2", IntegerType.BIGINT, ALL_HISTOGRAM_STATS_SCOPES)
+                .collect(connectContext, new NativeAnalyzeStatus());
+        Assertions.assertEquals(1, mcvQueries.get());
+        Assertions.assertEquals(0, boundsQueries.get());
+        Assertions.assertEquals(1, collectedSql.size());
+        Assertions.assertTrue(collectedSql.get(0).contains("histogram(`column_key`"),
+                "stats collection sql is unexpected. The sql is " + collectedSql.get(0));
+
+        // omitting the property means the same thing as naming every kind
+        mcvQueries.set(0);
+        boundsQueries.set(0);
+        collectedSql.clear();
+        histogramStatsWithScopeJob(db, olapTable, "v2", IntegerType.BIGINT, null)
                 .collect(connectContext, new NativeAnalyzeStatus());
         Assertions.assertEquals(1, mcvQueries.get());
         Assertions.assertEquals(0, boundsQueries.get());
@@ -839,8 +872,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testHistogramScopeIsBothAndTypeIsString() throws Exception {
-        // Given a histogram job on a varchar column with the both stats scope
+    public void testHistogramAllScopesAndTypeIsString() throws Exception {
+        // Given a histogram job on a varchar column naming every stats scope
         // CASE WHEN the column is char-family THEN the bucket collection is skipped and one placeholder bucket carries
         //      the row count next to the MCVs END
 
@@ -862,7 +895,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                boundsQueries.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    boundsQueries.incrementAndGet();
+                }
                 return Lists.newArrayList();
             }
         };
@@ -875,7 +910,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        histogramStatsWithScopeJob(db, olapTable, "v2", VarcharType.VARCHAR, StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH)
+        histogramStatsWithScopeJob(db, olapTable, "v2", VarcharType.VARCHAR, ALL_HISTOGRAM_STATS_SCOPES)
                 .collect(connectContext, new NativeAnalyzeStatus());
 
         Assertions.assertEquals(1, mcvQueries.get());
@@ -888,10 +923,10 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testHistogramScopeIsBucketsAndTypeIsString() throws Exception {
+    public void testHistogramScopeIsBucketsAndTypeIsStringStillCollectsMcv() throws Exception {
         // Given a histogram job on a varchar column with the buckets stats scope
-        // CASE WHEN the column is char-family THEN no query of either kind runs and the placeholder bucket replaces the
-        //      aggregate END
+        // CASE WHEN the column is char-family THEN buckets are impossible, so the MCVs are collected anyway rather
+        //      than storing a row with neither MCVs nor real buckets END
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable olapTable =
@@ -911,7 +946,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                boundsQueries.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    boundsQueries.incrementAndGet();
+                }
                 return Lists.newArrayList();
             }
         };
@@ -927,11 +964,48 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         histogramStatsWithScopeJob(db, olapTable, "v2", VarcharType.VARCHAR, StatsConstants.HISTOGRAM_STATS_SCOPE_BUCKETS)
                 .collect(connectContext, new NativeAnalyzeStatus());
 
-        Assertions.assertEquals(0, mcvQueries.get());
+        Assertions.assertEquals(1, mcvQueries.get());
         Assertions.assertEquals(0, boundsQueries.get());
         Assertions.assertEquals(1, collectedSql.size());
         Assertions.assertTrue(collectedSql.get(0).contains("concat('[[\"Infinity\",\"Infinity\",'"), collectedSql.get(0));
+        // 10 / 0.1 - the MCV count is scaled back to full-table. Without this the stored row would carry no
+        // information at all, and the IN-predicate estimator would still prefer it over the char NDV path.
+        Assertions.assertTrue(collectedSql.get(0).contains("'[[\"1\",\"100\"]]'"), collectedSql.get(0));
         Assertions.assertFalse(collectedSql.get(0).contains("histogram("), collectedSql.get(0));
+    }
+
+    @Test
+    public void testHistogramSingleBucketIsNullWhenDateBoundsAreMissing() throws Exception {
+        // Given a histogram job on a date column whose scope excludes buckets
+        // CASE WHEN the sampled bounds come back unusable THEN buckets are stored as NULL rather than the
+        //      Infinity placeholder, because HistogramUtils.convertBuckets cannot parse it as a date and would
+        //      drop the bucket, losing the non-MCV count from getTotalRows() END
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
+
+        HistogramStatisticsCollectJob job = histogramStatsWithScopeJob(db, olapTable, "v4", DateType.DATE,
+                StatsConstants.HISTOGRAM_STATS_SCOPE_MCV);
+
+        for (Type dateType : Lists.<Type>newArrayList(DateType.DATE, DateType.DATETIME)) {
+            String sql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
+                    db, olapTable, 0.1, ImmutableMap.of("2020-01-01", "10"), "v4", dateType, Optional.empty());
+
+            Assertions.assertTrue(sql.contains("'test.t0_stats', NULL,"), sql);
+            Assertions.assertFalse(sql.contains("Infinity"), sql);
+        }
+
+        // A numeric column keeps the placeholder: "Infinity" round-trips through Double.parseDouble.
+        String numericSql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
+                db, olapTable, 0.1, ImmutableMap.of("1", "10"), "v2", IntegerType.BIGINT, Optional.empty());
+        Assertions.assertTrue(numericSql.contains("concat('[[\"Infinity\",\"Infinity\",'"), numericSql);
+
+        // And with usable bounds a date column stores a real bucket.
+        String boundedSql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
+                db, olapTable, 0.1, ImmutableMap.of("2020-01-01", "10"), "v4", DateType.DATE,
+                Optional.of(Pair.create("2020-01-02", "2020-06-30")));
+        Assertions.assertTrue(boundedSql.contains("concat('[[\"2020-01-02\",\"2020-06-30\",'"), boundedSql);
     }
 
     @Test
@@ -992,15 +1066,19 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("r_regionkey"), StatsConstants.AnalyzeType.HISTOGRAM,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now()));
 
-        Assertions.assertEquals(2, queriedSql.size());
-        Assertions.assertTrue(queriedSql.get(1).contains("IFNULL(MIN(`column_key`), '')"), queriedSql.get(1));
+        // Match on the queries themselves rather than on an exact call count, which also sees unrelated
+        // statistics traffic: the MCV query stands in for the bucket aggregate, and the bounds query supplies
+        // the single bucket's min/max.
+        Assertions.assertTrue(queriedSql.stream().anyMatch(sql -> sql.contains("group by")), queriedSql.toString());
+        Assertions.assertTrue(queriedSql.stream().anyMatch(StatisticsCollectJobTest::isSampledBoundsQuery),
+                queriedSql.toString());
         Assertions.assertEquals(1, collectedSql.size());
         Assertions.assertTrue(collectedSql.get(0).contains("concat('[[\"0\",\"4\",'"), collectedSql.get(0));
         Assertions.assertFalse(collectedSql.get(0).contains("histogram("), collectedSql.get(0));
     }
 
     @Test
-    public void testExternalHistogramBothScopeCollectsMcvAndBuckets() throws Exception {
+    public void testExternalHistogramAllScopesCollectsMcvAndBuckets() throws Exception {
         // Given an external histogram job on an int column with the both stats scope
         // CASE WHEN the scope covers MCVs and buckets THEN the MCV query runs, the bounds query does not, and the
         //      sorted aggregate runs with the MCVs excluded END
@@ -1013,7 +1091,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
-        properties.put(StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH);
+        properties.put(StatsConstants.HISTOGRAM_STATS_SCOPE, ALL_HISTOGRAM_STATS_SCOPES);
 
         ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
                 "hive0", db, region, Lists.newArrayList("r_regionkey"), Lists.newArrayList(IntegerType.INT),
@@ -1033,7 +1111,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                boundsQueries.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    boundsQueries.incrementAndGet();
+                }
                 return Lists.newArrayList();
             }
 
@@ -1091,7 +1171,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                queryCalls.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    queryCalls.incrementAndGet();
+                }
                 return Lists.newArrayList();
             }
 
@@ -1119,7 +1201,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testExternalHistogramBothScopeSkipsBucketQueryForStringColumns() throws Exception {
+    public void testExternalHistogramAllScopesSkipsBucketQueryForStringColumns() throws Exception {
         // Given an external histogram job on a varchar column with the both stats scope
         // CASE WHEN the column is char-family THEN the bucket aggregate is skipped and one placeholder bucket carries
         //      the row count next to the MCVs ELSE the sorted aggregate runs END
@@ -1132,7 +1214,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
-        properties.put(StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH);
+        properties.put(StatsConstants.HISTOGRAM_STATS_SCOPE, ALL_HISTOGRAM_STATS_SCOPES);
 
         ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
                 "hive0", db, region, Lists.newArrayList("r_name"), Lists.newArrayList(VarcharType.VARCHAR),
@@ -1152,7 +1234,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                boundsQueries.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    boundsQueries.incrementAndGet();
+                }
                 return Lists.newArrayList();
             }
 
@@ -1183,10 +1267,10 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testExternalHistogramBucketsScopeStoresPlaceholderWithoutMcvForStringColumns() throws Exception {
+    public void testExternalHistogramBucketsScopeStillCollectsMcvForStringColumns() throws Exception {
         // Given an external histogram job on a varchar column with the buckets stats scope
-        // CASE WHEN the column is char-family THEN no query of either kind runs and the placeholder bucket replaces the
-        //      aggregate END
+        // CASE WHEN the column is char-family THEN buckets are impossible, so the MCVs are collected anyway and the
+        //      placeholder bucket only carries the row count END
 
         Table region = connectContext.getGlobalStateMgr().getMetadataMgr()
                 .getTable(connectContext, "hive0", "tpch", "region");
@@ -1202,17 +1286,23 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "hive0", db, region, Lists.newArrayList("r_name"), Lists.newArrayList(VarcharType.VARCHAR),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, properties);
 
-        AtomicInteger queryCalls = new AtomicInteger(0);
+        AtomicInteger mcvQueries = new AtomicInteger(0);
+        AtomicInteger boundsQueries = new AtomicInteger(0);
         new MockUp<StatisticExecutor>() {
             @Mock
             public List<TStatisticData> queryMCV(ConnectContext ctx, String sql) {
-                queryCalls.incrementAndGet();
-                return Lists.newArrayList();
+                mcvQueries.incrementAndGet();
+                TStatisticData data = new TStatisticData();
+                data.columnName = "AFRICA";
+                data.histogram = "10";
+                return Lists.newArrayList(data);
             }
 
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
-                queryCalls.incrementAndGet();
+                if (isSampledBoundsQuery(sql)) {
+                    boundsQueries.incrementAndGet();
+                }
                 return Lists.newArrayList();
             }
 
@@ -1234,9 +1324,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("r_name"), StatsConstants.AnalyzeType.HISTOGRAM,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now()));
 
-        Assertions.assertEquals(0, queryCalls.get());
+        Assertions.assertEquals(1, mcvQueries.get());
+        Assertions.assertEquals(0, boundsQueries.get());
         Assertions.assertEquals(1, collectedSql.size());
         Assertions.assertTrue(collectedSql.get(0).contains("concat('[[\"Infinity\",\"Infinity\",'"), collectedSql.get(0));
+        Assertions.assertTrue(collectedSql.get(0).contains("'[[\"AFRICA\",\"10\"]]'"), collectedSql.get(0));
         Assertions.assertFalse(collectedSql.get(0).contains("histogram("), collectedSql.get(0));
     }
 

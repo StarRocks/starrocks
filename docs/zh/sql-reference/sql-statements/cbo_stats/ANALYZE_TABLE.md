@@ -94,7 +94,7 @@ PROPERTIES (property [,property]);
 | histogram_mcv_size             | INT      | 100        | 直方图 most common value (MCV) 的数量。                      |
 | histogram_sample_ratio         | FLOAT    | 0.1        | 直方图采样比例。                                             |
 | histogram_max_sample_row_count | LONG     | 10000000   | 直方图最大采样行数。                                         |
-| histogram_stats_scope          | STRING   | both       | 直方图采集的统计信息范围：`mcv`（仅采集 most common value）、`buckets`（仅采集等深分桶）或 `both`（同时采集 MCV 和分桶）。 |
+| histogram_stats_scope          | STRING   | `mcv,buckets` | 直方图采集的统计信息种类，取值为 `mcv`（most common value）和 `buckets`（等深分桶）组成的逗号分隔集合。不指定该属性时采集全部种类。未采集 `buckets` 时，会存储一个覆盖全部数据的分桶，以保证行数估算正确。 |
 
 直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 `histogram_sample_ratio` 两者中的最大值。最多不超过 `histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
 

@@ -266,7 +266,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         HistogramStatisticsCollectJob job = mcvOnlyHistogramJob(db, t0, "v1", IntegerType.BIGINT);
 
         String sql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
-                db, t0, 0.1, ImmutableMap.of("1", "10", "2", "20"), "v1",
+                db, t0, 0.1, ImmutableMap.of("1", "10", "2", "20"), "v1", IntegerType.BIGINT,
                 Optional.of(Pair.create("1", "100")));
 
         // 10 + 20 MCV rows are excluded from the bucket, and count() is divided by the sample ratio.
@@ -287,11 +287,12 @@ public class StatisticsSQLTest extends PlanTestBase {
         HistogramStatisticsCollectJob job = mcvOnlyHistogramJob(db, t0, "s1", StringType.STRING);
 
         Optional<Pair<String, String>> bounds = Deencapsulation.invoke(job, "sampleColumnMinMax",
-                connectContext, new StatisticExecutor(), "s1", StringType.STRING, 0.1);
+                connectContext, new StatisticExecutor(), "s1", StringType.STRING, 0.1,
+                ImmutableMap.of("a", "10"));
         Assertions.assertTrue(bounds.isEmpty());
 
         String sql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
-                db, t0, 0.1, ImmutableMap.of("a", "10"), "s1", bounds);
+                db, t0, 0.1, ImmutableMap.of("a", "10"), "s1", StringType.STRING, bounds);
 
         Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
                 "cast(cast(greatest(0, count(`s1`) / cast(0.1 as double) - 10) as bigint) as varchar), ',0]]')"), sql);
@@ -309,12 +310,16 @@ public class StatisticsSQLTest extends PlanTestBase {
         HistogramStatisticsCollectJob job = mcvOnlyHistogramJob(db, t0, "v1", IntegerType.BIGINT);
 
         String sql = Deencapsulation.invoke(job, "buildSampleMinMax",
-                db, t0, "v1", IntegerType.BIGINT, 0.1);
+                db, t0, "v1", IntegerType.BIGINT, 0.1, ImmutableMap.of("1", "10", "2", "20"));
 
         Assertions.assertTrue(sql.contains("cast(" + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as INT)"), sql);
         Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
         Assertions.assertTrue(sql.contains("cast(IFNULL(MAX(`column_key`), '') as varchar)"), sql);
         Assertions.assertTrue(sql.contains("SAMPLE('percent'='10')"), sql);
+        // The bucket's count subtracts the MCV rows, so its bounds are sampled over the same population.
+        Assertions.assertTrue(sql.contains("and `v1` not in (1,2)"), sql);
+        // No LIMIT: without an ORDER BY it would bias min/max towards an arbitrary scan-order prefix.
+        Assertions.assertFalse(sql.toLowerCase().contains("limit"), sql);
     }
 
     @Test
@@ -330,7 +335,7 @@ public class StatisticsSQLTest extends PlanTestBase {
             HistogramStatisticsCollectJob job = mcvOnlyHistogramJob(db, t0, column.first, column.second);
 
             String sql = Deencapsulation.invoke(job, "buildSampleMinMax",
-                    db, t0, column.first, column.second, 0.1);
+                    db, t0, column.first, column.second, 0.1, ImmutableMap.of("2020-01-01", "10"));
 
             Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
             Assertions.assertTrue(sql.contains("cast(IFNULL(MAX(`column_key`), '') as varchar)"), sql);
@@ -391,7 +396,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         ExternalHistogramStatisticsCollectJob job = mcvOnlyExtHistogramJob(db, region);
 
         String sql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
-                db, region, ImmutableMap.of("1", "10"), "r_regionkey",
+                db, region, ImmutableMap.of("1", "10"), "r_regionkey", IntegerType.INT,
                 Optional.of(Pair.create("0", "4")));
 
         Assertions.assertTrue(sql.contains("concat('[[\"0\",\"4\",', " +
@@ -414,11 +419,14 @@ public class StatisticsSQLTest extends PlanTestBase {
         ExternalHistogramStatisticsCollectJob job = mcvOnlyExtHistogramJob(db, region);
 
         String sql = Deencapsulation.invoke(job, "buildSampleMinMax",
-                db, region, "r_regionkey", IntegerType.INT, 0.1);
+                db, region, "r_regionkey", IntegerType.INT, 0.1, ImmutableMap.of("1", "10"));
 
         Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
         Assertions.assertTrue(sql.contains("cast(IFNULL(MAX(`column_key`), '') as varchar)"), sql);
-        Assertions.assertTrue(sql.contains("where rand() <= 0.1 and `r_regionkey` is not null"), sql);
+        Assertions.assertTrue(sql.contains(
+                "where rand() <= 0.1 and `r_regionkey` is not null  and `r_regionkey` not in (1)"), sql);
+        // No LIMIT: without an ORDER BY it would bias min/max towards an arbitrary scan-order prefix.
+        Assertions.assertFalse(sql.toLowerCase().contains("limit"), sql);
         // ORDER BY would bias MAX towards the smallest sampled rows, and the bucket aggregate is what we are avoiding.
         Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
         Assertions.assertFalse(sql.contains("histogram("), sql);
@@ -441,7 +449,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 ImmutableMap.of(StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_MCV));
 
         String sql = Deencapsulation.invoke(job, "buildSampleMinMax",
-                db, orders, "o_orderdate", DateType.DATE, 0.1);
+                db, orders, "o_orderdate", DateType.DATE, 0.1, ImmutableMap.of("1993-01-01", "10"));
 
         Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
 
@@ -465,7 +473,8 @@ public class StatisticsSQLTest extends PlanTestBase {
         // no longer re-checks.
         for (Type unparseable : Lists.<Type>newArrayList(VarcharType.VARCHAR, BooleanType.BOOLEAN)) {
             Optional<Pair<String, String>> bounds = Deencapsulation.invoke(job, "sampleColumnMinMax",
-                    connectContext, new StatisticExecutor(), "r_name", unparseable, 0.1);
+                    connectContext, new StatisticExecutor(), "r_name", unparseable, 0.1,
+                    ImmutableMap.of("AFRICA", "10"));
 
             Assertions.assertTrue(bounds.isEmpty());
         }

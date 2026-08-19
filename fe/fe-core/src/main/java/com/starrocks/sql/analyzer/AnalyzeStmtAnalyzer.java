@@ -493,14 +493,17 @@ public class AnalyzeStmtAnalyzer {
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
 
-                String histStatScope = properties.computeIfAbsent(StatsConstants.HISTOGRAM_STATS_SCOPE,
-                        p -> StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH);
-                if (!histStatScope.equalsIgnoreCase(StatsConstants.HISTOGRAM_STATS_SCOPE_MCV)
-                        && !histStatScope.equalsIgnoreCase(StatsConstants.HISTOGRAM_STATS_SCOPE_BUCKETS)
-                        && !histStatScope.equalsIgnoreCase(StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH)) {
-                    throw new SemanticException("Property '%s' must be one of '%s', '%s', '%s'",
-                            StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_MCV,
-                            StatsConstants.HISTOGRAM_STATS_SCOPE_BUCKETS, StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH);
+                // Validated but deliberately not defaulted into the map: omitting the property already
+                // means "collect every kind", so there is nothing to materialise.
+                if (properties.containsKey(StatsConstants.HISTOGRAM_STATS_SCOPE)) {
+                    try {
+                        StatsConstants.parseHistogramStatsScope(
+                                properties.get(StatsConstants.HISTOGRAM_STATS_SCOPE));
+                    } catch (IllegalArgumentException e) {
+                        throw new SemanticException("Property '%s' must be a comma-separated subset of %s: %s",
+                                StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_VALUES,
+                                e.getMessage());
+                    }
                 }
 
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
