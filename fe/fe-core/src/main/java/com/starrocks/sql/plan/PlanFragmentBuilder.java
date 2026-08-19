@@ -1273,7 +1273,10 @@ public class PlanFragmentBuilder {
                 partitionValues *= rangeSize;
     
                 kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
-                kr.setColumn_name(col.getName());
+                // BE indexes the tuple's slots by col_name, which is the column id, so name the range by
+                // the id as well: a renamed partition column would otherwise be skipped and its
+                // scan ranges never pruned.
+                kr.setColumn_name(col.getColumnId().getId());
                 if (isNullPartition) {
                     kr.setHas_null(true);
                 }
@@ -1317,7 +1320,10 @@ public class PlanFragmentBuilder {
 
                 TKeyRange kr = new TKeyRange();
                 kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
-                kr.setColumn_name(col.getName());
+                // BE indexes the tuple's slots by col_name, which is the column id, so name the range by
+                // the id as well: a renamed partition column would otherwise be skipped and its
+                // scan ranges never pruned.
+                kr.setColumn_name(col.getColumnId().getId());
                 List<TExpr> l = Lists.newArrayList();
                 partitionValuesList.forEach(v -> l.add(ExprToThrift.treeToThrift(v)));
                 kr.setList_values(l);
@@ -1348,7 +1354,10 @@ public class PlanFragmentBuilder {
 
                 TKeyRange kr = new TKeyRange();
                 kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
-                kr.setColumn_name(col.getName());
+                // BE indexes the tuple's slots by col_name, which is the column id, so name the range by
+                // the id as well: a renamed partition column would otherwise be skipped and its
+                // scan ranges never pruned.
+                kr.setColumn_name(col.getColumnId().getId());
                 List<TExpr> l = Lists.newArrayList();
                 for (var values : partitionValuesList) {
                     Preconditions.checkState(values.size() == partitionCols.size());
