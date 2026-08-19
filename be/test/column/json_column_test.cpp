@@ -652,7 +652,7 @@ JsonColumn::Ptr make_plain_json(const std::vector<std::string>& jsons) {
 }
 
 JsonColumn::Ptr make_flat_json(const std::vector<std::string>& jsons, const std::vector<std::string>& paths,
-                                const std::vector<LogicalType>& types, bool has_remain) {
+                               const std::vector<LogicalType>& types, bool has_remain) {
     auto plain = make_plain_json(jsons);
     JsonFlattener flattener(paths, types, has_remain);
     flattener.flatten(plain.get());
