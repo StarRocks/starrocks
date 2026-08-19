@@ -14,6 +14,7 @@
 
 #include "storage_primitive/merge_iterator.h"
 
+#include <atomic>
 #include <climits>
 #include <condition_variable>
 #include <deque>
@@ -368,6 +369,11 @@ inline Status MergeIterator::parallel_prefill() {
     });
 
     auto* mem_tracker = _mem_tracker;
+    // One residency allowance for the whole merge, drawn from by every child's prefetch: it caps
+    // what this merge may hold in prefetched buffers no matter how many children it has. Children
+    // past the budget fall back to the pre-split path, a graceful degradation for merges whose
+    // scans are too big to hold. Joined before this function returns, so a stack slot is safe.
+    std::atomic<int64_t> prefetch_budget{config::compaction_parallel_merge_prefetch_bytes};
     // Per-iterator in-flight limit: the shared pool is sized for concurrent merges, so without
     // this cap one task with many children would occupy the whole pool and past-the-knee
     // concurrency slows the task itself down (measured: 64 threads slower than 16 for one task).
@@ -385,7 +391,7 @@ inline Status MergeIterator::parallel_prefill() {
             --*inflight;
             gate->second.notify_one();
         };
-        auto task = std::make_shared<std::packaged_task<void()>>([this, i, mem_tracker, done]() {
+        auto task = std::make_shared<std::packaged_task<void()>>([this, i, mem_tracker, done, &prefetch_budget]() {
             // Memory tracking is thread local: without re-installing the caller's tracker the
             // bytes read here would vanish from the task's account and escape its memory limit.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
@@ -397,12 +403,16 @@ inline Status MergeIterator::parallel_prefill() {
             // The IO half first: a child whose prefetch makes its bytes locally available keeps
             // its decode half on the merge thread, so this pool thread only ever waits on IO and
             // the task's CPU stays on its own worker.
-            auto covered = _children[i]->prefetch();
+            auto covered = _children[i]->prefetch(&prefetch_budget);
             if (!covered.ok()) {
-                // Land the error in the slot for commit_slot to interpret in child order, exactly
-                // where a serial read would have surfaced it. Retrying via read_slot instead would
-                // re-run the child's init on a half-initialized iterator and mask the real error.
-                _bufs[i]->st[0] = covered.status();
+                // Land the error in the slot for commit_slot to interpret in child order, at the
+                // same point a serial read would have surfaced its error. Retrying via read_slot
+                // instead would re-run the child's init on a half-initialized iterator and mask
+                // the real error. commit_slot treats end-of-file as a clean child close, so an
+                // EOF-status here (which no prefetch should produce) must not slip through as one.
+                _bufs[i]->st[0] = covered.status().is_end_of_file()
+                                          ? Status::InternalError("unexpected EOF from prefetch")
+                                          : covered.status();
                 return;
             }
             if (*covered) {

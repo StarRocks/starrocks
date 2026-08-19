@@ -304,13 +304,18 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.column_access_paths = &_column_access_paths;
     // In bypass mode the pass reads object storage directly: no cache fill (the cache demonstrably
     // cannot retain the working set), no cache lookup, and all of a segment's column regions merged
-    // into few large reads instead of per-column cache-block churn.
+    // into few large reads instead of per-column cache-block churn. With the parallel prefill the
+    // same per-segment stream is also used in cache mode (reading through the cache, still filling
+    // it): the prefill pulls the registered ranges into the stream's own buffers, which is what
+    // lets the pool run pure IO and the merge thread decode without ever waiting on a read -- a
+    // cache-warming prefill instead would leave the decode exposed to eviction between warm and
+    // read.
     reader_params.lake_io_opts = {
             .fill_data_cache = !_bypass_data_cache && config::lake_enable_vertical_compaction_fill_data_cache,
             .skip_disk_cache = _bypass_data_cache,
             .buffer_size = read_buffer_size(),
             .hold_segments = config::lake_compaction_hold_input_segments,
-            .coalesce_across_columns = _bypass_data_cache};
+            .coalesce_across_columns = _bypass_data_cache || config::enable_compaction_parallel_merge_init};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and

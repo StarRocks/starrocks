@@ -2274,10 +2274,11 @@ CONF_mBool(enable_compaction_parallel_merge_init, "false");
 // Per-merge-iterator in-flight read limit: 16 is the measured knee for one task (1/4/16/64
 // threads read 754/302/157/181s), and issuing more per task past the knee slows it down.
 CONF_Int32(compaction_parallel_merge_init_threads, "16");
-// How many bytes one merge input may hold in its own read buffers when its prefill runs as
-// prefetch (IO on the pool, decode on the merge thread). An input whose scan does not fit keeps
-// reading the remainder while decoding instead of holding it all at once.
-CONF_mInt64(compaction_parallel_merge_prefetch_bytes, "67108864");
+// How many bytes one merge may hold in prefetched read buffers, across all of its inputs, when
+// its prefill runs as prefetch (IO on the pool, decode on the merge thread). Inputs past the
+// budget fall back to full reads on the pool instead of holding their scans; 0 disables the
+// IO/decode split entirely.
+CONF_mInt64(compaction_parallel_merge_prefetch_bytes, "268435456");
 // The shared pool's thread count. Larger than the per-task limit so concurrent compactions do
 // not dilute each other down to pool_size / tasks; idle threads are reclaimed after 10s, so an
 // idle BE pays nothing for the headroom.
