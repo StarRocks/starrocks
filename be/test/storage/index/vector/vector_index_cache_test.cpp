@@ -218,8 +218,7 @@ TEST_F(VectorIndexCacheTest, IvfPqListBlock_GetPtrLoopLoadsOnce) {
             return;
         }
         ++loads;
-        cache_->Insert(key, make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList),
-                       &list_handle);
+        cache_->Insert(key, make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList), &list_handle);
     };
 
     for (int scan = 0; scan < 4; ++scan) {
