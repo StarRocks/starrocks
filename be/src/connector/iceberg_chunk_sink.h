@@ -65,6 +65,8 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
     TCompressionType::type compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::map<std::string, std::string> options;
     std::vector<formats::FileColumnId> parquet_field_ids;
+    // Parallel to column_names / parquet_field_ids. Empty means all columns nullable.
+    std::vector<bool> nullable;
     PriorityThreadPool* executor = nullptr;
     TCloudConfiguration cloud_conf;
     pipeline::FragmentContext* fragment_context = nullptr;
