@@ -18,7 +18,6 @@
 #include <ios>
 #include <memory>
 
-#include "util/failpoint/fail_point.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config.h"
@@ -35,6 +34,7 @@
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
