@@ -102,10 +102,12 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      * Split plan for one index: {@code oldTabletId -> child count}.
      *
      * <p>The size rule decides first and is untouched. Where it declines, the adaptive target gets a
-     * turn: while the index has less parallelism than the warehouse can drive, that target is the size
-     * that would give it one tablet per usable node, and {@code adaptiveSplitCount} is bounded so the
-     * index lands at or below the auto-merge floor however its data is spread. Merge acts strictly
-     * above that floor, so an index this widens is never one merge would immediately narrow.
+     * turn: while the index holds fewer tablets than the bound, that target is the size that would
+     * give it one tablet per slot in the bound -- the warehouse's compute-node count capped by
+     * {@code tablet_reshard_max_split_count}, so lowering that configuration lowers this width too.
+     * The count is then capped by the slots the index has left, so it lands at or below the
+     * auto-merge floor however its data is spread. Merge acts strictly above that floor, so an index
+     * this widens is never one merge would immediately narrow.
      *
      * <p>The size rule wins outright where it applies. That ordering is load bearing: a BE split is
      * all-or-nothing -- when the key distribution cannot produce exactly the requested number of
