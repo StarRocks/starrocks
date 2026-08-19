@@ -34,6 +34,8 @@
 #include "column/chunk_schema_helper.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
@@ -198,6 +200,8 @@ public:
 
     void close() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
+
+    StatusOr<bool> prefetch() override;
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
@@ -2880,6 +2884,73 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
     _cur_rowid = range.end();
     _opts.stats->raw_rows_read += read_num;
     return Status::OK();
+}
+
+StatusOr<bool> SegmentIterator::prefetch() {
+    if (!_inited) {
+        RETURN_IF_ERROR(_init());
+        _inited = true;
+    }
+    bool covered = true;
+    if (_cross_column_stream != nullptr) {
+        // Direct-read mode: pull the registered coalesced ranges into the shared buffers, so the
+        // decoding pass finds every byte resident. The budget caps how much one child may hold at
+        // once; a child too big to fit reads the rest inline while decoding.
+        ASSIGN_OR_RETURN(bool all, _cross_column_stream->prefetch_registered(
+                                           config::compaction_parallel_merge_prefetch_bytes));
+        covered &= all;
+    }
+    // The bytes of a cache-path column can only be made resident in the local data cache, and only
+    // when reads actually fill it; otherwise a warming read would just be a second remote read.
+    const bool cache_warmable = config::datacache_enable && _opts.lake_io_opts.fill_data_cache &&
+                                !_opts.lake_io_opts.skip_disk_cache && _segment->lake_tablet_manager() != nullptr;
+    std::vector<uint8_t> scratch;
+    // The same per-child budget as the resident case. Warming is not held memory, but an
+    // over-budget child (a whole wide segment, say) would push its entire scan's IO ahead of the
+    // first decoded row; past the budget it keeps the streaming behaviour instead.
+    int64_t warm_budget = config::compaction_parallel_merge_prefetch_bytes;
+    for (auto& [cid, file] : _column_files) {
+        if (auto* sbs = dynamic_cast<SharedBufferedInputStream*>(file.get())) {
+            // Per-column coalesced stream (io_coalesce_lake_read_enable): same as above.
+            ASSIGN_OR_RETURN(bool all,
+                             sbs->prefetch_registered(config::compaction_parallel_merge_prefetch_bytes));
+            covered &= all;
+            continue;
+        }
+        if (!cache_warmable) {
+            covered = false;
+            continue;
+        }
+        if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
+            covered = false;
+            continue;
+        }
+        auto vec_or = _column_iterators[cid]->get_io_range_vec(_scan_range, nullptr);
+        if (!vec_or.ok()) {
+            // A column that cannot enumerate its reads (NotSupported for complex types) keeps its
+            // IO on the decoding thread; report the gap instead of failing the child.
+            covered = false;
+            continue;
+        }
+        // Touch every byte the scan will read through the same cache-filling file the read loop
+        // uses: the data lands in the local cache and the scratch is thrown away, so this warms
+        // without holding anything. Stepped reads so one huge range does not need a huge scratch.
+        constexpr int64_t kWarmStep = 1024 * 1024;
+        for (auto [offset, size] : *vec_or) {
+            while (size > 0) {
+                if (warm_budget <= 0) {
+                    return false;
+                }
+                const int64_t n = std::min(size, kWarmStep);
+                scratch.resize(n);
+                RETURN_IF_ERROR(file->read_at_fully(offset, scratch.data(), n));
+                offset += n;
+                size -= n;
+                warm_budget -= n;
+            }
+        }
+    }
+    return covered;
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {

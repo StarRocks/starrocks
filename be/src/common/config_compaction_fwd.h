@@ -265,6 +265,11 @@ CONF_mBool(enable_compaction_parallel_merge_init, "false");
 // threads read 754/302/157/181s), and issuing more per task past the knee slows it down.
 CONF_Int32(compaction_parallel_merge_init_threads, "16");
 
+// How many bytes one merge input may hold in its own read buffers when its prefill runs as
+// prefetch (IO on the pool, decode on the merge thread). An input whose scan does not fit keeps
+// reading the remainder while decoding instead of holding it all at once.
+CONF_mInt64(compaction_parallel_merge_prefetch_bytes, "67108864");
+
 // The shared pool's thread count. Larger than the per-task limit so concurrent compactions do
 // not dilute each other down to pool_size / tasks; idle threads are reclaimed after 10s, so an
 // idle BE pays nothing for the headroom.

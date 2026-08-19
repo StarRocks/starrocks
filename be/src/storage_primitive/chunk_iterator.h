@@ -23,6 +23,7 @@
 #include "column/schema.h"
 #include "common/constexpr.h"
 #include "common/runtime_profile.h"
+#include "common/statusor.h"
 #include "storage_primitive/row_source_mask.h"
 
 namespace starrocks {
@@ -85,6 +86,14 @@ public:
         DCHECK_CHUNK(chunk);
         return st;
     }
+
+    // Make the bytes this iterator is going to read locally available -- resident in its own read
+    // buffers or in the local data cache -- without decoding anything. Returns true only when the
+    // whole scan is covered, so the following get_next calls decode without waiting on remote IO.
+    // Returns false when the iterator cannot enumerate (all of) its reads up front; reading stays
+    // correct either way. This is the IO half of a read split off for an IO worker thread, so an
+    // implementation must not decode pages or build chunks here.
+    virtual StatusOr<bool> prefetch() { return false; }
 
     // Release resources associated with this iterator, e.g, deallocate memory.
     // This routine can be called at most once.

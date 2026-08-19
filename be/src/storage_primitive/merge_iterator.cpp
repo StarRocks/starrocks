@@ -287,6 +287,10 @@ protected:
 
     std::vector<ChunkIteratorPtr> _children;
     std::vector<std::unique_ptr<ChildBuffer>> _bufs;
+    // Set during the prefill for a child whose prefetch() made its whole scan locally available:
+    // from then on its reads are decode-only, and they run on the merge thread -- never on the
+    // pool, whose job under the IO/decode split is the IO half alone.
+    std::vector<uint8_t> _bytes_resident;
     ThreadPool* _pool = nullptr;
     MemTracker* _mem_tracker = nullptr;
     size_t _buffers = 1;
@@ -315,6 +319,7 @@ inline Status MergeIterator::init() {
         }
     }
 
+    _bytes_resident.assign(_children.size(), 0);
     const bool parallel = config::enable_compaction_parallel_merge_init && _children.size() > 1 && _pool != nullptr;
     const int64_t start_ns = MonotonicNanos();
     if (parallel) {
@@ -331,10 +336,14 @@ inline Status MergeIterator::init() {
     LOG_IF(INFO, cost_ms >= 1000) << "slow merge iterator prefill: children=" << _children.size()
                                   << ", parallel=" << parallel << ", cost=" << cost_ms << "ms";
 
-    // Slot 0 of every surviving child is now in the merge state; start reading ahead into the rest.
+    // Slot 0 of every surviving child is now in the merge state; start reading ahead into the
+    // rest. A resident child gets no pump: its refills are decode-only and the merge thread runs
+    // them inline.
     if (pipelined()) {
         for (size_t i = 0; i < _children.size(); i++) {
-            start_pump(i);
+            if (!_bytes_resident[i]) {
+                start_pump(i);
+            }
         }
     }
     _inited = true;
@@ -385,6 +394,17 @@ inline Status MergeIterator::parallel_prefill() {
                 tls_in_merge_prefill = false;
                 done();
             });
+            // The IO half first: a child whose prefetch makes its bytes locally available keeps
+            // its decode half on the merge thread, so this pool thread only ever waits on IO and
+            // the task's CPU stays on its own worker. A prefetch error is not surfaced here --
+            // the decode half re-hits it and reports it in commit order, like the serial path.
+            auto covered = _children[i]->prefetch();
+            if (covered.ok() && *covered) {
+                _bytes_resident[i] = 1;
+                return;
+            }
+            // This child cannot be covered up front (non-lake file, complex column, cache off,
+            // or over budget): keep the pre-split behaviour, a full read on the pool.
             (void)read_slot(i, 0);
         });
         auto st = _pool->submit_func([task]() { (*task)(); });
@@ -401,9 +421,13 @@ inline Status MergeIterator::parallel_prefill() {
     }
     futures.clear();
 
-    // Commit in child order. End-of-file and read errors are interpreted here, by the same
-    // branching the serial path uses, so a caller cannot tell the two paths apart.
+    // Decode half of the resident children, on this thread and in child order, then commit in
+    // child order. End-of-file and read errors are interpreted by the same branching the serial
+    // path uses, so a caller cannot tell the paths apart.
     for (size_t i = 0; i < n; i++) {
+        if (_bytes_resident[i]) {
+            (void)read_slot(i, 0);
+        }
         RETURN_IF_ERROR(commit_slot(i, 0));
     }
     return Status::OK();
@@ -411,8 +435,10 @@ inline Status MergeIterator::parallel_prefill() {
 
 inline Status MergeIterator::refill(size_t child) {
     ChildBuffer& b = *_bufs[child];
-    if (!pipelined()) {
-        // One slot: read straight back into the slot the merge just released, as before.
+    if (!pipelined() || _bytes_resident[child]) {
+        // One slot, or the child's bytes are already resident: read straight back into the slot
+        // the merge just released. For a resident child this is decode-only work, and it belongs
+        // here on the merge thread -- handing it to the pump would put CPU back on the IO pool.
         RETURN_IF_ERROR(read_slot(child, b.held));
         return commit_slot(child, b.held);
     }

@@ -84,6 +84,11 @@ public:
     io::IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
+    // Load every registered buffer that is not resident yet, in ascending offset order, stopping
+    // once the resident bytes exceed |max_bytes|. Returns whether every registered buffer is now
+    // loaded. Lets a caller run the IO of a scan up front (e.g. on an IO worker) while the
+    // decoding stays with the consuming thread.
+    StatusOr<bool> prefetch_registered(int64_t max_bytes);
     void release_to_offset(int64_t offset);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
