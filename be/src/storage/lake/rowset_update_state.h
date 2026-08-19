@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "gutil/macros.h"
+#include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
@@ -28,6 +29,8 @@
 #include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks::lake {
+
+using CrossPublishRowSelectorPtr = std::unique_ptr<CrossPublishRowSelector>;
 
 class RssidFileInfoContainer;
 
@@ -183,6 +186,10 @@ private:
     void _reset();
 
     // one for each segment file
+    // Built once per rowset by prepare(); nullptr unless this is a SPLIT child cross-publishing a
+    // rowset whose segments the split marked shared. Outlives every _upserts iterator, which only
+    // borrows it.
+    CrossPublishRowSelectorPtr _row_selector;
     std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
     MutableColumns _deletes;
