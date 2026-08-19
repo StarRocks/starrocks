@@ -1115,16 +1115,19 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 if (expr instanceof SlotRef) {
                     // check key columns
                     SlotId cid = ((SlotRef) expr).getSlotId();
-                    // keyColumnNames holds column ids, so compare ids here too
-                    String columnName = desc.getSlot(cid.asInt()).getColumn().getColumnId().getId();
-                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
+                    // Identify the probe column by its storage-side id, the one handle a rename does
+                    // not change, and compare both checks below against ids as well - keyColumnNames
+                    // holds ids, and a partition column's name is just as mutable as this one's.
+                    String probeColumnId = desc.getSlot(cid.asInt()).getColumn().getColumnId().getId();
+                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(probeColumnId)) {
                         sortKeyAscHint = outputAscHint;
                     }
                     // check partition column
                     PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                     if (partitionInfo instanceof RangePartitionInfo) {
                         List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
-                        if (!partitionColumns.isEmpty() && partitionColumns.get(0).getName().equals(columnName)) {
+                        if (!partitionColumns.isEmpty()
+                                && partitionColumns.get(0).getColumnId().getId().equals(probeColumnId)) {
                             partitionKeyAscHint = Optional.of(outputAscHint);
                         }
                     }

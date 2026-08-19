@@ -32,6 +32,11 @@ public class SortKeyColumnIdPlanTest extends PlanTestBase {
         starRocksAssert.withTable("create table sort_key_rename(k1 int, k2 int, v1 int) " +
                 "duplicate key(k1, k2) distributed by hash(v1) buckets 1 " +
                 "properties('replication_num'='1')");
+        starRocksAssert.withTable("create table part_key_rename(dt date not null, v1 int) " +
+                "duplicate key(dt) partition by range(dt) (" +
+                "  partition p1 values [('2026-01-01'), ('2026-01-02'))," +
+                "  partition p2 values [('2026-01-02'), ('2026-01-03'))) " +
+                "distributed by hash(v1) buckets 1 properties('replication_num'='1')");
     }
 
     /**
@@ -73,6 +78,26 @@ public class SortKeyColumnIdPlanTest extends PlanTestBase {
                     "output_asc_hint:false");
         } finally {
             starRocksAssert.ddl("alter table sort_key_rename rename column k1_new to k1");
+        }
+    }
+
+    /**
+     * assignOrderByHints checks the same probe column twice: against the sort key, and against the
+     * table's leading partition column, which decides whether BE may schedule the partitions in the
+     * TopN's direction (partition_order_hint). The second check compares against a Column of its own,
+     * so it has to be moved to ids together with the first one - leaving it on names would mean an id
+     * being compared against a name, and a renamed partition column would silently lose that hint.
+     */
+    @Test
+    public void testPartitionOrderHintSurvivesColumnRename() throws Exception {
+        assertContains(getThriftPlan("select v1 from part_key_rename order by dt desc limit 5"),
+                "partition_order_hint:false");
+        starRocksAssert.ddl("alter table part_key_rename rename column dt to dt_new");
+        try {
+            assertContains(getThriftPlan("select v1 from part_key_rename order by dt_new desc limit 5"),
+                    "partition_order_hint:false");
+        } finally {
+            starRocksAssert.ddl("alter table part_key_rename rename column dt_new to dt");
         }
     }
 
