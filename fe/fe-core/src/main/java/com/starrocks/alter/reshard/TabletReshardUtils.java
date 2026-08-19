@@ -19,8 +19,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -193,38 +191,16 @@ public class TabletReshardUtils {
     }
 
     /**
-     * Number of compute nodes PROVISIONED in FE for the resource's worker group (>= 1).
-     *
-     * <p>Counts both Backends and ComputeNodes: {@code Backend extends ComputeNode}, a shared-data
-     * cluster can be made entirely of BEs acting as workers, and HeartbeatMgr registers both as StarOS
-     * workers. Deliberately NOT filtered by liveness, so a transient node restart or blocklist entry
-     * does not change reshard layout decisions.
-     *
-     * <p>FE is the source of this mapping, not a consumer of it: FE assigns each node's
-     * warehouse/worker group, persists it, and feeds that value into StarOS via addWorker(). The two
-     * can diverge briefly in either direction — a node added but not yet registered is counted here and
-     * not by StarOS; a node dropped after losing its starlet port is still held by StarOS and not
-     * counted here until StarMgrMetaSyncer reconciles. Both are bounded by the count itself, and both
-     * move the adaptive-split bound and the auto-merge floor together, so their disjointness holds.
-     *
-     * <p>Shared by pre-split (which sizes a new partition to at least this many tablets), auto-merge
-     * (whose floor derives from it) and adaptive split (whose bound does), keeping all three consistent.
+     * Total number of compute nodes provisioned in the given warehouse resource (>= 1). Uses
+     * getAllComputeNodeIds (NOT the alive/blocklist-filtered set) so a transient node restart or
+     * blocklist entry does not change reshard layout decisions. Shared by pre-split (which sizes a
+     * new partition to at least this many tablets) and auto-merge (whose floor is derived from it),
+     * keeping the two consistent. Throws ErrorReportException (unchecked) if the warehouse resource
+     * no longer exists.
      */
     public static int computeNodeCount(ComputeResource computeResource) {
-        // Kept from the StarMgr-backed lookup this replaced: pre-split and the range rollup/rewrite jobs
-        // size a brand-new partition or shadow index by this count, and a warehouse that no longer
-        // exists has to fail them outright rather than quietly size them for a single node. The reshard
-        // scan stays graceful because safeComputeNodeCountForTable turns this into a zero bound.
-        if (!GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .warehouseExists(computeResource.getWarehouseId())) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
-                    String.format("id: %d", computeResource.getWarehouseId()));
-        }
-        long workerGroupId = computeResource.getWorkerGroupId();
-        return Math.max(1, (int) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                .backendAndComputeNodeStream()
-                .filter(node -> node.getWorkerGroupId() == workerGroupId)
-                .count());
+        return Math.max(1, GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getAllComputeNodeIds(computeResource).size());
     }
 
     /**

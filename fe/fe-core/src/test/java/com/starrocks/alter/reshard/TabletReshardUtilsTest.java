@@ -23,18 +23,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -316,54 +311,6 @@ public class TabletReshardUtilsTest {
                 "the scan's resolution must fall back");
     }
 
-    @Test
-    public void computeNodeCount_countsBackendsAndComputeNodesInTheWorkerGroup() {
-        Backend beInGroup = new Backend(1L, "h1", 9050);
-        beInGroup.setWorkerGroupId(7L);
-        beInGroup.setAlive(false);                       // liveness must NOT be filtered
-        ComputeNode cnInGroup = new ComputeNode(2L, "h2", 9050);
-        cnInGroup.setWorkerGroupId(7L);
-        ComputeNode cnOtherGroup = new ComputeNode(3L, "h3", 9050);
-        cnOtherGroup.setWorkerGroupId(9L);
-
-        SystemInfoService clusterInfo = new SystemInfoService();
-        clusterInfo.addBackend(beInGroup);
-        clusterInfo.addComputeNode(cnInGroup);
-        clusterInfo.addComputeNode(cnOtherGroup);
-        new MockUp<NodeMgr>() {
-            @Mock
-            public SystemInfoService getClusterInfo() {
-                return clusterInfo;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public boolean warehouseExists(long warehouseId) {
-                return warehouseId != 404L;
-            }
-        };
-
-        // Pin the worker group directly: WarehouseComputeResource resolves it through warehouse state,
-        // which this test does not establish.
-        ComputeResource resource = Mockito.mock(ComputeResource.class);
-        Mockito.when(resource.getWarehouseId()).thenReturn(1L);
-        Mockito.when(resource.getWorkerGroupId()).thenReturn(7L);
-        assertEquals(2, TabletReshardUtils.computeNodeCount(resource));
-
-        Mockito.when(resource.getWorkerGroupId()).thenReturn(9L);
-        assertEquals(1, TabletReshardUtils.computeNodeCount(resource));
-
-        Mockito.when(resource.getWorkerGroupId()).thenReturn(11L);
-        assertEquals(1, TabletReshardUtils.computeNodeCount(resource), "empty group floors at 1");
-
-        // A warehouse that no longer exists must fail outright, not floor to one node: pre-split and the
-        // range rollup/rewrite jobs take this count as the tablet count for a partition they are about
-        // to create. The reshard callers stay graceful by catching it into a zero bound.
-        Mockito.when(resource.getWarehouseId()).thenReturn(404L);
-        assertThrows(ErrorReportException.class, () -> TabletReshardUtils.computeNodeCount(resource),
-                "an unknown warehouse must not be sized as a one-node cluster");
-    }
 
     @Test
     public void parallelismFloor_clampsAndBounds() {
