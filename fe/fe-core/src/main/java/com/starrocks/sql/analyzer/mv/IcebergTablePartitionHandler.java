@@ -14,19 +14,13 @@
 
 package com.starrocks.sql.analyzer.mv;
 
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
-import com.starrocks.connector.iceberg.IcebergPartitionTransform;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.iceberg.PartitionField;
-import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Table;
 
 /**
@@ -54,64 +48,16 @@ public class IcebergTablePartitionHandler implements MVBaseTablePartitionHandler
             }
         }
 
-        boolean withTransform = checkPartitionTransformCompatibleWithSpec(table, partitionByExpr, slotRef);
+        boolean withTransform;
+        try {
+            withTransform = IcebergPartitionUtils.checkPartitionTransformCompatibleWithSpec(
+                    table, partitionByExpr, slotRef);
+        } catch (StarRocksConnectorException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
         if (withTransform) {
             context.getStatement().setRefBaseTablePartitionWithTransform(true);
         }
-    }
-
-    public static boolean checkPartitionTransformCompatibleWithSpec(IcebergTable table,
-                                                                    Expr partitionByExpr,
-                                                                    SlotRef slotRef) {
-        Table icebergTable = table.getNativeTable();
-        PartitionSpec partitionSpec = icebergTable.spec();
-        for (PartitionField partitionField : partitionSpec.fields()) {
-            String partitionColumnName = icebergTable.schema().findColumnName(partitionField.sourceId());
-            if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
-                IcebergPartitionTransform transform =
-                        IcebergPartitionTransform.fromString(partitionField.transform().toString());
-                switch (transform) {
-                    case YEAR:
-                    case MONTH:
-                    case DAY:
-                    case HOUR:
-                        if (!isDateTruncWithUnit(partitionByExpr, transform.name())) {
-                            throw new SemanticException("Materialized view partition expr %s " +
-                                    "must be the same with base table partition transform %s, please use date_trunc" +
-                                    "(<transform>, <partition_colum_name>) instead.",
-                                    ExprToSql.toSql(partitionByExpr), transform.name());
-                        }
-                        return true;
-                    case IDENTITY:
-                        if (!(partitionByExpr instanceof SlotRef) && !MvUtils.isStr2Date(partitionByExpr) &&
-                                !MvUtils.isFuncCallExpr(partitionByExpr, FunctionSet.DATE_TRUNC)) {
-                            throw new SemanticException("Materialized view partition expr %s: " +
-                                    "only support ref partition column for transform %s, please use " +
-                                    "<partition_column_name> instead.",
-                                    ExprToSql.toSql(partitionByExpr), transform.name());
-                        }
-                        return false;
-                    default:
-                        throw new SemanticException("Do not support create materialized view when " +
-                                "base iceberg table partition transform is: " + transform.name());
-                }
-            }
-        }
-
-        throw new SemanticException("Materialized view partition expr %s is no longer compatible with " +
-                "base Iceberg table current partition spec: partition column %s is not found in current " +
-                "partition spec.", ExprToSql.toSql(partitionByExpr), slotRef.getColumnName());
-    }
-
-    private static boolean isDateTruncWithUnit(Expr partitionExpr, String timeUnit) {
-        if (MvUtils.isFuncCallExpr(partitionExpr, FunctionSet.DATE_TRUNC)) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
-                return false;
-            }
-            StringLiteral stringLiteral = (StringLiteral) functionCallExpr.getChild(0);
-            return stringLiteral.getStringValue().equalsIgnoreCase(timeUnit);
-        }
-        return false;
     }
 }

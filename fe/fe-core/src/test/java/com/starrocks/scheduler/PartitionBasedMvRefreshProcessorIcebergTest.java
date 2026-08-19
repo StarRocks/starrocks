@@ -31,12 +31,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.mv.IcebergTablePartitionHandler;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.DmlException;
@@ -751,13 +751,14 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                         return ImmutableMap.of(baseTable, Lists.newArrayList((SlotRef) null));
                     }
                 };
-                new MockUp<IcebergTablePartitionHandler>() {
+                new MockUp<IcebergPartitionUtils>() {
                     @Mock
                     public boolean checkPartitionTransformCompatibleWithSpec(IcebergTable table,
                                                                              Expr partitionByExpr,
                                                                              SlotRef slotRef) {
-                        throw new SemanticException("Materialized view partition expr date_trunc('month', ts) "
-                                + "must be the same with base table partition transform DAY");
+                        throw new StarRocksConnectorException("Materialized view partition expr "
+                                + "date_trunc('month', ts) must be the same with base table partition "
+                                + "transform DAY");
                     }
                 };
                 String incompatible = refreshMvAndGetError(testDb, mv);
@@ -815,13 +816,13 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         // 2. every expr/slot pair is validated: here only the second pair is incompatible.
         slots.add(null);
         int[] checkedPairs = {0};
-        new MockUp<IcebergTablePartitionHandler>() {
+        new MockUp<IcebergPartitionUtils>() {
             @Mock
             public boolean checkPartitionTransformCompatibleWithSpec(IcebergTable table,
                                                                      Expr partitionByExpr,
                                                                      SlotRef slotRef) {
                 if (++checkedPairs[0] == 2) {
-                    throw new SemanticException("Materialized view partition expr date_trunc('day', ts) "
+                    throw new StarRocksConnectorException("Materialized view partition expr date_trunc('day', ts) "
                             + "must be the same with base table partition transform MONTH");
                 }
                 return false;

@@ -43,6 +43,8 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshPlanner;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshSynchronizer;
@@ -66,7 +68,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.mv.IcebergTablePartitionHandler;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.Expr;
@@ -823,10 +824,10 @@ public abstract class MVRefreshProcessor {
 
         try {
             for (int i = 0; i < exprs.size(); i++) {
-                IcebergTablePartitionHandler.checkPartitionTransformCompatibleWithSpec(
+                IcebergPartitionUtils.checkPartitionTransformCompatibleWithSpec(
                         icebergTable, exprs.get(i), slots.get(i));
             }
-        } catch (SemanticException e) {
+        } catch (StarRocksConnectorException e) {
             throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s partition "
                             + "transform has evolved and is no longer compatible with the materialized view's "
                             + "partition expression: %s",

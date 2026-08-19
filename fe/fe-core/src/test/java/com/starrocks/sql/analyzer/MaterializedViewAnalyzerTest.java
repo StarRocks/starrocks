@@ -26,12 +26,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.analyzer.mv.IcebergTablePartitionHandler;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -702,8 +703,8 @@ public class MaterializedViewAnalyzerTest {
                         MockIcebergMetadata.MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
         SlotRef missingCurrentSpecSlot = new SlotRef(null, "data");
 
-        SemanticException exception = Assertions.assertThrows(SemanticException.class, () ->
-                IcebergTablePartitionHandler.checkPartitionTransformCompatibleWithSpec(
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                IcebergPartitionUtils.checkPartitionTransformCompatibleWithSpec(
                         table, missingCurrentSpecSlot, missingCurrentSpecSlot));
         Assertions.assertTrue(exception.getMessage().contains("is not found in current partition spec"),
                 "Unexpected error message: " + exception.getMessage());
