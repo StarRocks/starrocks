@@ -288,27 +288,9 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
     }
 
-    @Test
-    public void testExternalHistogramSkipsBucketQueryForStringColumns() throws Exception {
-        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(connectContext, "hive0", "tpch", "region");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
-
-        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
-                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
-
-        String sql = Deencapsulation.invoke(job, "buildCollectDefaultBucket",
-                db, region, ImmutableMap.of("a", "10"), "r_name");
-
-        Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
-                "cast(cast(greatest(0, count(`r_name`) - 10) as bigint) as varchar), ',0]]')"), sql);
-        Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
-        Assertions.assertFalse(sql.contains("histogram("), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("is not null"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("sample("), sql);
-    }
+    // The external placeholder-bucket SQL for char-family columns is asserted end-to-end in
+    // ExternalHistogramStatisticsCollectJobTest#testLegacyInsertUsesDefaultBucketSqlForStringColumns,
+    // which drives collect() rather than a private builder.
 
     @Test
     public void testEscapeFullSQL() throws Exception {

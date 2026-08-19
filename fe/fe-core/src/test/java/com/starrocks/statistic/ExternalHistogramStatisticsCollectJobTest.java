@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,7 +50,8 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                 "hive0", db, table, Lists.newArrayList(columnName), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-        VelocityContext context = Deencapsulation.invoke(job, "buildBaseContext", db, table, columnName);
+        VelocityContext context = HistogramStatisticsUtils.buildBaseContext(
+                db, table, job.getCatalogName(), columnName);
         assertSqlLiteralRoundTrips(columnName, (String) context.get("columnNameStr"));
     }
 
@@ -221,6 +221,37 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     }
 
     @Test
+    public void testLegacyInsertUsesDefaultBucketSqlForStringColumns() throws Exception {
+        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
+            fixture.disableBatch();
+
+            fixture.collect();
+
+            // v2 is BIGINT so it keeps the histogram() aggregate; v7 is a char-family column, so it gets a
+            // single placeholder bucket carrying count(non-MCV rows) instead - no bucket query, no sort.
+            String bigintSql = fixture.legacyInsertSql().get(0);
+            String varcharSql = fixture.legacyInsertSql().get(1);
+            Assertions.assertTrue(bigintSql.contains("histogram(`column_key`"), bigintSql);
+
+            String expectedVarcharSql = """
+                    INSERT INTO external_histogram_statistics(
+                    table_uuid, column_name, catalog_name, db_name, table_name, buckets, mcv, update_time)
+                    SELECT '%s', 'v7', 'hive0', 'test', 't0_stats',
+                    concat('[["Infinity","Infinity",',
+                        cast(cast(greatest(0, count(`v7`) - 10) as bigint) as varchar),
+                        ',0]]'), '[["1","10"]]', NOW()
+                    FROM `hive0`.`test`.`t0_stats`
+                    """.formatted(fixture.tableUuidHash());
+            assertSqlStatements(Lists.newArrayList(expectedVarcharSql), Lists.newArrayList(varcharSql));
+
+            Assertions.assertFalse(varcharSql.contains("histogram(`column_key`"), varcharSql);
+            Assertions.assertFalse(varcharSql.toLowerCase().contains("order by"), varcharSql);
+            Assertions.assertFalse(varcharSql.toLowerCase().contains("is not null"), varcharSql);
+            Assertions.assertFalse(varcharSql.toLowerCase().contains("sample("), varcharSql);
+        }
+    }
+
+    @Test
     public void testBatchInsertCreatesFreshStatementForRetry() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
             fixture.enableBatch(20L * 1024 * 1024);
@@ -363,6 +394,10 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
 
         private int legacyInsertCount() {
             return legacyInsertSql.size();
+        }
+
+        private List<String> legacyInsertSql() {
+            return legacyInsertSql;
         }
 
         private StatementBase firstBatchInsertStatement() {

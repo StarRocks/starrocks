@@ -14,9 +14,13 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.sql.ast.ColumnDef;
@@ -47,6 +51,63 @@ import java.util.stream.Collectors;
 
 public final class HistogramStatisticsUtils {
     private HistogramStatisticsUtils() {
+    }
+
+    /**
+     * Identity context for one analyzed column: every key describing "which catalog/db/table/column
+     * is this". Deliberately a superset - each SQL template picks the keys it needs and ignores the
+     * rest, which is what lets the native and external jobs share one context builder even though
+     * their templates select different identifying columns.
+     */
+    static VelocityContext buildBaseContext(Database database, Table table, String catalogName, String columnName) {
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", table.getId());
+        context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
+        context.put("columnName", StatisticUtils.quoting(table, columnName));
+        context.put("columnNameStr", SqlUtils.escapeSqlString(columnName));
+        context.put("dbId", database.getId());
+        context.put("catalogName", catalogName);
+        context.put("dbName", database.getOriginName());
+        context.put("tableName", table.getName());
+        return context;
+    }
+
+    /**
+     * SQL for the placeholder-bucket form of a histogram, used when the histogram() aggregate is
+     * skipped for a column. Serves both the INSERT and the plain-query shape of both jobs - the
+     * caller supplies the template, and wraps the result in an INSERT prefix if it needs one.
+     */
+    static String buildDefaultBucketSql(Database database, Table table, String catalogName, String columnName,
+                                        Map<String, String> mostCommonValues, double sampleRatio, String template) {
+        VelocityContext context = buildBaseContext(database, table, catalogName, columnName);
+        // The query templates reference neither of these; only the INSERT ones do.
+        putMcv(context, mostCommonValues);
+        putDefaultBucketSampleClause(context, sampleRatio);
+        context.put("bucketExpr",
+                buildDefaultBucketExpr(StatisticUtils.quoting(table, columnName), sampleRatio, mostCommonValues));
+
+        return StatisticsCollectJob.build(context, template);
+    }
+
+    static void putMcv(VelocityContext context, Map<String, String> mostCommonValues) {
+        String mcvJson = buildMcvJson(mostCommonValues);
+        context.put("mcv", mcvJson == null ? "NULL" : quoteSqlString(mcvJson));
+    }
+
+    // The default-bucket templates splice $sampleClause$randFilter straight onto "FROM `db`.`table`"
+    // and have no WHERE of their own, so the keyword travels inside the substituted value here. An
+    // unsampled scan yields empty strings for both - the external templates never even reference them.
+    private static void putDefaultBucketSampleClause(VelocityContext context, double sampleRatio) {
+        if (!isSampled(sampleRatio)) {
+            context.put("sampleClause", "");
+            context.put("randFilter", "");
+        } else if (Config.enable_use_table_sample_collect_statistics) {
+            context.put("sampleClause", " SAMPLE('percent'='" + formatSamplePercent(sampleRatio) + "')");
+            context.put("randFilter", "");
+        } else {
+            context.put("sampleClause", "");
+            context.put("randFilter", " WHERE rand() <= " + formatSampleRatio(sampleRatio));
+        }
     }
 
     /**
@@ -113,6 +174,20 @@ public final class HistogramStatisticsUtils {
      */
     static String formatSampleRatio(double sampleRatio) {
         return BigDecimal.valueOf(sampleRatio).stripTrailingZeros().toPlainString();
+    }
+
+    /**
+     * Convert a sample ratio in (0, 1) into a percent string in (0, 100) for the SAMPLE('percent'=...)
+     * clause. Uses BigDecimal to avoid both binary float noise (e.g. 0.49999999999999994) and
+     * truncation to 0 for sub-1% ratios on very large tables (which used to produce the illegal
+     * SAMPLE('percent'='0')).
+     */
+    @VisibleForTesting
+    static String formatSamplePercent(double sampleRatio) {
+        BigDecimal percent = BigDecimal.valueOf(sampleRatio).multiply(BigDecimal.valueOf(100));
+        // Drop trailing zeros so integral percents stay clean (e.g. "50" not "50.00"), and avoid
+        // scientific notation that the SQL parser cannot consume.
+        return percent.stripTrailingZeros().toPlainString();
     }
 
     private static boolean isSampled(double sampleRatio) {
