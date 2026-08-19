@@ -396,10 +396,16 @@ inline Status MergeIterator::parallel_prefill() {
             });
             // The IO half first: a child whose prefetch makes its bytes locally available keeps
             // its decode half on the merge thread, so this pool thread only ever waits on IO and
-            // the task's CPU stays on its own worker. A prefetch error is not surfaced here --
-            // the decode half re-hits it and reports it in commit order, like the serial path.
+            // the task's CPU stays on its own worker.
             auto covered = _children[i]->prefetch();
-            if (covered.ok() && *covered) {
+            if (!covered.ok()) {
+                // Land the error in the slot for commit_slot to interpret in child order, exactly
+                // where a serial read would have surfaced it. Retrying via read_slot instead would
+                // re-run the child's init on a half-initialized iterator and mask the real error.
+                _bufs[i]->st[0] = covered.status();
+                return;
+            }
+            if (*covered) {
                 _bytes_resident[i] = 1;
                 return;
             }
