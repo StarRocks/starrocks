@@ -93,6 +93,8 @@ SET GLOBAL enable_group_level_query_queue = true;
 | max_cpu_cores      | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
 | mem_used_pct_limit | 0          | 该资源组在单个 BE 节点中的内存使用率上限。仅在设置为大于 `0` 后生效。取值范围：[0, 1] |
 
+`mem_used_pct_limit` 仅适用于 Query Queue v1。启用 Query Queue v2（将 `enable_query_queue_v2` 设置为 `true`）后，该参数不再生效。
+
 您可以通过 SHOW USAGE RESOURCE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_group.md#查看资源组的使用信息)。
 
 #### 管理查询并发数量

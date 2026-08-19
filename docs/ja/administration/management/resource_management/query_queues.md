@@ -92,6 +92,8 @@ v3.1.4 以降、リソースグループを作成する際に、個別の同時�
 | max_cpu_cores      | 0           | 単一の BE ノード上のこのリソースグループの CPU コア制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, `avg_be_cpu_cores`]、ここで `avg_be_cpu_cores` はすべての BE ノードの平均 CPU コア数を表します。 |
 | mem_used_pct_limit | 0           | 単一の BE ノード上のこのリソースグループのメモリ使用率制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, 1]                                                                |
 
+`mem_used_pct_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 を有効にする（`enable_query_queue_v2` を `true` に設定する）と、このパラメータは有効になりません。
+
 各 BE ノードのリソースグループごとのリソース使用情報を表示するには、[View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information) を参照してください。
 
 #### クエリの同時実行数を管理する

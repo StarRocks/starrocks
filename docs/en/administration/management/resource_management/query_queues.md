@@ -89,6 +89,8 @@ From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_lim
 | max_cpu_cores      | 0           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. |
 | mem_used_pct_limit | 0           | The memory usage percentage limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, 1]                                                                                             |
 
+`mem_used_pct_limit` applies only to Query Queue v1. After Query Queue v2 is enabled (`enable_query_queue_v2` is set to `true`), this parameter no longer takes effect.
+
 You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information).
 
 #### Manage query concurrency

@@ -52,7 +52,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | mem_pool                   | Groups resource groups to share a memory limit.                                                                | String                                                         | default_mem_pool |
 | spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1]                                                         | 1.0              |
 | concurrency_limit          | Maximum number of concurrent queries in this resource group.                                                   | Integer (takes effect when greater than 0)                     | 0                |
-| mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. | [0, 1] (takes effect when greater than 0)                      | 0                |
+| mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. Only available when `enable_query_queue_v2` is `false`. | [0, 1] (takes effect when greater than 0)                      | 0                |
 | big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.                                             | Integer (takes effect when greater than 0)                     | 0                |
 | big_query_scan_rows_limit  | Maximum number of rows big query tasks can scan on each BE node.                                               | Integer (takes effect when greater than 0)                     | 0                |
 | big_query_mem_limit        | Maximum memory big query tasks can use on each BE node.                                                        | Integer (takes effect when greater than 0)                     | 0                |
@@ -156,7 +156,7 @@ Defines the maximum number of concurrent queries in the resource group to preven
 
 Defines the memory usage percentage limit in this resource group on a BE node above which the resource group is treated as overloaded. The value range is [0, 1]. Effective only when greater than 0, with a default value of 0.
 If the resource group uses a shared `mem_pool` (not `default_mem_pool`), the limit is evaluated against the pool-level memory usage and limit on that BE node.
-This parameter only takes effect for resource-group-level query queues, which additionally require the global session variable `enable_group_level_query_queue` to be set to `true`.
+This parameter only takes effect for resource-group-level query queues, which additionally require the global session variable `enable_group_level_query_queue` to be set to `true`. It is only available when the FE configuration item `enable_query_queue_v2` is `false`.
 
 #### Big query resource parameters
 

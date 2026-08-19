@@ -48,7 +48,7 @@ import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.md
 | mem_pool                   | 将资源组进行分组以共享内存限制。                 | 字符串                                     | default_mem_pool |
 | spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
 | concurrency_limit          | 该资源组中并发查询数的上限。                                  | 整数 (大于 0 才生效)                           | 0      |
-| mem_used_pct_limit         | 该资源组的内存使用率上限。需要启用 `enable_group_level_query_queue`。 | [0, 1] (大于 0 才生效)                        | 0      |
+| mem_used_pct_limit         | 该资源组的内存使用率上限。需要启用 `enable_group_level_query_queue`。仅当 `enable_query_queue_v2` 为 `false` 时可用。 | [0, 1] (大于 0 才生效)                        | 0      |
 | big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。         | 整数 (大于 0 才生效)                          | 0      |
 | big_query_scan_rows_limit  | 该资源组的大查询任务在每个 BE 上可以扫描的行数上限。              | 整数 (大于 0 才生效)                          | 0      |
 | big_query_mem_limit        | 该资源组的大查询任务在每个 BE 上可以使用的内存上限。              | 整数 (大于 0 才生效)                          | 0      |
@@ -155,7 +155,7 @@ WITH (
 
 该资源组在 BE 节点上的内存使用率上限，超过该阈值后该资源组将被视为过载。取值范围为 [0, 1]。只有大于 0 时才生效，默认值为 0。
 如果该资源组使用了共享的 `mem_pool`（而非 `default_mem_pool`），则该限制将根据该 BE 节点上该内存池级别的内存使用量和限制进行评估。
-该参数仅适用于资源组粒度的查询队列，除此之外还需要将全局会话变量 `enable_group_level_query_queue` 设置为 `true`。
+该参数仅适用于资源组粒度的查询队列，除此之外还需要将全局会话变量 `enable_group_level_query_queue` 设置为 `true`。该参数仅在 FE 配置项 `enable_query_queue_v2` 为 `false` 时可用。
 
 #### 大查询资源相关配置项
 
