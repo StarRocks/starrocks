@@ -64,6 +64,10 @@ public class EliminateSortColumnWithEqualityPredicateRule extends Transformation
 
         if (reservedOrdering.isEmpty()) {
             // if topn has projection, we should merge topn's projection into scan's projection
+<<<<<<< HEAD
+=======
+            // partial cherry-pick from https://github.com/StarRocks/starrocks/pull/58345
+>>>>>>> ee65a7e ([BugFix] Preserve TopN projection when eliminating sort columns with equality predicates (#78021))
             if (topn.getProjection() != null) {
                 if (scan.getProjection() == null) {
                     scan.setProjection(topn.getProjection());

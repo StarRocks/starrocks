@@ -123,4 +123,34 @@ public class EliminateSortColumnWithEqualityPredicateTest extends PlanTestBase {
                 "     offset: 10\n" +
                 "     limit: 30");
     }
+
+    @Test
+    public void testEliminateSortKeepsProjectionHoistedUponTopn() throws Exception {
+        // Regression for the planning error: HoistHeavyCostExprsUponTopnRule hoists the heavy
+        // decimal128 divide into a project above the TopN, which is later merged into the TopN
+        // operator as its projection. When every ORDER BY column is pinned by an equality
+        // predicate, this rule eliminates the TopN; the TopN's projection (holding the divide)
+        // must be merged into the scan's projection instead of being dropped, otherwise plan
+        // translation fails with "Cannot convert ColumnRefOperator to Expr".
+        starRocksAssert.withTable("CREATE TABLE `t_eliminate_sort_hoist` (\n" +
+                "  `k1` varchar(60) NOT NULL,\n" +
+                "  `v1` decimal(28, 8) NULL,\n" +
+                "  `v2` decimal(28, 8) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 4\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        try {
+            // v1 and v2 must also be selected as plain columns, otherwise the hoist rule bails out
+            // (the heavy expr's inputs must be pass-through outputs of the project below the TopN)
+            String sql = "select k1, v1, v2, v1 / v2 from t_eliminate_sort_hoist " +
+                    "where k1 = '2026-06' order by k1 limit 10";
+            String plan = getVerboseExplain(sql);
+            // the sort is eliminated, and the hoisted divide is computed by the scan's projection
+            assertContains(plan, "[2: v1, DECIMAL128(28,8), true] / [3: v2, DECIMAL128(28,8), true]");
+            assertNotContains(plan, "TOP-N");
+        } finally {
+            starRocksAssert.dropTable("t_eliminate_sort_hoist");
+        }
+    }
 }
