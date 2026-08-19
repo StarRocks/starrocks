@@ -21,6 +21,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <fstream>
 #include <future>
 #include <thread>
 #include <vector>
@@ -354,6 +356,40 @@ TEST(FailPointTest, trigger_mode_from_request_lifts_pause) {
     auto passthrough = failpoint::trigger_mode_from_request(plain);
     ASSERT_FALSE(passthrough.pause());
     ASSERT_EQ(FailPointTriggerModeType::ENABLE, passthrough.mode());
+}
+
+TEST(FailPointTest, init_from_conf_pause_mode) {
+    failpoint::FailPoint fp("test_conf_pause");
+    ASSERT_TRUE(failpoint::FailPointRegistry::GetInstance()->add(&fp).ok());
+
+    const std::string conf_path = "./fail_point_conf_pause.json";
+    {
+        std::ofstream out(conf_path);
+        out << R"({"test_conf_pause": {"mode": "pause", "pause_timeout_second": 1}})";
+    }
+
+    ASSERT_TRUE(failpoint::init_failpoint_from_conf(conf_path));
+    ASSERT_TRUE(fp.to_pb().trigger_mode().pause());
+    ASSERT_EQ(1, fp.to_pb().trigger_mode().pause_timeout_second());
+
+    // The armed timeout is honoured: the call returns on its own without any setMode(). Bounded on a
+    // worker for the same reason as pause_times_out.
+    std::promise<bool> done;
+    auto future = done.get_future();
+    auto start = std::chrono::steady_clock::now();
+    std::thread worker([&] { done.set_value(fp.shouldFail()); });
+    const bool finished = future.wait_for(std::chrono::seconds(20)) == std::future_status::ready;
+    if (!finished) {
+        fp.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
+    }
+    worker.join();
+    auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+    ASSERT_TRUE(finished) << "conf-file pause_timeout_second was ignored";
+    ASSERT_FALSE(future.get());
+    ASSERT_GE(elapsed_ms, 900);
+
+    std::remove(conf_path.c_str());
 }
 
 } // namespace starrocks

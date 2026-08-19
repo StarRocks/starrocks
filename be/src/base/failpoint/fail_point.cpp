@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <limits>
 #include <unordered_set>
 #include <utility>
 
@@ -279,6 +280,22 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
                 }
                 trigger_mode.set_mode(FailPointTriggerModeType::PROBABILITY_ENABLE);
                 trigger_mode.set_probability(probability.value());
+            } else if (mode.value() == "pause") {
+                // Mirror the wire encoding: mode = DISABLE plus the pause flag.
+                trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+                trigger_mode.set_pause(true);
+                // Optional. Absent leaves the field unset and the failpoint layer falls back to
+                // kDefaultPauseTimeoutSecond.
+                auto pause_timeout_second = value["pause_timeout_second"].get_int64();
+                if (pause_timeout_second.error() == simdjson::SUCCESS) {
+                    const int64_t raw = pause_timeout_second.value();
+                    if (raw <= 0 || raw > std::numeric_limits<int32_t>::max()) {
+                        LOG(WARNING) << "ignoring out-of-range pause_timeout_second " << raw << " for failpoint "
+                                     << std::string(fp_name.value());
+                    } else {
+                        trigger_mode.set_pause_timeout_second(static_cast<int32_t>(raw));
+                    }
+                }
             }
             fp->setMode(trigger_mode);
         }
