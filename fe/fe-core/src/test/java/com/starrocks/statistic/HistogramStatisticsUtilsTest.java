@@ -31,6 +31,11 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
+import org.apache.velocity.VelocityContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -116,5 +121,77 @@ public class HistogramStatisticsUtilsTest {
         Assertions.assertEquals(HistogramStatisticsUtils.buildStatsTargetColumnNames(HISTOGRAM_STATISTICS_TABLE_NAME),
                 first.getTargetColumnNames());
         Assertions.assertEquals(sql, first.getOrigStmt().getOrigStmt());
+    }
+
+    @Test
+    public void testMostCommonValuesScaleSampledCountsBackToFullTable() {
+        List<TStatisticData> mcv = Lists.newArrayList(mcvRow("a", "10"), mcvRow("b", "7"));
+
+        Map<String, String> sampled = HistogramStatisticsUtils.buildMostCommonValues(mcv, 0.1);
+        Assertions.assertEquals(ImmutableMap.of("a", "100", "b", "70"), sampled);
+
+        // A ratio of 1.0 means the query was unsampled, so the counts must pass through untouched.
+        Map<String, String> unsampled = HistogramStatisticsUtils.buildMostCommonValues(mcv, 1.0);
+        Assertions.assertEquals(ImmutableMap.of("a", "10", "b", "7"), unsampled);
+        Assertions.assertEquals(unsampled, HistogramStatisticsUtils.buildMostCommonValues(mcv, 0.0));
+    }
+
+    @Test
+    public void testDefaultBucketExprSubtractsMcvsFromCount() {
+        Map<String, String> mcv = ImmutableMap.of("a", "10", "b", "7");
+
+        Assertions.assertEquals(
+                "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v7`) - 17) as bigint) as varchar), ',0]]')",
+                HistogramStatisticsUtils.buildDefaultBucketExpr("`v7`", 1.0, mcv));
+
+        // Under a sample the count is divided back up first, which is why the bigint cast is needed.
+        Assertions.assertEquals(
+                "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v7`) / cast(0.1 as double) - 17) as bigint) as varchar), " +
+                        "',0]]')",
+                HistogramStatisticsUtils.buildDefaultBucketExpr("`v7`", 0.1, mcv));
+
+        Assertions.assertEquals(
+                "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v7`) - 0) as bigint) as varchar), ',0]]')",
+                HistogramStatisticsUtils.buildDefaultBucketExpr("`v7`", 1.0, ImmutableMap.of()));
+    }
+
+    @Test
+    public void testSampleRatioRendersAsPlainDecimalLiteral() {
+        Assertions.assertEquals("0.1", HistogramStatisticsUtils.formatSampleRatio(0.1));
+        Assertions.assertEquals("0.5", HistogramStatisticsUtils.formatSampleRatio(0.50));
+        // Sub-1% ratios must not come out in scientific notation - the SQL parser cannot consume it.
+        Assertions.assertEquals("0.0000001", HistogramStatisticsUtils.formatSampleRatio(0.0000001));
+    }
+
+    @Test
+    public void testMcvExcludeQuotesOnlyStringLikeValues() {
+        Map<String, String> mcv = ImmutableMap.of("a", "10", "b", "7");
+
+        Assertions.assertEquals(" and `v2` not in (a,b)", mcvExclude(mcv, IntegerType.BIGINT));
+        Assertions.assertEquals(" and `v7` not in (\"a\",\"b\")", mcvExclude(mcv, VarcharType.VARCHAR, "`v7`"));
+        Assertions.assertEquals(" and `v4` not in (\"a\",\"b\")", mcvExclude(mcv, DateType.DATE, "`v4`"));
+
+        // No MCVs means nothing to exclude, and the slot still has to be filled for the template.
+        Assertions.assertEquals("", mcvExclude(ImmutableMap.of(), IntegerType.BIGINT));
+    }
+
+    private static TStatisticData mcvRow(String columnValue, String count) {
+        TStatisticData row = new TStatisticData();
+        row.columnName = columnValue;
+        row.histogram = count;
+        return row;
+    }
+
+    private static String mcvExclude(Map<String, String> mostCommonValues, Type columnType) {
+        return mcvExclude(mostCommonValues, columnType, "`v2`");
+    }
+
+    private static String mcvExclude(Map<String, String> mostCommonValues, Type columnType, String quotedColumnName) {
+        VelocityContext context = new VelocityContext();
+        HistogramStatisticsUtils.putMcvExclude(context, mostCommonValues, quotedColumnName, columnType);
+        return (String) context.get("MCVExclude");
     }
 }

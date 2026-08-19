@@ -14,7 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -32,7 +31,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,9 +38,12 @@ import static com.starrocks.statistic.HistogramStatisticsUtils.batchInsertPrefix
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBatchInsertPrefix;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsLiteral;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsSql;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildDefaultBucketExpr;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildMcvJson;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildMostCommonValues;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildStatsTargetColumnNames;
 import static com.starrocks.statistic.HistogramStatisticsUtils.createInsertStmt;
+import static com.starrocks.statistic.HistogramStatisticsUtils.putMcvExclude;
 import static com.starrocks.statistic.HistogramStatisticsUtils.quoteSqlString;
 import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
@@ -93,6 +94,11 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
                     "group by $columnName " +
                     "order by column_value desc limit $topN ) t";
 
+    // The MCV and default-bucket templates above scan the whole table - unlike the histogram
+    // template, they carry no sample clause - so their counts are already full-table counts and the
+    // shared helpers must not scale them.
+    private static final double UNSAMPLED_RATIO = 1.0;
+
     private final String catalogName;
 
     public ExternalHistogramStatisticsCollectJob(String catalogName, Database db, Table table, List<String> columnNames,
@@ -140,12 +146,12 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             StatisticExecutor statisticExecutor = new StatisticExecutor();
             List<TStatisticData> mcv = statisticExecutor.queryMCV(context, sql);
 
-            Map<String, String> mostCommonValues = new HashMap<>();
-            for (TStatisticData tStatisticData : mcv) {
-                mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
-            }
+            Map<String, String> mostCommonValues = buildMostCommonValues(mcv, UNSAMPLED_RATIO);
 
-            sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+            sql = shouldSkipHistogramBuckets(columnType)
+                    ? buildCollectDefaultBucket(db, table, mostCommonValues, columnName)
+                    : buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                    columnType);
             collectStatisticSync(sql, context, analyzeStatus);
             // Best-effort: remove the stale raw-keyed row this column's fresh hashed-keyed row just
             // superseded. The read side no longer depends on this for correctness (it dedups by
@@ -180,13 +186,12 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
                 try {
                     List<TStatisticData> mcv = queryStatisticSync(
                             buildCollectMCV(db, table, mcvSize, columnName), context, analyzeStatus);
-                    Map<String, String> mostCommonValues = new HashMap<>();
-                    for (TStatisticData tStatisticData : mcv) {
-                        mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
-                    }
+                    Map<String, String> mostCommonValues = buildMostCommonValues(mcv, UNSAMPLED_RATIO);
 
-                    String histogramQuery = buildQueryHistogram(
-                            db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+                    String histogramQuery = shouldSkipHistogramBuckets(columnType)
+                            ? buildQueryDefaultBucket(db, table, mostCommonValues, columnName)
+                            : buildQueryHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                            columnType);
                     String buckets = getSingleHistogramResult(
                             queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
                     String mcvJson = buildMcvJson(mostCommonValues);
@@ -275,60 +280,63 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     private String buildCollectHistogram(Database database, Table table, double sampleRatio,
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                          Type columnType) {
-        List<String> targetColumnNames = buildStatsTargetColumnNames(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
-        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)
-                .append(columnNames).append(" ");
-
-        String quoteColumName = StatisticUtils.quoting(table, columnName);
-
-        VelocityContext context = buildBaseContext(database, table, columnName);
-        context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
-
-        String mcvJson = buildMcvJson(mostCommonValues);
-        if (mcvJson == null) {
-            context.put("mcv", "NULL");
-        } else {
-            context.put("mcv", quoteSqlString(mcvJson));
-        }
-
-        putMcvExclude(context, mostCommonValues, quoteColumName, columnType);
-
-        if (shouldSkipHistogramBuckets(columnType)) {
-            long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
-            context.put("bucketExpr",
-                    "concat('[[\"Infinity\",\"Infinity\",', cast(greatest(0, count(" + quoteColumName +
-                            ") - " + mcvSum + ") as varchar), ',0]]')");
-            builder.append(build(context, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
-            return builder.toString();
-        }
+        VelocityContext context = buildCollectContext(database, table, mostCommonValues, columnName);
+        putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
-        builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
-        return builder.toString();
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
     }
 
     private String buildQueryHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
                                        Map<String, String> mostCommonValues, String columnName, Type columnType) {
-        String quoteColumnName = StatisticUtils.quoting(table, columnName);
         VelocityContext context = buildBaseContext(database, table, columnName);
-        putMcvExclude(context, mostCommonValues, quoteColumnName, columnType);
-
-        if (shouldSkipHistogramBuckets(columnType)) {
-            long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
-            context.put("bucketExpr",
-                    "concat('[[\"Infinity\",\"Infinity\",', cast(greatest(0, count(" + quoteColumnName +
-                            ") - " + mcvSum + ") as varchar), ',0]]')");
-            return build(context, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE);
-        }
+        putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
+    }
+
+    private String buildCollectDefaultBucket(Database database, Table table, Map<String, String> mostCommonValues,
+                                             String columnName) {
+        VelocityContext context = buildCollectContext(database, table, mostCommonValues, columnName);
+        context.put("bucketExpr", buildDefaultBucketExpr(
+                StatisticUtils.quoting(table, columnName), UNSAMPLED_RATIO, mostCommonValues));
+
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
+    }
+
+    private String buildQueryDefaultBucket(Database database, Table table, Map<String, String> mostCommonValues,
+                                           String columnName) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        context.put("bucketExpr", buildDefaultBucketExpr(
+                StatisticUtils.quoting(table, columnName), UNSAMPLED_RATIO, mostCommonValues));
+        return build(context, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE);
+    }
+
+    // Base context plus the two things only the INSERT-side templates reference.
+    private VelocityContext buildCollectContext(Database database, Table table,
+                                                Map<String, String> mostCommonValues, String columnName) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
+
+        String mcvJson = buildMcvJson(mostCommonValues);
+        context.put("mcv", mcvJson == null ? "NULL" : quoteSqlString(mcvJson));
+        return context;
+    }
+
+    private String buildInsertIntoHistogramStatistics(String query) {
+        List<String> targetColumnNames = buildStatsTargetColumnNames(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+        return "INSERT INTO " +
+                EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
+                columnNames +
+                " " +
+                query;
     }
 
     private VelocityContext buildBaseContext(Database database, Table table, String columnName) {
@@ -387,20 +395,5 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         rowsBuffer.clear();
         sqlBuffer.clear();
         columnsBuffer.clear();
-    }
-
-    private void putMcvExclude(VelocityContext context, Map<String, String> mostCommonValues, String quoteColumName,
-                               Type columnType) {
-        if (!mostCommonValues.isEmpty()) {
-            if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
-                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
-            } else {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
-                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
-            }
-        } else {
-            context.put("MCVExclude", "");
-        }
     }
 }

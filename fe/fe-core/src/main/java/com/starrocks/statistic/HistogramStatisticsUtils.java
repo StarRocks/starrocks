@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.starrocks.common.DdlException;
@@ -32,16 +33,90 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
+import org.apache.velocity.VelocityContext;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public final class HistogramStatisticsUtils {
     private HistogramStatisticsUtils() {
+    }
+
+    /**
+     * Turn the raw MCV query result into a column-value -> count map. Counts collected under a
+     * sample are scaled back up to full-table counts; pass a ratio of 1.0 for an unsampled query.
+     */
+    static Map<String, String> buildMostCommonValues(List<TStatisticData> mcv, double sampleRatio) {
+        Map<String, String> mostCommonValues = new HashMap<>();
+        for (TStatisticData tStatisticData : mcv) {
+            if (isSampled(sampleRatio)) {
+                long count = Long.parseLong(tStatisticData.histogram);
+                count = (long) (1.0 * count / sampleRatio);
+                mostCommonValues.put(tStatisticData.columnName, String.valueOf(count));
+            } else {
+                mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
+            }
+        }
+        return mostCommonValues;
+    }
+
+    /**
+     * MCVs are stored separately from the buckets, so the bucket query has to exclude them to avoid
+     * double counting. Renders that exclusion predicate into the $MCVExclude template slot.
+     */
+    static void putMcvExclude(VelocityContext context, Map<String, String> mostCommonValues,
+                              String quotedColumnName, Type columnType) {
+        if (mostCommonValues.isEmpty()) {
+            context.put("MCVExclude", "");
+            return;
+        }
+
+        if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
+            context.put("MCVExclude", " and " + quotedColumnName + " not in (\"" +
+                    Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
+        } else {
+            context.put("MCVExclude", " and " + quotedColumnName + " not in (" +
+                    Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+        }
+    }
+
+    /**
+     * Bucket expression used when the histogram() aggregate is skipped for a column: a single
+     * placeholder bucket holding "every value except the MCVs", so Histogram.getTotalRows() still
+     * reflects the column's real cardinality instead of reading as empty.
+     */
+    static String buildDefaultBucketExpr(String quotedColumnName, double sampleRatio,
+                                         Map<String, String> mostCommonValues) {
+        String countExpr = "count(" + quotedColumnName + ")";
+        if (isSampled(sampleRatio)) {
+            countExpr += " / cast(" + formatSampleRatio(sampleRatio) + " as double)";
+        }
+
+        long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
+        String nonMcvExpr = "greatest(0, " + countExpr + " - " + mcvSum + ")";
+        // The bigint cast keeps the sampled (divided, hence double) form from rendering as a
+        // decimal; on the unsampled form it is a no-op, since count() is already a bigint.
+        return "concat('[[\"Infinity\",\"Infinity\",', cast(cast(" + nonMcvExpr +
+                " as bigint) as varchar), ',0]]')";
+    }
+
+    /**
+     * Render a sample ratio as a plain decimal SQL literal: no trailing zeros, and no scientific
+     * notation for sub-1% ratios (which the SQL parser cannot consume).
+     */
+    static String formatSampleRatio(double sampleRatio) {
+        return BigDecimal.valueOf(sampleRatio).stripTrailingZeros().toPlainString();
+    }
+
+    private static boolean isSampled(double sampleRatio) {
+        return sampleRatio > 0.0 && sampleRatio < 1.0;
     }
 
     static String buildMcvJson(Map<String, String> mostCommonValues) {
