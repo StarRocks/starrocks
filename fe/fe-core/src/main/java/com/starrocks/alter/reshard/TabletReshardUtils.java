@@ -103,10 +103,12 @@ public class TabletReshardUtils {
      * one tablet per usable compute node, whichever is smaller, floored so a nearly empty index is not
      * carved into slivers.
      *
-     * <p>The rule retires itself rather than being switched off. As an index widens, this target
-     * climbs toward the steady-state one and meets it, so an index already holding roughly
-     * {@code indexDataSize / bound} per tablet gets the same answer here as the steady-state target
-     * would give -- no separate condition decides when the adaptive phase is over.
+     * <p>This target is a function of the index's SIZE, not of how many tablets it has: splitting an
+     * index does not move it. It rises as the index grows and meets the steady-state target once the
+     * index holds {@code bound} targets' worth of data, after which the expression collapses to the
+     * steady-state target and the two rules agree. What ends the adaptive phase earlier, and usually
+     * does, is the index reaching the bound -- the headroom test in
+     * {@code SplitTabletJobFactory#planIndexSplits}, which owns that count.
      *
      * <p>The floor is clamped to the target. That clamp is what makes
      * {@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switch the adaptive behaviour
@@ -210,7 +212,7 @@ public class TabletReshardUtils {
         // Kept from the StarMgr-backed lookup this replaced: pre-split and the range rollup/rewrite jobs
         // size a brand-new partition or shadow index by this count, and a warehouse that no longer
         // exists has to fail them outright rather than quietly size them for a single node. The reshard
-        // callers stay graceful because safeComputeNodeCountForTable turns this into a zero bound.
+        // scan stays graceful because safeComputeNodeCountForTable turns this into a zero bound.
         if (!GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .warehouseExists(computeResource.getWarehouseId())) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
@@ -270,6 +272,19 @@ public class TabletReshardUtils {
     private static int computeNodeCountForTable(long tableId) {
         return computeNodeCount(GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getBackgroundComputeResource(tableId));
+    }
+
+    /**
+     * Bound for a table's adaptive split, propagating a resolution failure rather than swallowing it.
+     *
+     * <p>A planner must not read "warehouse temporarily unavailable" as "this index needs nothing".
+     * Falling back to a zero bound there yields an empty plan, which the caller is entitled to treat
+     * as deterministic and latch -- and since the layout, the configuration and the signal are all
+     * unchanged, the fingerprint would not move again and the table would stay suppressed for good.
+     * The scan is the one caller that should degrade instead: it has a whole cluster to walk.
+     */
+    public static int adaptiveSplitBoundForTable(long tableId) {
+        return adaptiveSplitBound(computeNodeCountForTable(tableId));
     }
 
     /**

@@ -4840,8 +4840,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
             + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
-            + "Should be no larger than tablet_reshard_target_size. Also the target tablet size while a materialized "
-            + "index holds fewer tablets than its warehouse has compute nodes, so raising it also delays early "
+            + "Should be no larger than tablet_reshard_target_size. Also the lower bound on the target size "
+            + "an index splits at while it holds fewer tablets than its warehouse has compute nodes -- that "
+            + "target aims at one tablet per node and is floored here -- so raising it also delays early "
             + "splitting. Setting it at or above tablet_reshard_target_size turns that off, leaving only "
             + "the size-based rule.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;

@@ -162,12 +162,15 @@ public class SplitTabletJobEarlyTest {
         partition.createRollupIndex(rollup);
     }
 
+    // Stubs what the factory resolves, expressed as a node count so each test reads in the same terms
+    // as the bound it expects. Only the resolution is replaced; the bound is still derived by the real
+    // helper, so a change to that derivation reaches these tests.
     private static void stubNodeCount(int nodeCount) {
         stubbedNodeCount = nodeCount;
         new MockUp<TabletReshardUtils>() {
             @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
-                return stubbedNodeCount;
+            public static int adaptiveSplitBoundForTable(long tableId) {
+                return TabletReshardUtils.adaptiveSplitBound(stubbedNodeCount);
             }
         };
     }
@@ -188,6 +191,18 @@ public class SplitTabletJobEarlyTest {
         assertEquals(Map.of(ids.get(0), 2), plan(8, new SplitTabletClause()));
         assertTrue(plan(1, new SplitTabletClause()).isEmpty(), "cn=1 -> ceiling 1 -> never applies");
         assertTrue(plan(0, new SplitTabletClause()).isEmpty(), "cn=0 -> unresolved -> never applies");
+    }
+
+    @Test
+    public void theSizeRuleSpendsHeadroomBeforeTheAdaptiveRuleSeesIt() {
+        // A mixed plan: the size rule claims the 15 GiB tablet on its own, and the adaptive rule would
+        // claim the 10 GiB one. Charging only the adaptive split against the bound counts the size
+        // rule's extra tablet for free, landing on six against a bound of five -- and six is back above
+        // the merge floor, so auto-merge takes the index straight back. The size rule keeps its count
+        // either way; it is the adaptive rule that must stand down.
+        setTabletDataSizes(0L, 0L, 10L << 30, 15L << 30);
+        int after = 4 + plan(5, new SplitTabletClause()).values().stream().mapToInt(k -> k - 1).sum();
+        assertEquals(5, after, "landed on " + after + ", bound is 5");
     }
 
     @Test

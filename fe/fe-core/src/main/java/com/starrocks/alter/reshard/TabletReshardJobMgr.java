@@ -79,8 +79,9 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // TabletStatMgr scan: the largest tablet (split), the smallest adjacent fresh-pair sum (merge) and
     // the largest tablet living in an index that still has fewer tablets than the warehouse can drive
     // in parallel (early split; 0 when there is none). Long.MAX_VALUE is the "no merge" identity, so a
-    // split-only publish mark and a split+merge periodic mark compose by (max, min, max, max)
-    // regardless of arrival order. adaptiveBound rides along because the scan has already resolved it
+    // split-only publish mark and a split+merge periodic mark compose the three signals by
+    // (max, min, max) regardless of arrival order; the bound composes as last-nonzero, which is
+    // deliberately order-dependent for the reason below. adaptiveBound rides along because the scan has already resolved it
     // -- resolving a warehouse probes StarMgr -- and it is a plan input the drain would otherwise have
     // to fetch again. It takes the newer mark's value rather than the larger, so a warehouse scaled
     // down between two marks is fingerprinted against the bound it now has: taking the max would keep

@@ -46,9 +46,9 @@ public class TabletReshardJobMgrTest {
     private static void stubCountingNodeCount() {
         new MockUp<TabletReshardUtils>() {
             @Mock
-            public static int safeComputeNodeCountForTable(long tableId) {
+            public static int adaptiveSplitBoundForTable(long tableId) {
                 NODE_COUNT_RESOLUTIONS.incrementAndGet();
-                return 8;
+                return TabletReshardUtils.adaptiveSplitBound(8);
             }
         };
     }

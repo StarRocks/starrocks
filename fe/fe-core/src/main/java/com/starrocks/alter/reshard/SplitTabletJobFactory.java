@@ -75,7 +75,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      * Tablet count the early rule may not carry an index past, resolved lazily and at most once.
      *
      * <p>Resolved here rather than while planning because it goes through the warehouse availability
-     * probe, which reaches StarMgr, and planning holds a table read lock that publish waits on.
+     * probe, which reaches StarMgr, and planning holds a table read lock that publish waits on. A
+     * failure to resolve propagates: planning against a fallback bound would produce an empty plan
+     * that the caller could latch as deterministic, suppressing the table until something unrelated
+     * moved its fingerprint.
      * Resolved on demand rather than in the constructor because the statements that name their own
      * tablets, or their own target size, never consult it and must not pay for a round trip they do
      * not use -- the merge side keeps the same property.
@@ -89,8 +92,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     && splitTabletClause.getProperties()
                             .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
             boolean explicitTablets = splitTabletClause.getTabletList() != null;
-            adaptiveBound = explicitTarget || explicitTablets ? 0 : TabletReshardUtils.adaptiveSplitBound(
-                    TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
+            adaptiveBound = explicitTarget || explicitTablets
+                    ? 0 : TabletReshardUtils.adaptiveSplitBoundForTable(table.getId());
         }
         return adaptiveBound;
     }
@@ -111,24 +114,44 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     @VisibleForTesting
     static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long steadyTargetSize, int bound) {
-        int tabletCount = index.getTablets().size();
+        List<Tablet> tablets = index.getTablets();
         long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(
                 index.getDataSize(true), steadyTargetSize, bound);
-        // Slots left before the index reaches the bound. Flooring bounds the CHILDREN the adaptive rule
-        // asks for, but tablets it leaves alone still occupy slots and are absent from that sum, so a
-        // skewed index -- one large tablet beside several small ones -- would pass the bound without
-        // this. Spent as the walk goes, so the total never exceeds what was available.
-        int headroom = adaptiveTarget < steadyTargetSize ? Math.max(0, bound - tabletCount) : 0;
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
-        for (Tablet tablet : index.getTablets()) {
-            long dataSize = tablet.getDataSize(true);
-            int k = TabletReshardUtils.calcSplitCount(dataSize, steadyTargetSize);
-            if (k <= 1 && headroom > 0) {
-                k = Math.min(TabletReshardUtils.adaptiveSplitCount(dataSize, adaptiveTarget), headroom + 1);
-                headroom -= k - 1;
-            }
+
+        // The size rule decides first and is never overridden: BE tablet split is all-or-nothing, so
+        // asking for more children than it computed can turn a working split into a silent no-op.
+        int planned = tablets.size();
+        for (Tablet tablet : tablets) {
+            int k = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true), steadyTargetSize);
             if (k > 1) {
                 splitCounts.put(tablet.getId(), k);
+                planned += k - 1;
+            }
+        }
+        if (adaptiveTarget >= steadyTargetSize) {
+            return splitCounts;
+        }
+
+        // What the adaptive rule may still spend, counted against the width the size rule has ALREADY
+        // committed to -- not against today's tablet count. Charging only the adaptive splits lets a
+        // mixed plan pass the bound: four tablets of 0/0/10/15 GiB against a bound of five give the
+        // size rule one extra tablet and the adaptive rule one more, landing on six, which is back
+        // inside auto-merge's range. Flooring does not catch it either; it bounds the children this
+        // rule asks for, not the ones the other rule already claimed.
+        int headroom = Math.max(0, bound - planned);
+        for (Tablet tablet : tablets) {
+            if (headroom <= 0) {
+                break;
+            }
+            if (splitCounts.containsKey(tablet.getId())) {
+                continue;
+            }
+            int k = Math.min(TabletReshardUtils.adaptiveSplitCount(tablet.getDataSize(true), adaptiveTarget),
+                    headroom + 1);
+            if (k > 1) {
+                splitCounts.put(tablet.getId(), k);
+                headroom -= k - 1;
             }
         }
         return splitCounts;
