@@ -16,6 +16,7 @@
 
 #include "base/failpoint/fail_point.h"
 
+#include <chrono>
 #include <filesystem>
 #include <unordered_set>
 #include <utility>
@@ -24,6 +25,21 @@
 #include "simdjson.h"
 
 namespace starrocks::failpoint {
+
+namespace {
+// Minimal scope guard for the parked-thread gauge. Hand-rolled because be/src/base must not depend
+// on be/src/util, where DeferOp lives.
+class PausedThreadGuard {
+public:
+    explicit PausedThreadGuard(std::atomic<int64_t>* counter) : _counter(counter) {}
+    ~PausedThreadGuard() { _counter->fetch_sub(1, std::memory_order_relaxed); }
+    PausedThreadGuard(const PausedThreadGuard&) = delete;
+    PausedThreadGuard& operator=(const PausedThreadGuard&) = delete;
+
+private:
+    std::atomic<int64_t>* _counter;
+};
+} // namespace
 
 int check_fail_point(const char* name, int* failnum, void** failinfo, unsigned int* flags) {
     auto fp = FailPointRegistry::GetInstance()->get(name);
@@ -39,42 +55,117 @@ FailPoint::FailPoint(std::string name) : _name(std::move(name)) {
 }
 
 bool FailPoint::shouldFail() {
-    std::shared_lock l(_mu);
-    const auto mode = _trigger_mode.mode();
-    switch (mode) {
-    case FailPointTriggerModeType::ENABLE:
-        return true;
-    case FailPointTriggerModeType::DISABLE:
-        return false;
-    case FailPointTriggerModeType::PROBABILITY_ENABLE:
-        if (drand48() <= static_cast<double>(_trigger_mode.probability())) {
-            return true;
+    uint64_t gen = 0;
+    int64_t timeout_us = 0;
+    {
+        std::shared_lock l(_mu);
+        // Check the pause flag BEFORE the mode: a pause request carries mode = DISABLE so that a
+        // node predating the flag disables rather than enabling (see internal_service.proto).
+        if (!_trigger_mode.pause()) {
+            const auto mode = _trigger_mode.mode();
+            switch (mode) {
+            case FailPointTriggerModeType::ENABLE:
+                _trigger_count.fetch_add(1, std::memory_order_relaxed);
+                return true;
+            case FailPointTriggerModeType::DISABLE:
+                return false;
+            case FailPointTriggerModeType::PROBABILITY_ENABLE:
+                if (drand48() <= static_cast<double>(_trigger_mode.probability())) {
+                    _trigger_count.fetch_add(1, std::memory_order_relaxed);
+                    return true;
+                }
+                return false;
+            case FailPointTriggerModeType::ENABLE_N_TIMES:
+                if (_n_times-- > 0) {
+                    _trigger_count.fetch_add(1, std::memory_order_relaxed);
+                    return true;
+                }
+                return false;
+            default:
+                DCHECK(false);
+                return false;
+            }
         }
-        return false;
-    case FailPointTriggerModeType::ENABLE_N_TIMES:
-        if (_n_times-- > 0) {
-            return true;
-        }
-        return false;
-    default:
-        DCHECK(false);
-        break;
+        // Read the generation together with the mode. Reading it later, under _pause_mu, would let a
+        // setMode() landing in the gap look like the CURRENT generation, so the thread would then
+        // wait for a further change and sleep until its timeout.
+        gen = _mode_generation.load(std::memory_order_relaxed);
+        const int32_t timeout_second = _trigger_mode.pause_timeout_second() > 0
+                                               ? _trigger_mode.pause_timeout_second()
+                                               : kDefaultPauseTimeoutSecond;
+        timeout_us = static_cast<int64_t>(timeout_second) * 1000000L;
     }
+    // _mu is released before blocking -- see the _pause_mu comment in the header.
+    return wait_until_released(gen, timeout_us);
+}
+
+bool FailPoint::wait_until_released(uint64_t gen, int64_t timeout_us) {
+    std::unique_lock<bthread::Mutex> l(_pause_mu);
+    if (_mode_generation.load(std::memory_order_relaxed) != gen) {
+        // Released between dropping _mu and taking _pause_mu. This thread never parks, so it must
+        // not be counted as a fire and must not appear in the gauge.
+        return false;
+    }
+    _trigger_count.fetch_add(1, std::memory_order_relaxed);
+    _paused_thread_count.fetch_add(1, std::memory_order_relaxed);
+    PausedThreadGuard gauge(&_paused_thread_count);
+
+    LOG(INFO) << "failpoint " << _name << " paused, waiting for ADMIN DISABLE FAILPOINT";
+    // steady_clock so a wall-clock adjustment cannot extend or truncate the wait.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(timeout_us);
+    bool timed_out = false;
+    while (_mode_generation.load(std::memory_order_relaxed) == gen) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= deadline) {
+            timed_out = true;
+            break;
+        }
+        // bthread's wait_for takes microseconds and returns ETIMEDOUT; the loop re-checks the
+        // predicate, so a spurious wakeup or a timeout slice is handled the same way.
+        (void)_pause_cv.wait_for(l, std::chrono::duration_cast<std::chrono::microseconds>(deadline - now).count());
+    }
+    if (timed_out) {
+        LOG(WARNING) << "failpoint " << _name << " pause timed out after " << (timeout_us / 1000000)
+                     << "s, resuming";
+    } else {
+        LOG(INFO) << "failpoint " << _name << " pause released";
+    }
+    // A released pause never injects: the caller continues normally.
     return false;
+}
+
+PFailPointTriggerMode trigger_mode_from_request(const PUpdateFailPointStatusRequest& request) {
+    PFailPointTriggerMode trigger_mode = request.trigger_mode();
+    if (request.pause()) {
+        trigger_mode.set_pause(true);
+        if (request.pause_timeout_second() > 0) {
+            trigger_mode.set_pause_timeout_second(request.pause_timeout_second());
+        }
+    }
+    return trigger_mode;
 }
 
 void FailPoint::setMode(const PFailPointTriggerMode& p_trigger_mode) {
     LOG(INFO) << "failpoint change mode, name: " << _name << ", mode: " << p_trigger_mode.DebugString();
-    std::lock_guard l(_mu);
-    _trigger_mode = p_trigger_mode;
-    auto type = p_trigger_mode.mode();
-    switch (type) {
-    case FailPointTriggerModeType::ENABLE_N_TIMES:
-        _n_times = p_trigger_mode.n_times();
-        break;
-    default:
-        break;
+    {
+        std::lock_guard l(_mu);
+        _trigger_mode = p_trigger_mode;
+        auto type = p_trigger_mode.mode();
+        switch (type) {
+        case FailPointTriggerModeType::ENABLE_N_TIMES:
+            _n_times = p_trigger_mode.n_times();
+            break;
+        default:
+            break;
+        }
+        // Bump under _pause_mu too. A waiter evaluates the predicate while holding _pause_mu, and a
+        // bump plus notify landing inside that window would be lost -- the waiter would then sleep
+        // until its timeout. Taking _pause_mu here serialises against that window. _mu -> _pause_mu
+        // is the only lock order used; the waiter never holds both.
+        std::lock_guard<bthread::Mutex> pl(_pause_mu);
+        _mode_generation.fetch_add(1, std::memory_order_relaxed);
     }
+    _pause_cv.notify_all();
 }
 
 PFailPointInfo FailPoint::to_pb() const {
@@ -82,6 +173,8 @@ PFailPointInfo FailPoint::to_pb() const {
     PFailPointInfo result;
     result.set_name(_name);
     result.mutable_trigger_mode()->CopyFrom(_trigger_mode);
+    result.set_trigger_count(_trigger_count.load(std::memory_order_relaxed));
+    result.set_paused_thread_count(_paused_thread_count.load(std::memory_order_relaxed));
     return result;
 }
 

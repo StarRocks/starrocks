@@ -16,6 +16,9 @@
 
 #ifdef FIU_ENABLE
 
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -46,10 +49,38 @@ public:
     PFailPointInfo to_pb() const;
 
 protected:
+    // Fallback for a pause whose arming request carries no pause_timeout_second -- a failpoint armed
+    // straight through the brpc HTTP endpoint or from the conf file. A local constant rather than a
+    // config: be/src/base must not depend on be/src/common.
+    static constexpr int32_t kDefaultPauseTimeoutSecond = 300;
+
+    // Blocks until setMode() moves _mode_generation past |gen|, or |timeout_us| elapses.
+    // ALWAYS returns false -- a released pause continues normally and never injects.
+    bool wait_until_released(uint64_t gen, int64_t timeout_us);
+
     std::string _name;
     mutable std::shared_mutex _mu;
     PFailPointTriggerMode _trigger_mode;
     std::atomic_int _n_times = 0;
+
+    // Bumped by setMode(). A pausing thread reads it together with the mode under _mu, so a
+    // setMode() that races that read is observed as "already changed" instead of being waited for.
+    std::atomic<uint64_t> _mode_generation = 0;
+    // bthread rather than std primitives: several failpoints sit directly in brpc handlers before
+    // any thread-pool handoff (lake_publish_version_rpc_fail at lake_service.cpp:263), so a pause
+    // there runs on a bthread. Blocking with std::condition_variable would pin the backing pthread,
+    // and enough parked handlers would exhaust the worker pool that has to serve the
+    // ADMIN DISABLE FAILPOINT RPC -- the pause could then only end at its timeout. bthread
+    // primitives yield the worker, and work from plain pthreads too.
+    //
+    // The wait also has its own mutex so shouldFail() can drop _mu before blocking: blocking while
+    // holding _mu (even shared) would deadlock setMode(), and therefore the release RPC.
+    // Lock order is always _mu -> _pause_mu.
+    bthread::Mutex _pause_mu;
+    bthread::ConditionVariable _pause_cv;
+
+    std::atomic<int64_t> _trigger_count = 0;
+    std::atomic<int64_t> _paused_thread_count = 0;
 };
 
 class ScopedFailPoint : public FailPoint {
@@ -68,8 +99,6 @@ public:
 private:
     FailPoint* _sfp = nullptr;
 };
-
-// @TODO need PausableFailPoint?
 
 using FailPointPtr = std::shared_ptr<FailPoint>;
 
@@ -139,6 +168,13 @@ private:
 };
 
 bool init_failpoint_from_conf(const std::string& conf_file);
+
+// Lift PUpdateFailPointStatusRequest's request-level pause discriminator into the trigger mode that
+// gets stored. Lives here rather than inline in the brpc handler so it can be unit-tested, and so
+// there is exactly one place that knows the request encoding. Uses only
+// gen_cpp/internal_service.pb.h, which this header already includes, so it does not breach the
+// be/src/base layering rule.
+PFailPointTriggerMode trigger_mode_from_request(const PUpdateFailPointStatusRequest& request);
 
 } // namespace starrocks::failpoint
 #endif
