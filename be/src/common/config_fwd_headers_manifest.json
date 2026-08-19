@@ -745,7 +745,8 @@
         "compaction_merge_child_buffers",
         "lake_compaction_hold_input_segments",
         "enable_lake_compaction_data_cache_bypass",
-        "lake_compaction_data_cache_bypass_threshold_mb"
+        "lake_compaction_data_cache_bypass_threshold_mb",
+        "lake_compaction_data_cache_bypass_min_miss_ratio"
       ]
     },
     {

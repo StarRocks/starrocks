@@ -123,6 +123,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
         const int64_t remote_bytes_before = _context->stats->io_bytes_read_remote;
+        const int64_t local_bytes_before = _context->stats->io_bytes_read_local_disk;
         int64_t column_group_ns = 0;
         {
             SCOPED_RAW_TIMER(&column_group_ns);
@@ -143,12 +144,22 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         // 1000-column shape), so the switch additionally requires the parallel merge prefill.
         if (i == 1 && !_bypass_data_cache && config::enable_lake_compaction_data_cache_bypass &&
             config::enable_compaction_parallel_merge_init && column_group_size > 2) {
-            const int64_t pass_remote_mb =
-                    (_context->stats->io_bytes_read_remote - remote_bytes_before) / (1024 * 1024);
-            if (pass_remote_mb >= config::lake_compaction_data_cache_bypass_threshold_mb) {
+            const int64_t pass_remote = _context->stats->io_bytes_read_remote - remote_bytes_before;
+            const int64_t pass_local = _context->stats->io_bytes_read_local_disk - local_bytes_before;
+            const int64_t pass_remote_mb = pass_remote / (1024 * 1024);
+            // Two gates: an absolute floor (tiny tables and noise never switch) and a miss ratio
+            // (a cache that still serves most reads is kept even when the absolute miss bytes are
+            // large -- switching there would forfeit a mostly-working cache).
+            const double miss_ratio =
+                    (pass_remote + pass_local) > 0
+                            ? static_cast<double>(pass_remote) / static_cast<double>(pass_remote + pass_local)
+                            : 0.0;
+            if (pass_remote_mb >= config::lake_compaction_data_cache_bypass_threshold_mb &&
+                miss_ratio >= config::lake_compaction_data_cache_bypass_min_miss_ratio) {
                 _bypass_data_cache = true;
                 LOG(INFO) << "Vertical compaction switching to direct object-storage reads, tablet: " << _tablet.id()
                           << ", txn: " << _txn_id << ", second-pass remote MB: " << pass_remote_mb
+                          << ", miss ratio: " << miss_ratio
                           << ", remaining column groups: " << (column_group_size - i - 1);
             }
         }

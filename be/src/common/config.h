@@ -2295,8 +2295,13 @@ CONF_mBool(lake_compaction_hold_input_segments, "true");
 // trigger the switch. Direct reads also merge each segment's column regions into few large reads
 // (see LakeIOOptions::coalesce_across_columns).
 CONF_mBool(enable_lake_compaction_data_cache_bypass, "true");
-// Remote bytes the second column-group pass must reach before the bypass engages.
+// Remote bytes the second column-group pass must reach before the bypass engages -- an absolute
+// floor so tiny tables and measurement noise never trigger the switch.
 CONF_mInt64(lake_compaction_data_cache_bypass_threshold_mb, "32");
+// The second pass's remote share of all read bytes (remote / (remote + local)) must also reach
+// this ratio. Guards the borderline case where the cache still serves most reads but the absolute
+// miss bytes happen to exceed the floor -- switching there would forfeit a mostly-working cache.
+CONF_mDouble(lake_compaction_data_cache_bypass_min_miss_ratio, "0.5");
 
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");
