@@ -285,7 +285,7 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 
 - `iceberg.catalog.security`
   - Required: No
-  - Description: The type of authorization protocol to use. Default: `NONE`. Valid values: `OAUTH2` and `JWT`. When this item is set to `OAUTH2`, either `token` or `credential` is required. When this item is set to `JWT`, the user is required to log in to the StarRocks cluster using the `JWT` method. You can omit `token` or `credential` and StarRocks will use the logged in user's JWT to access the catalog.
+  - Description: The type of authorization protocol to use. Default: `NONE`. Valid values: `OAUTH2`, `JWT`, and `GOOGLE`. When this item is set to `OAUTH2`, either `token` or `credential` is required. When this item is set to `JWT`, the user is required to log in to the StarRocks cluster using the `JWT` method. You can omit `token` or `credential` and StarRocks will use the logged in user's JWT to access the catalog. When this item is set to `GOOGLE`, StarRocks authenticates with Google Cloud (for example, the Lakehouse for Apache Iceberg REST catalog, formerly BigLake) using Application Default Credentials, or a service account key file if `gcp.auth.credentials-path` is specified.
 
 - `iceberg.catalog.oauth2.token`
   - Required: No
@@ -302,6 +302,14 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 - `iceberg.catalog.oauth2.server-uri`
   - Required: No
   - Description: The endpoint to retrieve access token from OAuth2 Server.
+
+- `iceberg.catalog.gcp.auth.credentials-path`
+  - Required: No
+  - Description: The path to a Google Cloud service account key file (JSON) on the FE nodes. Applicable only when `security` is set to `GOOGLE`. If omitted, Application Default Credentials are used.
+
+- `iceberg.catalog.gcp.auth.scopes`
+  - Required: No
+  - Description: Comma-separated OAuth2 scopes to request for Google Cloud authentication. Applicable only when `security` is set to `GOOGLE`. Default: `https://www.googleapis.com/auth/cloud-platform`.
 
 - `iceberg.catalog.vended-credentials-enabled`
   - Required: No
@@ -391,6 +399,23 @@ SHOW DATABASES FROM r2;
 ```
 
 The `<r2_warehouse_name>`,`<r2_api_token>`, and `<r2_catalog_uri>` values are obtained from the [Cloudflare Dashboard as detailed here](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites).
+
+The following example creates an Iceberg catalog named `lakehouse` that uses the Google Cloud Lakehouse for Apache Iceberg REST catalog (formerly BigLake; the API endpoint retains the legacy `biglake` name):
+
+```SQL
+CREATE EXTERNAL CATALOG lakehouse
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://biglake.googleapis.com/iceberg/v1/restcatalog",
+    "iceberg.catalog.warehouse" = "bl://projects/<project_id>/catalogs/<catalog_id>",
+    "iceberg.catalog.security" = "google",
+    "iceberg.catalog.header.x-goog-user-project" = "<project_id>"
+);
+```
+
+StarRocks authenticates with Google Cloud using Application Default Credentials. To use a service account key file instead, set `"iceberg.catalog.gcp.auth.credentials-path" = "/path/to/service_account.json"`. Because vended credentials are enabled by default (`iceberg.catalog.vended-credentials-enabled`), StarRocks accesses the underlying Cloud Storage data with credentials vended by the catalog. Credential vending must also be enabled on the Lakehouse catalog itself (created with `--credential-mode=vended-credentials`), and the catalog's auto-provisioned service account needs the Storage Object User role (`roles/storage.objectUser`) on the associated Cloud Storage buckets. If you disable vended credentials, configure storage access separately with `StorageCredentialParams` (for example, `"gcp.gcs.use_compute_engine_service_account" = "true"`).
 
 </TabItem>
 
