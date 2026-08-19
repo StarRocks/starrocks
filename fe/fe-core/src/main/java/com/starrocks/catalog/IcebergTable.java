@@ -30,6 +30,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
@@ -68,7 +69,6 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.BaseTable;
-import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
@@ -296,13 +296,7 @@ public class IcebergTable extends Table {
 
         int currentSpecId = t.spec().specId();
         try {
-            for (ManifestFile manifest : snapshot.allManifests(t.io())) {
-                if (manifest.partitionSpecId() != currentSpecId) {
-                    return false;
-                }
-            }
-
-            return true;
+            return IcebergUtil.isSnapshotAllOnSpec(snapshot, t.io(), currentSpecId);
         } catch (Exception e) {
             LOG.warn("Failed to check manifests for iceberg table {}, fall back to strict partition-evolution check",
                     getName(), e);

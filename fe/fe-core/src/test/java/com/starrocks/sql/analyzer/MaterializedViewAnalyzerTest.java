@@ -133,7 +133,7 @@ public class MaterializedViewAnalyzerTest {
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().
-                    contains("Do not support create materialized view when base iceberg table partition transform "));
+                    contains("Do not support materialized view when base iceberg table partition transform is: "));
         }
     }
 
@@ -635,9 +635,6 @@ public class MaterializedViewAnalyzerTest {
 
     @Test
     public void testCreateMvOnIcebergTableWithPartitionEvolutionAllowedByConfig() throws Exception {
-        // With the new switch on, and since the mocked evolution table has no data (currentSnapshot() is null,
-        // so isCurrentSnapshotAllOnCurrentSpec() returns true), creating a partitioned MV on top of the
-        // partition-evolved iceberg table should succeed.
         boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
         Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
         String partitionedMvName = "iceberg_evolution_partitioned_mv_allowed";
@@ -663,11 +660,6 @@ public class MaterializedViewAnalyzerTest {
 
     @Test
     public void testCreateMvOnIcebergTableIncompatibleTransformEvenWhenAllowed() throws Exception {
-        // Even with the switch on, the MV's partition expression must still match the base iceberg table's
-        // *current* partition transform. The mocked evolution table's current default spec is month("ts"),
-        // so a MV with `date_trunc('day', ts)` must still be rejected. This is the exact protection that
-        // MVRefreshProcessor also applies at refresh time via checkPartitionTransformCompatibleWithSpec:
-        // even if all live manifests are on the current spec, an incompatible transform still fails fast.
         boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
         Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
         String partitionedMvName = "iceberg_evolution_partitioned_mv_incompat";
