@@ -31,6 +31,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -38,7 +39,11 @@ namespace starrocks::lake {
 Status KeyValueMerger::merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid) {
     IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
-        return Status::InternalError("Failed to parse index value ver");
+        // These bytes were written as a serialized IndexValuesWithVerPB into the SST
+        // data block, so a parse failure means the persisted content is corrupted
+        // (usually a bad local cache copy). Compaction callers key their
+        // drop-corrupted-cache handling off is_corruption().
+        return Status::Corruption("Failed to parse index value ver");
     }
     if (index_value_ver.values_size() == 0) {
         return Status::OK();
@@ -418,6 +423,13 @@ Status LakePersistentIndex::prepare_merging_iterator(
         // no need to do merge
         return Status::OK();
     }
+    // Record the full picked input set before opening anything: if an open below fails
+    // with corruption, the caller's cleanup handler walks this list to drop every
+    // input's local cache (the failing file itself never makes it into
+    // `merging_sstables`).
+    for (const auto& sstable_pb : sstables_to_merge) {
+        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
+    }
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         RandomAccessFileOptions opts;
@@ -434,8 +446,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
-        // add input sstable.
-        txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
         ss_debug << sstable_pb.filename() << " | ";
     }
     sstable::Options options;
@@ -450,12 +460,22 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
                                            bool base_level_merge) {
     auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), builder,
                                                    base_level_merge);
+    // ~TableBuilder() asserts the builder was closed via Finish() or Abandon(), so
+    // every early return here must Abandon() it. Before the corruption fix no error
+    // could surface from this loop in practice; now a corrupted input sstable fails
+    // merger->merge() (value parse) or the iterator status (block read).
     while (iter_ptr->Valid()) {
-        RETURN_IF_ERROR(
-                merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string(), iter_ptr->max_rss_rowid()));
+        auto st = merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string(), iter_ptr->max_rss_rowid());
+        if (!st.ok()) {
+            builder->Abandon();
+            return st;
+        }
         iter_ptr->Next();
     }
-    RETURN_IF_ERROR(iter_ptr->status());
+    if (auto st = iter_ptr->status(); !st.ok()) {
+        builder->Abandon();
+        return st;
+    }
     merger->finish();
     return builder->Finish();
 }
@@ -469,14 +489,37 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     std::vector<std::shared_ptr<PersistentIndexSstable>> sstable_vec;
     std::unique_ptr<sstable::Iterator> merging_iter_ptr;
     bool merge_base_level = false;
+    // Corrupted bytes usually come from the local cache copy of an input sstable. Drop
+    // those cache entries so the next compaction round re-reads from remote storage,
+    // instead of hitting the same bad blocks and failing forever. The handler walks the
+    // input list in `txn_log`, which prepare_merging_iterator fills with the full picked
+    // set before opening anything, so corruption hit while opening an input is covered
+    // too (the failing file never makes it into `sstable_vec`).
+    auto drop_input_cache_on_corruption = [&](const Status& st) {
+        if (!st.is_corruption()) {
+            return;
+        }
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of "
+                     << txn_log->op_compaction().input_sstables_size() << " input sstables, tablet_id=" << metadata.id()
+                     << ", error: " << st;
+        for (const auto& sstable_pb : txn_log->op_compaction().input_sstables()) {
+            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata.id(), sstable_pb.filename()));
+        }
+    };
     // build merge iterator
-    RETURN_IF_ERROR(prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
-                                             &merge_base_level));
+    auto prepare_st =
+            prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr, &merge_base_level);
+    if (!prepare_st.ok()) {
+        drop_input_cache_on_corruption(prepare_st);
+        return prepare_st;
+    }
     if (merging_iter_ptr == nullptr) {
         // no need to do merge
         return Status::OK();
     }
     if (!merging_iter_ptr->Valid()) {
+        drop_input_cache_on_corruption(merging_iter_ptr->status());
         return merging_iter_ptr->status();
     }
 
@@ -495,7 +538,11 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf.get());
-    RETURN_IF_ERROR(merge_sstables(std::move(merging_iter_ptr), &builder, merge_base_level));
+    auto merge_st = merge_sstables(std::move(merging_iter_ptr), &builder, merge_base_level);
+    if (!merge_st.ok()) {
+        drop_input_cache_on_corruption(merge_st);
+        return merge_st;
+    }
     RETURN_IF_ERROR(wf->close());
 
     // record output sstable pb
