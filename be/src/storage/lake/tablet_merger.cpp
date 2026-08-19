@@ -75,6 +75,8 @@ bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_rebuild_total("tablet_merge_l
 bvar::Adder<int64_t> g_tablet_merge_legacy_sstable_rebuild_dropped_entries(
         "tablet_merge_legacy_sstable_rebuild_dropped_entries");
 bvar::Adder<int64_t> g_tablet_merge_non_shared_sstable_rebuild_total("tablet_merge_non_shared_sstable_rebuild_total");
+bvar::Adder<int64_t> g_tablet_merge_non_shared_sstable_rebuild_dropped_entries(
+        "tablet_merge_non_shared_sstable_rebuild_dropped_entries");
 
 } // namespace
 
@@ -2543,13 +2545,24 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
     // post-merge watermark. Per-entry update_max_encoded_rss_rowid_from
     // only widens this initial value as non-tombstone entries are
     // written.
+    // An entry whose rssid projects below the merged id space references a rowset this old
+    // tablet no longer carries (see below); the watermark can sit there too, on a file whose
+    // newest referenced rowset has since been compacted away. Start uninitialized in that case
+    // and let the surviving entries widen it, instead of failing the whole merge.
     const uint32_t source_max_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
-    ASSIGN_OR_RETURN(uint32_t projected_max_high, ctx.map_rssid(source_max_high));
-    uint64_t max_encoded_rss_rowid =
-            encode_rss_rowid(projected_max_high, extract_rss_rowid_low(src_pb.max_rss_rowid()));
-    bool max_encoded_initialized = true;
+    uint64_t max_encoded_rss_rowid = 0;
+    bool max_encoded_initialized = false;
+    if (auto projected_max_high = ctx.map_rssid(source_max_high); projected_max_high.ok()) {
+        max_encoded_rss_rowid =
+                encode_rss_rowid(projected_max_high.value(), extract_rss_rowid_low(src_pb.max_rss_rowid()));
+        max_encoded_initialized = true;
+    } else if (static_cast<int64_t>(source_max_high) + ctx.rssid_offset() >= 0) {
+        // Only the below-the-floor direction is expected; anything else stays fatal.
+        return projected_max_high.status();
+    }
 
     uint64_t kept_entry_count = 0;
+    uint64_t dropped_value_count = 0;
     for (; source_iterator->Valid(); source_iterator->Next()) {
         const Slice entry_key = source_iterator->key();
         const Slice entry_raw_value = source_iterator->value();
@@ -2557,9 +2570,13 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
             return Status::InternalError("Failed to parse non-shared sstable value during rebuild");
         }
+        IndexValuesWithVerPB kept_pb;
         for (auto& index_value_ref : *values_pb.mutable_values()) {
             auto* index_value = &index_value_ref;
-            if (is_index_tombstone(*index_value)) continue; // preserve sentinel as-is
+            if (is_index_tombstone(*index_value)) {
+                *kept_pb.add_values() = *index_value; // preserve sentinel as-is
+                continue;
+            }
             const int64_t lifted_rssid =
                     static_cast<int64_t>(index_value->rssid()) + static_cast<int64_t>(source_rssid_offset);
             if (lifted_rssid < 0 || lifted_rssid > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
@@ -2567,24 +2584,48 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
                         "non-shared rebuild: lifted rssid out of uint32 range: stored={} src_offset={} lifted={}",
                         index_value->rssid(), source_rssid_offset, lifted_rssid));
             }
-            ASSIGN_OR_RETURN(uint32_t final_rssid, ctx.map_rssid(static_cast<uint32_t>(lifted_rssid)));
-            index_value->set_rssid(final_rssid);
+            auto final_rssid = ctx.map_rssid(static_cast<uint32_t>(lifted_rssid));
+            if (!final_rssid.ok()) {
+                // ctx.rssid_offset() is next_rowset_id - min_carried_id, so a negative projection
+                // means this entry's rssid sits strictly below the smallest rowset id this old
+                // tablet carries into the merged tablet: the rowset was compacted away and no
+                // segment in the merged metadata can ever resolve the entry. Drop it, exactly as
+                // rebuild_legacy_shared_sstable already drops its out-of-range entries -- failing
+                // instead aborts the merge publish, which the FE then retries forever and the
+                // table stays pinned in TABLET_RESHARD with no abort path.
+                if (lifted_rssid + ctx.rssid_offset() >= 0) {
+                    return final_rssid.status(); // above the space: still fatal
+                }
+                ++dropped_value_count;
+                continue;
+            }
+            index_value->set_rssid(final_rssid.value());
+            *kept_pb.add_values() = *index_value;
         }
-        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid, &max_encoded_initialized);
-        const std::string serialized_entry = values_pb.SerializeAsString();
+        if (kept_pb.values_size() == 0) {
+            // Every version of this key referenced an erased rowset.
+            continue;
+        }
+        update_max_encoded_rss_rowid_from(kept_pb, &max_encoded_rss_rowid, &max_encoded_initialized);
+        const std::string serialized_entry = kept_pb.SerializeAsString();
         RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
         ++kept_entry_count;
     }
     RETURN_IF_ERROR(source_iterator->status());
 
+    if (dropped_value_count > 0) {
+        g_tablet_merge_non_shared_sstable_rebuild_dropped_entries << static_cast<int64_t>(dropped_value_count);
+    }
+
     if (kept_entry_count == 0) {
-        // Defensive: SeekToFirst returned Valid() above, so this should
-        // be unreachable, but covers the case where every Add() somehow
-        // got skipped without an error.
+        // Every entry referenced an erased rowset. The cleanup guard deletes the partial
+        // output; leaving out_pb empty tells the caller to drop the sstable from the merged
+        // metadata, matching rebuild_legacy_shared_sstable's all-dropped path.
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(finalize_legacy_rebuild_output(output_writer, max_encoded_rss_rowid, out_pb));
+    RETURN_IF_ERROR(
+            finalize_legacy_rebuild_output(output_writer, max_encoded_initialized ? max_encoded_rss_rowid : 0, out_pb));
     cleanup_partial_output.cancel();
     g_tablet_merge_non_shared_sstable_rebuild_total << 1;
     return Status::OK();
