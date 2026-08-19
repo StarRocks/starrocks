@@ -19,9 +19,6 @@
 
 #include <gtest/gtest.h>
 
-#include "base/concurrency/await.h"
-#include "base/utility/defer_op.h"
-
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -29,6 +26,9 @@
 #include <future>
 #include <thread>
 #include <vector>
+
+#include "base/concurrency/await.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks {
 
