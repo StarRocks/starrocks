@@ -199,7 +199,7 @@ public:
     void close() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
 
-    StatusOr<bool> prefetch() override;
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override;
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
