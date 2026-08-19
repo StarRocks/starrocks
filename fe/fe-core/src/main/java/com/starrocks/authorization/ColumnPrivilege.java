@@ -15,11 +15,7 @@
 package com.starrocks.authorization;
 
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.BasicTable;
-=======
->>>>>>> e0d97ad265 ([BugFix] Ranger view/MV authorization for external tables (#56316))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
