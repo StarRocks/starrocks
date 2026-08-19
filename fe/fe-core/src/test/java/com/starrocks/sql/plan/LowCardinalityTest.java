@@ -2024,8 +2024,6 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "  4:Decode\n"
                 + "  |  <dict id 38> : <string id 2>\n"
                 + "  |  cardinality: 1\n"
-                + "  |  probe runtime filters:\n"
-                + "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n"
                 + "  |  column statistics: \n"
                 + "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"
                 + "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"
