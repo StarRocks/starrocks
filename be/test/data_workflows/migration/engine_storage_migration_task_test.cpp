@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <set>
 #include <utility>
 
 #include "base/path/file_util.h"
@@ -58,6 +59,10 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
+#ifndef __APPLE__
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+#endif
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_factory.h"
@@ -77,7 +82,7 @@ public:
 
     static void TearDownTestCase() { config::enable_event_based_compaction_framework = true; }
 
-    static TabletSharedPtr create_pk_tablet(int64_t tablet_id, int32_t schema_hash) {
+    static TabletSharedPtr create_pk_tablet(int64_t tablet_id, int32_t schema_hash, bool add_gin_index = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -102,8 +107,22 @@ public:
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
-        k3.column_type.type = TPrimitiveType::INT;
+        k3.column_type.type = add_gin_index ? TPrimitiveType::VARCHAR : TPrimitiveType::INT;
+        if (add_gin_index) {
+            k3.column_type.len = 65535;
+        }
         request.tablet_schema.columns.push_back(k3);
+
+        if (add_gin_index) {
+            request.tablet_schema.__isset.indexes = true;
+            request.tablet_schema.indexes.emplace_back();
+            auto& gin_index = request.tablet_schema.indexes.back();
+            gin_index.__set_index_id(1);
+            gin_index.__set_index_name("v2_gin");
+            gin_index.__set_index_type(TIndexType::GIN);
+            gin_index.__set_columns({"v2"});
+            gin_index.__set_common_properties({{"imp_lib", "clucene"}});
+        }
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -633,6 +652,69 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
     EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path, false);
     ASSERT_OK(migration_task.execute());
 }
+
+#ifndef __APPLE__
+TEST_F(EngineStorageMigrationTaskTest, test_migrate_pk_tablet_with_clucene_gin_index) {
+    constexpr int64_t tablet_id = 88888;
+    constexpr int32_t schema_hash = 8888;
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+
+    auto tablet = create_pk_tablet(tablet_id, schema_hash, true);
+    tablet->set_enable_persistent_index(false);
+    ASSERT_OK(tablet->rowset_commit(2, create_pk_rowset(tablet, {1, 2, 3, 4, 5})));
+
+    std::set<std::string> source_index_dirs;
+    ASSERT_OK(fs::list_dirs_files(tablet->schema_hash_path(), &source_index_dirs, nullptr));
+    ASSERT_TRUE(std::any_of(source_index_dirs.begin(), source_index_dirs.end(),
+                            [](const std::string& entry) { return entry.ends_with(".ivt"); }));
+
+    DataDir* source_store = tablet->data_dir();
+    DataDir* dest_store = nullptr;
+    for (auto* store : StorageEngine::instance()->get_stores()) {
+        if (store != source_store) {
+            dest_store = store;
+            break;
+        }
+    }
+    ASSERT_NE(dest_store, nullptr);
+    tablet.reset();
+
+    sleep(2);
+    ASSERT_OK(EngineStorageMigrationTask(tablet_id, schema_hash, dest_store, false).execute());
+
+    tablet = tablet_manager->get_tablet(tablet_id);
+    ASSERT_NE(tablet, nullptr);
+    ASSERT_EQ(tablet->data_dir(), dest_store);
+    ASSERT_EQ(tablet->updates()->max_version(), 2);
+
+    std::set<std::string> destination_files;
+    ASSERT_OK(fs::list_dirs_files(tablet->schema_hash_path(), nullptr, &destination_files));
+    ASSERT_TRUE(std::none_of(destination_files.begin(), destination_files.end(),
+                             [](const std::string& file) { return CLucenePlugin::is_index_files(file); }));
+
+    std::vector<RowsetSharedPtr> applied_rowsets;
+    ASSERT_OK(tablet->updates()->get_applied_rowsets(2, &applied_rowsets));
+    ASSERT_FALSE(applied_rowsets.empty());
+
+    size_t active_index_directory_count = 0;
+    for (const auto& rowset : applied_rowsets) {
+        for (int segment_id = 0; segment_id < rowset->num_segments(); ++segment_id) {
+            for (const auto& index : *tablet->tablet_schema()->indexes()) {
+                if (index.index_type() != GIN) {
+                    continue;
+                }
+                const auto index_directory = IndexDescriptor::inverted_index_file_path(
+                        tablet->schema_hash_path(), rowset->rowset_id().to_string(), segment_id, index.index_id());
+                std::set<std::string> index_files;
+                ASSERT_OK(fs::list_dirs_files(index_directory, nullptr, &index_files));
+                ASSERT_FALSE(index_files.empty()) << index_directory;
+                ++active_index_directory_count;
+            }
+        }
+    }
+    ASSERT_GT(active_index_directory_count, 0);
+}
+#endif
 
 // Verifies that rapid PK tablet re-migration (disk A->B->A) preserves the
 // new tablet's rowset metadata when GC and migration race concurrently.
