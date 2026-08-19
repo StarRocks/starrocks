@@ -73,6 +73,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -196,6 +197,7 @@ public class InsertOverwriteJobRunner {
     private void doLoad() throws Exception {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         createTempPartitions();
+        preSplitStaticOverwriteTempPartitions();
         preSplitDynamicOverwriteTempPartitions();
         prepareInsert();
         executeInsert();
@@ -206,6 +208,38 @@ public class InsertOverwriteJobRunner {
     void preSplitDynamicOverwriteTempPartitions() {
         if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
             InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(insertStmt, context, job.getTxnId());
+        }
+    }
+
+    void preSplitStaticOverwriteTempPartitions() {
+        try {
+            if (job.isDynamicOverwrite() || job.getTmpPartitionIds() == null || job.getTmpPartitionIds().isEmpty()) {
+                return;
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db == null) {
+                return;
+            }
+            List<String> temporaryPartitionNames;
+            try (AutoCloseableLock ignored = new AutoCloseableLock(
+                    new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.READ)) {
+                OlapTable targetTable = checkAndGetTable(db, tableId);
+                temporaryPartitionNames = job.getTmpPartitionIds().stream()
+                        .map(targetTable::getPartition)
+                        .filter(Objects::nonNull)
+                        .map(Partition::getName)
+                        .toList();
+            }
+            if (temporaryPartitionNames.size() != job.getTmpPartitionIds().size()) {
+                return;
+            }
+            InsertPreSplitHook.maybeRunStaticOverwritePreSplit(
+                    insertStmt, context, job.getSourcePartitionNames(), temporaryPartitionNames);
+        } catch (Throwable unexpected) {
+            // Pre-split is opportunistic. A catalog race or coordinator failure must never turn a
+            // valid INSERT OVERWRITE into a failed load after its temporary partitions were cloned.
+            LOG.warn("Sample-Based Tablet Pre-Split (static INSERT OVERWRITE) failed; "
+                    + "proceeding without pre-split", unexpected);
         }
     }
 
