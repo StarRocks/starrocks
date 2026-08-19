@@ -67,8 +67,14 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         return name;
     }
 
-    public boolean isPause() {
-        return pause;
+    /**
+     * Whether this statement arms a policy rather than removing one. NOT the same as
+     * {@link #getIsEnable()}: a pause is an ENABLE statement, but it is transmitted with
+     * is_enable = false so that a node predating the pause field removes the policy instead of
+     * arming an ENABLE it cannot honour. Every arm-or-remove decision must go through this.
+     */
+    public boolean isArming() {
+        return isEnable || pause;
     }
 
     public PUpdateFailPointStatusRequest toProto() {
@@ -81,8 +87,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
             // mode and echo it back from list_fail_point, making SHOW FAILPOINTS report PAUSE for a
             // failpoint it merely disabled.
             request.pause = true;
-            // Normalized here too, so FE and BE cannot disagree about a misconfigured value.
-            request.pauseTimeoutSecond = Math.max(1, Config.failpoint_pause_timeout_second);
+            request.pauseTimeoutSecond = normalizedPauseTimeoutSecond();
         }
         return request;
     }
@@ -95,6 +100,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         request.setIs_enable(isEnable && !pause);
         if (pause) {
             request.setPause(true);
+            request.setPause_timeout_second(normalizedPauseTimeoutSecond());
         }
         if (nTimes != null) {
             request.setTimes(nTimes);
@@ -105,7 +111,16 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         return request;
     }
 
-    public PFailPointTriggerMode getFailPointMode() {
+    /**
+     * Snapshotted once, here at the arming site, and carried to every recipient. Receivers must not
+     * re-read their own config at park time or an ADMIN SET FRONTEND CONFIG in between would let the
+     * frontends and backends disagree about how long a pause lasts.
+     */
+    private int normalizedPauseTimeoutSecond() {
+        return TriggerPolicy.normalizePauseTimeoutSecond(Config.failpoint_pause_timeout_second);
+    }
+
+    private PFailPointTriggerMode getFailPointMode() {
         PFailPointTriggerMode mode = new PFailPointTriggerMode();
         if (isEnable) {
             if (pause) {
@@ -129,17 +144,13 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         return mode;
     }
 
+    /**
+     * The policy this statement arms on the local frontend. Derived from the same thrift encoding the
+     * followers receive, so the leader and its followers cannot diverge -- a second decode ladder here
+     * is exactly how a new trigger mode ends up honoured on one frontend and not the others.
+     */
     public TriggerPolicy getTriggerPolicy() {
-        if (pause) {
-            return TriggerPolicy.pausePolicy();
-        }
-        if (nTimes != null) {
-            return TriggerPolicy.timesPolicy(nTimes);
-        }
-        if (probability != null) {
-            return TriggerPolicy.probabilityPolicy(probability);
-        }
-        return TriggerPolicy.enablePolicy();
+        return TriggerPolicy.fromThrift(toThrift());
     }
 
     public List<String> getBackends() {

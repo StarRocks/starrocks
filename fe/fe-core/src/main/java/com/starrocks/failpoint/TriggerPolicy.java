@@ -14,10 +14,13 @@
 package com.starrocks.failpoint;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.starrocks.common.Config;
 import com.starrocks.thrift.TUpdateFailPointRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TriggerPolicy {
     private static final Logger LOG = LogManager.getLogger(TriggerPolicy.class);
@@ -26,17 +29,35 @@ public class TriggerPolicy {
     private double probability;
     private int times;
 
-    // PAUSE only. Threads park on this monitor; release() wakes them.
-    private final Object pauseLock = new Object();
-    private boolean released = false;
-    private int pausedThreadCount = 0;
+    // PAUSE only. A one-shot gate: countDown() is idempotent, releases every waiter, and a thread
+    // arriving after the release returns immediately -- exactly the semantics a pause needs.
+    private final CountDownLatch releaseLatch = new CountDownLatch(1);
+    private final AtomicInteger pausedThreadCount = new AtomicInteger();
+    // Snapshotted when the policy is armed, never re-read from Config at park time: an
+    // ADMIN SET FRONTEND CONFIG between arming and parking must not desynchronize this frontend from
+    // its peers or from the backends, which snapshot the same value into the trigger mode they store.
+    private int pauseTimeoutSecond = 1;
 
     public static TriggerPolicy enablePolicy() {
         return new TriggerPolicy(TriggerMode.ENABLE);
     }
 
-    public static TriggerPolicy pausePolicy() {
-        return new TriggerPolicy(TriggerMode.PAUSE);
+    /**
+     * @param timeoutSecond the already-normalized pause timeout carried by the arming request; values
+     *                      below 1 are clamped so a misconfigured value can never mean "wait forever".
+     */
+    public static TriggerPolicy pausePolicy(int timeoutSecond) {
+        TriggerPolicy policy = new TriggerPolicy(TriggerMode.PAUSE);
+        policy.pauseTimeoutSecond = normalizePauseTimeoutSecond(timeoutSecond);
+        return policy;
+    }
+
+    /**
+     * The single definition of the pause-timeout clamp. Applied once at the arming site so the value
+     * that reaches a frontend policy, a follower frontend, and every backend is byte-identical.
+     */
+    public static int normalizePauseTimeoutSecond(int timeoutSecond) {
+        return Math.max(1, timeoutSecond);
     }
 
     public static TriggerPolicy probabilityPolicy(double probability) {
@@ -61,6 +82,7 @@ public class TriggerPolicy {
         this.times = times;
     }
 
+    @VisibleForTesting
     public TriggerMode getMode() {
         return mode;
     }
@@ -71,9 +93,7 @@ public class TriggerPolicy {
      */
     @VisibleForTesting
     public int getPausedThreadCount() {
-        synchronized (pauseLock) {
-            return pausedThreadCount;
-        }
+        return pausedThreadCount.get();
     }
 
     public boolean shouldTrigger(String name) {
@@ -102,39 +122,21 @@ public class TriggerPolicy {
      * continues normally and never injects the rule's action.
      */
     private boolean pauseUntilReleased(String name) {
-        // Normalize once: a misconfigured 0 or negative must mean "clamp to 1s", never "do not wait"
-        // and never "wait forever". The same normalization is applied when the value is sent to BEs.
-        int timeoutSecond = Math.max(1, Config.failpoint_pause_timeout_second);
-        // nanoTime, not currentTimeMillis: a wall-clock adjustment must not extend or truncate the
-        // wait.
-        long deadlineNanos = System.nanoTime() + timeoutSecond * 1_000_000_000L;
         LOG.info("failpoint {} paused, waiting for ADMIN DISABLE FAILPOINT", name);
-        boolean timedOut = false;
+        pausedThreadCount.incrementAndGet();
         try {
-            synchronized (pauseLock) {
-                pausedThreadCount++;
-                try {
-                    while (!released) {
-                        long remainNanos = deadlineNanos - System.nanoTime();
-                        if (remainNanos <= 0) {
-                            timedOut = true;
-                            break;
-                        }
-                        pauseLock.wait(remainNanos / 1_000_000L, (int) (remainNanos % 1_000_000L));
-                    }
-                } finally {
-                    pausedThreadCount--;
-                }
+            // await() is nanoTime-based, so a wall-clock adjustment cannot extend or truncate the
+            // wait, and its boolean return already distinguishes released from timed out.
+            if (releaseLatch.await(pauseTimeoutSecond, TimeUnit.SECONDS)) {
+                LOG.info("failpoint {} pause released", name);
+            } else {
+                LOG.warn("failpoint {} pause timed out after {}s, resuming", name, pauseTimeoutSecond);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LOG.warn("failpoint {} pause interrupted, resuming", name);
-            return false;
-        }
-        if (timedOut) {
-            LOG.warn("failpoint {} pause timed out after {}s, resuming", name, timeoutSecond);
-        } else {
-            LOG.info("failpoint {} pause released", name);
+        } finally {
+            pausedThreadCount.decrementAndGet();
         }
         return false;
     }
@@ -144,10 +146,7 @@ public class TriggerPolicy {
      * (ADMIN DISABLE FAILPOINT) or replaced by a re-arm. Idempotent, and safe on a non-PAUSE policy.
      */
     public void release() {
-        synchronized (pauseLock) {
-            released = true;
-            pauseLock.notifyAll();
-        }
+        releaseLatch.countDown();
     }
 
     /**
@@ -161,7 +160,9 @@ public class TriggerPolicy {
 
     public static TriggerPolicy fromThrift(TUpdateFailPointRequest request) {
         if (request.isSetPause() && request.isPause()) {
-            return TriggerPolicy.pausePolicy();
+            // The timeout is snapshotted by the arming frontend and carried on the request; falling
+            // back to this node's own Config would reintroduce the desync the snapshot prevents.
+            return TriggerPolicy.pausePolicy(request.getPause_timeout_second());
         } else if (request.isSetTimes()) {
             return TriggerPolicy.timesPolicy(request.getTimes());
         } else if (request.isSetProbability()) {

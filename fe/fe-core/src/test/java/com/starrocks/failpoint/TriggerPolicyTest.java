@@ -14,16 +14,21 @@
 
 package com.starrocks.failpoint;
 
-import com.starrocks.common.Config;
 import com.starrocks.thrift.TUpdateFailPointRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 public class TriggerPolicyTest {
+
+    // Long enough that a parked thread stays parked for the duration of a test.
+    private static final int PAUSE_TIMEOUT_SECOND = 300;
 
     // Spin until the policy reports the expected number of parked threads, so the tests synchronise
     // on real state rather than on a sleep.
@@ -40,7 +45,12 @@ public class TriggerPolicyTest {
     // Daemon threads so a failed assertion cannot leave a non-daemon thread parked for the whole
     // pause timeout.
     private static Thread startParker(TriggerPolicy policy, String name, AtomicBoolean triggered) {
-        Thread t = new Thread(() -> triggered.set(policy.shouldTrigger(name)), "parker-" + name);
+        return startParker(policy, name, triggered, () -> policy.shouldTrigger(name));
+    }
+
+    private static Thread startParker(TriggerPolicy policy, String name, AtomicBoolean triggered,
+                                      BooleanSupplier trigger) {
+        Thread t = new Thread(() -> triggered.set(trigger.getAsBoolean()), "parker-" + name);
         t.setDaemon(true);
         t.start();
         return t;
@@ -49,7 +59,7 @@ public class TriggerPolicyTest {
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     public void testPauseReleasedByRelease() throws Exception {
-        TriggerPolicy policy = TriggerPolicy.pausePolicy();
+        TriggerPolicy policy = TriggerPolicy.pausePolicy(PAUSE_TIMEOUT_SECOND);
         AtomicBoolean triggered = new AtomicBoolean(true);
         Thread t = startParker(policy, "fp_pause", triggered);
         try {
@@ -67,7 +77,7 @@ public class TriggerPolicyTest {
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     public void testPauseReleasesAllWaiters() throws Exception {
-        TriggerPolicy policy = TriggerPolicy.pausePolicy();
+        TriggerPolicy policy = TriggerPolicy.pausePolicy(PAUSE_TIMEOUT_SECOND);
         AtomicBoolean a = new AtomicBoolean(true);
         AtomicBoolean b = new AtomicBoolean(true);
         Thread t1 = startParker(policy, "fp_multi", a);
@@ -83,46 +93,26 @@ public class TriggerPolicyTest {
         Assertions.assertFalse(b.get());
     }
 
-    @Test
+    // The armed timeout is honoured and a misconfigured value clamps to 1s rather than meaning
+    // "never wait" or "wait forever". No global config is touched: the timeout now travels with the
+    // policy, which is exactly the property that keeps frontends and backends in agreement.
+    @ParameterizedTest
+    @ValueSource(ints = {1, 0, -5})
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    public void testPauseTimesOut() {
-        int original = Config.failpoint_pause_timeout_second;
-        try {
-            Config.failpoint_pause_timeout_second = 1;
-            TriggerPolicy policy = TriggerPolicy.pausePolicy();
+    public void testPauseTimesOutAfterItsArmedTimeout(int armedTimeout) {
+        TriggerPolicy policy = TriggerPolicy.pausePolicy(armedTimeout);
+        long start = System.nanoTime();
+        Assertions.assertFalse(policy.shouldTrigger("fp_timeout"));
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
 
-            long start = System.nanoTime();
-            Assertions.assertFalse(policy.shouldTrigger("fp_timeout"));
-            long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
-
-            Assertions.assertTrue(elapsedMs >= 900, "resumed after " + elapsedMs + "ms, expected >= 900ms");
-            Assertions.assertEquals(0, policy.getPausedThreadCount());
-        } finally {
-            Config.failpoint_pause_timeout_second = original;
-        }
-    }
-
-    @Test
-    @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    public void testNonPositiveTimeoutIsNormalized() {
-        int original = Config.failpoint_pause_timeout_second;
-        try {
-            // A misconfigured 0 must not mean "never wait" nor "wait forever": it clamps to 1s.
-            Config.failpoint_pause_timeout_second = 0;
-            TriggerPolicy policy = TriggerPolicy.pausePolicy();
-            long start = System.nanoTime();
-            Assertions.assertFalse(policy.shouldTrigger("fp_zero"));
-            long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
-            Assertions.assertTrue(elapsedMs >= 900, "resumed after " + elapsedMs + "ms, expected >= 900ms");
-        } finally {
-            Config.failpoint_pause_timeout_second = original;
-        }
+        Assertions.assertTrue(elapsedMs >= 900, "resumed after " + elapsedMs + "ms, expected >= 900ms");
+        Assertions.assertEquals(0, policy.getPausedThreadCount());
     }
 
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     public void testInterruptResumesAndRestoresFlag() throws Exception {
-        TriggerPolicy policy = TriggerPolicy.pausePolicy();
+        TriggerPolicy policy = TriggerPolicy.pausePolicy(PAUSE_TIMEOUT_SECOND);
         AtomicBoolean triggered = new AtomicBoolean(true);
         AtomicBoolean interruptFlagSeen = new AtomicBoolean(false);
         Thread t = new Thread(() -> {
@@ -146,7 +136,7 @@ public class TriggerPolicyTest {
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     public void testReleaseIsIdempotentAndPreRelease() {
-        TriggerPolicy policy = TriggerPolicy.pausePolicy();
+        TriggerPolicy policy = TriggerPolicy.pausePolicy(PAUSE_TIMEOUT_SECOND);
         policy.release();
         policy.release();
         // Already released: returns immediately rather than waiting out the timeout.
@@ -155,45 +145,34 @@ public class TriggerPolicyTest {
         Assertions.assertTrue((System.nanoTime() - start) / 1_000_000L < 5_000);
     }
 
+    // Both ADMIN DISABLE FAILPOINT (remove) and a re-arm (replace) must release whatever is parked on
+    // the superseded policy, or a paused thread is stranded until its timeout.
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     public void testRemoveTriggerPolicyReleasesPausedThread() throws Exception {
-        TriggerPolicy policy = TriggerPolicy.pausePolicy();
-        FailPoint.setTriggerPolicy("fp_remove", policy);
-        AtomicBoolean triggered = new AtomicBoolean(true);
-        Thread t = new Thread(() -> triggered.set(FailPoint.shouldTrigger("fp_remove")), "parker-remove");
-        t.setDaemon(true);
-        t.start();
-        try {
-            Assertions.assertTrue(waitForParked(policy, 1));
-        } finally {
-            // ADMIN DISABLE FAILPOINT goes through removeTriggerPolicy.
-            FailPoint.removeTriggerPolicy("fp_remove");
-        }
-        t.join(10_000);
-        Assertions.assertFalse(t.isAlive());
-        Assertions.assertFalse(triggered.get());
+        assertReleasedBy("fp_remove", () -> FailPoint.removeTriggerPolicy("fp_remove"));
     }
 
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     public void testReArmReleasesPausedThread() throws Exception {
-        TriggerPolicy policy = TriggerPolicy.pausePolicy();
-        FailPoint.setTriggerPolicy("fp_rearm", policy);
+        assertReleasedBy("fp_rearm", () -> FailPoint.setTriggerPolicy("fp_rearm", TriggerPolicy.enablePolicy()));
+        FailPoint.removeTriggerPolicy("fp_rearm");
+    }
+
+    private void assertReleasedBy(String name, Runnable release) throws Exception {
+        TriggerPolicy policy = TriggerPolicy.pausePolicy(PAUSE_TIMEOUT_SECOND);
+        FailPoint.setTriggerPolicy(name, policy);
         AtomicBoolean triggered = new AtomicBoolean(true);
-        Thread t = new Thread(() -> triggered.set(FailPoint.shouldTrigger("fp_rearm")), "parker-rearm");
-        t.setDaemon(true);
-        t.start();
+        Thread t = startParker(policy, name, triggered, () -> FailPoint.shouldTrigger(name));
         try {
             Assertions.assertTrue(waitForParked(policy, 1));
         } finally {
-            // Replacing the policy must release whatever was parked on the old one.
-            FailPoint.setTriggerPolicy("fp_rearm", TriggerPolicy.enablePolicy());
+            release.run();
         }
         t.join(10_000);
         Assertions.assertFalse(t.isAlive());
         Assertions.assertFalse(triggered.get());
-        FailPoint.removeTriggerPolicy("fp_rearm");
     }
 
     @Test
@@ -203,6 +182,7 @@ public class TriggerPolicyTest {
         request.setName("fp");
         request.setIs_enable(false);
         request.setPause(true);
+        request.setPause_timeout_second(42);
         Assertions.assertEquals(TriggerMode.PAUSE, TriggerPolicy.fromThrift(request).getMode());
     }
 

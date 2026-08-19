@@ -82,6 +82,13 @@ public class FailPointStmtTest {
         TUpdateFailPointRequest thriftRequest = stmt.toThrift();
         Assertions.assertFalse(thriftRequest.isIs_enable());
         Assertions.assertTrue(thriftRequest.isPause());
+        // Followers snapshot the same timeout rather than re-reading their own config.
+        Assertions.assertEquals(Config.failpoint_pause_timeout_second,
+                thriftRequest.getPause_timeout_second());
+
+        // A pause is an ENABLE statement even though its wire form says is_enable = false; the
+        // leader must arm off isArming(), never off the raw flag.
+        Assertions.assertTrue(stmt.isArming());
 
         // local execution is unaffected by the wire encoding
         Assertions.assertEquals(TriggerMode.PAUSE, stmt.getTriggerPolicy().getMode());
@@ -109,6 +116,7 @@ public class FailPointStmtTest {
         Assertions.assertNull(stmt.toProto().pause);
         Assertions.assertTrue(stmt.toThrift().isIs_enable());
         Assertions.assertFalse(stmt.toThrift().isSetPause());
+        Assertions.assertTrue(stmt.isArming());
     }
 
     @Test

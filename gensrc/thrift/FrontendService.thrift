@@ -2345,6 +2345,11 @@ struct TUpdateFailPointRequest {
     // sets is_enable = false, so a frontend that predates this field disables the failpoint instead
     // of enabling it. Readers must check `pause` before `is_enable`.
     5: optional bool pause;
+    // Pause timeout, snapshotted by the arming frontend and carried with the request, exactly as
+    // PUpdateFailPointStatusRequest.pause_timeout_second is for backends. Receivers must NOT re-read
+    // their own config at park time: that would let ADMIN SET FRONTEND CONFIG between arming and
+    // parking desynchronize the frontends from each other and from the backends.
+    6: optional i32 pause_timeout_second;
 }
 
 struct TUpdateFailPointResponse {

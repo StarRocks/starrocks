@@ -310,7 +310,9 @@ TEST(FailPointTest, pause_default_timeout_applies_when_unset) {
     threads.emplace_back([&] { (void)fp.shouldFail(); });
     ASSERT_TRUE(wait_for_parked(fp, 1));
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    // A short observation window is enough: with the 300s default armed, a broken fallback would
+    // resume the thread immediately. Kept small to match this file's no-long-fixed-sleeps convention.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     ASSERT_EQ(1, fp.to_pb().paused_thread_count());
 }
 
