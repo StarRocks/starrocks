@@ -16,7 +16,15 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUniqueId;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,7 +34,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.lang.reflect.Field;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -165,5 +175,61 @@ public class SlotManagerRequestWorkerTest {
                 .isTrue();
         assertThat(worker.isAlive()).isTrue();
         assertThat(thrown.get()).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testFailedSlotRequirementIsReportedToTheRequester(boolean enableQueryQueueV2) throws Exception {
+        Config.enable_query_queue_v2 = enableQueryQueueV2;
+        Set<Thread> preexisting = workerThreadsSnapshot();
+        ReplyCapturingSlotManager slotManager = new ReplyCapturingSlotManager(new ResourceUsageMonitor());
+
+        // Make the slot requirement fail after the frontend checks, standing in for a handler bug or
+        // an Error under heap pressure. Without a reply the requester waits out its pending timeout.
+        SlotTracker throwingTracker = new SlotTracker(slotManager, ImmutableList.of()) {
+            @Override
+            public boolean requireSlot(LogicalSlot slot) {
+                throw new IllegalStateException("injected failure while requiring a slot");
+            }
+        };
+        Field field = SlotManager.class.getDeclaredField("slotTracker");
+        field.setAccessible(true);
+        field.set(slotManager, throwingTracker);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getFeByName(String name) {
+                return new Frontend(FrontendNodeType.FOLLOWER, name, "127.0.0.1", 9010);
+            }
+        };
+
+        slotManager.start();
+        Thread worker = awaitNewWorker(preexisting);
+
+        long nowMs = System.currentTimeMillis();
+        LogicalSlot slot = new LogicalSlot(new TUniqueId(1, 1), "FE_NAME", 0L, 0L, 1,
+                nowMs + 60_000L, nowMs + 120_000L, nowMs, 1, 1);
+        slotManager.requireSlotAsync(slot);
+
+        TStatus reply = slotManager.replies.poll(5, TimeUnit.SECONDS);
+        assertThat(reply)
+                .as("a failed slot requirement must be reported to the requester")
+                .isNotNull();
+        assertThat(reply.getStatus_code()).isEqualTo(TStatusCode.INTERNAL_ERROR);
+        assertThat(slot.getState()).isEqualTo(LogicalSlot.State.CANCELLED);
+        assertThat(worker.isAlive()).isTrue();
+    }
+
+    private static class ReplyCapturingSlotManager extends SlotManager {
+        private final BlockingQueue<TStatus> replies = new LinkedBlockingQueue<>();
+
+        ReplyCapturingSlotManager(ResourceUsageMonitor resourceUsageMonitor) {
+            super(resourceUsageMonitor);
+        }
+
+        @Override
+        protected void finishSlotRequirementToEndpoint(LogicalSlot slot, TStatus status) {
+            replies.add(status);
+        }
     }
 }
