@@ -732,7 +732,6 @@ This topic introduces the following types of FE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: Target tablet size that Sample-Based Tablet Pre-Split sizes a load's split count against. `0` (the default) inherits `tablet_reshard_target_size`. Lower it to give a load more write parallelism without shrinking every tablet in the cluster: the background tablet split/merge daemon keeps measuring against `tablet_reshard_target_size`, so it merges the finer tablets back together after the load finishes. This matters most for a load that writes brand-new range-distributed partitions (for example the replacement partitions of an `INSERT OVERWRITE`), which start from a single catch-all tablet and would otherwise be written by a single backend.
-- Introduced in: v4.1.4
 
 #### Rolling back Sample-Based Tablet Pre-Split
 
