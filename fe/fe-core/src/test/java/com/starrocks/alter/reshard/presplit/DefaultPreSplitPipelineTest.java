@@ -231,13 +231,20 @@ public class DefaultPreSplitPipelineTest {
         Sampler dataTier = request -> {
             throw new AssertionError("data tier must not be invoked when meta tier returns NO_SPLIT");
         };
+        PreSplitProfile profile = new PreSplitProfile();
 
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
-            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
-                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+            try (PreSplitProfile.Scope ignored =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
 
             Assertions.assertTrue(prepared.isEmpty(), "NO_SPLIT must short-circuit to Optional.empty");
+            Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_META_TIER,
+                    profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                    "NO_SPLIT attempts must still identify the source tier that produced the result");
             mocked.verifyNoInteractions();
         }
     }

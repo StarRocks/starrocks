@@ -229,6 +229,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                     request.getSampleByteLimit(), request.getSeed());
             TierOutcome outcome = planBoundariesWithFallback(
                     indexRequest, requestedTabletCount, activeComputeNodeCount, deadline);
+            // Record every tier that actually ran, even when it concluded that the source has no
+            // useful cut. Otherwise a NO_SPLIT attempt reports an outcome but hides whether footer
+            // metadata or row sampling produced it.
+            PreSplitProfile.recordSourceTier(outcome.tier());
             if (outcome.result().isNoSplit()) {
                 continue;
             }
@@ -236,7 +240,6 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             if (oldTabletIdToRanges.isEmpty()) {
                 // first index that produced cuts -> record load-level tier/boundary metrics once
                 recordTierUsed(outcome.tier());
-                PreSplitProfile.recordSourceTier(outcome.tier());
                 recordBoundariesPlanned(outcome.result().getBoundaries().size());
             }
             oldTabletIdToRanges.put(indexTarget.oldTabletId(), buildTabletRanges(outcome.result().getBoundaries()));
@@ -344,12 +347,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     private TierOutcome runMetaTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
-        BoundaryPlannerResult result;
-        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
-                PreSplitProfile.Phase.SOURCE_SAMPLING)) {
-            // The metadata tier reads footer statistics and computes boundaries in one operation.
-            result = metaTierSampler.tryPlan(request, requestedTabletCount);
-        }
+        // The production metadata sampler instruments footer-statistics fetch and boundary
+        // planning separately. Keeping a scope around this combined interface would double-count
+        // the fetch and incorrectly attribute planning work to SourceSamplingTime.
+        BoundaryPlannerResult result = metaTierSampler.tryPlan(request, requestedTabletCount);
         checkDeadline(deadline);
         return new TierOutcome(result, TIER_LABEL_META_TIER);
     }

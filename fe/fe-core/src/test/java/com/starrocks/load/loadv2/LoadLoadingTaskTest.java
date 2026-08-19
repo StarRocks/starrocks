@@ -117,6 +117,19 @@ public class LoadLoadingTaskTest {
         profile = loadLoadingTask.buildFinishedTopLevelProfile();
         // Perform assertions to verify the behavior
         assertNotNull(profile, "Profile should not be null");
+
+        new Expectations() {
+            {
+                connectContext.getPreSplitProfile();
+                result = preSplitProfile;
+            }
+        };
+        LoadLoadingTask contextBackedTask = new LoadLoadingTask.Builder().setDb(database).setLoadStmt(stmt)
+                .setTable(olapTable).setContext(connectContext)
+                .setOriginStmt(new OriginStatementInfo("")).build();
+        RuntimeProfile contextBackedProfile = contextBackedTask.buildRunningTopLevelProfile();
+        assertNotNull(contextBackedProfile.getChild(PreSplitProfile.PROFILE_NAME),
+                "legacy/context-backed tasks must attach the same diagnostic node");
     }
 
     @Test
