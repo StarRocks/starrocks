@@ -1170,6 +1170,12 @@ public class ConnectProcessor {
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
 
             List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            // The proxy context is created per forwarded request, so isSingleStmt keeps its default
+            // (false) unless set here. StmtExecutor.buildTopLevelProfile and getAuditSql rebuild the
+            // SQL from the AST for non-single statements, so a forwarded single statement would show
+            // the rebuilt SQL (or an empty one for statements without a deparse visitor, e.g. CTAS)
+            // in the profile and audit log instead of the origin text.
+            ctx.setSingleStmt(stmts.size() == 1);
             StatementBase statement = stmts.get(idx);
             //Build View SQL without Policy Rewrite
             new AstTraverser<Void, Void>() {
