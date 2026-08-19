@@ -175,6 +175,20 @@ public class TriggerPolicyTest {
         Assertions.assertFalse(triggered.get());
     }
 
+    // A timed-out pause must DISARM the failpoint, not just let one thread through: otherwise every
+    // newly arriving thread parks for a fresh full timeout and the node never recovers.
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    public void testTimeoutDisarmsTheFailpoint() {
+        FailPoint.setTriggerPolicy("fp_selfheal", TriggerPolicy.pausePolicy(1));
+        Assertions.assertFalse(FailPoint.shouldTrigger("fp_selfheal"));
+        // The policy is gone, so a later arrival passes straight through instead of parking again.
+        long start = System.nanoTime();
+        Assertions.assertFalse(FailPoint.shouldTrigger("fp_selfheal"));
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        Assertions.assertTrue(elapsedMs < 500, "second arrival parked again after " + elapsedMs + "ms");
+    }
+
     @Test
     public void testFromThriftPreferPauseOverIsEnable() {
         // A pause request sets is_enable = false so an old FE disables; a new FE must still see PAUSE.

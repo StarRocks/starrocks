@@ -16,9 +16,6 @@
 
 #ifdef FIU_ENABLE
 
-#include <bthread/condition_variable.h>
-#include <bthread/mutex.h>
-
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -62,18 +59,27 @@ protected:
     // Bumped by setMode(). A pausing thread reads it together with the mode under _mu, so a
     // setMode() that races that read is observed as "already changed" instead of being waited for.
     std::atomic<uint64_t> _mode_generation = 0;
-    // bthread rather than std primitives: several failpoints sit directly in brpc handlers before
-    // any thread-pool handoff (lake_publish_version_rpc_fail at lake_service.cpp:263), so a pause
-    // there runs on a bthread. Blocking with std::condition_variable would pin the backing pthread,
-    // and enough parked handlers would exhaust the worker pool that has to serve the
-    // ADMIN DISABLE FAILPOINT RPC -- the pause could then only end at its timeout. bthread
-    // primitives yield the worker, and work from plain pthreads too.
+    // Deliberately std, NOT bthread, primitives -- this looks like the wrong choice for a failpoint
+    // that can sit in a brpc handler, so the reason matters:
+    //
+    // shouldFail() is reached through libfiu's external callback, from inside fiu_fail(). fiu_fail
+    // increments a __thread recursion counter and takes a pthread_rwlock read lock BEFORE invoking
+    // the callback, and releases both after it returns (libfiu/fiu.c:286,295,350). A bthread that
+    // parks here yields its worker and can resume on a DIFFERENT pthread, so the counter would be
+    // incremented on one worker and decremented on another -- leaving the first worker permanently
+    // above the recursion threshold, which silently disables EVERY failpoint on it for the life of
+    // the process -- and the rwlock would be unlocked by a thread that never took it (UB).
+    // Blocking the pthread keeps both balanced.
+    //
+    // The cost is that a paused failpoint pins its thread: park more brpc handlers than the worker
+    // pool has threads and ADMIN DISABLE FAILPOINT cannot be served until the pause times out. That
+    // is bounded and visible; the bthread alternative is silent and permanent.
     //
     // The wait also has its own mutex so shouldFail() can drop _mu before blocking: blocking while
     // holding _mu (even shared) would deadlock setMode(), and therefore the release RPC.
     // Lock order is always _mu -> _pause_mu.
-    bthread::Mutex _pause_mu;
-    bthread::ConditionVariable _pause_cv;
+    std::mutex _pause_mu;
+    std::condition_variable _pause_cv;
 
     std::atomic<int64_t> _trigger_count = 0;
     std::atomic<int64_t> _paused_thread_count = 0;

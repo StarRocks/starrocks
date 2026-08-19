@@ -105,35 +105,37 @@ bool FailPoint::wait_until_released(uint64_t gen, int32_t timeout_second) {
     if (timeout_second <= 0) {
         timeout_second = kDefaultPauseTimeoutSecond;
     }
-    std::unique_lock<bthread::Mutex> l(_pause_mu);
-    if (_mode_generation.load(std::memory_order_relaxed) != gen) {
-        // Released between dropping _mu and taking _pause_mu. This thread never parks, so it must
-        // not be counted as a fire and must not appear in the gauge.
-        return false;
-    }
-    _trigger_count.fetch_add(1, std::memory_order_relaxed);
-    _paused_thread_count.fetch_add(1, std::memory_order_relaxed);
-    DeferOp gauge([this] { _paused_thread_count.fetch_sub(1, std::memory_order_relaxed); });
-
-    LOG(INFO) << "failpoint " << _name << " paused, waiting for ADMIN DISABLE FAILPOINT";
-    // A condition variable rather than Awaitility's polling loop: a pause runs for
-    // failpoint_pause_timeout_second (300s by default), so polling would wake a bthread every
-    // interval for the whole window, and release should be immediate once DISABLE lands.
-    // steady_clock so a wall-clock adjustment cannot extend or truncate the wait.
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_second);
     bool timed_out = false;
-    while (_mode_generation.load(std::memory_order_relaxed) == gen) {
-        const auto now = std::chrono::steady_clock::now();
-        if (now >= deadline) {
-            timed_out = true;
-            break;
+    {
+        std::unique_lock<std::mutex> l(_pause_mu);
+        if (_mode_generation.load(std::memory_order_relaxed) != gen) {
+            // Released between dropping _mu and taking _pause_mu. This thread never parks, so it
+            // must not be counted as a fire and must not appear in the gauge.
+            return false;
         }
-        // bthread's wait_for takes microseconds and returns ETIMEDOUT; the loop re-checks the
-        // predicate, so a spurious wakeup or a timeout slice is handled the same way.
-        (void)_pause_cv.wait_for(l, std::chrono::duration_cast<std::chrono::microseconds>(deadline - now).count());
+        _trigger_count.fetch_add(1, std::memory_order_relaxed);
+        _paused_thread_count.fetch_add(1, std::memory_order_relaxed);
+        DeferOp gauge([this] { _paused_thread_count.fetch_sub(1, std::memory_order_relaxed); });
+
+        LOG(INFO) << "failpoint " << _name << " paused, waiting for ADMIN DISABLE FAILPOINT";
+        // A condition variable rather than Awaitility's polling loop: a pause runs for
+        // pause_timeout_second (300s by default), so polling would wake every interval for the whole
+        // window, and release should be immediate once DISABLE lands. wait_for is specified against
+        // a steady clock, so a wall-clock adjustment cannot extend or truncate it.
+        timed_out = !_pause_cv.wait_for(l, std::chrono::seconds(timeout_second), [this, gen] {
+            return _mode_generation.load(std::memory_order_relaxed) != gen;
+        });
     }
     if (timed_out) {
-        LOG(WARNING) << "failpoint " << _name << " pause timed out after " << timeout_second << "s, resuming";
+        // Disarm, do not merely resume: leaving the failpoint armed would park every NEWLY arriving
+        // thread for another full timeout, so a failpoint on a hot path (a publish RPC handler, say)
+        // would keep the node wedged indefinitely -- the opposite of the self-healing this timeout
+        // exists to provide. Done outside the _pause_mu scope because setMode takes _mu -> _pause_mu.
+        LOG(WARNING) << "failpoint " << _name << " pause timed out after " << timeout_second
+                     << "s, disarming it and resuming";
+        PFailPointTriggerMode disabled;
+        disabled.set_mode(FailPointTriggerModeType::DISABLE);
+        setMode(disabled);
     } else {
         LOG(INFO) << "failpoint " << _name << " pause released";
     }
@@ -166,7 +168,7 @@ void FailPoint::setMode(const PFailPointTriggerMode& p_trigger_mode) {
         // bump plus notify landing inside that window would be lost -- the waiter would then sleep
         // until its timeout. Taking _pause_mu here serialises against that window. _mu -> _pause_mu
         // is the only lock order used; the waiter never holds both.
-        std::lock_guard<bthread::Mutex> pl(_pause_mu);
+        std::lock_guard<std::mutex> pl(_pause_mu);
         _mode_generation.fetch_add(1, std::memory_order_relaxed);
     }
     _pause_cv.notify_all();

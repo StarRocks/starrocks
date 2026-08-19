@@ -381,4 +381,33 @@ TEST(FailPointTest, init_from_conf_pause_mode) {
     std::remove(conf_path.c_str());
 }
 
+// Every other pause test calls fp.shouldFail() directly, which bypasses libfiu entirely. In
+// production the only caller is libfiu's external callback, invoked from inside fiu_fail() while it
+// holds a __thread recursion counter and a pthread_rwlock read lock. This test drives the real macro
+// so that a pause which corrupts that per-thread state -- by yielding to another pthread, say -- is
+// caught here rather than silently disabling every failpoint on a worker in production.
+TEST(FailPointTest, pause_through_the_fiu_trigger_macro) {
+    DEFINE_FAIL_POINT(fp_pause_via_fiu);
+
+    auto test_func = [&]() {
+        FAIL_POINT_TRIGGER_RETURN(fp_pause_via_fiu, false);
+        return true;
+    };
+
+    ASSERT_TRUE(test_func());
+
+    fp_fp_pause_via_fiu.setMode(pause_mode(1));
+    // Parks inside fiu_fail(), then times out, disarms and resumes without injecting.
+    ASSERT_TRUE(test_func());
+
+    // fiu's recursion guard must still be balanced: a subsequent ENABLE has to fire on this same
+    // thread. If the pause left rec_count elevated, fiu_fail() would take its early return and this
+    // would wrongly report success.
+    fp_fp_pause_via_fiu.setMode(simple_mode(FailPointTriggerModeType::ENABLE));
+    ASSERT_FALSE(test_func());
+
+    fp_fp_pause_via_fiu.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
+    ASSERT_TRUE(test_func());
+}
+
 } // namespace starrocks

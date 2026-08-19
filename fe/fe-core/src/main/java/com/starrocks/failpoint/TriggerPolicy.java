@@ -124,19 +124,27 @@ public class TriggerPolicy {
     private boolean pauseUntilReleased(String name) {
         LOG.info("failpoint {} paused, waiting for ADMIN DISABLE FAILPOINT", name);
         pausedThreadCount.incrementAndGet();
+        boolean timedOut = false;
         try {
             // await() is nanoTime-based, so a wall-clock adjustment cannot extend or truncate the
             // wait, and its boolean return already distinguishes released from timed out.
-            if (releaseLatch.await(pauseTimeoutSecond, TimeUnit.SECONDS)) {
-                LOG.info("failpoint {} pause released", name);
-            } else {
-                LOG.warn("failpoint {} pause timed out after {}s, resuming", name, pauseTimeoutSecond);
-            }
+            timedOut = !releaseLatch.await(pauseTimeoutSecond, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LOG.warn("failpoint {} pause interrupted, resuming", name);
+            return false;
         } finally {
             pausedThreadCount.decrementAndGet();
+        }
+        if (timedOut) {
+            // Disarm, do not merely resume: leaving the policy armed would park every NEWLY arriving
+            // thread for another full timeout, so a failpoint on a hot path would keep the frontend
+            // wedged indefinitely -- the opposite of the self-healing this timeout exists to give.
+            LOG.warn("failpoint {} pause timed out after {}s, disarming it and resuming",
+                    name, pauseTimeoutSecond);
+            FailPoint.removeTriggerPolicy(name);
+        } else {
+            LOG.info("failpoint {} pause released", name);
         }
         return false;
     }
