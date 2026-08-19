@@ -2341,6 +2341,10 @@ struct TUpdateFailPointRequest {
     2: optional bool is_enable;
     3: optional i32 times;
     4: optional double probability;
+    // Pause mode: park threads reaching this failpoint until it is disabled. A pause request also
+    // sets is_enable = false, so a frontend that predates this field disables the failpoint instead
+    // of enabling it. Readers must check `pause` before `is_enable`.
+    5: optional bool pause;
 }
 
 struct TUpdateFailPointResponse {
