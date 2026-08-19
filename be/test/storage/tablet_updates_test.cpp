@@ -14,6 +14,7 @@
 
 #include "storage/tablet_updates_test.h"
 
+#include <algorithm>
 #include <random>
 
 #include "base/failpoint/fail_point.h"
@@ -23,11 +24,18 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "data_workflows/consistency/engine_checksum_task.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 #include "fs/fs_factory.h"
 #include "runtime/runtime_state.h"
 #include "script/script.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_common.h"
+#ifndef __APPLE__
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+#endif
 #include "storage/local_primary_key_recover.h"
 #include "storage/manual_compaction.h"
 #include "storage/primary_key_dump.h"
@@ -3525,6 +3533,289 @@ TEST_F(TabletUpdatesTest, load_snapshot_primary) {
     test_load_snapshot_primary(7, {3, 4, 5});
     test_load_snapshot_primary(7, {3, 5, 7});
 }
+
+#ifndef __APPLE__
+TEST_F(TabletUpdatesTest, load_snapshot_primary_with_gin_index) {
+    srand(GetCurrentTimeMicros());
+    auto src_tablet = create_tablet(rand(), rand(), false, 0, 0, false, true);
+    auto dest_tablet = create_tablet(rand(), rand(), false, 0, 0, false, true);
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(src_tablet->tablet_id());
+        (void)tablet_mgr->drop_tablet(dest_tablet->tablet_id());
+        (void)fs::remove_all(src_tablet->schema_hash_path());
+        (void)fs::remove_all(dest_tablet->schema_hash_path());
+    });
+
+    auto add_version = [&](TabletSharedPtr& tablet, int64_t version) {
+        std::vector<int64_t> keys = {version * 10 + 1, version * 10 + 2, version * 10 + 3};
+        auto rowset = create_rowset(tablet, keys);
+        ASSERT_TRUE(tablet->rowset_commit(version, rowset).ok());
+    };
+    add_version(src_tablet, 2);
+    add_version(dest_tablet, 2);
+    add_version(src_tablet, 3);
+    add_version(src_tablet, 4);
+    add_version(dest_tablet, 4);
+
+    std::vector<int64_t> missing_version_ranges;
+    ASSERT_TRUE(dest_tablet->updates()->get_missing_version_ranges(missing_version_ranges).ok());
+    ASSERT_EQ(std::vector<int64_t>({3, 3, 5}), missing_version_ranges);
+
+    auto snapshot_path = SnapshotManager::instance()->snapshot_primary(src_tablet, missing_version_ranges, 3600);
+    ASSERT_TRUE(snapshot_path.ok()) << snapshot_path.status();
+    DeferOp snapshot_defer([&]() { (void)fs::remove_all(*snapshot_path); });
+    const std::string snapshot_dir = SnapshotManager::instance()->get_schema_hash_full_path(src_tablet, *snapshot_path);
+
+    std::set<std::string> snapshot_dirs;
+    std::set<std::string> snapshot_files;
+    ASSERT_OK(fs::list_dirs_files(snapshot_dir, &snapshot_dirs, &snapshot_files));
+    ASSERT_TRUE(snapshot_dirs.empty());
+    ASSERT_TRUE(std::any_of(snapshot_files.begin(), snapshot_files.end(),
+                            [](const std::string& file) { return file.find("_0_1_") != std::string::npos; }));
+
+    ASSERT_OK(SnapshotManager::instance()->convert_rowset_ids(snapshot_dir, src_tablet->tablet_id(),
+                                                              src_tablet->schema_hash()));
+    snapshot_dirs.clear();
+    snapshot_files.clear();
+    ASSERT_OK(fs::list_dirs_files(snapshot_dir, &snapshot_dirs, &snapshot_files));
+    ASSERT_TRUE(std::any_of(snapshot_dirs.begin(), snapshot_dirs.end(),
+                            [](const std::string& dir) { return dir.ends_with(".ivt"); }));
+
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(snapshot_dir + "/meta");
+    ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
+    snapshot_meta->tablet_meta().set_tablet_id(dest_tablet->tablet_id());
+    snapshot_meta->tablet_meta().set_schema_hash(dest_tablet->schema_hash());
+    for (auto& rowset_meta : snapshot_meta->rowset_metas()) {
+        rowset_meta.set_tablet_id(dest_tablet->tablet_id());
+        rowset_meta.set_tablet_schema_hash(dest_tablet->schema_hash());
+    }
+    ASSERT_OK(snapshot_meta->serialize_to_file(snapshot_dir + "/meta"));
+
+    std::set<std::string> dest_dirs_before;
+    ASSERT_OK(fs::list_dirs_files(dest_tablet->schema_hash_path(), &dest_dirs_before, nullptr));
+
+    TCloneReq clone_req;
+    clone_req.tablet_id = dest_tablet->tablet_id();
+    clone_req.schema_hash = dest_tablet->schema_hash();
+    std::vector<std::string> error_msgs;
+    std::vector<TTabletInfo> tablet_infos;
+    Status clone_status;
+    EngineCloneTask clone_task(_compaction_mem_tracker.get(), clone_req, 0, &error_msgs, &tablet_infos, &clone_status);
+    ASSERT_OK(clone_task._finish_clone_primary(dest_tablet.get(), snapshot_dir));
+    ASSERT_EQ(4, dest_tablet->updates()->max_version());
+
+    std::set<std::string> dest_dirs_after;
+    std::set<std::string> dest_files_after;
+    ASSERT_OK(fs::list_dirs_files(dest_tablet->schema_hash_path(), &dest_dirs_after, &dest_files_after));
+    ASSERT_GT(dest_dirs_after.size(), dest_dirs_before.size());
+    ASSERT_TRUE(std::none_of(dest_files_after.begin(), dest_files_after.end(),
+                             [](const std::string& file) { return CLucenePlugin::is_index_files(file); }));
+    for (const auto& dir : dest_dirs_after) {
+        if (!dir.ends_with(".ivt")) {
+            continue;
+        }
+        std::set<std::string> index_files;
+        ASSERT_OK(fs::list_dirs_files(dest_tablet->schema_hash_path() + "/" + dir, nullptr, &index_files));
+        ASSERT_FALSE(index_files.empty());
+    }
+}
+
+TEST_F(TabletUpdatesTest, restore_primary_snapshot_with_gin_index) {
+    srand(GetCurrentTimeMicros());
+    auto src_tablet = create_tablet(rand(), rand(), false, 0, 0, false, true);
+    auto dest_tablet = create_tablet(rand(), src_tablet->schema_hash(), false, 0, 0, false, true);
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(src_tablet->tablet_id());
+        (void)tablet_mgr->drop_tablet(dest_tablet->tablet_id());
+        (void)fs::remove_all(src_tablet->schema_hash_path());
+        (void)fs::remove_all(dest_tablet->schema_hash_path());
+    });
+
+    auto add_version = [&](TabletSharedPtr& tablet, int64_t version) {
+        std::vector<int64_t> keys = {version * 10 + 1, version * 10 + 2, version * 10 + 3};
+        ASSERT_OK(tablet->rowset_commit(version, create_rowset(tablet, keys)));
+    };
+    add_version(src_tablet, 2);
+    add_version(src_tablet, 3);
+    add_version(src_tablet, 4);
+    add_version(dest_tablet, 2);
+
+    auto snapshot_path = SnapshotManager::instance()->snapshot_full(src_tablet, 4, 3600);
+    ASSERT_OK(snapshot_path.status());
+    DeferOp snapshot_defer([&]() { (void)fs::remove_all(*snapshot_path); });
+    const std::string source_snapshot_dir =
+            SnapshotManager::instance()->get_schema_hash_full_path(src_tablet, *snapshot_path);
+
+    const std::string restore_root =
+            fmt::format("{}/restore_snapshot_{}", dest_tablet->data_dir()->path(), dest_tablet->tablet_id());
+    const std::string restore_parent = fmt::format("{}/{}", restore_root, dest_tablet->tablet_id());
+    const std::string restore_dir = fmt::format("{}/{}", restore_parent, dest_tablet->schema_hash());
+    ASSERT_OK(fs::create_directories(restore_parent));
+    DeferOp restore_defer([&]() { (void)fs::remove_all(restore_root); });
+    std::error_code copy_error;
+    std::filesystem::copy(source_snapshot_dir, restore_dir,
+                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing,
+                          copy_error);
+    ASSERT_FALSE(copy_error) << copy_error.message();
+
+    std::set<std::string> restore_dirs;
+    std::set<std::string> restore_files;
+    ASSERT_OK(fs::list_dirs_files(restore_dir, &restore_dirs, &restore_files));
+    ASSERT_TRUE(restore_dirs.empty());
+    ASSERT_TRUE(std::any_of(restore_files.begin(), restore_files.end(),
+                            [](const std::string& file) { return CLucenePlugin::is_index_files(file); }));
+
+    SnapshotLoader loader(nullptr, 1, 2);
+    ASSERT_OK(loader.primary_key_move(restore_dir, dest_tablet, true));
+    ASSERT_EQ(4, dest_tablet->updates()->max_version());
+    ASSERT_FALSE(fs::path_exist(restore_dir));
+
+    std::set<std::string> tablet_dirs;
+    std::set<std::string> tablet_files;
+    ASSERT_OK(fs::list_dirs_files(dest_tablet->schema_hash_path(), &tablet_dirs, &tablet_files));
+    ASSERT_TRUE(std::none_of(tablet_files.begin(), tablet_files.end(),
+                             [](const std::string& file) { return CLucenePlugin::is_index_files(file); }));
+
+    size_t index_directory_count = 0;
+    for (const auto& directory : tablet_dirs) {
+        if (!directory.ends_with(".ivt")) {
+            continue;
+        }
+        std::set<std::string> index_files;
+        ASSERT_OK(fs::list_dirs_files(dest_tablet->schema_hash_path() + "/" + directory, nullptr, &index_files));
+        ASSERT_FALSE(index_files.empty()) << directory;
+        ++index_directory_count;
+    }
+    ASSERT_GT(index_directory_count, 0);
+}
+
+TEST_F(TabletUpdatesTest, link_primary_snapshot_gin_indexes_is_idempotent) {
+    srand(GetCurrentTimeMicros());
+    auto tablet = create_tablet(rand(), rand(), false, 0, 0, false, true);
+    DeferOp tablet_defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)fs::remove_all(tablet->schema_hash_path());
+    });
+
+    std::vector<int64_t> keys = {21, 22, 23};
+    ASSERT_OK(tablet->rowset_commit(2, create_rowset(tablet, keys)));
+
+    auto snapshot_path = SnapshotManager::instance()->snapshot_full(tablet, 2, 3600);
+    ASSERT_OK(snapshot_path.status());
+    DeferOp snapshot_defer([&]() { (void)fs::remove_all(*snapshot_path); });
+    const std::string snapshot_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet, *snapshot_path);
+
+    ASSERT_OK(
+            SnapshotManager::instance()->convert_rowset_ids(snapshot_dir, tablet->tablet_id(), tablet->schema_hash()));
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(snapshot_dir + "/meta");
+    ASSERT_OK(snapshot_meta.status());
+    ASSERT_OK(
+            SnapshotManager::instance()->assign_new_rowset_id(&*snapshot_meta, snapshot_dir, tablet->tablet_schema()));
+
+    const auto snapshot_rowset =
+            std::find_if(snapshot_meta->rowset_metas().begin(), snapshot_meta->rowset_metas().end(),
+                         [](const auto& rowset_meta) { return rowset_meta.num_segments() > 0; });
+    ASSERT_NE(snapshot_meta->rowset_metas().end(), snapshot_rowset);
+    const std::string source_index_dir =
+            IndexDescriptor::inverted_index_file_path(snapshot_dir, snapshot_rowset->rowset_id(), 0, 1);
+    const std::string destination_index_dir =
+            IndexDescriptor::inverted_index_file_path(tablet->schema_hash_path(), snapshot_rowset->rowset_id(), 0, 1);
+    ASSERT_TRUE(fs::path_exist(source_index_dir));
+
+    std::set<std::string> linked_index_dirs;
+    DeferOp linked_index_defer([&]() {
+        for (const auto& index_dir : linked_index_dirs) {
+            (void)fs::remove_all(index_dir);
+        }
+    });
+    ASSERT_OK(SnapshotManager::instance()->link_inverted_index_directories(
+            *snapshot_meta, tablet->tablet_schema(), snapshot_dir, tablet->schema_hash_path(), &linked_index_dirs));
+    ASSERT_FALSE(linked_index_dirs.empty());
+    ASSERT_TRUE(linked_index_dirs.contains(destination_index_dir));
+
+    const auto& existing_index_dir = destination_index_dir;
+    std::set<std::string> existing_index_files;
+    ASSERT_OK(fs::list_dirs_files(existing_index_dir, nullptr, &existing_index_files));
+    ASSERT_FALSE(existing_index_files.empty());
+    const std::string index_file_name = *existing_index_files.begin();
+    const std::string source_index_file = source_index_dir + "/" + index_file_name;
+    const std::string missing_index_file = existing_index_dir + "/" + index_file_name;
+    ASSERT_TRUE(fs::path_exist(source_index_file));
+    ASSERT_OK(FileSystem::Default()->delete_file(missing_index_file));
+    ASSERT_TRUE(fs::path_exist(source_index_file));
+
+    std::set<std::string> retried_index_dirs;
+    ASSERT_OK(SnapshotManager::instance()->link_inverted_index_directories(
+            *snapshot_meta, tablet->tablet_schema(), snapshot_dir, tablet->schema_hash_path(), &retried_index_dirs));
+    ASSERT_TRUE(retried_index_dirs.empty());
+    ASSERT_TRUE(fs::path_exist(missing_index_file));
+    ASSERT_TRUE(fs::path_exist(source_index_file));
+
+    const std::string unexpected_file = existing_index_dir + "/unexpected";
+    ASSERT_OK(FileSystem::Default()->link_file(missing_index_file, unexpected_file));
+
+    std::set<std::string> mismatched_index_dirs;
+    auto st = SnapshotManager::instance()->link_inverted_index_directories(
+            *snapshot_meta, tablet->tablet_schema(), snapshot_dir, tablet->schema_hash_path(), &mismatched_index_dirs);
+    ASSERT_TRUE(st.is_corruption()) << st;
+    ASSERT_TRUE(fs::path_exist(existing_index_dir));
+    ASSERT_TRUE(fs::path_exist(unexpected_file));
+    ASSERT_TRUE(fs::path_exist(source_index_dir));
+    ASSERT_TRUE(mismatched_index_dirs.empty());
+}
+
+TEST_F(TabletUpdatesTest, link_builtin_gin_index_skips_standalone_directory) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+
+    auto* key = schema_pb.add_column();
+    key->set_unique_id(1);
+    key->set_name("k1");
+    key->set_type("INT");
+    key->set_is_key(true);
+    key->set_length(4);
+
+    auto* value = schema_pb.add_column();
+    value->set_unique_id(2);
+    value->set_name("v1");
+    value->set_type("VARCHAR");
+    value->set_length(64);
+
+    auto* index = schema_pb.add_table_indices();
+    index->set_index_id(100);
+    index->set_index_name("gin_v1");
+    index->set_index_type(GIN);
+    index->add_col_unique_id(2);
+    index->set_index_properties(R"({"common_properties":{")" + INVERTED_IMP_KEY + R"(":"builtin"}})");
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+
+    const auto root = fmt::format("{}/builtin_gin_link_test", config::storage_root_path);
+    const auto snapshot_dir = root + "/snapshot";
+    const auto tablet_dir = root + "/tablet";
+    ASSERT_OK(fs::create_directories(snapshot_dir));
+    ASSERT_OK(fs::create_directories(tablet_dir));
+    DeferOp defer([&]() { (void)fs::remove_all(root); });
+
+    SnapshotMeta snapshot_meta;
+    auto& rowset_meta = snapshot_meta.rowset_metas().emplace_back();
+    rowset_meta.set_rowset_id(StorageEngine::instance()->next_rowset_id().to_string());
+    rowset_meta.set_num_segments(1);
+
+    std::set<std::string> created_index_dirs;
+    ASSERT_OK(SnapshotManager::instance()->link_inverted_index_directories(snapshot_meta, schema, snapshot_dir,
+                                                                           tablet_dir, &created_index_dirs));
+    ASSERT_TRUE(created_index_dirs.empty());
+    std::set<std::string> destination_dirs;
+    std::set<std::string> destination_files;
+    ASSERT_OK(fs::list_dirs_files(tablet_dir, &destination_dirs, &destination_files));
+    ASSERT_TRUE(destination_dirs.empty());
+    ASSERT_TRUE(destination_files.empty());
+}
+#endif
 
 TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     _tablet = create_tablet(rand(), rand());
