@@ -37,10 +37,15 @@ permissions:
   contents: read
   pull-requests: write
 
-# Group by event + object so resolve (keyed by sync PR number) and clear (keyed by fix PR)
-# do not cancel each other under a shared cancel-in-progress group.
+# Group by event + object + label so resolve (keyed by sync PR number) and clear (keyed by fix PR)
+# do not cancel each other. The label.name is essential: a sync PR is created with ALL its labels
+# (sync/conflict/sr/branch-*/SHA:) applied within the same second, firing one labeled event each.
+# Without label.name in the key they share one cancel-in-progress group, so a sibling label event
+# (sr/sync/SHA) cancels the `conflict` run mid-flight and the fast path silently misses the PR.
+# Keying by label.name gives the conflict event its own group; siblings no longer cancel it.
+# (closed / workflow_dispatch have an empty label.name — still unique per PR/event.)
 concurrency:
-  group: sync-ai-conflict-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+  group: sync-ai-conflict-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}-${{ github.event.label.name }}
   cancel-in-progress: true
 
 env:
