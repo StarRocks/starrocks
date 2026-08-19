@@ -380,7 +380,8 @@ public:
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
-                                  int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false) {
+                                  int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false,
+                                  bool add_gin_index = false) {
         srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -427,8 +428,22 @@ public:
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
-        k3.column_type.type = TPrimitiveType::INT;
+        k3.column_type.type = add_gin_index ? TPrimitiveType::VARCHAR : TPrimitiveType::INT;
+        if (add_gin_index) {
+            k3.column_type.len = 65535;
+        }
         request.tablet_schema.columns.emplace_back(k3);
+
+        if (add_gin_index) {
+            request.tablet_schema.__isset.indexes = true;
+            request.tablet_schema.indexes.emplace_back();
+            auto& gin_index = request.tablet_schema.indexes.back();
+            gin_index.__set_index_id(1);
+            gin_index.__set_index_name("v2_gin");
+            gin_index.__set_index_type(TIndexType::GIN);
+            gin_index.__set_columns({"v2"});
+            gin_index.__set_common_properties({{"imp_lib", "clucene"}});
+        }
 
         if (add_v3) {
             TColumn k4;

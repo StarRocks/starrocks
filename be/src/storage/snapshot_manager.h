@@ -69,6 +69,19 @@ public:
 
     Status convert_rowset_ids(const string& clone_dir, int64_t tablet_id, int32_t schema_hash);
 
+    Status restore_inverted_index_directories(const std::string& snapshot_dir);
+
+    // Existing standalone GIN index directories are verified and completed in place. Only directories created by
+    // this call are returned in |created_index_dirs|. Files added to a pre-existing directory are retained after
+    // return so callers never remove paths from a destination they do not own during rollback.
+    Status link_inverted_index_directories(const SnapshotMeta& snapshot_meta, const TabletSchemaCSPtr& tablet_schema,
+                                           const std::string& snapshot_dir, const std::string& tablet_dir,
+                                           std::set<std::string>* created_index_dirs);
+
+    Status link_inverted_index_directories(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                                           const TabletSchemaCSPtr& tablet_schema, const std::string& snapshot_dir,
+                                           const std::string& tablet_dir, std::set<std::string>* created_index_dirs);
+
     // Create a file named `meta` under the directory |snapshot_dir|. See the
     // comment in snapshot_manager.cpp for the details of the file format.
     // Any existing file with the name `meta` will be deleted, and a new file

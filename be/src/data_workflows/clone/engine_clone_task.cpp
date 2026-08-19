@@ -701,6 +701,20 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
     tablet->obtain_header_wrlock();
     DeferOp header_wrlock_release_guard([&tablet]() { tablet->release_header_lock(); });
 
+    std::set<std::string> linked_index_dirs;
+    auto cleanup_unpublished_files = CancelableDefer([&]() {
+        for (const auto& linked_file : linked_success_files) {
+            auto st = FileSystem::Default()->delete_file(linked_file);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Fail to remove tablet file " << linked_file << ": " << st;
+        }
+        for (const auto& index_dir : linked_index_dirs) {
+            auto st = fs::remove_all(index_dir);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Fail to remove tablet index directory " << index_dir << ": " << st;
+        }
+    });
+
     do {
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());
@@ -771,15 +785,29 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         }
         LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
 
+        const auto& rowset_metas =
+                incremental_clone ? cloned_tablet_meta.all_inc_rs_metas() : cloned_tablet_meta.all_rs_metas();
+        res = SnapshotManager::instance()->link_inverted_index_directories(rowset_metas, tablet->tablet_schema(),
+                                                                           clone_dir, tablet_dir, &linked_index_dirs);
+        if (!res.ok()) {
+            break;
+        }
+        LOG(INFO) << "Linked " << linked_index_dirs.size() << " inverted index directories from " << clone_dir << " to "
+                  << tablet_dir;
+
         std::vector<RowsetMetaSharedPtr> rs_to_clone;
         if (incremental_clone) {
             res = _clone_incremental_data(tablet, cloned_tablet_meta, committed_version);
         } else {
             res = _clone_full_data(tablet, const_cast<TabletMeta*>(&cloned_tablet_meta), rs_to_clone);
         }
+        if (!res.ok()) {
+            break;
+        }
+        cleanup_unpublished_files.cancel();
 
         // if full clone success, need to update cumulative layer point
-        if (!incremental_clone && res.ok()) {
+        if (!incremental_clone) {
             tablet->set_cumulative_layer_point(-1);
         }
 
@@ -820,11 +848,6 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
             }
         }
     } while (false);
-
-    // clear linked files if errors happen
-    if (!res.ok()) {
-        (void)fs::remove(linked_success_files);
-    }
 
     return res;
 }
@@ -1000,25 +1023,47 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
 
     auto fs = FileSystem::Default();
     std::set<std::string> tablet_files;
+    std::set<std::string> tablet_index_dirs;
+    auto cleanup_linked_snapshot = [&]() {
+        for (const auto& filename : tablet_files) {
+            auto st = fs->delete_file(filename);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to remove tablet file " << filename << ": " << st;
+        }
+        for (const auto& index_dir : tablet_index_dirs) {
+            auto st = fs::remove_all(index_dir);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Fail to remove tablet index directory " << index_dir << ": " << st;
+        }
+    };
+
     for (const std::string& filename : clone_files) {
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
+        auto st = fs->link_file(from, to);
+        if (!st.ok()) {
+            cleanup_linked_snapshot();
+            return st;
+        }
         tablet_files.insert(to);
-        RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
+
+    auto link_index_st = SnapshotManager::instance()->link_inverted_index_directories(
+            snapshot_meta, tablet->tablet_schema(), clone_dir, tablet_dir, &tablet_index_dirs);
+    if (!link_index_st.ok()) {
+        cleanup_linked_snapshot();
+        return link_index_st;
+    }
+    LOG(INFO) << "Linked " << tablet_index_dirs.size() << " inverted index directories from " << clone_dir << " to "
+              << tablet_dir;
+
     bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
     Status st = tablet->updates()->load_snapshot(snapshot_meta, false, false, need_rebuild_pk_index,
                                                  config::pindex_rebuild_clone_wait_seconds);
     if (!st.ok()) {
-        Status clear_st;
-        for (const std::string& filename : tablet_files) {
-            clear_st = fs::delete_file(filename);
-            if (!clear_st.ok()) {
-                LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
-            }
-        }
+        cleanup_linked_snapshot();
+        return st;
     }
 
     int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
