@@ -345,6 +345,16 @@ public class QueryOptimizer extends Optimizer {
                 !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
+        // A materialized view holds the base table's state as of its last refresh, so it cannot answer a read
+        // pinned to an explicit snapshot, tag or branch: the targeted snapshot is not the one materialized, and
+        // for a non-main branch the MV is not even considered stale because the table's current snapshot never
+        // moved. Mirror the definition side, which rejects time-travel clauses outright
+        // (see AnalyzerUtils#prohibitTimeTravelQuery), and skip the rewrite until snapshot-aware MVs exist.
+        if (MvUtils.containsTimeTravelScan(logicOperatorTree)) {
+            OptimizerTraceUtil.logMVPrepare(connectContext,
+                    "Skip mv rewrite because the query reads a table at an explicit time-travel version");
+            return;
+        }
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
                 .prepare(logicOperatorTree);
