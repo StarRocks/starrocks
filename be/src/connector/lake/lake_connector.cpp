@@ -625,6 +625,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     // becomes segment_read_options.ranges -- the prepared-split rowid cache is sized from that, and
     // its `size() == _opts.ranges.size()` reuse guard would mismatch if we pruned afterwards.
     // With enable_tablet_scan_key_prune off no constraint is attached and the call below is untouched.
+    // RANGE distribution needs no payload; the flag lets SegmentIterator compare each scan key against
+    // the versioned tablet range it already holds.
+    _params.prune_scan_keys_by_tablet_range = wants_tablet_range_scan_key_prune(_scan_range);
     TabletHashBucketConstraint bucket_constraint;
     if (to_hash_bucket_constraint(_scan_range, &bucket_constraint)) {
         auto prune_result = TabletScanKeyPruner::prune_hash(bucket_constraint, *_tablet_schema, _scanner_ranges);
@@ -1336,6 +1339,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, segment_init_name);
+    _scan_keys_pruned_by_tablet_range_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "ScanKeysPrunedByTabletRange", TUnit::UNIT, segment_init_name);
     _rows_after_sk_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _rows_key_range_counter =
@@ -1566,6 +1571,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
+    COUNTER_UPDATE(_scan_keys_pruned_by_tablet_range_counter, _reader->stats().scan_keys_pruned_by_tablet_range);
     COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
     COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 

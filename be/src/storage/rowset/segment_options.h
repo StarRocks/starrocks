@@ -153,6 +153,7 @@ public:
     // such a predicate into the ANN candidate, so a segment-level k-limit would under-return; the
     // vector filter resolver routes these queries to exact brute-force instead. See design doc §7.
     bool has_predicate_above_iterator = false;
+    bool prune_scan_keys_by_tablet_range = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

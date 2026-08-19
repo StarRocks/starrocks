@@ -78,6 +78,7 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
+#include "storage/tablet_scan_key_pruner.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "storage/virtual_column_utils.h"
@@ -2470,8 +2471,28 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
         return res;
     }
 
+    // Tablet-local scan key pruning for a range-distributed tablet. Skipping a range that cannot
+    // intersect the tablet's own range only avoids the short-key lookup: _apply_tablet_range() would
+    // remove those rows anyway, so the resulting _scan_range is unchanged. Off unless FE sent a RANGE
+    // constraint, and inapplicable when the tablet withholds its range (a primary-key tablet with a
+    // separate sort key, see _apply_tablet_range).
+    const bool prune_by_tablet_range = _opts.prune_scan_keys_by_tablet_range && _opts.tablet_range.has_value() &&
+                                       !_opts.tablet_range.value().all_range();
+    // Arity to pad both bounds to. Taken from the tablet schema, NOT from
+    // Segment::num_sort_key_columns(): that one reads the full sort key index decoder, which is only
+    // published after ensure_full_sort_key_index_usable() and is otherwise null (guarded by a DCHECK
+    // that compiles away in release). Both the query ranges and the tablet range were decoded against
+    // this schema, so its sort-key arity is what their positions mean.
+    const auto& sort_key_idxes = _segment->tablet_schema().sort_key_idxes();
+    const size_t num_sort_key_columns =
+            sort_key_idxes.empty() ? _segment->tablet_schema().num_key_columns() : sort_key_idxes.size();
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const SeekRange& range : _opts.ranges) {
+        if (prune_by_tablet_range &&
+            seek_range_disjoint_from_tablet_range(range, _opts.tablet_range.value(), num_sort_key_columns)) {
+            ++_opts.stats->scan_keys_pruned_by_tablet_range;
+            continue;
+        }
         ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range));
         if (rowid_range_opt.has_value()) {
             res.add(rowid_range_opt.value());

@@ -17,10 +17,106 @@
 #include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/datum_convert.h"
+#include "storage/base/short_key_index.h"
 #include "storage/types.h"
 #include "types/datum.h"
 
 namespace starrocks {
+
+namespace {
+
+// Encodes one bound into the segment's sort-key space. `as_lower` picks the padding that makes a
+// prefix bound mean what it should: KEY_MINIMAL_MARKER sorts a prefix before all its extensions
+// (correct for a lower bound), KEY_MAXIMAL_MARKER after them (correct for an upper bound).
+std::string encode_bound(const SeekTuple& tuple, size_t num_sort_key_columns, bool as_lower) {
+    return tuple.full_sort_key_encode(num_sort_key_columns, as_lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+}
+
+// Lowest key the range admits, plus whether that key itself is excluded.
+// An exclusive lower bound on a prefix excludes every extension of it, so the boundary is the prefix's
+// LAST key, not its first.
+bool range_low(const SeekRange& range, size_t num_cols, std::string* out, bool* exclusive) {
+    if (range.lower().empty()) {
+        return false; // unbounded below: nothing to compare against
+    }
+    *exclusive = !range.inclusive_lower();
+    *out = encode_bound(range.lower(), num_cols, /*as_lower=*/range.inclusive_lower());
+    return true;
+}
+
+// Highest key the range admits. Symmetrically, an exclusive upper bound on a prefix excludes every
+// extension, so the boundary is the prefix's FIRST key.
+bool range_high(const SeekRange& range, size_t num_cols, std::string* out, bool* exclusive) {
+    if (range.upper().empty()) {
+        return false; // unbounded above
+    }
+    *exclusive = !range.inclusive_upper();
+    *out = encode_bound(range.upper(), num_cols, /*as_lower=*/!range.inclusive_upper());
+    return true;
+}
+
+// a's top vs b's bottom: disjoint when a ends before b starts.
+bool ends_before(const SeekRange& a, const SeekRange& b, size_t num_cols) {
+    std::string a_hi;
+    std::string b_lo;
+    bool a_hi_excl = false;
+    bool b_lo_excl = false;
+    if (!range_high(a, num_cols, &a_hi, &a_hi_excl) || !range_low(b, num_cols, &b_lo, &b_lo_excl)) {
+        return false;
+    }
+    int c = a_hi.compare(b_lo);
+    if (c < 0) {
+        return true;
+    }
+    // Touching at exactly one key: disjoint only if at least one side excludes it.
+    return c == 0 && (a_hi_excl || b_lo_excl);
+}
+
+} // namespace
+
+namespace {
+
+// The encoded bytes are only comparable when both tuples encode the same logical types at the same
+// positions, mirroring full_sort_key_types_compatible() in segment_iterator.cpp. A drifted sort-key
+// type (an old rowset read under its archived schema) must fall back rather than compare bytes that
+// mean different things.
+bool bound_types_comparable(const SeekTuple& a, const SeekTuple& b) {
+    size_t n = std::min(a.columns(), b.columns());
+    if (n > a.schema().num_fields() || n > b.schema().num_fields()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (a.schema().field(i)->type()->type() != b.schema().field(i)->type()->type()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool range_types_comparable(const SeekRange& a, const SeekRange& b) {
+    for (const SeekTuple* x : {&a.lower(), &a.upper()}) {
+        for (const SeekTuple* y : {&b.lower(), &b.upper()}) {
+            if (!x->empty() && !y->empty() && !bound_types_comparable(*x, *y)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+bool seek_range_disjoint_from_tablet_range(const SeekRange& query, const SeekRange& tablet_range,
+                                           size_t num_sort_key_columns) {
+    if (num_sort_key_columns == 0 || query.all_range() || tablet_range.all_range()) {
+        return false;
+    }
+    if (!range_types_comparable(query, tablet_range)) {
+        return false;
+    }
+    return ends_before(query, tablet_range, num_sort_key_columns) ||
+           ends_before(tablet_range, query, num_sort_key_columns);
+}
 
 bool TabletScanKeyPruner::is_routable_type(LogicalType type) {
     switch (type) {

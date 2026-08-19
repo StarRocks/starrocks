@@ -21,9 +21,13 @@
 #include <vector>
 
 #include "column/binary_column.h"
+#include "column/field.h"
+#include "column/schema.h"
 #include "column/fixed_length_column.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -335,6 +339,135 @@ TEST(TabletScanKeyPrunerTest, OwningOverloadMatchesBorrowingOverload) {
     EXPECT_EQ(from_borrowing.pruned, from_owning.pruned);
     EXPECT_EQ(from_borrowing.exact_empty, from_owning.exact_empty);
     EXPECT_EQ(from_borrowing.fallback, from_owning.fallback);
+}
+
+// ---------------------------------------------------------------------------------------------
+// RANGE distribution: a scan key is dropped only when it provably cannot intersect the tablet range.
+// A wrong "disjoint" verdict silently loses rows, so every case below pins the direction of the error.
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+Schema int_schema(int num_cols) {
+    Schema s;
+    for (int i = 0; i < num_cols; i++) {
+        auto f = std::make_shared<Field>(static_cast<ColumnId>(i), "k" + std::to_string(i),
+                                         get_type_info(TYPE_INT), false);
+        f->set_is_key(true);
+        s.append(f);
+    }
+    return s;
+}
+
+SeekTuple int_tuple(const std::vector<int32_t>& vals, int num_cols) {
+    std::vector<Datum> ds;
+    ds.reserve(vals.size());
+    for (int32_t v : vals) {
+        ds.emplace_back(v);
+    }
+    return SeekTuple(int_schema(num_cols), std::move(ds));
+}
+
+// Builds [lo, hi] over `num_cols` columns; an empty vector means unbounded on that side.
+SeekRange int_range(const std::vector<int32_t>& lo, bool inc_lo, const std::vector<int32_t>& hi, bool inc_hi,
+                    int num_cols) {
+    SeekRange r(lo.empty() ? SeekTuple() : int_tuple(lo, num_cols),
+                hi.empty() ? SeekTuple() : int_tuple(hi, num_cols));
+    r.set_inclusive_lower(inc_lo);
+    r.set_inclusive_upper(inc_hi);
+    return r;
+}
+
+bool disjoint(const SeekRange& q, const SeekRange& t, int num_cols) {
+    return seek_range_disjoint_from_tablet_range(q, t, static_cast<size_t>(num_cols));
+}
+
+} // namespace
+
+TEST(TabletScanKeyPrunerTest, RangeDisjointSingleColumn) {
+    // tablet owns [100, 200)
+    auto tablet = int_range({100}, true, {200}, false, 1);
+
+    // Point keys below, inside and above.
+    EXPECT_TRUE(disjoint(int_range({42}, true, {42}, true, 1), tablet, 1));
+    EXPECT_FALSE(disjoint(int_range({150}, true, {150}, true, 1), tablet, 1));
+    EXPECT_TRUE(disjoint(int_range({260}, true, {260}, true, 1), tablet, 1));
+
+    // Exactly on the closed lower bound: overlaps.
+    EXPECT_FALSE(disjoint(int_range({100}, true, {100}, true, 1), tablet, 1));
+    // Exactly on the open upper bound: the tablet excludes it.
+    EXPECT_TRUE(disjoint(int_range({200}, true, {200}, true, 1), tablet, 1));
+
+    // Overlapping spans stay.
+    EXPECT_FALSE(disjoint(int_range({50}, true, {120}, true, 1), tablet, 1));
+    EXPECT_FALSE(disjoint(int_range({180}, true, {900}, true, 1), tablet, 1));
+    EXPECT_FALSE(disjoint(int_range({0}, true, {999}, true, 1), tablet, 1));
+}
+
+TEST(TabletScanKeyPrunerTest, RangeUnboundedSidesNeverProveDisjoint) {
+    auto tablet = int_range({100}, true, {200}, false, 1);
+    EXPECT_TRUE(disjoint(int_range({}, false, {50}, true, 1), tablet, 1));   // upper 50 < tablet lower 100
+    EXPECT_FALSE(disjoint(int_range({}, false, {150}, true, 1), tablet, 1)); // overlaps
+    EXPECT_TRUE(disjoint(int_range({260}, true, {}, false, 1), tablet, 1));  // lower 260 >= tablet upper
+    EXPECT_FALSE(disjoint(int_range({150}, true, {}, false, 1), tablet, 1)); // overlaps
+
+    // A fully unbounded tablet range or query range proves nothing.
+    EXPECT_FALSE(disjoint(int_range({42}, true, {42}, true, 1), int_range({}, false, {}, false, 1), 1));
+    EXPECT_FALSE(disjoint(int_range({}, false, {}, false, 1), tablet, 1));
+}
+
+// A prefix bound must cover every extension of that prefix. Getting the padding backwards here is the
+// classic way to silently drop rows, so both directions are pinned.
+TEST(TabletScanKeyPrunerTest, RangePrefixBoundsCoverExtensions) {
+    // tablet owns [(100), (200)) over two sort key columns -- bounds are 1-column prefixes.
+    auto tablet = int_range({100}, true, {200}, false, 1);
+
+    // (100, 5) is inside: the closed prefix lower bound covers all extensions of 100.
+    EXPECT_FALSE(disjoint(int_range({100, 5}, true, {100, 5}, true, 2), tablet, 2));
+    // (99, 999) is below every extension of 100.
+    EXPECT_TRUE(disjoint(int_range({99, 999}, true, {99, 999}, true, 2), tablet, 2));
+    // (200, 0) is excluded: the open prefix upper bound excludes all extensions of 200.
+    EXPECT_TRUE(disjoint(int_range({200, 0}, true, {200, 0}, true, 2), tablet, 2));
+    // (199, 999) is the last key the tablet owns.
+    EXPECT_FALSE(disjoint(int_range({199, 999}, true, {199, 999}, true, 2), tablet, 2));
+
+    // Mirror: a prefix QUERY bound against a full-arity tablet range.
+    auto tablet2 = int_range({100, 50}, true, {100, 80}, false, 2);
+    // Query prefix 100 spans (100,*) which overlaps [ (100,50), (100,80) ).
+    EXPECT_FALSE(disjoint(int_range({100}, true, {100}, true, 2), tablet2, 2));
+    // Query prefix 99 cannot reach it.
+    EXPECT_TRUE(disjoint(int_range({99}, true, {99}, true, 2), tablet2, 2));
+}
+
+TEST(TabletScanKeyPrunerTest, RangeOpenBoundsTouchingExactly) {
+    // Query (,50] vs tablet [50,): closed/closed touch at 50 -> overlap.
+    EXPECT_FALSE(disjoint(int_range({}, false, {50}, true, 1), int_range({50}, true, {}, false, 1), 1));
+    // Query (,50) vs tablet [50,): query excludes 50 -> disjoint.
+    EXPECT_TRUE(disjoint(int_range({}, false, {50}, false, 1), int_range({50}, true, {}, false, 1), 1));
+    // Query (,50] vs tablet (50,): tablet excludes 50 -> disjoint.
+    EXPECT_TRUE(disjoint(int_range({}, false, {50}, true, 1), int_range({50}, false, {}, false, 1), 1));
+}
+
+// Regression: the caller used to take the arity from Segment::num_sort_key_columns(), which reads a
+// decoder that is only published once the full sort key index is loaded and is null otherwise -- a
+// release build has no DCHECK to catch it, so a segment without that index crashed the scan
+// (SIGSEGV in _get_row_ranges_by_key_ranges). The arity must come from the tablet schema instead.
+// Here we pin the property that makes the schema a valid source: a bound shorter than the arity is
+// padded, so passing the schema arity for tuples of any length is well-defined.
+TEST(TabletScanKeyPrunerTest, RangeArityLargerThanBoundsIsWellDefined) {
+    // Bounds carry 1 value each while the sort key has 3 columns.
+    auto tablet = int_range({100}, true, {200}, false, 1);
+    for (size_t arity : {size_t{1}, size_t{2}, size_t{3}, size_t{8}}) {
+        EXPECT_TRUE(seek_range_disjoint_from_tablet_range(int_range({42}, true, {42}, true, 1), tablet, arity))
+                << "arity=" << arity;
+        EXPECT_FALSE(seek_range_disjoint_from_tablet_range(int_range({150}, true, {150}, true, 1), tablet, arity))
+                << "arity=" << arity;
+    }
+}
+
+TEST(TabletScanKeyPrunerTest, RangeZeroSortKeyColumnsProvesNothing) {
+    auto tablet = int_range({100}, true, {200}, false, 1);
+    EXPECT_FALSE(disjoint(int_range({42}, true, {42}, true, 1), tablet, 0));
 }
 
 } // namespace starrocks

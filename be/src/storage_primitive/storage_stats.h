@@ -84,6 +84,9 @@ struct OlapReaderStatistics {
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
+    // Scan keys skipped because they provably cannot intersect the tablet's own range. Pure work
+    // avoided: the rows those keys would have produced are removed by the tablet range anyway.
+    int64_t scan_keys_pruned_by_tablet_range = 0;
     int64_t rows_after_key_range = 0;
     int64_t rows_key_range_num = 0;
     int64_t rows_stats_filtered = 0;

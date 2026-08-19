@@ -806,6 +806,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
     seg_options.has_predicate_above_iterator = options.has_predicate_above_iterator;
+    seg_options.prune_scan_keys_by_tablet_range = options.prune_scan_keys_by_tablet_range;
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());

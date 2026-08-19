@@ -34,6 +34,7 @@ inline bool to_hash_bucket_constraint(const TInternalScanRange& scan_range, Tabl
     if (constraint.type != TTabletScanKeyConstraintType::HASH_BUCKET) {
         return false;
     }
+
     if (!constraint.__isset.distribution_key_positions || !constraint.__isset.bucket_id ||
         !constraint.__isset.bucket_num) {
         return false;
@@ -47,6 +48,14 @@ inline bool to_hash_bucket_constraint(const TInternalScanRange& scan_range, Tabl
     out->hash_version = constraint.__isset.hash_version ? constraint.hash_version : 1;
     out->pruning_was_exact = constraint.__isset.pruning_was_exact && constraint.pruning_was_exact;
     return true;
+}
+
+// True when this scan range asks for range-distribution scan key pruning. Carries no payload: the BE
+// compares each scan key against the range of the tablet version it opened, so there is nothing to
+// translate beyond the enable signal itself.
+inline bool wants_tablet_range_scan_key_prune(const TInternalScanRange& scan_range) {
+    return scan_range.__isset.scan_key_constraint &&
+           scan_range.scan_key_constraint.type == TTabletScanKeyConstraintType::RANGE;
 }
 
 // Reports what the prune did on this tablet. Shared so both scan paths emit the same counter names.

@@ -56,8 +56,15 @@ public final class TabletScanKeyConstraintBuilder {
      */
     public static TabletScanKeyConstraintBuilder create(OlapTable table, long selectedIndexMetaId,
                                                         DistributionInfo distributionInfo) {
-        if (distributionInfo == null ||
-                distributionInfo.getType() != DistributionInfo.DistributionInfoType.HASH) {
+        if (distributionInfo == null) {
+            return null;
+        }
+        // RANGE carries no topology: the BE compares each scan key against the range of the tablet
+        // version it opened. Only the type travels, as an enable signal.
+        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            return new TabletScanKeyConstraintBuilder(null);
+        }
+        if (distributionInfo.getType() != DistributionInfo.DistributionInfoType.HASH) {
             return null;
         }
         List<String> sortKeyColumnIds = sortKeyColumnIds(table, selectedIndexMetaId);
@@ -93,6 +100,11 @@ public final class TabletScanKeyConstraintBuilder {
      * @return null when the tablet's bucket ordinal cannot be determined.
      */
     public TTabletScanKeyConstraint build(MaterializedIndex index, long tabletId, int selectedTabletCount) {
+        if (distributionKeyPositions == null) {
+            TTabletScanKeyConstraint rangeConstraint = new TTabletScanKeyConstraint();
+            rangeConstraint.setType(TTabletScanKeyConstraintType.RANGE);
+            return rangeConstraint;
+        }
         // Derive both the ordinal and the bucket count from the same list HashDistributionPruner
         // indexes into, so the two can never disagree with the pruning that selected this tablet.
         List<Long> tabletIdsInOrder = index.getTabletIdsInOrder();

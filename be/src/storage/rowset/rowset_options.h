@@ -103,6 +103,7 @@ public:
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
     bool has_predicate_above_iterator = false;
+    bool prune_scan_keys_by_tablet_range = false;
 };
 
 } // namespace starrocks

@@ -127,7 +127,10 @@ struct TKeyRange {
 //   all plan fragments
 
 enum TTabletScanKeyConstraintType {
-  HASH_BUCKET = 0
+  HASH_BUCKET = 0,
+  // Range-distributed tablet. Carries no bounds: the BE reads them from the versioned tablet
+  // metadata it opened, so FE's view and the executing snapshot can never disagree.
+  RANGE = 1
 }
 
 // Lets a scan range tell the BE which scan keys can possibly live on its tablet, so the

@@ -130,6 +130,10 @@ struct TabletReaderParams {
     // evaluated ABOVE the segment iterator; routes vector-filter queries to exact brute-force so a
     // segment-level ANN k-limit cannot under-return. See design doc §7.
     bool has_predicate_above_iterator = false;
+    // Drop scan keys that provably cannot intersect this tablet's range, so a range-distributed
+    // tablet skips the short-key lookup for keys that belong to a sibling tablet. Purely an
+    // optimization: SegmentIterator::_apply_tablet_range() already removes those rows.
+    bool prune_scan_keys_by_tablet_range = false;
 
 public:
     std::string to_string() const;

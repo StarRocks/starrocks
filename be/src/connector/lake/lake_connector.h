@@ -161,6 +161,7 @@ private:
     // reader is created; get_next() reports EOF. Distinct from "no ranges at all", which the storage
     // layer reads as "scan everything".
     bool _scan_key_pruned_empty = false;
+    RuntimeProfile::Counter* _scan_keys_pruned_by_tablet_range_counter = nullptr;
     ReusableReaderKey _reusable_reader_key;
     RuntimeFilterSnapshots _observed_runtime_filter_snapshots;
 

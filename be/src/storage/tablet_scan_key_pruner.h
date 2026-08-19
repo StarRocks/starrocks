@@ -18,10 +18,26 @@
 #include <memory>
 #include <vector>
 
+#include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/olap_scan_range.h"
 
 namespace starrocks {
+
+// True only when `query` and `tablet_range` provably share no key, so the caller may skip the query
+// range entirely.
+//
+// Both ranges are compared in the segment's sort-key space by encoding each bound to
+// `num_sort_key_columns` with SeekTuple::full_sort_key_encode(), which is order preserving. A bound
+// shorter than the full sort key is padded with KEY_MINIMAL_MARKER as a lower bound and
+// KEY_MAXIMAL_MARKER as an upper bound, so a prefix bound covers exactly the keys it should and the
+// differing-arity case needs no special handling. That mirrors how SegmentIterator builds its own
+// search keys.
+//
+// Returns false whenever disjointness cannot be established -- an unbounded side, or an encoding that
+// cannot be produced. Never the other way round: a wrong "disjoint" silently drops rows.
+bool seek_range_disjoint_from_tablet_range(const SeekRange& query, const SeekRange& tablet_range,
+                                           size_t num_sort_key_columns);
 
 // Distribution topology of one tablet, translated from TInternalScanRange.scan_key_constraint by the
 // scan layer. Deliberately thrift-free so the storage layer keeps no dependency on plan types and the

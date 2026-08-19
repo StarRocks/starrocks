@@ -340,6 +340,7 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
     segment_options->delete_predicates = delete_predicates;
     segment_options->enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
     segment_options->has_predicate_above_iterator = options.has_predicate_above_iterator;
+    segment_options->prune_scan_keys_by_tablet_range = options.prune_scan_keys_by_tablet_range;
     if (options.runtime_state != nullptr) {
         segment_options->is_cancelled = &options.runtime_state->cancelled_ref();
     }

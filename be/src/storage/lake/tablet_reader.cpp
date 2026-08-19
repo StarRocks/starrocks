@@ -641,6 +641,7 @@ Status TabletReader::init_rowset_read_options(const TabletReaderParams& params, 
     options->lake_io_opts = params.lake_io_opts;
     options->enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     options->has_predicate_above_iterator = params.has_predicate_above_iterator;
+    options->prune_scan_keys_by_tablet_range = params.prune_scan_keys_by_tablet_range;
     options->prune_column_after_index_filter = params.prune_column_after_index_filter;
     options->enable_gin_filter = params.enable_gin_filter;
     options->enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
