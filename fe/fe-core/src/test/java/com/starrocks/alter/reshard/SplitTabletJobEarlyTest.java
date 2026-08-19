@@ -197,6 +197,27 @@ public class SplitTabletJobEarlyTest {
     }
 
     @Test
+    public void anIndexIsPlannedAgainstOneReadingOfEachTabletSize() {
+        // A lake tablet's size is volatile and the stat collector writes it without the table lock, so
+        // successive reads inside one plan can disagree. Hand out 14, 14, then 16 GiB: with a single
+        // reading the size rule declines 14 GiB (below the 15 GiB threshold) and the adaptive rule
+        // takes seven children at a 2 GiB target. Re-reading per pass would let the size rule decline
+        // at 14 while the adaptive rule asks for eight at 16 -- more than the size rule would have
+        // granted, and a count BE may not be able to honour, which turns the split into a no-op.
+        List<Long> ids = setTabletDataSizes(14L << 30);
+        long[] readings = {14L << 30, 14L << 30, 16L << 30};
+        int[] reads = {0};
+        new MockUp<LakeTablet>() {
+            @Mock
+            public long getDataSize(boolean singleReplica) {
+                return readings[Math.min(reads[0]++, readings.length - 1)];
+            }
+        };
+        assertEquals(Map.of(ids.get(0), 7), plan(8, new SplitTabletClause()));
+        assertEquals(1, reads[0], "one reading per tablet, for the whole plan");
+    }
+
+    @Test
     public void theSizeRuleSpendsHeadroomBeforeTheAdaptiveRuleSeesIt() {
         // A mixed plan: the size rule claims the 15 GiB tablet on its own, and the adaptive rule would
         // claim the 10 GiB one. Charging only the adaptive split against the bound counts the size

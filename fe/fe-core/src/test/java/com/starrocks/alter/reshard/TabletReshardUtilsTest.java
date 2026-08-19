@@ -221,7 +221,8 @@ public class TabletReshardUtilsTest {
         // The resolution goes through the warehouse manager and can throw (e.g. the warehouse no
         // longer exists, or has no usable worker). It must swallow that and fall back to 0 so a single
         // table's warehouse error cannot abort the scan; 0 in turn means "no floor" for auto-merge and
-        // "no early split" for the split factory.
+        // no adaptive signal from that scan. The planner does NOT come through here -- it resolves via
+        // adaptiveSplitBoundForTable, which propagates instead.
         new MockUp<WarehouseManager>() {
             @Mock
             public ComputeResource getBackgroundComputeResource(long tableId) {
