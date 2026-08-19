@@ -18,6 +18,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.InsertStmt;
@@ -45,6 +48,12 @@ import java.util.Map;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 
 public class HistogramStatisticsUtilsTest {
+    // Touches every key buildDefaultBucketSql populates: if one stops being set, Velocity leaks the
+    // literal "$key" into the rendered SQL and the assertions below catch it.
+    private static final String IDENTITY_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$catalogName', '$tableUUID', $bucketExpr, $mcv" +
+                    " FROM `$dbName`.`$tableName`$sampleClause$randFilter";
+
     @Test
     public void testMcvJsonEscaping() {
         String key = "a\"b\\c'd";
@@ -193,5 +202,72 @@ public class HistogramStatisticsUtilsTest {
         VelocityContext context = new VelocityContext();
         HistogramStatisticsUtils.putMcvExclude(context, mostCommonValues, quotedColumnName, columnType);
         return (String) context.get("MCVExclude");
+    }
+
+    @Test
+    public void testBaseContextCarriesEveryIdentityKey() {
+        VelocityContext context = HistogramStatisticsUtils.buildBaseContext(
+                testDb(), testTable(), "default_catalog", "v1");
+
+        Assertions.assertEquals(2L, context.get("tableId"));
+        Assertions.assertEquals(1L, context.get("dbId"));
+        Assertions.assertEquals("default_catalog", context.get("catalogName"));
+        Assertions.assertEquals(testDb().getOriginName(), context.get("dbName"));
+        Assertions.assertEquals("t0", context.get("tableName"));
+        Assertions.assertEquals("`v1`", context.get("columnName"));
+        Assertions.assertEquals("v1", context.get("columnNameStr"));
+        // Only the external templates read tableUUID, but an internal table must still resolve one:
+        // Table.getUUID() falls back to the table id.
+        Assertions.assertEquals(StatisticUtils.hashTableUuidForPkStorage("2"), context.get("tableUUID"));
+    }
+
+    @Test
+    public void testDefaultBucketSqlLeavesAnUnsampledScanUnfiltered() {
+        String sql = HistogramStatisticsUtils.buildDefaultBucketSql(
+                testDb(), testTable(), "hive0", "v1", ImmutableMap.of("a", "10"), 1.0, IDENTITY_TEMPLATE);
+
+        Assertions.assertEquals(
+                "SELECT 2, 'v1', 1, 'hive0', '" + StatisticUtils.hashTableUuidForPkStorage("2") + "', " +
+                        "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v1`) - 10) as bigint) as varchar), ',0]]'), " +
+                        "'[[\"a\",\"10\"]]' FROM `test`.`t0`",
+                sql);
+    }
+
+    @Test
+    public void testDefaultBucketSqlScalesAndFiltersASampledScan() {
+        boolean originalUseTableSample = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = true;
+            Assertions.assertTrue(sampledDefaultBucketSql().endsWith("FROM `test`.`t0` SAMPLE('percent'='10')"),
+                    sampledDefaultBucketSql());
+
+            Config.enable_use_table_sample_collect_statistics = false;
+            Assertions.assertTrue(sampledDefaultBucketSql().endsWith("FROM `test`.`t0` WHERE rand() <= 0.1"),
+                    sampledDefaultBucketSql());
+
+            // Either way the bucket count is divided back up to a full-table estimate.
+            Assertions.assertTrue(
+                    sampledDefaultBucketSql().contains("count(`v1`) / cast(0.1 as double) - 10"),
+                    sampledDefaultBucketSql());
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalUseTableSample;
+        }
+    }
+
+    private static String sampledDefaultBucketSql() {
+        return HistogramStatisticsUtils.buildDefaultBucketSql(
+                testDb(), testTable(), "hive0", "v1", ImmutableMap.of("a", "10"), 0.1, IDENTITY_TEMPLATE);
+    }
+
+    private static Database testDb() {
+        return new Database(1, "test");
+    }
+
+    private static OlapTable testTable() {
+        OlapTable table = new OlapTable();
+        table.setId(2);
+        table.setName("t0");
+        return table;
     }
 }

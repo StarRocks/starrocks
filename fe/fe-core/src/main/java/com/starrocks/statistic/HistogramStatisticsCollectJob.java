@@ -14,13 +14,11 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -35,22 +33,23 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.statistic.HistogramStatisticsUtils.batchInsertPrefixSize;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildBaseContext;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBatchInsertPrefix;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsLiteral;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsSql;
-import static com.starrocks.statistic.HistogramStatisticsUtils.buildDefaultBucketExpr;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildDefaultBucketSql;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildMcvJson;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildMostCommonValues;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildStatsTargetColumnNames;
 import static com.starrocks.statistic.HistogramStatisticsUtils.createInsertStmt;
-import static com.starrocks.statistic.HistogramStatisticsUtils.formatSampleRatio;
+import static com.starrocks.statistic.HistogramStatisticsUtils.formatSamplePercent;
 import static com.starrocks.statistic.HistogramStatisticsUtils.normalizeBucketsForHll;
+import static com.starrocks.statistic.HistogramStatisticsUtils.putMcv;
 import static com.starrocks.statistic.HistogramStatisticsUtils.putMcvExclude;
 import static com.starrocks.statistic.HistogramStatisticsUtils.quoteSqlString;
 import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
@@ -177,7 +176,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             Map<String, String> mostCommonValues = buildMostCommonValues(mcv, sampleRatio);
 
             if (shouldSkipHistogramBuckets(columnType)) {
-                sql = buildCollectDefaultBucket(db, table, sampleRatio, mostCommonValues, columnName);
+                sql = buildInsertIntoHistogramStatistics(buildDefaultBucketSql(db, table, getCatalogName(),
+                        columnName, mostCommonValues, sampleRatio, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
             } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
                 sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
                         columnType, false);
@@ -273,7 +273,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             StatsConstants.HistogramCollectBucketNdvMode ndvMode, Map<String, String> mostCommonValues,
             String columnName, Type columnType) throws Exception {
         if (shouldSkipHistogramBuckets(columnType)) {
-            return buildQueryDefaultBucket(db, table, sampleRatio, mostCommonValues, columnName);
+            return buildDefaultBucketSql(db, table, getCatalogName(), columnName, mostCommonValues, sampleRatio,
+                    QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE);
         }
 
         if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
@@ -308,17 +309,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    // Convert a sample ratio in (0, 1) into a percent string in (0, 100) for the SAMPLE('percent'=...) clause.
-    // Uses BigDecimal to avoid both binary float noise (e.g. 0.49999999999999994) and truncation to 0 for
-    // sub-1% ratios on very large tables (which used to produce the illegal SAMPLE('percent'='0')).
-    @VisibleForTesting
-    static String formatSamplePercent(double sampleRatio) {
-        BigDecimal percent = BigDecimal.valueOf(sampleRatio).multiply(BigDecimal.valueOf(100));
-        // Drop trailing zeros so integral percents stay clean (e.g. "50" not "50.00"), and avoid
-        // scientific notation that the SQL parser cannot consume.
-        return percent.stripTrailingZeros().toPlainString();
-    }
-
     private String buildCollectMCV(Database database, Table table, Long topN, String columnName, double sampleRatio) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
@@ -349,32 +339,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 query;
     }
 
-    private VelocityContext buildBaseContext(Database database, Table table, String columnName) {
-        String quoteColumName = StatisticUtils.quoting(table, columnName);
-
-        VelocityContext context = new VelocityContext();
-        context.put("tableId", table.getId());
-        context.put("columnName", quoteColumName);
-        context.put("columnNameStr", SqlUtils.escapeSqlString(columnName));
-        context.put("dbId", database.getId());
-        context.put("dbName", database.getOriginName());
-        context.put("tableName", table.getName());
-
-        return context;
-    }
-
-    private void addMcvToContext(VelocityContext context, Map<String, String> mostCommonValues) {
-        String mcvJson = buildMcvJson(mostCommonValues);
-        if (mcvJson == null) {
-            context.put("mcv", "NULL");
-        } else {
-            context.put("mcv", quoteSqlString(mcvJson));
-        }
-    }
-
     private String buildHistogramFunction(Database database, Table table, double sampleRatio, Long bucketNum,
                                           String columnName, boolean withSampleNdv) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+        VelocityContext context = buildBaseContext(database, table, getCatalogName(), columnName);
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
         if (withSampleNdv) {
@@ -388,8 +355,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
                                          Map<String, String> mostCommonValues, String columnName, Type columnType,
                                          boolean withSampleNdv) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
-        addMcvToContext(context, mostCommonValues);
+        VelocityContext context = buildBaseContext(database, table, getCatalogName(), columnName);
+        putMcv(context, mostCommonValues);
         putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
@@ -403,7 +370,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildQueryHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
                                        Map<String, String> mostCommonValues, String columnName, Type columnType,
                                        boolean withSampleNdv) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+        VelocityContext context = buildBaseContext(database, table, getCatalogName(), columnName);
         putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
 
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
@@ -412,30 +379,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         addSampleClauseToContext(context, sampleRatio);
 
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
-    }
-
-    // In case we skip histogram collection, we simply add one tail bucket that contains all values - sum(MCVs)
-    private String buildCollectDefaultBucket(Database database, Table table, double sampleRatio,
-                                             Map<String, String> mostCommonValues, String columnName) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
-        addMcvToContext(context, mostCommonValues);
-        addDefaultBucketToContext(context, table, sampleRatio, mostCommonValues, columnName);
-
-        return buildInsertIntoHistogramStatistics(build(context, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
-    }
-
-    private String buildQueryDefaultBucket(Database database, Table table, double sampleRatio,
-                                           Map<String, String> mostCommonValues, String columnName) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
-        addDefaultBucketToContext(context, table, sampleRatio, mostCommonValues, columnName);
-        return build(context, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE);
-    }
-
-    private void addDefaultBucketToContext(VelocityContext context, Table table, double sampleRatio,
-                                           Map<String, String> mostCommonValues, String columnName) {
-        addDefaultBucketSampleClauseToContext(context, sampleRatio);
-        context.put("bucketExpr",
-                buildDefaultBucketExpr(StatisticUtils.quoting(table, columnName), sampleRatio, mostCommonValues));
     }
 
     // TODO: use table sample by default and remove this switch
@@ -449,33 +392,17 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    // Separate from addSampleClauseToContext because the default-bucket templates splice
-    // $sampleClause$randFilter straight onto "FROM `db`.`table`" and have no WHERE of their own, so
-    // the keyword has to travel inside the substituted value here.
-    private void addDefaultBucketSampleClauseToContext(VelocityContext context, double sampleRatio) {
-        if (sampleRatio <= 0.0 || sampleRatio >= 1.0) {
-            context.put("sampleClause", "");
-            context.put("randFilter", "");
-        } else if (Config.enable_use_table_sample_collect_statistics) {
-            context.put("sampleClause", " SAMPLE('percent'='" + formatSamplePercent(sampleRatio) + "')");
-            context.put("randFilter", "");
-        } else {
-            context.put("sampleClause", "");
-            context.put("randFilter", " WHERE rand() <= " + formatSampleRatio(sampleRatio));
-        }
-    }
-
     private String buildCollectHistogramWithHllNdv(Database database, Table table, Map<String, String> mostCommonValues,
                                                 String buckets, String columnName) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
-        addMcvToContext(context, mostCommonValues);
+        VelocityContext context = buildBaseContext(database, table, getCatalogName(), columnName);
+        putMcv(context, mostCommonValues);
         context.put("buckets", buckets);
 
         return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_WITH_HLL_NDV_STATISTIC_TEMPLATE));
     }
 
     private String buildQueryHistogramWithHllNdv(Database database, Table table, String buckets, String columnName) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+        VelocityContext context = buildBaseContext(database, table, getCatalogName(), columnName);
         context.put("buckets", StringEscapeUtils.escapeSql(buckets));
         return build(context, QUERY_HISTOGRAM_WITH_HLL_NDV_STATISTIC_TEMPLATE);
     }
@@ -483,7 +410,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectBucketsWithoutNdv(Database database, Table table, double sampleRatio,
                                       Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                       Type columnType) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+        VelocityContext context = buildBaseContext(database, table, getCatalogName(), columnName);
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName, false));
         context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);

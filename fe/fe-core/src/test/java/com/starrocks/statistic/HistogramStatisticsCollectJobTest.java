@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,7 +50,8 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                 db, table, Lists.newArrayList(columnName), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-        VelocityContext context = Deencapsulation.invoke(job, "buildBaseContext", db, table, columnName);
+        VelocityContext context = HistogramStatisticsUtils.buildBaseContext(
+                db, table, job.getCatalogName(), columnName);
         assertSqlLiteralRoundTrips(columnName, (String) context.get("columnNameStr"));
     }
 

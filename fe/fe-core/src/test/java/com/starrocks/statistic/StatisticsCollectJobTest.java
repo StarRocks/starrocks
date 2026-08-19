@@ -70,16 +70,16 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testHistogramFormatSamplePercent() {
         // Sub-1% ratios on large tables previously truncated to "0", producing the illegal SAMPLE('percent'='0').
         // They must now be rendered as their true percent value.
-        Assertions.assertEquals("0.5", HistogramStatisticsCollectJob.formatSamplePercent(0.005));
-        Assertions.assertEquals("0.1", HistogramStatisticsCollectJob.formatSamplePercent(0.001));
+        Assertions.assertEquals("0.5", HistogramStatisticsUtils.formatSamplePercent(0.005));
+        Assertions.assertEquals("0.1", HistogramStatisticsUtils.formatSamplePercent(0.001));
         // 10M / 2B = 0.005 -> 0.5%
         Assertions.assertEquals("0.5",
-                HistogramStatisticsCollectJob.formatSamplePercent(10_000_000.0 / 2_000_000_000.0));
+                HistogramStatisticsUtils.formatSamplePercent(10_000_000.0 / 2_000_000_000.0));
         // Integral percents stay clean, no trailing zeros, no scientific notation.
-        Assertions.assertEquals("50", HistogramStatisticsCollectJob.formatSamplePercent(0.5));
-        Assertions.assertEquals("1", HistogramStatisticsCollectJob.formatSamplePercent(0.01));
+        Assertions.assertEquals("50", HistogramStatisticsUtils.formatSamplePercent(0.5));
+        Assertions.assertEquals("1", HistogramStatisticsUtils.formatSamplePercent(0.01));
         // Very small ratios must remain a positive decimal, never "0".
-        String tiny = HistogramStatisticsCollectJob.formatSamplePercent(0.0000001);
+        String tiny = HistogramStatisticsUtils.formatSamplePercent(0.0000001);
         Assertions.assertNotEquals("0", tiny);
         Assertions.assertFalse(tiny.contains("E"));
         Assertions.assertFalse(tiny.contains("e"));
@@ -588,45 +588,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        // buildCollectDefaultBucket produces a placeholder-bucket SQL (no histogram() aggregate, no sort): the
-        // bucket carries count(non-null, non-MCV rows) scaled to full-table, so getTotalRows() reflects the real
-        // cardinality. This is the SQL collect() substitutes for char-family columns (see the
-        // testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode end-to-end test).
-        Map<String, String> stringMcv = new HashMap<>();
-        stringMcv.put("1", "10");
-        stringMcv.put("2", "20");
-        String defaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectDefaultBucket",
-                db, olapTable, 0.1, stringMcv, "v2");
-        String defaultBucketNormalized = normalize.apply(defaultBucketSql);
-        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                        "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
-                        "cast(0.1 as double) - 30) as bigint) as varchar), ',0]]'), " +
-                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats` SAMPLE('percent'='10')",
-                t0StatsTableId, dbid)), defaultBucketNormalized);
-        Assertions.assertFalse(defaultBucketNormalized.contains("histogram_hll_ndv"));
-        Assertions.assertFalse(defaultBucketNormalized.contains("histogram("));
-        Assertions.assertFalse(defaultBucketNormalized.contains("order by"));
-        Assertions.assertFalse(defaultBucketNormalized.contains("is not null"));
-
-        // When enable_use_table_sample_collect_statistics is off, buildCollectDefaultBucket must fall back to a
-        // row-level rand() bernoulli filter instead of the SAMPLE clause, matching buildCollectHistogram.
-        boolean originalSampleForDefaultBucket = Config.enable_use_table_sample_collect_statistics;
-        try {
-            Config.enable_use_table_sample_collect_statistics = false;
-            String randDefaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob,
-                    "buildCollectDefaultBucket", db, olapTable, 0.1, stringMcv, "v2");
-            String randDefaultBucketNormalized = normalize.apply(randDefaultBucketSql);
-            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                            "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
-                            "cast(0.1 as double) - 30) as bigint) as varchar), ',0]]'), " +
-                            "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats` WHERE rand() <= 0.1",
-                    t0StatsTableId, dbid)), randDefaultBucketNormalized);
-            Assertions.assertFalse(randDefaultBucketNormalized.contains("sample("));
-        } finally {
-            Config.enable_use_table_sample_collect_statistics = originalSampleForDefaultBucket;
-        }
+        // The placeholder-bucket SQL that replaces the histogram() aggregate for char-family columns is
+        // asserted end-to-end in testHistogramCollectEmitsDefaultBucketSqlForStringColumns, which drives
+        // collect() rather than a private builder.
 
         // buildCollectHistogram always builds the full bucket SQL - the skip decision lives in collect(), not here,
         // so it emits histogram() even for a char-family column.
@@ -634,7 +598,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         try {
             Config.enable_use_table_sample_collect_statistics = false;
             sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, olapTable, 0.1, 64L, stringMcv, "v2", VarcharType.VARCHAR, false);
+                    db, olapTable, 0.1, 64L, mostCommonValues, "v2", VarcharType.VARCHAR, false);
             Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                             "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                             "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
@@ -642,6 +606,80 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                             "`test`.`t0_stats`  WHERE  rand() <= 0.100000 and `v2` is not null  and `v2` " +
                             "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)),
                     normalize.apply(sql));
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalSample;
+        }
+    }
+
+    @Test
+    public void testHistogramCollectEmitsDefaultBucketSqlForStringColumns() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
+
+        Map<String, String> properties = new HashMap<>();
+        // 0.5 keeps the MCV scale-up exact: the mocked counts 5 and 10 become 10 and 20, so the bucket
+        // subtracts 30. A ratio of 0.1 would divide lossily (2 / 0.1 -> 19.999... -> 19).
+        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.5");
+        properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
+        HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(VarcharType.VARCHAR),
+                StatsConstants.ScheduleType.ONCE, properties);
+
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryMCV(ConnectContext ctx, String sql) {
+                TStatisticData first = new TStatisticData();
+                first.columnName = "1";
+                first.histogram = "5";
+                TStatisticData second = new TStatisticData();
+                second.columnName = "2";
+                second.histogram = "10";
+                return Lists.newArrayList(first, second);
+            }
+        };
+
+        List<String> collectedSql = new ArrayList<>();
+        new MockUp<HistogramStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
+                collectedSql.add(sql);
+            }
+        };
+
+        Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
+        String expectedPrefix = String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                        "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
+                        "cast(0.5 as double) - 30) as bigint) as varchar), ',0]]'), " +
+                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`",
+                olapTable.getId(), db.getId());
+
+        boolean originalSample = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = true;
+            job.collect(connectContext, new NativeAnalyzeStatus());
+
+            Assertions.assertEquals(1, collectedSql.size());
+            String sampledSql = normalize.apply(collectedSql.get(0));
+            Assertions.assertEquals(normalize.apply(expectedPrefix + " SAMPLE('percent'='50')"), sampledSql);
+            // A placeholder bucket instead of the histogram() aggregate: no bucket query, no sort.
+            Assertions.assertFalse(sampledSql.contains("histogram("));
+            Assertions.assertFalse(sampledSql.contains("histogram_hll_ndv"));
+            Assertions.assertFalse(sampledSql.contains("order by"));
+            Assertions.assertFalse(sampledSql.contains("is not null"));
+
+            // With the table-sample switch off it falls back to a row-level rand() bernoulli filter.
+            Config.enable_use_table_sample_collect_statistics = false;
+            collectedSql.clear();
+            job.collect(connectContext, new NativeAnalyzeStatus());
+
+            Assertions.assertEquals(1, collectedSql.size());
+            String randFilteredSql = normalize.apply(collectedSql.get(0));
+            Assertions.assertEquals(normalize.apply(expectedPrefix + " WHERE rand() <= 0.5"), randFilteredSql);
+            Assertions.assertFalse(randFilteredSql.contains("sample("));
         } finally {
             Config.enable_use_table_sample_collect_statistics = originalSample;
         }

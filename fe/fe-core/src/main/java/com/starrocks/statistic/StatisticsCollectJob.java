@@ -311,7 +311,7 @@ public abstract class StatisticsCollectJob {
         return fn;
     }
 
-    protected String build(VelocityContext context, String template) {
+    protected static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         return sw.toString();
