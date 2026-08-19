@@ -2359,6 +2359,6 @@ static ColumnPtr cast_from_string_to_geometry_fn(ColumnPtr& column) {
 }
 
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
-CUSTOMIZE_FN_CAST(TYPE_CHAR,    TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
+CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
 
 } // namespace starrocks
