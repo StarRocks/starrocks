@@ -57,6 +57,7 @@
 #include "storage/seek_range.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/options.h"
+#include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
 
@@ -277,6 +278,35 @@ protected:
         uint64_t filesz = 0;
         PersistentIndexSstableRangePB range_pb;
         CHECK_OK(lake::PersistentIndexSstable::build_sstable(map, wf.get(), &filesz, &range_pb));
+        CHECK_OK(wf->close());
+        return filesz;
+    }
+
+    // write_legacy_pk_sstable stores exactly one version per key (its map value is a single
+    // IndexValueWithVer). A PK-index entry can hold SEVERAL versions of one key, each with its
+    // own (rssid, rowid), so tests that care about per-version filtering need this instead.
+    // Keys must be supplied in bytewise-ascending order, as TableBuilder requires.
+    uint64_t write_legacy_pk_sstable_versions(
+            const std::string& path,
+            const std::vector<std::pair<std::string, std::vector<std::tuple<int64_t, uint32_t, uint32_t>>>>& entries) {
+        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto wf_or = fs::new_writable_file(opts, path);
+        CHECK_OK(wf_or.status());
+        auto wf = std::move(wf_or.value());
+        sstable::Options options;
+        sstable::TableBuilder builder(options, wf.get());
+        for (const auto& [key, versions] : entries) {
+            IndexValuesWithVerPB values_pb;
+            for (const auto& [version, rssid, rowid] : versions) {
+                auto* v = values_pb.add_values();
+                v->set_version(version);
+                v->set_rssid(rssid);
+                v->set_rowid(rowid);
+            }
+            builder.Add(Slice(key), values_pb.SerializeAsString());
+        }
+        CHECK_OK(builder.Finish());
+        const uint64_t filesz = builder.FileSize();
         CHECK_OK(wf->close());
         return filesz;
     }
@@ -12210,6 +12240,121 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
     EXPECT_EQ(kFullKeyRows, totals[3].num_rows);
     EXPECT_EQ(static_cast<int64_t>(full_key_seg_size), totals[3].data_size);
     EXPECT_EQ(0, totals[3].num_dels);
+}
+
+// A PK-index entry holds every version of one key, each with its own (rssid, rowid). The legacy
+// shared rebuild used to return a single keep/drop verdict for the WHOLE entry, so the first dead
+// version evicted the key's live version with it -- and superseded versions going dead (their rowset
+// compacted away, or their rowid marked in the merged delvec) is the normal steady state of a PK
+// index, so this fired routinely.
+//
+// The consequence is silent: the merged tablet's index no longer has the key, the next upsert cannot
+// find the row it should supersede, and both versions stay in the table. Observed on a soak as
+// duplicate primary keys with an inflated COUNT(*) and no error anywhere -- and
+// GROUP BY ... HAVING COUNT(*)>1 does not even show them, because its streaming per-segment
+// aggregate trusts PK uniqueness.
+//
+// Layout: one key with two versions, the older on a rowset that no surviving child carries and the
+// newer on a live one. The key must survive carrying only its live version.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_keeps_live_version_of_entry) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    constexpr uint32_t kDeadRowsetId = 3;  // no child carries it
+    constexpr uint32_t kLiveRowsetIdA = 1; // child_a keeps this
+    constexpr uint32_t kLiveRowsetIdB = 2; // child_b keeps this
+
+    // k_multi: version 1 on the dead rowset, version 2 on a live one -- the whole point.
+    // k_live_only / k_dead_only pin the existing all-live and all-dead behaviour.
+    const std::string legacy_filename = "multi_version.sst";
+    const auto legacy_path = _tablet_manager->sst_location(child_a, legacy_filename);
+    const uint64_t legacy_filesize = write_legacy_pk_sstable_versions(
+            legacy_path, {
+                                 {"k_dead_only", {{1, kDeadRowsetId, 0}}},
+                                 {"k_live_only", {{1, kLiveRowsetIdA, 1}}},
+                                 {"k_multi", {{1, kDeadRowsetId, 5}, {2, kLiveRowsetIdB, 6}}},
+                         });
+
+    auto make_child = [&](int64_t tablet_id, uint32_t live_rowset_id, const std::string& seg_filename) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(kDeadRowsetId + 1);
+        set_primary_key_schema(meta.get(), 1001);
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(live_rowset_id);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        rowset->set_overlapped(false);
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(seg_filename);
+        sm->set_size(100);
+        sm->set_shared(true);
+        (*meta->mutable_rowset_to_schema())[live_rowset_id] = 1001;
+        auto* sst = meta->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(legacy_filename);
+        sst->set_filesize(legacy_filesize);
+        sst->set_shared(true);
+        sst->set_max_rss_rowid((static_cast<uint64_t>(kDeadRowsetId) << 32) | 5);
+        return meta;
+    };
+
+    ASSERT_OK(put_tablet_metadata(make_child(child_a, kLiveRowsetIdA, "seg_a.dat")));
+    ASSERT_OK(put_tablet_metadata(make_child(child_b, kLiveRowsetIdB, "seg_b.dat")));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& out_sst = merged->sstable_meta().sstables(0);
+
+    ASSIGN_OR_ABORT(auto sstable, lake::PersistentIndexSstable::new_sstable(
+                                          out_sst, _tablet_manager->sst_location(merged_tablet, out_sst.filename()),
+                                          /*cache=*/nullptr, /*need_filter=*/false, /*delvec=*/nullptr, merged,
+                                          _tablet_manager.get()));
+    sstable::ReadOptions read_options;
+    read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iter(sstable->new_iterator(read_options));
+    std::map<std::string, std::vector<uint32_t>> kept; // key -> surviving rssids
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+        IndexValuesWithVerPB values_pb;
+        ASSERT_TRUE(values_pb.ParseFromArray(iter->value().data, static_cast<int>(iter->value().size)));
+        auto& rssids = kept[iter->key().to_string()];
+        for (const auto& v : values_pb.values()) {
+            rssids.push_back(v.rssid());
+        }
+    }
+    ASSERT_OK(iter->status());
+
+    // The regression: before the fix k_multi was dropped entirely because its version 1 sat on the
+    // dead rowset, taking the live version 2 with it.
+    ASSERT_TRUE(kept.count("k_multi")) << "an entry must survive as long as ANY of its versions is live";
+    EXPECT_EQ(1u, kept["k_multi"].size()) << "only the live version should remain";
+
+    EXPECT_TRUE(kept.count("k_live_only"));
+    EXPECT_FALSE(kept.count("k_dead_only")) << "an entry whose every version is dead is still dropped";
 }
 
 // =============================================================================
