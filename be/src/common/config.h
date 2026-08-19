@@ -2187,7 +2187,7 @@ CONF_mBool(lake_enable_alter_struct, "true");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
-CONF_mBool(enable_vector_index_block_cache, "true");
+CONF_mBool(enable_vector_index_block_cache, "false");
 
 // On a top-level vector index cache miss, let the current query fall back to
 // brute-force search and load the index into the cache in the background.
