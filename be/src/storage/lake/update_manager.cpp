@@ -1897,10 +1897,15 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             // column readers and takes a cache lock. The static open leaves that pointer null and
             // skips the whole accounting path.
             //
-            // The size estimate comes from the first segment this publish opens: a Segment's cost is
+            // The size estimate comes from the first segment this call reads: a Segment's cost is
             // dominated by one column reader per schema column, so it is near-uniform within a tablet.
-            // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
-            // evicts to stay under capacity, so it reports room even while it thrashes.
+            // It is deliberately an estimate, and it errs low -- this call only sees the base segments
+            // *it* reads, while a publish runs one such call per update segment and the union across
+            // them can be larger. Erring low is the safer direction: it keeps the cache in use for the
+            // clustered-key workloads that benefit from it, and the cases measured as pathological
+            // (working set several times the capacity) are far enough past the threshold to still be
+            // caught. Comparing the cache's own usage against its capacity does NOT work as a signal --
+            // an LRU evicts to stay under capacity, so it reports room even while it thrashes.
             use_segment_cache = touched_segment_count * segment_mem_estimate <= tablet_mgr->metacache()->capacity();
         }
         TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
@@ -1911,9 +1916,6 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             // keep the data-cache behaviour identical to the static Segment::open below.
             segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, LakeIOOptions{},
                                                /*fill_meta_cache=*/true, tablet_schema);
-            if (segment.ok() && segment_mem_estimate == 0) {
-                segment_mem_estimate = (*segment)->mem_usage();
-            }
         } else {
             segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema);
         }
@@ -1973,6 +1975,13 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             if (field->type()->type() == TYPE_CHAR) {
                 ChunkHelper::padding_char_column(tablet_schema, *field, (*columns)[i].get());
             }
+        }
+        // Sampled here rather than right after the open: a Segment's metacache charge keeps growing
+        // after open() as ColumnReader loads each column's indexes and calls update_cache_size(), so a
+        // sample taken before the reads understates what the entry finally costs. Taken on whichever
+        // path produced the segment, since the cost is the same either way.
+        if (segment_mem_estimate == 0) {
+            segment_mem_estimate = (*segment)->mem_usage();
         }
         return Status::OK();
     };
