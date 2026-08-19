@@ -63,29 +63,27 @@ bool FailPoint::shouldFail() {
         // Check the pause flag BEFORE the mode: a pause request carries mode = DISABLE so that a
         // node predating the flag disables rather than enabling (see internal_service.proto).
         if (!_trigger_mode.pause()) {
-            const auto mode = _trigger_mode.mode();
-            switch (mode) {
+            bool fired = false;
+            switch (_trigger_mode.mode()) {
             case FailPointTriggerModeType::ENABLE:
-                _trigger_count.fetch_add(1, std::memory_order_relaxed);
-                return true;
+                fired = true;
+                break;
             case FailPointTriggerModeType::DISABLE:
-                return false;
+                break;
             case FailPointTriggerModeType::PROBABILITY_ENABLE:
-                if (drand48() <= static_cast<double>(_trigger_mode.probability())) {
-                    _trigger_count.fetch_add(1, std::memory_order_relaxed);
-                    return true;
-                }
-                return false;
+                fired = drand48() <= static_cast<double>(_trigger_mode.probability());
+                break;
             case FailPointTriggerModeType::ENABLE_N_TIMES:
-                if (_n_times-- > 0) {
-                    _trigger_count.fetch_add(1, std::memory_order_relaxed);
-                    return true;
-                }
-                return false;
+                fired = _n_times-- > 0;
+                break;
             default:
                 DCHECK(false);
-                return false;
+                break;
             }
+            if (fired) {
+                _trigger_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            return fired;
         }
         // Read the generation together with the mode. Reading it later, under _pause_mu, would let a
         // setMode() landing in the gap look like the CURRENT generation, so the thread would then
