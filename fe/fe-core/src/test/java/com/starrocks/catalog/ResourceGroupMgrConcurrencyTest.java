@@ -805,4 +805,37 @@ public class ResourceGroupMgrConcurrencyTest {
         Assertions.assertDoesNotThrow(() -> replaceMethod.invoke(mgr, "rg_null_cls", rgNew));
         Assertions.assertEquals(0.6, mgr.getResourceGroup("rg_null_cls").getMemLimit());
     }
+
+    @Test
+    public void testCreateResourceGroupReplaceSingleWalOperation() throws Exception {
+        Map<String, String> props1 = Maps.newHashMap();
+        props1.put("cpu_weight", "1");
+        props1.put("mem_limit", "50%");
+        props1.put("type", "mv");
+        CreateResourceGroupStmt stmt1 = new CreateResourceGroupStmt("rg_single_wal", false, false,
+                Collections.emptyList(), props1);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt1);
+        mgr.createResourceGroup(stmt1);
+
+        ResourceGroup original = mgr.getResourceGroup("rg_single_wal");
+        Assertions.assertNotNull(original);
+        long originalId = original.getId();
+
+        // Replace rg_single_wal with 60% mem_limit
+        Map<String, String> props2 = Maps.newHashMap();
+        props2.put("cpu_weight", "1");
+        props2.put("mem_limit", "60%");
+        props2.put("type", "mv");
+        CreateResourceGroupStmt stmt2 = new CreateResourceGroupStmt("rg_single_wal", false, true,
+                Collections.emptyList(), props2);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt2);
+
+        mgr.createResourceGroup(stmt2);
+
+        ResourceGroup replaced = mgr.getResourceGroup("rg_single_wal");
+        Assertions.assertNotNull(replaced);
+        // ID must be preserved across replacement
+        Assertions.assertEquals(originalId, replaced.getId());
+        Assertions.assertEquals(0.6, replaced.getMemLimit());
+    }
 }
