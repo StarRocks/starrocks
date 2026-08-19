@@ -33,7 +33,7 @@ public:
 
     // Not timed: the prefetch runs on an IO worker concurrently with other children, so adding its
     // wait to the scan counter would double-count overlapped time.
-    StatusOr<bool> prefetch() override { return _iter->prefetch(); }
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override { return _iter->prefetch(budget); }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));

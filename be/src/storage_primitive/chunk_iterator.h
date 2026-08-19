@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <unordered_set>
 #include <vector>
@@ -87,13 +88,15 @@ public:
         return st;
     }
 
-    // Make the bytes this iterator is going to read locally available -- resident in its own read
-    // buffers or in the local data cache -- without decoding anything. Returns true only when the
-    // whole scan is covered, so the following get_next calls decode without waiting on remote IO.
-    // Returns false when the iterator cannot enumerate (all of) its reads up front; reading stays
-    // correct either way. This is the IO half of a read split off for an IO worker thread, so an
-    // implementation must not decode pages or build chunks here.
-    virtual StatusOr<bool> prefetch() { return false; }
+    // Make the bytes this iterator is going to read resident in its own read buffers without
+    // decoding anything. Returns true only when the whole scan is covered, so the following
+    // get_next calls decode without waiting on any IO. Returns false when the iterator cannot
+    // hold (all of) its reads up front; reading stays correct either way. This is the IO half of
+    // a read split off for an IO worker thread, so an implementation must not decode pages or
+    // build chunks here. |budget| is the caller's remaining residency allowance, shared by every
+    // sibling iterator of the same read: reserve from it before loading, and report false once it
+    // runs out.
+    virtual StatusOr<bool> prefetch(std::atomic<int64_t>* budget) { return false; }
 
     // Release resources associated with this iterator, e.g, deallocate memory.
     // This routine can be called at most once.
