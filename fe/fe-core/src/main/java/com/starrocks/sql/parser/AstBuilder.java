@@ -4994,6 +4994,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                             "Invalid PROBABILITY value %f, it should be in range [0, 1]", probability));
                 }
                 return new UpdateFailPointStatusStatement(failpointName, probability, backendList, createPos(ctx));
+            } else if (ctx.PAUSE() != null) {
+                return UpdateFailPointStatusStatement.pauseStatement(failpointName, backendList, createPos(ctx));
             }
             return new UpdateFailPointStatusStatement(failpointName, true, backendList, createPos(ctx));
         } else {
