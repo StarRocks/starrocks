@@ -227,7 +227,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         for (IndexPreSplitTarget indexTarget : indexTargets) {
             SampleRequest indexRequest = new SampleRequest(request.getScanContext(), indexTarget.sortKey(),
                     request.getSampleByteLimit(), request.getSeed());
-            TierOutcome outcome = planBoundariesWithFallback(indexRequest, requestedTabletCount, deadline);
+            TierOutcome outcome = planBoundariesWithFallback(
+                    indexRequest, requestedTabletCount, activeComputeNodeCount, deadline);
             if (outcome.result().isNoSplit()) {
                 continue;
             }
@@ -327,14 +328,15 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * to the data tier against the same deadline. The deadline is checked at
      * phase boundaries — no in-flight sampler RPC is preempted.
      */
-    private TierOutcome planBoundariesWithFallback(SampleRequest request, int requestedTabletCount, Instant deadline)
+    private TierOutcome planBoundariesWithFallback(SampleRequest request, int requestedTabletCount,
+                                                   int activeComputeNodeCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         try {
             return runMetaTier(request, requestedTabletCount, deadline);
         } catch (MetaTierUnavailableException metaTierUnavailable) {
             LOG.info("Sample-Based Tablet Pre-Split: meta tier unavailable for table {} — falling back to data tier: {}",
                     table.getName(), metaTierUnavailable.getMessage());
-            return runDataTier(request, requestedTabletCount, deadline);
+            return runDataTier(request, requestedTabletCount, activeComputeNodeCount, deadline);
         }
     }
 
@@ -345,7 +347,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         return new TierOutcome(result, TIER_LABEL_META_TIER);
     }
 
-    private TierOutcome runDataTier(SampleRequest request, int requestedTabletCount, Instant deadline)
+    private TierOutcome runDataTier(SampleRequest request, int requestedTabletCount,
+                                    int activeComputeNodeCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         checkDeadline(deadline);
         // Cap the sample at the remaining budget (see class doc); an over-budget
@@ -353,9 +356,35 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         SampleRequest budgetedRequest = request.withQueryTimeoutSeconds(remainingBudgetSeconds(deadline));
         SampleSet sampleSet = dataTierSampler.sample(budgetedRequest);
         checkDeadline(deadline);
-        BoundaryPlannerResult result =
-                BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, request.getSortKey());
+        BoundaryPlannerResult result = BoundaryPlanner.planRowQuantileBoundaries(
+                sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
+                request.getSortKey());
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
+    }
+
+    /**
+     * Re-sizes the split count against what the load's predicate actually selects.
+     *
+     * <p>{@code requestedTabletCount} was computed from {@code fileTotalBytes}, which measures the
+     * whole source: for an external Iceberg table that is the entire snapshot, however selective the
+     * INSERT's WHERE clause is. The data tier is the only tier that learns the filtered size, because
+     * it is the only one that actually samples, so this is the first point where a better number
+     * exists. Without it a selective INSERT into an unpartitioned target is carved into tablets sized
+     * for the whole table -- and with a small {@code tablet_pre_split_target_size} that runs straight
+     * into {@code tablet_reshard_max_split_count}, leaving sub-megabyte tablets. The multi-partition
+     * flow already sizes from the sampler's estimate; this brings the single-partition flow in line.
+     *
+     * <p>A zero byte estimate means the sampler could not size the input at all (an Iceberg snapshot
+     * whose summary carries no totals, for instance). Keep the caller's count in that case rather
+     * than collapsing to the two-tablet floor on no evidence.
+     */
+    private static int effectiveTabletCount(SampleSet sampleSet, int requestedTabletCount,
+                                            int activeComputeNodeCount) {
+        Estimates sampledEstimates = sampleSet.getEstimates();
+        if (sampledEstimates == null || sampledEstimates.totalBytes() <= 0L) {
+            return requestedTabletCount;
+        }
+        return TabletPreSplitCoordinator.selectPreSplitTabletCount(sampledEstimates, activeComputeNodeCount);
     }
 
     /**

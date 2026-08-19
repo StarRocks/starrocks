@@ -218,10 +218,39 @@ public final class PartitionSampleGrouper {
             return Collections.emptyList();
         }
 
+        // Scope phase (no lock): when the INSERT named its target partitions, drop every group that
+        // resolves outside that set BEFORE the cap ranks anything. Capping first lets out-of-scope
+        // partitions with more sampled rows evict the named target, and the scope check further down
+        // then discards whatever the cap kept -- so an explicitly targeted INSERT or overwrite would
+        // silently receive no pre-split at all. Resolving here also memoizes the mapping, so the
+        // locked pass below does not repeat the range-fallback scan. Catalog name lookups are safe
+        // outside the lock for the same reason the analyzer above is: the locked pass re-resolves
+        // every partition it actually uses.
+        Map<String, String> scopedCatalogNames = new LinkedHashMap<>();
+        List<MergedGroup> mergedGroups;
+        if (partitionScope.isSpecified()) {
+            mergedGroups = new ArrayList<>();
+            for (MergedGroup group : byPartitionName.values()) {
+                String catalogPartitionName =
+                        resolveCatalogPartitionName(table, group, partitionColumns, partitionScope);
+                if (catalogPartitionName == null) {
+                    // The sample row belongs to a partition outside the explicit INSERT target.
+                    continue;
+                }
+                scopedCatalogNames.put(group.partitionName, catalogPartitionName);
+                mergedGroups.add(group);
+            }
+            if (mergedGroups.isEmpty()) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.GROUPER_EMPTY);
+                return Collections.emptyList();
+            }
+        } else {
+            mergedGroups = new ArrayList<>(byPartitionName.values());
+        }
+
         // Cap phase (no lock): rank merged groups heaviest-first and trim to the
         // per-load cap BEFORE the catalog lock so both analyzer (already done) and
         // catalog work are bounded for high-cardinality loads.
-        List<MergedGroup> mergedGroups = new ArrayList<>(byPartitionName.values());
         mergedGroups.sort((left, right) -> Integer.compare(right.rows.size(), left.rows.size()));
         int cap = Config.tablet_pre_split_max_partitions_per_load;
         if (cap > 0 && mergedGroups.size() > cap) {
@@ -243,15 +272,10 @@ public final class PartitionSampleGrouper {
                 long estimatedBytes = sampleRowCount == 0 ? 0L :
                         Math.round((double) group.rows.size() / sampleRowCount * totalFileBytes);
 
-                String catalogPartitionName = resolveCatalogPartitionName(
-                        table, group, partitionColumns, partitionScope);
-                if (partitionScope.isSpecified() && catalogPartitionName == null) {
-                    // The sample row belongs to a partition outside the explicit INSERT target.
-                    continue;
-                }
-                if (catalogPartitionName == null) {
-                    catalogPartitionName = group.partitionName;
-                }
+                // Resolved by the scope phase above for an explicit target; an unrestricted load
+                // writes the deterministic auto-partition name itself.
+                String catalogPartitionName =
+                        scopedCatalogNames.getOrDefault(group.partitionName, group.partitionName);
                 Partition partition = temporaryPartition
                         ? table.getPartition(catalogPartitionName, true)
                         : table.getPartition(catalogPartitionName);
