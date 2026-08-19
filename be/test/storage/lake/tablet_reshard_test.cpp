@@ -232,6 +232,19 @@ protected:
         return rowset;
     }
 
+    PersistentIndexSstablePB* add_shared_rssid_sstable(TabletMetadataPB* metadata, const std::string& filename,
+                                                       uint32_t rssid, int64_t shared_version, uint32_t max_rowid,
+                                                       uint64_t filesize = 512) {
+        auto* sst = metadata->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(filename);
+        sst->set_filesize(filesize);
+        sst->set_shared(true);
+        sst->set_shared_rssid(rssid);
+        sst->set_shared_version(shared_version);
+        sst->set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | max_rowid);
+        return sst;
+    }
+
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                     const std::string& file_name, const std::string& content) {
         FileMetaPB file_meta;
@@ -5850,6 +5863,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_mixed_shared_and_local
         sm->set_size(100);
         sm->set_shared(true);
     }
+    stamp_physical_identity_uid(rowset_a1, "shared_seg.dat");
     auto* rowset_a2 = meta_a->add_rowsets();
     rowset_a2->set_id(2);
     rowset_a2->set_version(2);
@@ -5892,6 +5906,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_mixed_shared_and_local
         sm->set_size(100);
         sm->set_shared(true);
     }
+    stamp_physical_identity_uid(rowset_b, "shared_seg.dat");
     // Same shared sstable
     auto* sst_shared_b = meta_b->mutable_sstable_meta()->add_sstables();
     sst_shared_b->set_filename("shared_sst.sst");
@@ -6099,6 +6114,375 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_shared_rssid_projectio
     // max_rss_rowid high part should match projected shared_rssid
     uint64_t expected_max = (static_cast<uint64_t>(out_sst.shared_rssid()) << 32) | 99;
     EXPECT_EQ(expected_max, out_sst.max_rss_rowid());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rssid_uses_live_sibling_owner) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t compacted_child = next_id();
+    const int64_t live_child = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(compacted_child);
+    prepare_tablet_dirs(live_child);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto compacted_meta = std::make_shared<TabletMetadataPB>();
+    compacted_meta->set_id(compacted_child);
+    compacted_meta->set_version(base_version);
+    compacted_meta->set_next_rowset_id(3);
+    set_primary_key_schema(compacted_meta.get(), 1001);
+    auto* compacted_rowset = compacted_meta->add_rowsets();
+    compacted_rowset->set_id(2);
+    compacted_rowset->set_version(2);
+    compacted_rowset->set_num_rows(10);
+    compacted_rowset->set_data_size(100);
+    auto* compacted_segment = compacted_rowset->add_segment_metas();
+    compacted_segment->set_filename("compacted.dat");
+    compacted_segment->set_size(100);
+    add_shared_rssid_sstable(compacted_meta.get(), "shared_modern.sst", /*rssid=*/1, /*shared_version=*/1,
+                             /*max_rowid=*/UINT32_MAX - 1);
+
+    auto live_meta = std::make_shared<TabletMetadataPB>();
+    live_meta->set_id(live_child);
+    live_meta->set_version(base_version);
+    live_meta->set_next_rowset_id(2);
+    set_primary_key_schema(live_meta.get(), 1001);
+    auto* live_rowset = live_meta->add_rowsets();
+    live_rowset->set_id(1);
+    live_rowset->set_version(1);
+    live_rowset->set_num_rows(10);
+    live_rowset->set_data_size(100);
+    auto* live_segment = live_rowset->add_segment_metas();
+    live_segment->set_filename("ancestor.dat");
+    live_segment->set_size(100);
+    live_segment->set_shared(true);
+    add_shared_rssid_sstable(live_meta.get(), "shared_modern.sst", /*rssid=*/1, /*shared_version=*/1,
+                             /*max_rowid=*/UINT32_MAX - 1);
+
+    ASSERT_OK(put_tablet_metadata(compacted_meta));
+    ASSERT_OK(put_tablet_metadata(live_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(compacted_child);
+    merging_info.add_old_tablet_ids(live_child);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    const auto& merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const uint32_t projected_rssid = merged->sstable_meta().sstables(0).shared_rssid();
+    bool has_owner = false;
+    for (const auto& rowset : merged->rowsets()) {
+        for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
+            has_owner |= lake::get_rssid(rowset, segment_pos) == projected_rssid;
+        }
+    }
+    EXPECT_TRUE(has_owner) << "projected shared_rssid=" << projected_rssid << " has no segment owner";
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_drops_ownerless_shared_data_sstable) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+    const std::string sst_filename = "stale_shared_modern.sst";
+    const uint64_t sst_filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(child_a, sst_filename),
+                                                          {{"stale-key", /*rssid=*/1, /*rowid=*/0}});
+
+    auto make_child = [&](int64_t tablet_id, const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(3);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(2);
+        rowset->set_version(2);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+        add_shared_rssid_sstable(metadata.get(), sst_filename, /*rssid=*/1, /*shared_version=*/1,
+                                 /*max_rowid=*/UINT32_MAX - 1, sst_filesize);
+        return metadata;
+    };
+
+    ASSERT_OK(put_tablet_metadata(make_child(child_a, "compacted_a.dat")));
+    ASSERT_OK(put_tablet_metadata(make_child(child_b, "compacted_b.dat")));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    const auto& merged = tablet_metadatas.at(merged_tablet);
+    EXPECT_EQ(0, merged->sstable_meta().sstables_size());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_conflicting_shared_rssid_owners) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id, const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(2);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+        segment->set_shared(true);
+        add_shared_rssid_sstable(metadata.get(), "ambiguous_shared_modern.sst", /*rssid=*/1,
+                                 /*shared_version=*/1, /*max_rowid=*/UINT32_MAX - 1);
+        return metadata;
+    };
+
+    ASSERT_OK(put_tablet_metadata(make_child(child_a, "owner_a.dat")));
+    ASSERT_OK(put_tablet_metadata(make_child(child_b, "owner_b.dat")));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const Status status =
+            lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                            txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("multiple final rssid owners")) << status;
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_shared_tombstone_sstable_without_segment_owner) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+    const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+    const std::string sst_filename = "shared_tombstone.sst";
+    const uint64_t sst_filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(child_a, sst_filename),
+                                                          {{"deleted-key", tombstone, tombstone}});
+
+    auto make_child = [&](int64_t tablet_id) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(2);
+        set_primary_key_schema(metadata.get(), 1001);
+        add_rowset_with_predicate(metadata.get(), /*rowset_id=*/1, /*version=*/1, /*has_predicate=*/true);
+        add_shared_rssid_sstable(metadata.get(), sst_filename, /*rssid=*/1, /*shared_version=*/1,
+                                 /*max_rowid=*/UINT32_MAX, sst_filesize);
+        return metadata;
+    };
+
+    ASSERT_OK(put_tablet_metadata(make_child(child_a)));
+    ASSERT_OK(put_tablet_metadata(make_child(child_b)));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    const auto& merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& tombstone_sst = merged->sstable_meta().sstables(0);
+    EXPECT_EQ(sst_filename, tombstone_sst.filename());
+    EXPECT_EQ(UINT32_MAX, static_cast<uint32_t>(tombstone_sst.max_rss_rowid()));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_data_sstable_ignores_restamped_watermark_marker) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+
+    for (bool restamped_child_first : {false, true}) {
+        const int64_t compacted_child = next_id();
+        const int64_t live_child = next_id();
+        const int64_t merged_tablet = next_id();
+        prepare_tablet_dirs(compacted_child);
+        prepare_tablet_dirs(live_child);
+        prepare_tablet_dirs(merged_tablet);
+
+        auto make_child = [&](int64_t tablet_id, bool owns_source_segment, uint32_t max_rowid) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(base_version);
+            metadata->set_next_rowset_id(owns_source_segment ? 2 : 3);
+            set_primary_key_schema(metadata.get(), 1001);
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(owns_source_segment ? 1 : 2);
+            rowset->set_version(owns_source_segment ? 1 : 2);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(owns_source_segment ? "ancestor.dat" : "compacted.dat");
+            segment->set_size(100);
+            segment->set_shared(owns_source_segment);
+            add_shared_rssid_sstable(metadata.get(), "restamped_shared_data.sst", /*rssid=*/1,
+                                     /*shared_version=*/1, max_rowid);
+            return metadata;
+        };
+
+        auto compacted_meta = make_child(compacted_child, /*owns_source_segment=*/false,
+                                         /*max_rowid=*/17); // parallel-compaction move restamp
+        auto live_meta = make_child(live_child, /*owns_source_segment=*/true, /*max_rowid=*/UINT32_MAX - 1);
+        ASSERT_OK(put_tablet_metadata(compacted_meta));
+        ASSERT_OK(put_tablet_metadata(live_meta));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(restamped_child_first ? compacted_child : live_child);
+        merging_info.add_old_tablet_ids(restamped_child_first ? live_child : compacted_child);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges));
+
+        const auto& merged = tablet_metadatas.at(merged_tablet);
+        ASSERT_EQ(1, merged->sstable_meta().sstables_size()) << "restamped_child_first=" << restamped_child_first;
+        const uint32_t projected_rssid = merged->sstable_meta().sstables(0).shared_rssid();
+        bool has_owner = false;
+        for (const auto& rowset : merged->rowsets()) {
+            for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
+                has_owner |= lake::get_rssid(rowset, segment_pos) == projected_rssid;
+            }
+        }
+        EXPECT_TRUE(has_owner) << "restamped_child_first=" << restamped_child_first;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_restamped_shared_tombstone_remains_effective) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+
+    for (bool restamped_child_first : {false, true}) {
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        const std::string filename = fmt::format("restamped_shared_tombstone_{}.sst", restamped_child_first);
+        const uint64_t filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(child_a, filename),
+                                                          {{"deleted-key", tombstone, tombstone}});
+
+        auto make_child = [&](int64_t tablet_id, uint32_t max_rowid) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(base_version);
+            metadata->set_next_rowset_id(2);
+            set_primary_key_schema(metadata.get(), 1001);
+            add_rowset_with_predicate(metadata.get(), /*rowset_id=*/1, /*version=*/1, /*has_predicate=*/true);
+            add_shared_rssid_sstable(metadata.get(), filename, /*rssid=*/1, /*shared_version=*/1, max_rowid, filesize);
+            return metadata;
+        };
+
+        auto restamped_meta = make_child(child_a, /*max_rowid=*/UINT32_MAX - 1);
+        auto pristine_meta = make_child(child_b, /*max_rowid=*/UINT32_MAX);
+        ASSERT_OK(put_tablet_metadata(restamped_meta));
+        ASSERT_OK(put_tablet_metadata(pristine_meta));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(restamped_child_first ? child_a : child_b);
+        merging_info.add_old_tablet_ids(restamped_child_first ? child_b : child_a);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges));
+
+        const auto& merged = tablet_metadatas.at(merged_tablet);
+        ASSERT_EQ(1, merged->sstable_meta().sstables_size()) << "restamped_child_first=" << restamped_child_first;
+        const auto& merged_sst_pb = merged->sstable_meta().sstables(0);
+        ASSIGN_OR_ABORT(auto merged_sst,
+                        lake::PersistentIndexSstable::new_sstable(
+                                merged_sst_pb, _tablet_manager->sst_location(merged_tablet, filename), nullptr,
+                                /*need_filter=*/false, nullptr, merged, _tablet_manager.get()));
+        Slice key("deleted-key");
+        lake::KeyIndexSet key_indexes{0};
+        lake::KeyIndexSet found;
+        IndexValue value(0);
+        ASSERT_OK(merged_sst->multi_get(&key, key_indexes, -1, &value, &found));
+        ASSERT_TRUE(found.contains(0));
+        EXPECT_EQ(NullIndexValue, value.get_value()) << "restamped_child_first=" << restamped_child_first;
+    }
 }
 
 // --- union_range unit tests ---
