@@ -172,7 +172,10 @@ namespace {
 ThreadPool* merge_prefill_pool() {
     static std::unique_ptr<ThreadPool> pool = []() -> std::unique_ptr<ThreadPool> {
         std::unique_ptr<ThreadPool> p;
-        int max_threads = std::max(1, config::compaction_parallel_merge_init_threads);
+        // The pool is shared by every concurrent merge; size it above the per-task in-flight
+        // limit so tasks do not dilute each other, and never below that limit.
+        int max_threads = std::max({1, config::compaction_parallel_merge_init_threads,
+                                    config::compaction_parallel_merge_init_pool_threads});
         Status st = ThreadPoolBuilder("merge_prefill")
                             .set_min_threads(0)
                             .set_max_threads(max_threads)
@@ -356,18 +359,38 @@ inline Status MergeIterator::parallel_prefill() {
     });
 
     auto* mem_tracker = _mem_tracker;
+    // Per-iterator in-flight limit: the shared pool is sized for concurrent merges, so without
+    // this cap one task with many children would occupy the whole pool and past-the-knee
+    // concurrency slows the task itself down (measured: 64 threads slower than 16 for one task).
+    const int inflight_cap = std::max(1, config::compaction_parallel_merge_init_threads);
+    auto gate = std::make_shared<std::pair<std::mutex, std::condition_variable>>();
+    auto inflight = std::make_shared<int>(0);
     for (size_t i = 0; i < n; i++) {
-        auto task = std::make_shared<std::packaged_task<void()>>([this, i, mem_tracker]() {
+        {
+            std::unique_lock<std::mutex> l(gate->first);
+            gate->second.wait(l, [&]() { return *inflight < inflight_cap; });
+            ++*inflight;
+        }
+        auto done = [gate, inflight]() {
+            std::lock_guard<std::mutex> l(gate->first);
+            --*inflight;
+            gate->second.notify_one();
+        };
+        auto task = std::make_shared<std::packaged_task<void()>>([this, i, mem_tracker, done]() {
             // Memory tracking is thread local: without re-installing the caller's tracker the
             // bytes read here would vanish from the task's account and escape its memory limit.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             tls_in_merge_prefill = true;
-            DeferOp reset_flag([]() { tls_in_merge_prefill = false; });
+            DeferOp reset_flag([done]() {
+                tls_in_merge_prefill = false;
+                done();
+            });
             (void)read_slot(i, 0);
         });
         auto st = _pool->submit_func([task]() { (*task)(); });
         if (!st.ok()) {
             // Pool refused the task: read this child inline. Still correct, just not overlapped.
+            done();
             (void)read_slot(i, 0);
             continue;
         }
