@@ -75,6 +75,16 @@ uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const Rowset
 Status verify_del_file_crc32c(const FileMetaPB& del_meta, int64_t tablet_id, std::string_view content);
 Status verify_del_file_crc32c(const DelfileWithRowsetId& del_meta, int64_t tablet_id, std::string_view content);
 
+// Read a del file's whole content through |rf| and verify it with verify_del_file_crc32c(). On a
+// checksum mismatch, drop the file's local data cache and read once more before failing: a del file is
+// immutable, so the bytes are most likely corrupt in the local cache rather than in remote storage, and
+// the retry reads through to the remote object. Falls back to reporting the original Corruption when
+// there is no cache to drop (non-shared-data build, or lake_clear_corrupted_cache_data turned off).
+// Segment pages and persistent-index sstables recover from cache corruption the same way.
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const FileMetaPB& del_meta, int64_t tablet_id);
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const DelfileWithRowsetId& del_meta,
+                                               int64_t tablet_id);
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
