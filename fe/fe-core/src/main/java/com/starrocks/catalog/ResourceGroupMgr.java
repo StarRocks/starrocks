@@ -189,7 +189,10 @@ public class ResourceGroupMgr implements Writable {
 
             wg.normalizeCpuWeight();
 
-            if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+            ResourceGroup oldWg = needReplace ? snapshot.byName.get(wg.getName()) : null;
+            if (oldWg != null) {
+                wg.setId(oldWg.getId());
+            } else if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_WG_ID);
             } else if (ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME.equals(wg.getName())) {
                 wg.setId(ResourceGroup.DEFAULT_MV_WG_ID);
@@ -197,35 +200,23 @@ public class ResourceGroupMgr implements Writable {
                 wg.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
 
-            wg.setVersion(wg.getId());
-            for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
-                classifier.setResourceGroupId(wg.getId());
-                classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
-            }
-
-            if (needReplace) {
-                // Log a DELETE WAL entry so BEs and journal-replay followers learn the old version
-                // is gone, but use a no-op snapshot callback — the snapshot update will be done
-                // atomically together with the CREATE entry below (single volatile write).
-                ResourceGroup oldWg = snapshot.byName.get(wg.getName());
-                if (oldWg != null) {
-                    ResourceGroup oldWgForOp =
-                            GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(oldWg), ResourceGroup.class);
-                    oldWgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
-                    ResourceGroupOpEntry deleteOp =
-                            new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, oldWgForOp);
-                    GlobalStateMgr.getCurrentState().getEditLog()
-                            .logResourceGroupOp(deleteOp, wal -> { /* snapshot updated atomically below */ });
-                    resourceGroupOps.add(deleteOp.toThrift());
+            wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+            if (wg.getClassifiers() != null) {
+                for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
+                    classifier.setResourceGroupId(wg.getId());
+                    classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
                 }
             }
 
-            ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
-            final boolean replacing = needReplace;
+            TWorkGroupOpType opType = (oldWg != null)
+                    ? TWorkGroupOpType.WORKGROUP_OP_ALTER
+                    : TWorkGroupOpType.WORKGROUP_OP_CREATE;
+            ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(opType, wg);
+            final boolean replacing = (oldWg != null);
             final String replacedName = wg.getName();
             GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp, wal -> {
                 if (replacing) {
-                    // Single volatile write: atomically removes old entry and adds new one.
+                    // Single volatile write: atomically replaces old entry with new entry.
                     replaceResourceGroupInternal(replacedName, wg);
                 } else {
                     addResourceGroupInternal(wg);
