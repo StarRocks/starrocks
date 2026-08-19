@@ -28,17 +28,12 @@ import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
-import com.starrocks.catalog.Type;
-=======
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorReportException;
->>>>>>> e0d97ad265 ([BugFix] Ranger view/MV authorization for external tables (#56316))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -49,16 +44,9 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
-import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
->>>>>>> e0d97ad265 ([BugFix] Ranger view/MV authorization for external tables (#56316))
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
