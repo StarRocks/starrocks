@@ -24,6 +24,22 @@ struct TNormalOlapScanNode {
   12: optional list<string> unused_output_column_name;
   13: optional list<i64> selected_partition_ids;
   14: optional list<i64> selected_partition_versions;
+<<<<<<< HEAD
+=======
+  15: optional PlanNodes.TTableSampleOptions sample_options;
+  // The schema the scan reads with. A fast schema evolution (ADD/DROP COLUMN) deliberately does
+  // not rewrite data, so it leaves the partition versions -- and therefore the rest of the cache
+  // key -- untouched, while changing what the very same query returns. Without this field the
+  // entries populated before such a DDL keep being served after it.
+  //
+  // Set only when the schema has actually diverged from the index it belongs to, so that tables
+  // which were never altered keep the digest they had before this field existed. See the note in
+  // OlapScanNode.toNormalForm().
+  //
+  // 16 is left free on purpose: a sibling fix for the same blind spot claims it for the ANN search
+  // spec. Keeping the two ordinals apart lets either change merge first without renumbering.
+  17: optional i64 schema_id;
+>>>>>>> 412db00e5a ([BugFix] Put the scan's schema into the query cache digest (#77559))
 }
 
 struct TNormalProjectNode {
