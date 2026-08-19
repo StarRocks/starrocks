@@ -31,6 +31,10 @@ public class UpdateFailPointStatusStatement extends StatementBase {
     private Integer nTimes = null;
     private Double probability = null;
     private boolean pause = false;
+    // Snapshotted when the statement is built, not read per serialization: toThrift() is called once
+    // for the local frontend and again for EVERY follower, so re-reading a mutable Config here would
+    // let a concurrent ADMIN SET FRONTEND CONFIG hand different nodes different armed timeouts.
+    private int pauseTimeoutSecond = 0;
     private List<String> backends = null;
 
     public UpdateFailPointStatusStatement(String name, boolean isEnable, List<String> backends, NodePosition pos) {
@@ -60,6 +64,8 @@ public class UpdateFailPointStatusStatement extends StatementBase {
                                                                 NodePosition pos) {
         UpdateFailPointStatusStatement statement = new UpdateFailPointStatusStatement(name, true, backends, pos);
         statement.pause = true;
+        statement.pauseTimeoutSecond =
+                TriggerPolicy.normalizePauseTimeoutSecond(Config.failpoint_pause_timeout_second);
         return statement;
     }
 
@@ -87,7 +93,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
             // mode and echo it back from list_fail_point, making SHOW FAILPOINTS report PAUSE for a
             // failpoint it merely disabled.
             request.pause = true;
-            request.pauseTimeoutSecond = normalizedPauseTimeoutSecond();
+            request.pauseTimeoutSecond = pauseTimeoutSecond;
         }
         return request;
     }
@@ -100,7 +106,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
         request.setIs_enable(isEnable && !pause);
         if (pause) {
             request.setPause(true);
-            request.setPause_timeout_second(normalizedPauseTimeoutSecond());
+            request.setPause_timeout_second(pauseTimeoutSecond);
         }
         if (nTimes != null) {
             request.setTimes(nTimes);
@@ -109,15 +115,6 @@ public class UpdateFailPointStatusStatement extends StatementBase {
             request.setProbability(probability);
         }
         return request;
-    }
-
-    /**
-     * Snapshotted once, here at the arming site, and carried to every recipient. Receivers must not
-     * re-read their own config at park time or an ADMIN SET FRONTEND CONFIG in between would let the
-     * frontends and backends disagree about how long a pause lasts.
-     */
-    private int normalizedPauseTimeoutSecond() {
-        return TriggerPolicy.normalizePauseTimeoutSecond(Config.failpoint_pause_timeout_second);
     }
 
     private PFailPointTriggerMode getFailPointMode() {

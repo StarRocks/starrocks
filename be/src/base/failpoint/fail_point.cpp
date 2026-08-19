@@ -130,12 +130,16 @@ bool FailPoint::wait_until_released(uint64_t gen, int32_t timeout_second) {
         // Disarm, do not merely resume: leaving the failpoint armed would park every NEWLY arriving
         // thread for another full timeout, so a failpoint on a hot path (a publish RPC handler, say)
         // would keep the node wedged indefinitely -- the opposite of the self-healing this timeout
-        // exists to provide. Done outside the _pause_mu scope because setMode takes _mu -> _pause_mu.
-        LOG(WARNING) << "failpoint " << _name << " pause timed out after " << timeout_second
-                     << "s, disarming it and resuming";
-        PFailPointTriggerMode disabled;
-        disabled.set_mode(FailPointTriggerModeType::DISABLE);
-        setMode(disabled);
+        // exists to provide. Done outside the _pause_mu scope because the disarm takes
+        // _mu -> _pause_mu, and conditionally so it cannot clobber a concurrent re-arm.
+        if (disarm_expired_pause(gen)) {
+            LOG(WARNING) << "failpoint " << _name << " pause timed out after " << timeout_second
+                         << "s, disarming it and resuming";
+        } else {
+            LOG(WARNING) << "failpoint " << _name << " pause timed out after " << timeout_second
+                         << "s, resuming; its mode changed concurrently so the current state is left "
+                         << "unchanged";
+        }
     } else {
         LOG(INFO) << "failpoint " << _name << " pause released";
     }
@@ -149,6 +153,27 @@ PFailPointTriggerMode trigger_mode_from_request(const PUpdateFailPointStatusRequ
         set_pause_trigger_mode(&trigger_mode, request.pause_timeout_second());
     }
     return trigger_mode;
+}
+
+bool FailPoint::disarm_expired_pause(uint64_t gen) {
+    {
+        std::lock_guard l(_mu);
+        // Same lock order as setMode: _mu -> _pause_mu.
+        std::lock_guard<std::mutex> pl(_pause_mu);
+        if (_mode_generation.load(std::memory_order_relaxed) != gen) {
+            // The mode changed while this pause was expiring -- re-armed by an operator, disabled, or
+            // already disarmed by a sibling waiter. Whatever it is now is the current intent; leave
+            // it alone.
+            return false;
+        }
+        _trigger_mode.Clear();
+        _trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        _mode_generation.fetch_add(1, std::memory_order_relaxed);
+    }
+    // Wake any sibling threads parked on the same generation so they resume now rather than each
+    // waiting out its own timeout.
+    _pause_cv.notify_all();
+    return true;
 }
 
 void FailPoint::setMode(const PFailPointTriggerMode& p_trigger_mode) {

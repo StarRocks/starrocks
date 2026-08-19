@@ -79,10 +79,12 @@ Points worth knowing:
   continues normally, so arming an existing fail-style failpoint `WITH PAUSE` turns it into a pure
   stop point. To pause *and* fail, arm a second failpoint downstream.
 - **Any mode change releases**, not just `ADMIN DISABLE FAILPOINT`.
-- **A forgotten disable self-heals.** A parked thread resumes after
-  `failpoint_pause_timeout_second` (FE config, default 300, mutable) with a `pause timed out`
-  WARNING. The FE sends this value to BEs/CNs with the arming request, so both sides share one
-  timeout.
+- **A forgotten disable self-heals.** On timeout the failpoint is **disarmed**, not merely stepped
+  past, so later arrivals are not parked again; a `pause timed out` WARNING is logged. If the failpoint
+  was re-armed while the pause was expiring, the new mode is kept and left alone. The timeout comes
+  from `failpoint_pause_timeout_second` (FE config, default 300, mutable), snapshotted when the
+  failpoint is armed and sent to every frontend and backend with the arming request, so all nodes
+  share one value even if the config changes afterwards.
 - **Observability.** `SHOW FAILPOINTS` reports `TriggerCount` (cumulative fires) and `PausedThreads`
   (threads parked right now) for backends. FE failpoints are not listed by `SHOW FAILPOINTS`; an FE
   pause logs `failpoint <name> paused, waiting for ADMIN DISABLE FAILPOINT` in `fe.log`, and the
@@ -92,11 +94,16 @@ Points worth knowing:
   Nothing is injected, but nothing pauses either, and such a node reports `DISABLE` rather than
   `PAUSE`. Always confirm a pause with `PausedThreads > 0`, which is the only signal that proves a
   thread actually parked.
-- **A pause blocks its logical thread.** The backend wait uses bthread primitives, so a pause inside
-  a brpc handler yields the worker rather than occupying it and `ADMIN DISABLE FAILPOINT` stays
-  serviceable. On the frontend, `TabletReshardJobMgr` runs every reshard job on one daemon thread, so
-  a pause inside a job also freezes the other reshard jobs on that frontend. A node shutdown while a
-  thread is parked waits out that thread's pause timeout.
+- **A pause blocks the thread it parks, and that thread stays blocked.** On the backend the wait
+  deliberately blocks the pthread rather than yielding a bthread: `shouldFail()` runs inside libfiu's
+  `fiu_fail()`, which holds a thread-local recursion counter and a read lock across the callback, so a
+  pause that migrated to another worker would corrupt both and silently disable every failpoint on the
+  original worker. The trade-off is that a paused failpoint occupies its thread, so parking more brpc
+  handlers than the worker pool has threads can delay `ADMIN DISABLE FAILPOINT` until the pause times
+  out. Pause a handful of handlers, not all of them.
+- On the frontend, `TabletReshardJobMgr` runs every reshard job on one daemon thread, so a pause
+  inside a job also freezes the other reshard jobs on that frontend. A node shutdown while a thread is
+  parked waits out that thread's pause timeout.
 
 ## Build requirement for BE failpoints
 

@@ -37,6 +37,23 @@ public class FailPoint {
         }
     }
 
+    /**
+     * Remove {@code name} only if it is still mapped to {@code expected}, then release it. Used by a
+     * timed-out pause to disarm itself: an unconditional remove would delete a policy that another
+     * thread installed for the same name in the meantime, silently discarding the operator's new mode.
+     *
+     * @return true if this call removed the policy
+     */
+    public static boolean removeTriggerPolicyIf(String name, TriggerPolicy expected) {
+        // ConcurrentHashMap.remove(key, value) compares with equals(), which TriggerPolicy does not
+        // override, so this is an identity check -- exactly what is wanted here.
+        boolean removed = POLICIES.remove(name, expected);
+        if (removed) {
+            expected.release();
+        }
+        return removed;
+    }
+
     public static boolean shouldTrigger(String name) {
         TriggerPolicy triggerPolicy = POLICIES.get(name);
         if (triggerPolicy != null) {

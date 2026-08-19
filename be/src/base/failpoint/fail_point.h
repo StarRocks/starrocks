@@ -51,6 +51,12 @@ protected:
     // ALWAYS returns false -- a released pause continues normally and never injects.
     bool wait_until_released(uint64_t gen, int32_t timeout_second);
 
+    // Disarm a pause that reached its timeout, but ONLY if it is still the mode installed as of
+    // |gen|. An unconditional disarm would race an operator who re-armed the failpoint in the window
+    // between the wait expiring and the disarm landing, silently replacing their new mode with
+    // DISABLE. Returns true if this call disarmed it.
+    bool disarm_expired_pause(uint64_t gen);
+
     std::string _name;
     mutable std::shared_mutex _mu;
     PFailPointTriggerMode _trigger_mode;

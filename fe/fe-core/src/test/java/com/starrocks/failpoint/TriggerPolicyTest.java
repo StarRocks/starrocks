@@ -189,6 +189,26 @@ public class TriggerPolicyTest {
         Assertions.assertTrue(elapsedMs < 500, "second arrival parked again after " + elapsedMs + "ms");
     }
 
+    // A pause that times out must disarm ITSELF, never a policy that replaced it in the meantime --
+    // otherwise the operator's newly armed mode is silently discarded. Exercised directly rather than
+    // by racing a real timeout: setTriggerPolicy releases the superseded policy, so a parked thread
+    // always observes a release rather than a timeout and never reaches the conditional removal.
+    @Test
+    public void testConditionalRemovalLeavesAReplacementArmed() {
+        TriggerPolicy expiring = TriggerPolicy.pausePolicy(1);
+        FailPoint.setTriggerPolicy("fp_replaced", expiring);
+        TriggerPolicy replacement = TriggerPolicy.enablePolicy();
+        FailPoint.setTriggerPolicy("fp_replaced", replacement);
+
+        // This is what a timed-out pause does. It must leave the replacement alone.
+        Assertions.assertFalse(FailPoint.removeTriggerPolicyIf("fp_replaced", expiring));
+        Assertions.assertTrue(FailPoint.shouldTrigger("fp_replaced"), "replacement was removed");
+
+        // The still-installed policy is removed, so a genuine self-disarm does take effect.
+        Assertions.assertTrue(FailPoint.removeTriggerPolicyIf("fp_replaced", replacement));
+        Assertions.assertFalse(FailPoint.shouldTrigger("fp_replaced"));
+    }
+
     @Test
     public void testFromThriftPreferPauseOverIsEnable() {
         // A pause request sets is_enable = false so an old FE disables; a new FE must still see PAUSE.

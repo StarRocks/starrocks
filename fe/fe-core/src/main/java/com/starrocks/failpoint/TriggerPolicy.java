@@ -140,9 +140,15 @@ public class TriggerPolicy {
             // Disarm, do not merely resume: leaving the policy armed would park every NEWLY arriving
             // thread for another full timeout, so a failpoint on a hot path would keep the frontend
             // wedged indefinitely -- the opposite of the self-healing this timeout exists to give.
-            LOG.warn("failpoint {} pause timed out after {}s, disarming it and resuming",
-                    name, pauseTimeoutSecond);
-            FailPoint.removeTriggerPolicy(name);
+            // Conditional on this policy still being the installed one: a plain remove would delete a
+            // replacement armed concurrently and discard the operator's new mode.
+            if (FailPoint.removeTriggerPolicyIf(name, this)) {
+                LOG.warn("failpoint {} pause timed out after {}s, disarming it and resuming",
+                        name, pauseTimeoutSecond);
+            } else {
+                LOG.warn("failpoint {} pause timed out after {}s, resuming; its policy changed "
+                        + "concurrently so the current state is left unchanged", name, pauseTimeoutSecond);
+            }
         } else {
             LOG.info("failpoint {} pause released", name);
         }
