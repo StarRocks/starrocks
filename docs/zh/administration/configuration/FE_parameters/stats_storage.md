@@ -668,7 +668,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
@@ -724,6 +724,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
+
+### `tablet_pre_split_target_size`
+
+- 默认值: 0
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
 
 #### 回滚基于采样的 Tablet 预分裂
 
