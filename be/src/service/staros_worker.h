@@ -169,5 +169,9 @@ Status staros_need_warmup_tablet(int64_t tablet_id);
 staros::WarmupLevel staros_worker_warmup_level();
 void set_starlet_in_shutdown();
 
+// Applies the starlet_fslib_*_part_size BE configs to their starlet gflags, validating each value
+// with starlet's own predicate. Called during worker init; exposed for tests.
+void apply_starlet_upload_threshold_configs();
+
 } // namespace starrocks
 #endif // USE_STAROS
