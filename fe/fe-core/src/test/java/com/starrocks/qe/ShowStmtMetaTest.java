@@ -1048,7 +1048,7 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupStmt() {
         ShowResourceGroupStmt stmt = new ShowResourceGroupStmt("test_group", false, false, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(12, metaData.getColumnCount());
+        Assertions.assertEquals(13, metaData.getColumnCount());
         Assertions.assertEquals("name", metaData.getColumn(0).getName());
         Assertions.assertEquals("id", metaData.getColumn(1).getName());
         Assertions.assertEquals("cpu_weight_percent", metaData.getColumn(2).getName());
@@ -1059,8 +1059,9 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("big_query_mem_limit", metaData.getColumn(7).getName());
         Assertions.assertEquals("concurrency_limit", metaData.getColumn(8).getName());
         Assertions.assertEquals("spill_mem_limit_threshold", metaData.getColumn(9).getName());
-        Assertions.assertEquals("classifiers", metaData.getColumn(10).getName());
-        Assertions.assertEquals("warehouses", metaData.getColumn(11).getName());
+        Assertions.assertEquals("mem_used_pct_limit", metaData.getColumn(10).getName());
+        Assertions.assertEquals("classifiers", metaData.getColumn(11).getName());
+        Assertions.assertEquals("warehouses", metaData.getColumn(12).getName());
     }
 
     @Test

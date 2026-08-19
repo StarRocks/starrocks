@@ -241,7 +241,7 @@ Resource groups restrict resource usage per group per BE node.
 
 Query queue uses BE-level limits for all queries.
 
-`concurrency_limit` and `max_cpu_cores` both apply when resource group-level query queue is enabled.
+`concurrency_limit`, `max_cpu_cores`, and `mem_used_pct_limit` all apply when resource group-level query queue is enabled. `mem_used_pct_limit` additionally requires `enable_query_queue_v2` to be `false`.
 
 ### What is the difference between `pipeline_dop`, `exec_mem_limit`, and resource group concurrency limits?
 
