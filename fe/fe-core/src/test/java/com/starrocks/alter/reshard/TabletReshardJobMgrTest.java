@@ -682,9 +682,9 @@ public class TabletReshardJobMgrTest {
                     "the old 32-bit Objects.hash fingerprint would have collided on these inputs");
 
             Config.tablet_reshard_target_size = targetA;
-            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L);
+            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
             Config.tablet_reshard_target_size = targetB;
-            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L);
+            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
             Assertions.assertNotEquals(sigA, sigB,
                     "the 64-bit murmur3 fingerprint must distinguish targets that collide under Objects.hash");
         } finally {
@@ -878,27 +878,31 @@ public class TabletReshardJobMgrTest {
         try {
             long max = Config.tablet_reshard_target_size * 4;
             long adaptive = Config.tablet_reshard_min_split_size * 4;
-            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive);
+            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8);
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive, 8),
                     "a larger max tablet changes the size rule's answer");
 
             Config.tablet_reshard_min_split_size = savedMin * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8),
                     "min_split_size moves the adaptive target");
             Config.tablet_reshard_min_split_size = savedMin;
 
-            // No node-count term: the scan decides against the current count, so a warehouse resize
-            // shows up as the adaptive signal itself appearing or vanishing.
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8, 8),
                     "a different adaptive-split tablet size");
+
+            // The bound is a plan input, not just a scan input: an index the adaptive rule declined
+            // to widen at four nodes may be worth widening at eight, so a resized warehouse has to
+            // re-arm a suppressed table rather than leave it latched on the old bound's answer.
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 4),
+                    "a resized warehouse moves the bound");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;
         }
     }
 
     @Test
-    public void nodeCountIsResolvedExactlyOncePerFiringDecision() {
+    public void nodeCountIsResolvedOnceForTheSignatureAndOnceForThePlan() {
         mockLeaderAdmissionOpen();
         new MockUp<TabletReshardUtils>() {
             @Mock
@@ -910,10 +914,18 @@ public class TabletReshardJobMgrTest {
         // A local manager, and the counter zeroed as late as possible: the singleton's scheduler
         // thread ticks every 10 ms, and a candidate an earlier test left queued would resolve too.
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+        // Both resolutions happen while deciding, before any tablet is actually planned, so leave
+        // the table too small to split: a real job here would replace the shared tablet this class
+        // hands to every other test.
+        oversizedTablet.setDataSize(0);
         NODE_COUNT_RESOLUTIONS.set(0);
         Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
                 Config.tablet_reshard_target_size * 4, Long.MAX_VALUE, 0L);
-        Assertions.assertEquals(1, NODE_COUNT_RESOLUTIONS.get());
+        // Two resolutions, both O(1): the trigger needs the bound to build the suppression
+        // signature (so a resized cluster re-arms it), and the factory resolves its own because
+        // an explicit ALTER TABLE ... SPLIT TABLET reaches it with no trigger ahead of it.
+        // Neither scales with the index, and both read the local node list rather than StarMgr.
+        Assertions.assertEquals(2, NODE_COUNT_RESOLUTIONS.get());
     }
 
     @Test

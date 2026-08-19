@@ -4841,7 +4841,8 @@ public class Config extends ConfigBase {
             + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
             + "Should be no larger than tablet_reshard_target_size. Also the target tablet size while a materialized "
             + "index holds fewer tablets than its warehouse has compute nodes, so raising it also delays early "
-            + "splitting; see tablet_reshard_enable_early_split.")
+            + "splitting. Setting it at or above tablet_reshard_target_size turns that off, leaving only "
+            + "the size-based rule.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "

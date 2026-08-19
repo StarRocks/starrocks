@@ -177,6 +177,18 @@ public class SplitTabletJobEarlyTest {
     }
 
     @Test
+    public void aSkewedIndexAtTheBoundIsNotWidenedPastIt() {
+        // One large tablet beside two small ones, against a bound of four. Flooring bounds the
+        // children the adaptive rule asks for -- here three, from 8 GiB over a 2.5 GiB target -- but
+        // the small tablets it declines still occupy slots and are absent from that sum. Left
+        // uncapped the index would land on five against a bound of four, back inside auto-merge's
+        // range, which is the tug of war the bound exists to prevent.
+        setTabletDataSizes(8L << 30, 1L << 30, 1L << 30);
+        int after = 3 + plan(4, new SplitTabletClause()).values().stream().mapToInt(k -> k - 1).sum();
+        assertEquals(4, after, "landed on " + after + ", bound is 4");
+    }
+
+    @Test
     public void theIndexNeverPassesTheBoundHoweverItsDataIsSpread() {
         // Uneven sizes are the shape that breaks a per-tablet rule that rounds to nearest: each tablet
         // rounds up independently and the total overshoots. Flooring makes sum(floor(s/T)) <= sum(s)/T,

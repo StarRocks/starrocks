@@ -173,19 +173,21 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // 64-bit fingerprint of the requested split plan: the raw reshard-config knobs plus the computed
     // child count of the tablet each rule would act on. Folding the raw configs guarantees any admin
     // config change re-arms the size-split latch even when calcSplitCount is capped at max_split_count;
-    // the computed counts also capture a size-band crossing. A warehouse resize needs no term of its
-    // own: the scan decides whether an index is under-provisioned against the current node count, so a
-    // resize shows up as the early signal appearing or vanishing. murmur3 (matching ColocateChecker)
-    // avoids the 32-bit Objects.hash collision that could hide a config change.
+    // the computed counts also capture a size-band crossing. The bound is folded in because the plan
+    // depends on it and the signal alone does not carry it: an eight-way attempt that latched after
+    // producing an identical tablet would, on a warehouse scaled down to two nodes, become a two-way
+    // attempt that might well succeed -- with the same tablet size, and so the same fingerprint,
+    // suppressing it forever. murmur3 (matching ColocateChecker) avoids the 32-bit Objects.hash
+    // collision that could hide a config change.
     @VisibleForTesting
-    static long splitPlanSignature(long maxTabletSize, long maxAdaptiveSplitTabletSize) {
+    static long splitPlanSignature(long maxTabletSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
         return Hashing.murmur3_128().newHasher()
                 .putLong(Config.tablet_reshard_target_size)
                 .putInt(Config.tablet_reshard_max_split_count)
                 .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
                 .putLong(Config.tablet_reshard_min_split_size)
-                .putBoolean(true /*adaptive target always applies*/)
                 .putLong(maxAdaptiveSplitTabletSize)
+                .putInt(adaptiveBound)
                 .hash().asLong();
     }
 
@@ -212,8 +214,13 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
             boolean adaptiveSignal = maxAdaptiveSplitTabletSize > 0;
             if (normalSignal || adaptiveSignal) {
+                // Resolved here, outside any table lock -- the drain holds none. The factory
+                // resolves it again for the plan it builds; a resize between the two only means this
+                // fingerprint describes a slightly different bound, which the next scan reconciles.
+                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(
+                        TabletReshardUtils.safeComputeNodeCountForTable(tableId));
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
-                        splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize));
+                        splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize, adaptiveBound));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
                     try {
@@ -231,16 +238,23 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                         if (normalSignal) {
                             throw e;
                         }
-                        // Arm the latch on the way out. Without it, a table whose early plan cannot be
-                        // built -- an unstable colocate group, an exhausted parallel-tablet budget --
-                        // re-plans every scan forever, each attempt walking every partition and index
-                        // under the table read lock, and says so only at debug level.
-                        // -1 is not a tracked job: the latch's abort/settled probes both resolve it to
-                        // "no job", which is exactly right -- nothing is running to wait on.
-                        sizeSplitLatch.recordFired(tableId, signature, -1L, decision.nextAbortRetries());
-                        LOG.info("Early split produced no work for table {}.{}; suppressing until its "
-                                        + "layout or configuration changes: {}",
-                                db.getFullName(), table.getName(), e.getMessage());
+                        if (e instanceof EmptyReshardPlanException) {
+                            // Deterministic: the same layout and configuration will produce the same
+                            // empty plan, so latch it. Without that, such a table re-plans on every
+                            // scan forever, walking every partition and index under the table read
+                            // lock each time. -1 is not a tracked job, which the latch's abort and
+                            // settled probes both resolve to "no job" -- correct, nothing is running.
+                            sizeSplitLatch.recordFired(tableId, signature, -1L, decision.nextAbortRetries());
+                            LOG.info("Adaptive split produced no work for table {}.{}; suppressing until "
+                                            + "its layout or configuration changes: {}",
+                                    db.getFullName(), table.getName(), e.getMessage());
+                        } else {
+                            // Not now, rather than never: an exhausted parallel-tablet budget or a table
+                            // another job owns clears on its own, and latching it here would suppress
+                            // the retry until something unrelated moved the fingerprint.
+                            LOG.info("Adaptive split for table {}.{} could not start; will retry: {}",
+                                    db.getFullName(), table.getName(), e.getMessage());
+                        }
                     }
                 } else if (sizeSplitLatch.claimSuppressionLog(tableId)) {
                     LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout "

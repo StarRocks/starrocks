@@ -109,14 +109,21 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     @VisibleForTesting
     static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long steadyTargetSize, int bound) {
+        int tabletCount = index.getTablets().size();
         long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(
                 index.getDataSize(true), steadyTargetSize, bound);
+        // Slots left before the index reaches the bound. Flooring bounds the CHILDREN the adaptive rule
+        // asks for, but tablets it leaves alone still occupy slots and are absent from that sum, so a
+        // skewed index -- one large tablet beside several small ones -- would pass the bound without
+        // this. Spent as the walk goes, so the total never exceeds what was available.
+        int headroom = adaptiveTarget < steadyTargetSize ? Math.max(0, bound - tabletCount) : 0;
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
         for (Tablet tablet : index.getTablets()) {
             long dataSize = tablet.getDataSize(true);
             int k = TabletReshardUtils.calcSplitCount(dataSize, steadyTargetSize);
-            if (k <= 1) {
-                k = TabletReshardUtils.adaptiveSplitCount(dataSize, adaptiveTarget);
+            if (k <= 1 && headroom > 0) {
+                k = Math.min(TabletReshardUtils.adaptiveSplitCount(dataSize, adaptiveTarget), headroom + 1);
+                headroom = Math.max(0, headroom - (k - 1));
             }
             if (k > 1) {
                 splitCounts.put(tablet.getId(), k);
@@ -133,9 +140,13 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     public TabletReshardJob createTabletReshardJob() throws StarRocksException {
         validateTableLevel(db, table);
 
+        // Resolved before the locked planning section: the resolver goes through the warehouse
+        // availability probe, which reaches StarMgr, and that section holds a table read lock that
+        // publish waits on. The merge factory resolves its own floor the same way.
+        adaptiveBound();
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
         if (reshardingPhysicalPartitions.isEmpty()) {
-            throw new StarRocksException("No tablets need to split in table "
+            throw new EmptyReshardPlanException("No tablets need to split in table "
                     + db.getFullName() + '.' + table.getName());
         }
 
