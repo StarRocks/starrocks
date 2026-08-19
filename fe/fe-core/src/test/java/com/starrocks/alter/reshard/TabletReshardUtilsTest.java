@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
@@ -272,6 +273,27 @@ public class TabletReshardUtilsTest {
         } finally {
             Config.tablet_reshard_min_split_size = saved;
         }
+    }
+
+    @Test
+    public void anUnresolvableWarehouseIsFatalToThePlannerAndSurvivableToTheScan() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "wh");
+            }
+        };
+
+        // The planner must not read "warehouse temporarily unavailable" as "this index needs nothing":
+        // that produces an empty plan, which its caller is entitled to latch as deterministic, and the
+        // fingerprint would never move again on an unchanged layout.
+        assertThrows(ErrorReportException.class, () -> TabletReshardUtils.adaptiveSplitBoundForTable(1L),
+                "the planner's resolution must propagate");
+
+        // The scan is the caller that should degrade instead -- it has a whole cluster left to walk,
+        // and its output is only a signal the planner re-decides.
+        assertEquals(0, TabletReshardUtils.safeComputeNodeCountForTable(1L),
+                "the scan's resolution must fall back");
     }
 
     @Test

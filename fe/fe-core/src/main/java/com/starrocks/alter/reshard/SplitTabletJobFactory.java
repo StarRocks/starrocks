@@ -115,17 +115,28 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     @VisibleForTesting
     static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long steadyTargetSize, int bound) {
         List<Tablet> tablets = index.getTablets();
-        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(
-                index.getDataSize(true), steadyTargetSize, bound);
+        // One read per tablet, for the whole plan. A lake tablet's size is volatile and the stat
+        // collector writes it without the table lock, so reading it again per pass would let the size
+        // rule decline a tablet on one value while the adaptive rule acts on a larger one -- and the
+        // size rule's verdict is the one that has to stand, since BE split is all-or-nothing. Summing
+        // the snapshot rather than calling MaterializedIndex#getDataSize keeps the index total on the
+        // same values, and costs one walk instead of two.
+        long[] dataSizes = new long[tablets.size()];
+        long indexDataSize = 0;
+        for (int i = 0; i < dataSizes.length; ++i) {
+            dataSizes[i] = tablets.get(i).getDataSize(true);
+            indexDataSize += dataSizes[i];
+        }
+        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(indexDataSize, steadyTargetSize, bound);
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
 
-        // The size rule decides first and is never overridden: BE tablet split is all-or-nothing, so
-        // asking for more children than it computed can turn a working split into a silent no-op.
+        // The size rule decides first and is never overridden: asking for more children than it
+        // computed can turn a working split into a silent no-op.
         int planned = tablets.size();
-        for (Tablet tablet : tablets) {
-            int k = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true), steadyTargetSize);
+        for (int i = 0; i < dataSizes.length; ++i) {
+            int k = TabletReshardUtils.calcSplitCount(dataSizes[i], steadyTargetSize);
             if (k > 1) {
-                splitCounts.put(tablet.getId(), k);
+                splitCounts.put(tablets.get(i).getId(), k);
                 planned += k - 1;
             }
         }
@@ -140,17 +151,15 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         // inside auto-merge's range. Flooring does not catch it either; it bounds the children this
         // rule asks for, not the ones the other rule already claimed.
         int headroom = Math.max(0, bound - planned);
-        for (Tablet tablet : tablets) {
-            if (headroom <= 0) {
-                break;
-            }
-            if (splitCounts.containsKey(tablet.getId())) {
+        for (int i = 0; i < dataSizes.length && headroom > 0; ++i) {
+            long tabletId = tablets.get(i).getId();
+            if (splitCounts.containsKey(tabletId)) {
                 continue;
             }
-            int k = Math.min(TabletReshardUtils.adaptiveSplitCount(tablet.getDataSize(true), adaptiveTarget),
+            int k = Math.min(TabletReshardUtils.adaptiveSplitCount(dataSizes[i], adaptiveTarget),
                     headroom + 1);
             if (k > 1) {
-                splitCounts.put(tablet.getId(), k);
+                splitCounts.put(tabletId, k);
                 headroom -= k - 1;
             }
         }

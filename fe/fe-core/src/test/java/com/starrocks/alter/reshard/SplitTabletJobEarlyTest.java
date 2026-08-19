@@ -23,6 +23,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -137,7 +139,8 @@ public class SplitTabletJobEarlyTest {
 
     /**
      * Mirrors what the factory resolves per job: a zero bound is how it says "leave the target alone",
-     * which is what an explicit target size in the statement, or an unresolved warehouse, produces.
+     * which is what an explicit target size, or explicit tablet ids, produce. A warehouse that cannot
+     * be resolved does NOT land here -- the factory propagates that instead.
      */
     private Map<Long, Integer> plan(int computeNodeCount, SplitTabletClause clause) {
         boolean explicitTarget = clause.getProperties() != null
@@ -220,8 +223,9 @@ public class SplitTabletJobEarlyTest {
     @Test
     public void theIndexNeverPassesTheBoundHoweverItsDataIsSpread() {
         // Uneven sizes are the shape that breaks a per-tablet rule that rounds to nearest: each tablet
-        // rounds up independently and the total overshoots. Flooring makes sum(floor(s/T)) <= sum(s)/T,
-        // which is the bound itself, so no budget has to be tracked across the walk.
+        // rounds up independently and the total overshoots. Flooring bounds each tablet's own count;
+        // the shared headroom budget is what bounds the index's width, since declined tablets and the
+        // size rule's own splits occupy slots too.
         setTabletDataSizes(4L << 30, 12L << 30, 1L << 30);
         int after = 3 + plan(5, new SplitTabletClause()).values().stream().mapToInt(k -> k - 1).sum();
         assertTrue(after <= 5, "landed on " + after + ", bound is 5");
@@ -375,16 +379,33 @@ public class SplitTabletJobEarlyTest {
     }
 
     @Test
-    public void anUnavailableWarehouseFallsBackToTheNormalRule() throws Exception {
+    public void aResolvedZeroBoundLeavesOnlyTheSizeRule() throws Exception {
         // Separate indexes for the same reason the non-positive-minimum test needs them: in one index
         // the 100 GiB tablet's normal split zeroes headroom before the 3 GiB tablet is reached, so the
         // assertion would read 10 for any node count and could not tell a resolved 0 from a count the
         // constructor never resolved at all.
         setTwoIndexesWithSizes(/*adaptiveOnly=*/ 4L << 30, /*normal=*/ 100L << 30);
         stubNodeCount(0);
-        // The factory resolves its own count, gets 0, and disables the early rule.
         TabletReshardJob job =
                 new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
         assertEquals(10L, job.getParallelTablets(), "only the 100 GiB tablet splits");
+    }
+
+    @Test
+    public void anUnresolvableWarehouseFailsTheJobRatherThanPlanningWithoutIt() {
+        // A resolution failure must not read as "this index needs nothing". An empty plan is something
+        // the caller is entitled to latch as deterministic, and with the layout, the configuration and
+        // the signal all unchanged that fingerprint would never move again -- the table would stop
+        // splitting for good over one unavailable warehouse.
+        setTabletDataSizes(4L << 30);
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int adaptiveSplitBoundForTable(long tableId) {
+                throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_UNAVAILABLE, "wh");
+            }
+        };
+        SplitTabletJobFactory factory = new SplitTabletJobFactory(db, table, new SplitTabletClause());
+        assertThrows(ErrorReportException.class, factory::createTabletReshardJob,
+                "an unresolvable warehouse must propagate, not become an empty plan");
     }
 }

@@ -100,7 +100,7 @@ public class TabletReshardUtils {
 
     /**
      * Target tablet size for one index: the steady-state target, or the size that would give the index
-     * one tablet per usable compute node, whichever is smaller, floored so a nearly empty index is not
+     * one tablet per slot the bound allows, whichever is smaller, floored so a nearly empty index is not
      * carved into slivers.
      *
      * <p>This target is a function of the index's SIZE, not of how many tablets it has: splitting an
@@ -116,9 +116,11 @@ public class TabletReshardUtils {
      * clamp, a minimum above the target would raise the effective target above it and change the
      * steady-state rule too.
      *
-     * <p>{@code bound} is the auto-merge parallelism floor. Merge acts strictly above it, so an index
-     * this rule widens to the bound is never one merge would immediately narrow again. A non-positive
-     * bound (an unresolved warehouse) leaves the steady-state target untouched.
+     * <p>{@code bound} sits at or below the auto-merge parallelism floor -- it is that floor clamped
+     * to the node count, so a single-node warehouse gets 1 where the floor is 2. Merge acts strictly
+     * above the floor, so an index this rule widens to the bound is never one merge would immediately
+     * narrow again. A non-positive bound (an unresolved warehouse) leaves the steady-state target
+     * untouched.
      */
     public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound) {
         long configuredFloor = Config.tablet_reshard_min_split_size;
@@ -244,10 +246,12 @@ public class TabletReshardUtils {
 
     /**
      * Tablet count the early-split rule may not carry an index past, or 0 when the node count could
-     * not be resolved. It is the auto-merge parallelism floor, because merge acts strictly above that
-     * floor: an index the early rule widened is therefore never one merge would immediately narrow
-     * again. min() with the node count keeps a single-node warehouse, whose floor is 2, from widening
-     * for a parallelism it does not have.
+     * not be resolved. It is the auto-merge parallelism floor clamped to the node count, so it is at
+     * or below that floor and never above it -- merge acts strictly above the floor, so an index this
+     * rule widened is never one merge would immediately narrow again. The clamp is what keeps a
+     * single-node warehouse, whose floor is 2, from widening for a parallelism it does not have; the
+     * floor itself is already capped by tablet_reshard_max_split_count, so a warehouse with more
+     * nodes than that cap bounds at the cap rather than at its node count.
      */
     public static int adaptiveSplitBound(int computeNodeCount) {
         return computeNodeCount == 0 ? 0
