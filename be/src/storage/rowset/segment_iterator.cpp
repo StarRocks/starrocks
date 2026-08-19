@@ -4976,6 +4976,14 @@ void SegmentIterator::close() {
             rfile.reset();
         }
     }
+    // The segment-wide stream is not in _column_files, but its reads are most of the segment's IO
+    // whenever it exists -- and the data-cache bypass decision reads the remote/local byte stats
+    // this collection feeds, so skipping it would blind that decision (and the task profile) to
+    // every read the stream carried.
+    if (_cross_column_stream != nullptr) {
+        _update_stats(_cross_column_stream.get());
+        _cross_column_stream.reset();
+    }
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
