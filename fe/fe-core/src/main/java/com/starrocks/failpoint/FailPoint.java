@@ -22,17 +22,25 @@ public class FailPoint {
     private static boolean isEnabled = false;
 
     public static void setTriggerPolicy(String name, TriggerPolicy triggerPolicy) {
-        POLICIES.put(name, triggerPolicy);
+        TriggerPolicy previous = POLICIES.put(name, triggerPolicy);
+        if (previous != null) {
+            // Re-arming must not strand threads parked on the policy being replaced.
+            previous.release();
+        }
     }
 
     public static void removeTriggerPolicy(String name) {
-        POLICIES.remove(name);
+        TriggerPolicy removed = POLICIES.remove(name);
+        if (removed != null) {
+            // ADMIN DISABLE FAILPOINT is the release command for a PAUSE policy.
+            removed.release();
+        }
     }
 
     public static boolean shouldTrigger(String name) {
         TriggerPolicy triggerPolicy = POLICIES.get(name);
         if (triggerPolicy != null) {
-            return triggerPolicy.shouldTrigger();
+            return triggerPolicy.shouldTrigger(name);
         } else {
             return false;
         }
