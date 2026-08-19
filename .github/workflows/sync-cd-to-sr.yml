@@ -25,10 +25,16 @@ run-name: Reverse Sync (#${{ github.event.inputs.pr || github.event.number }})
 # Runner [self-hosted, ubuntu, ai] (node2 calls claude). Requires ci-tool on the runner
 # and, for `on`, a token with StarRocks actions:write to dispatch repo-sync.yml.
 
+# ⛔ REVERSE SYNC PAUSED (2026-08-19): the on-merge auto trigger is commented out
+# as a code-level kill switch, on top of the two runtime switches already in place:
+#   - repo variable REVERSE_SYNC_REAL = off (this job exits early anyway), and
+#   - StarRocks/starrocks cd-repo-sync.yml executor is disabled_manually.
+# To re-enable reverse sync: uncomment the pull_request_target block below AND set
+# REVERSE_SYNC_REAL=on AND re-enable the SR cd-repo-sync.yml executor workflow.
 on:
-  pull_request_target:
-    types: [closed]
-    branches: [main, branch-4.1, branch-4.0]
+  # pull_request_target:
+  #   types: [closed]
+  #   branches: [main, branch-4.1, branch-4.0]
   workflow_dispatch:
     inputs:
       pr:
