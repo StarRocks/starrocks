@@ -282,7 +282,7 @@ public class StatisticsCollectJobFactory {
             allPartitionNames = allPartitionNames == null ? ConnectorPartitionTraits.build(table).getPartitionNames() :
                     allPartitionNames;
             return new ExternalSampleStatisticsCollectJob(catalogName, db, table, samplePartitionNames, columnNames,
-                    columnTypes, analyzeType, scheduleType, properties, allPartitionNames.size());
+                    columnTypes, analyzeType, scheduleType, properties, allPartitionNames);
         }
 
         return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
