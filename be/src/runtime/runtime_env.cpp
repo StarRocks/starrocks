@@ -47,11 +47,11 @@ namespace {
 // the allocation cache is holding to the OLD tracker before it switches, so nothing lands
 // on the wrong side of the swap.
 //
-// The tracker is resolved on every enter through RuntimeEnv::is_init() rather than cached:
-// a thread can exit after the environment is torn down (its thread_local cache destructor
-// frees the contexts then), and a cached MemTracker* would dangle. When the environment is
-// gone the scope does nothing and the free is simply charged wherever the thread already
-// points, which is a shutdown-time accounting detail and not a correctness one.
+// The tracker is resolved on every enter rather than cached: a thread can exit after the
+// environment is torn down (its thread_local cache destructor frees the contexts then), and
+// a cached MemTracker* would dangle. When the environment is gone the scope does nothing and
+// the free is charged through the malloc hook's own fallback, which resolves to the process
+// tracker -- the same place the allocation was charged.
 //
 // The depth counter keeps a future nested use honest: only the outermost scope saves and
 // restores, so an inner one cannot overwrite what the outer one has to put back.
@@ -61,12 +61,27 @@ thread_local bool tls_dctx_switched = false;
 
 void enter_dctx_alloc_scope() {
     if (tls_dctx_scope_depth++ > 0) return;
-    // Nothing to attribute to, and -- more to the point -- nothing to touch. The free
-    // side of this scope runs from a thread_local destructor at thread exit, which can
-    // happen while or after the environment is torn down; reading or writing the
-    // thread's CurrentThread there is exactly what must be avoided.
-    if (!RuntimeEnv::is_init()) return;
-    tls_saved_dctx_tracker = CurrentThread::mem_tracker();
+    // Two guards, in this order, and neither is optional.
+    //
+    // tls_is_thread_status_init is the same POD thread_local the malloc hook checks
+    // (mem_hook.cpp MEMORY_CONSUME_SIZE / MEMORY_RELEASE_SIZE): CurrentThread's
+    // constructor sets it, its destructor clears it, and it has no destructor of its own
+    // so it is always readable. It matters because dict_dctx_cache() can be the first
+    // dynamically initialized thread_local on a thread -- the cache is created, and only
+    // then does this scope initialize CurrentThread -- which makes CurrentThread destroyed
+    // FIRST at thread exit and the cache second. The cache's destructor frees its contexts,
+    // so without this guard it would touch tls_thread_status after that object's lifetime
+    // ended. The hook stops touching it at the same moment for the same reason, and its
+    // fallback resolves to the process tracker, so the free is still attributed correctly
+    // while nothing dead is read.
+    //
+    // CurrentThread::mem_tracker() is then the env check as well: it loads the
+    // is-initialized function with acquire ordering and returns null once the environment
+    // is gone, so nothing here reads RuntimeEnv::_is_init (a plain bool) directly.
+    if (!tls_is_thread_status_init) return;
+    MemTracker* saved = CurrentThread::mem_tracker();
+    if (saved == nullptr) return;
+    tls_saved_dctx_tracker = saved;
     tls_dctx_switched = true;
     (void)tls_thread_status.set_mem_tracker(RuntimeEnv::GetInstance()->process_mem_tracker());
 }
@@ -74,14 +89,16 @@ void enter_dctx_alloc_scope() {
 void leave_dctx_alloc_scope() {
     if (--tls_dctx_scope_depth > 0) return;
     tls_dctx_scope_depth = 0;
-    // Restore only what was actually switched: a scope that did not swap must not put
-    // anything back, or it would flush the thread's allocation cache for no reason and
-    // touch state the enter side deliberately left alone.
+    // Restore only what was actually switched. A scope that bailed out above -- nested, or
+    // CurrentThread already destroyed, or the environment gone -- must not put anything back:
+    // it would touch the same state the guards exist to avoid, and flush the thread's
+    // allocation cache for a swap that never happened.
     if (!tls_dctx_switched) return;
     tls_dctx_switched = false;
     (void)tls_thread_status.set_mem_tracker(tls_saved_dctx_tracker);
     tls_saved_dctx_tracker = nullptr;
 }
+
 } // namespace
 
 RuntimeEnv::RuntimeEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
