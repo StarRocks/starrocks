@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -43,7 +45,9 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -54,6 +58,8 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
@@ -65,6 +71,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
@@ -169,15 +176,17 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testTargetPartitionSpecShortCircuits() throws Exception {
-        // INSERT INTO t PARTITION(p1) SELECT * FROM src restricts the load to
-        // specific target partitions. Pre-split must not sample the whole source
-        // and pre-create partitions outside that set.
+    public void testTargetPartitionSpecBuildsRestrictedTemporaryScope() {
         InsertStmt stmt = simpleTableInsertStmt();
         when(stmt.isSpecifyPartitionNames()).thenReturn(true);
+        when(stmt.getTargetPartitionNames()).thenReturn(
+                new PartitionRef(List.of("p1_temp"), true, NodePosition.ZERO));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.fromInsert(stmt);
+
+        Assertions.assertTrue(scope.isSpecified());
+        Assertions.assertTrue(scope.isTemporary());
+        Assertions.assertEquals("p1_temp", scope.mappedCatalogName("P1_TEMP"));
     }
 
     @Test
@@ -196,8 +205,9 @@ public class InsertPreSplitHookTableTest {
         // INSERT PROPERTIES(strict_mode=true) ... — load properties are only validated by
         // InsertAnalyzer.analyzeProperties after this hook, so pre-splitting for a statement that
         // may fail property validation is wrong. Skip conservatively when any property is present.
+        // The gate reads the parse-time key set, not getProperties(), which the analyzer overwrites.
         InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getProperties()).thenReturn(Map.of("strict_mode", "true"));
+        when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("strict_mode"));
 
         assertHookDoesNotDelegate(() ->
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
@@ -254,16 +264,17 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testExpressionProjectionShortCircuits() throws Exception {
-        // INSERT INTO t SELECT col + 1 FROM src — a non-SlotRef expression item.
+    public void testExpressionProjectionMatchesTableSourceShape() {
+        // Expressions are accepted at the shape gate. prepare() later verifies
+        // that every key needed by sampling is still a direct source-column ref.
         SelectListItem exprItem = mock(SelectListItem.class);
         when(exprItem.isStar()).thenReturn(false);
         when(exprItem.getExpr()).thenReturn(mock(FunctionCallExpr.class));
 
-        InsertStmt stmt = insertStmtWithQueryRelation(
-                selectRelationWithSelectList(selectListOf(exprItem), mock(TableRelation.class)));
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        SelectRelation selectRelation = selectRelationWithSelectList(
+                selectListOf(exprItem), plainTableRelation());
+
+        Assertions.assertTrue(new TablePreSplitSource().matches(mock(InsertStmt.class), selectRelation));
     }
 
     @Test
@@ -479,6 +490,75 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void testIcebergSourceIsSupportedAndUsesSnapshotTotals() {
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        org.apache.iceberg.Snapshot snapshot = mock(org.apache.iceberg.Snapshot.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        when(snapshot.summary()).thenReturn(Map.of(
+                "total-files-size", "872000000000",
+                "total-records", "3500000000"));
+
+        Assertions.assertTrue(TablePreSplitSource.isSupportedSourceTable(icebergTable));
+        Assertions.assertEquals(new Estimates(872000000000L, 3500000000L),
+                TablePreSplitSource.sourceEstimates(icebergTable));
+    }
+
+    // The snapshot-summary keys below are written by whichever engine produced the snapshot, not by
+    // StarRocks, so a source table can legitimately arrive without them. These lock down what
+    // pre-split then does, because the degradation is silent at the SQL level.
+
+    private static IcebergTable mockIcebergTableWithSummary(Map<String, String> summary) {
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        if (summary == null) {
+            when(nativeTable.currentSnapshot()).thenReturn(null);
+            return icebergTable;
+        }
+        org.apache.iceberg.Snapshot snapshot = mock(org.apache.iceberg.Snapshot.class);
+        when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        when(snapshot.summary()).thenReturn(summary);
+        return icebergTable;
+    }
+
+    @Test
+    public void testIcebergSourceWithoutCurrentSnapshotEstimatesZero() {
+        // An empty (never-written) Iceberg table has no current snapshot.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(null)));
+    }
+
+    @Test
+    public void testIcebergSourceMissingSummaryTotalsEstimatesZero() {
+        // The case most likely to bite in production: a snapshot exists and the scan works, but the
+        // writer never recorded the totals, so pre-split has no size to work from.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(Map.of("operation", "append"))));
+    }
+
+    @Test
+    public void testIcebergSourceWithUnparseableSummaryTotalsEstimatesZero() {
+        // Never propagate a partially-parsed size: one bad key must not be combined with a good one
+        // into a ratio that over- or under-splits.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(
+                        Map.of("total-files-size", "not-a-number", "total-records", "-17"))));
+    }
+
+    @Test
+    public void testZeroSourceEstimateRemovesTheSamplingRateLimit() {
+        // The consequence of the three cases above, asserted end-to-end so it cannot regress
+        // unnoticed: a zero byte estimate makes the Bernoulli rate 1.0, so every predicate-matching
+        // row reaches the ORDER BY rand() LIMIT rather than a small sample. On a large Iceberg
+        // snapshot that turns a cheap sample into a top-N over the whole filtered input.
+        Assertions.assertEquals(1.0, AbstractSqlSampleSubqueryExecutor.pickSamplingRate(0L));
+        Assertions.assertTrue(AbstractSqlSampleSubqueryExecutor.pickSamplingRate(872000000000L) < 1.0e-4,
+                "a sized snapshot must still be sampled at a small rate");
+    }
+
+    @Test
     public void testUnmappableSortKeyShortCircuits() throws Exception {
         // Target sort key references a column the source projection cannot supply
         // (target has column "missing" that does not exist in the source).
@@ -529,6 +609,26 @@ public class InsertPreSplitHookTableTest {
                     "no WHERE clause must yield a null predicate SQL");
             Assertions.assertSame(fixture.sourceTable, scanContext.sourceTable(),
                     "scan context must carry the resolved OLAP source table");
+        }
+    }
+
+    @Test
+    public void prepareAllowsExpressionOnNonKeyColumn() throws Exception {
+        // target [k, v]; SELECT k, parse_json(v) FROM src. The sampler only needs
+        // target key k, so the value expression is intentionally absent from the map.
+        try (SourceFixture fixture = sourceFixture()) {
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectListItem expression = mock(SelectListItem.class);
+            when(expression.isStar()).thenReturn(false);
+            when(expression.getExpr()).thenReturn(mock(FunctionCallExpr.class));
+            SelectList projection = selectListOf(bareColumnItem("k"), expression);
+            when(selectRelation.getSelectList()).thenReturn(projection);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals(Map.of("k", "k"), scanContext.targetToSourceColumnNames());
         }
     }
 
@@ -623,6 +723,149 @@ public class InsertPreSplitHookTableTest {
 
             Assertions.assertNull(fixture.prepareScanContext(),
                     "a temporary-table source must skip pre-split (ROOT sampler cannot see it)");
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookDispatchesWithTransactionId() throws Exception {
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookDispatchesWithAnalyzerFilledProperties() throws Exception {
+        // This hook is the one pre-split entry point that runs AFTER analysis, so getProperties()
+        // has already been filled with the session defaults InsertAnalyzer#analyzeProperties adds
+        // to every INSERT. Gating on that map instead of the parse-time key set made the whole
+        // dynamic-overwrite path a silent no-op on a real cluster.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "0.0", "timeout", "14400"));
+            when(fixture.insertStmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of());
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsUserSpecifiedProperties() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("max_filter_ratio"));
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsNonDynamicStatement() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(false);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsWithoutOverwriteJob() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(false);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsWithoutTransactionId() throws Exception {
+        // The caller has not opened the overwrite transaction yet, so there is no txn prefix to
+        // name the temporary partitions after.
+        assertDynamicOverwriteHookSkips(0L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsExplain() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.isExplain()).thenReturn(true);
+            when(stmt.getExplainLevel()).thenReturn(ExplainLevel.COSTS);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsPreSetStatementTransaction() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.getTxnId()).thenReturn(99L);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsTargetPartitionSpec() throws Exception {
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.isSpecifyPartitionNames()).thenReturn(true);
+        });
+        assertDynamicOverwriteHookSkips(42L, stmt -> {
+            when(stmt.isDynamicOverwrite()).thenReturn(true);
+            when(stmt.hasOverwriteJob()).thenReturn(true);
+            when(stmt.isStaticKeyPartitionInsert()).thenReturn(true);
+        });
+    }
+
+    @Test
+    public void dynamicOverwriteHookSkipsExplicitSessionTransaction() throws Exception {
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.context.getTxnId()).thenReturn(7L);
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void dynamicOverwriteHookSwallowsUnexpectedFailure() throws Exception {
+        // Fail-safe contract: the load must still run when the hook throws.
+        InsertStmt stmt = mock(InsertStmt.class);
+        when(stmt.isDynamicOverwrite()).thenThrow(new IllegalStateException("boom"));
+
+        Assertions.assertDoesNotThrow(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                stmt, mockConnectContextWithSessionPreSplit(true), 42L));
+    }
+
+    /** Applies {@code stubs} to the fixture's statement and asserts the flow is never entered. */
+    private static void assertDynamicOverwriteHookSkips(
+            long overwriteTransactionId, Consumer<InsertStmt> stubs) throws Exception {
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            stubs.accept(fixture.insertStmt);
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                    fixture.insertStmt, fixture.context, overwriteTransactionId);
+
+            flow.verifyNoInteractions();
         }
     }
 
@@ -885,6 +1128,15 @@ public class InsertPreSplitHookTableTest {
         SelectList selectList = mock(SelectList.class);
         when(selectList.getItems()).thenReturn(List.of(items));
         return selectList;
+    }
+
+    private static SelectListItem bareColumnItem(String columnName) {
+        SlotRef slotRef = mock(SlotRef.class);
+        when(slotRef.getColName()).thenReturn(columnName);
+        SelectListItem item = mock(SelectListItem.class);
+        when(item.isStar()).thenReturn(false);
+        when(item.getExpr()).thenReturn(slotRef);
+        return item;
     }
 
     private static InsertStmt insertStmtWithQueryRelation(QueryRelation queryRelation) {

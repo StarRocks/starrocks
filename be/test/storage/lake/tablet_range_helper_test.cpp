@@ -186,15 +186,50 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     ASSERT_OK(res.status());
     ASSERT_FALSE(res.value().seek_key.empty());
 
-    // Case 2: different order -> Should return InternalError
+    // Case 2: the sort key is a permutation of the keys. A primary-key tablet's range is always in
+    // primary-key space, so the sort key does not enter the encoding and the result is unchanged.
     schema_pb.clear_sort_key_idxes();
     schema_pb.add_sort_key_idxes(1);
     schema_pb.add_sort_key_idxes(0);
-    auto tablet_schema_wrong = TabletSchema::create(schema_pb);
-    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema_wrong);
-    ASSERT_FALSE(res2.ok());
-    ASSERT_TRUE(res2.status().is_internal_error());
-    ASSERT_THAT(res2.status().to_string(), testing::HasSubstr("Sort key index 0 must be 0, but is 1"));
+    auto reordered_schema = TabletSchema::create(schema_pb);
+    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, reordered_schema);
+    ASSERT_OK(res2.status());
+    ASSERT_EQ(res.value().seek_key, res2.value().seek_key);
+
+    // Case 3: ORDER BY a value column -- still primary-key space, still the same encoding.
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+    auto separate_sort_key_schema = TabletSchema::create(schema_pb);
+    ASSERT_TRUE(separate_sort_key_schema->has_separate_sort_key());
+    auto res3 = TabletRangeHelper::create_sst_seek_range_from(range_pb, separate_sort_key_schema);
+    ASSERT_OK(res3.status());
+    ASSERT_EQ(res.value().seek_key, res3.value().seek_key);
+}
+
+TEST(TabletRangeHelperTest, test_range_key_idxes) {
+    TabletSchemaPB schema_pb;
+    auto add_column = [&](const char* name, bool is_key) {
+        auto c = schema_pb.add_column();
+        c->set_name(name);
+        c->set_type("INT");
+        c->set_is_key(is_key);
+        c->set_is_nullable(!is_key);
+        c->set_aggregation(is_key ? "NONE" : "REPLACE");
+    };
+    add_column("c0", true);
+    add_column("c1", true);
+    add_column("c2", false);
+    schema_pb.add_sort_key_idxes(2);
+    schema_pb.add_sort_key_idxes(0);
+
+    // A primary-key tablet routes by primary key whatever its physical order is.
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    EXPECT_EQ(std::vector<ColumnId>({0, 1}), TabletRangeHelper::range_key_idxes(*TabletSchema::create(schema_pb)));
+
+    // Every other key model keeps the historical sort-key boundary semantics.
+    schema_pb.set_keys_type(DUP_KEYS);
+    EXPECT_EQ(std::vector<ColumnId>({2, 0}), TabletRangeHelper::range_key_idxes(*TabletSchema::create(schema_pb)));
 }
 
 // NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).

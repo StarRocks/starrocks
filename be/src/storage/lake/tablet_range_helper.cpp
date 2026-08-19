@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_range_helper.h"
 
 #include <memory>
+#include <numeric>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -39,6 +40,15 @@ namespace starrocks::lake {
 constexpr int kMaxRangeSortKeyArity = 128;
 constexpr int64_t kMaxRangeValueBytes = 16LL * 1024 * 1024; // per value
 constexpr int64_t kMaxRangeTotalBytes = 64LL * 1024 * 1024; // whole range (both bounds)
+
+std::vector<ColumnId> TabletRangeHelper::range_key_idxes(const TabletSchema& tablet_schema) {
+    if (tablet_schema.keys_type() == KeysType::PRIMARY_KEYS) {
+        std::vector<ColumnId> key_idxes(tablet_schema.num_key_columns());
+        std::iota(key_idxes.begin(), key_idxes.end(), 0);
+        return key_idxes;
+    }
+    return tablet_schema.sort_key_idxes();
+}
 
 // Produce a Datum holding the minimum value for the given logical type.
 // Uses TypeInfo::set_to_min() which calls std::numeric_limits<CppType>::lowest().
@@ -304,30 +314,22 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
         return sst_seek_range;
     }
 
-    const auto& sort_key_idxes = tablet_schema->sort_key_idxes();
-    DCHECK(!sort_key_idxes.empty());
-    // sort key must the same as pk key
-    RETURN_IF(sort_key_idxes.size() != tablet_schema->num_key_columns(),
-              Status::InternalError(fmt::format("Sort key index size {} must be the same as pk key size {}",
-                                                sort_key_idxes.size(), tablet_schema->num_key_columns())));
-    for (int i = 0; i < tablet_schema->num_key_columns(); i++) {
-        if (sort_key_idxes[i] != i) {
-            return Status::InternalError(
-                    fmt::format("Sort key index {} must be {}, but is {}", i, i, sort_key_idxes[i]));
-        }
-    }
+    const auto key_idxes = range_key_idxes(*tablet_schema);
+    DCHECK(!key_idxes.empty());
+    RETURN_IF(tablet_schema->keys_type() != KeysType::PRIMARY_KEYS,
+              Status::InvalidArgument("SST seek range requires a primary-key tablet"));
 
     auto parse_bound_to_seek_string = [&](const TuplePB& tuple) -> StatusOr<std::string> {
-        DCHECK_EQ(tuple.values_size(), static_cast<int>(sort_key_idxes.size()));
-        if (tuple.values_size() != sort_key_idxes.size()) {
+        DCHECK_EQ(tuple.values_size(), static_cast<int>(key_idxes.size()));
+        if (tuple.values_size() != key_idxes.size()) {
             return Status::Corruption(
                     fmt::format("Unexpected number of values in TabletRangePB bound value, expected: {}, actual: {}",
-                                sort_key_idxes.size(), tuple.values_size()));
+                                key_idxes.size(), tuple.values_size()));
         }
 
         auto chunk = std::make_unique<Chunk>();
         for (int i = 0; i < tuple.values_size(); i++) {
-            const int idx = sort_key_idxes[i];
+            const int idx = key_idxes[i];
 
             Datum datum;
             TypeDescriptor type_desc;
@@ -512,10 +514,10 @@ Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, 
         return Status::OK();
     }
 
-    const auto& sort_key_idxes = new_schema.sort_key_idxes();
-    const int arity = static_cast<int>(sort_key_idxes.size());
+    const auto range_key_idxes = TabletRangeHelper::range_key_idxes(new_schema);
+    const int arity = static_cast<int>(range_key_idxes.size());
     if (arity <= 0) {
-        return Status::Corruption("range validation requires a non-empty sort key");
+        return Status::Corruption("range validation requires non-empty range keys");
     }
 
     int64_t total_bytes = 0;
@@ -526,7 +528,7 @@ Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, 
                                                   kMaxRangeSortKeyArity));
         }
         if (tuple.values_size() != arity) {
-            return Status::Corruption(fmt::format("range {} bound arity {} != effective sort-key arity {}", which,
+            return Status::Corruption(fmt::format("range {} bound arity {} != effective range-key arity {}", which,
                                                   tuple.values_size(), arity));
         }
         for (int i = 0; i < arity; ++i) {
@@ -543,9 +545,9 @@ Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, 
                 return Status::Corruption(fmt::format("range {} value {} is missing a type", which, i));
             }
             const auto type_desc = TypeDescriptor::from_protobuf(v.type());
-            const auto& col = new_schema.column(sort_key_idxes[i]);
+            const auto& col = new_schema.column(range_key_idxes[i]);
             if (type_desc.type != col.type()) {
-                return Status::Corruption(fmt::format("range {} value {} type {} != sort-key column type {}", which, i,
+                return Status::Corruption(fmt::format("range {} value {} type {} != range-key column type {}", which, i,
                                                       static_cast<int>(type_desc.type), static_cast<int>(col.type())));
             }
         }

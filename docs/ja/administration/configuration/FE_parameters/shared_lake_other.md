@@ -150,6 +150,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 アカウントのエンドポイント。例: `https://test.dfs.core.windows.net`。
 - 導入時期：v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- デフォルト：Empty string
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID の OAuth 2.0 トークンエンドポイント。v3.5.19、v4.0.12、v4.1.2 より前は、この項目は `azure_adls2_oauth2_oauth2_client_endpoint` という名前でした。旧名称は現在もエイリアスとして受け付けられます。
+- 導入時期：v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - デフォルト：Empty string
@@ -248,6 +257,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：Azure Blob Storage にアクセスするためにネイティブ SDK を使用するかどうか。これにより、マネージド ID およびサービスプリンシパルでの認証が可能になります。この項目が `false` に設定されている場合、共有キーと SAS トークンでの認証のみが許可されます。
 - 導入時期：v3.4.4
+
+### `s3_use_native_sdk_for_glob`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：S3 および S3 互換オブジェクトストア (`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs`、`tos`) について、FILES() テーブル関数内の glob パスの解決にネイティブ AWS S3 SDK を使用するかどうか。この項目が `true` に設定されている場合、ワイルドカードの最長リテラルプレフィックスが S3 `ListObjectsV2` にプッシュダウンされ、Hadoop `globStatus` で親プレフィックス全体を列挙する必要がなくなります。プレフィックス配下のオブジェクトが多く、一致するものが少ない場合はこちらのほうが大幅に高速です。`false` に設定すると Hadoop `globStatus` の経路にフォールバックします。
+- 導入時期：v4.1.4
 
 ### `cloud_native_hdfs_url`
 
@@ -356,6 +374,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：HdfsFsManager が管理する未使用のキャッシュ HDFS/ObjectStore FileSystem の Time-to-live (秒単位)。FileSystemExpirationChecker (60 秒ごとに実行) はこの値を使用して各 HdfsFs.isExpired(...) を呼び出します。期限切れになるとマネージャーは基盤となる FileSystem を閉じ、キャッシュから削除します。アクセサーメソッド (例: `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`) は最終アクセス時刻を更新するため、有効期限は非アクティブに基づいています。値が小さいとアイドルリソースの保持は減りますが、再オープンオーバーヘッドが増加します。値が大きいとハンドルが長く保持され、より多くのリソースを消費する可能性があります。
 - 導入時期：v3.2.0
+
+### `enable_lake_add_index_fast_path`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データテーブルに対する ADD INDEX および DROP INDEX の変更を、シャドウインデックスを作成しないメタデータのみの高速パスで処理するかどうか。`false` に設定すると、通常のスキーマ変更の経路にフォールバックします。この項目はセーフティバルブとして用意されており、高速パスがサポートされるデフォルトです。
 
 ### `lake_autovacuum_grace_period_minutes`
 

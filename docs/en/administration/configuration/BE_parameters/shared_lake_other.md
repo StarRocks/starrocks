@@ -86,6 +86,15 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_del_file_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to verify a Primary Key delete file (`.del`) of a shared-data cluster against the CRC32C recorded in its metadata when the file is read back during transaction publish or Primary Key index rebuild. When a mismatch is detected, the operation fails with a corruption error instead of erasing the wrong primary keys. Delete files written before the checksum existed carry none and are always accepted, so this item has no effect on data written by an earlier version. Writing the checksum is not controlled by this item; this item only controls verification.
+- Introduced in: v4.2
+
 ### lake_enable_pk_preserve_txn_delete_order
 
 - Default: true
@@ -191,7 +200,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a prepared-physical-split lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
+- Description: Whether a Prepared Physical Split Lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
 - Introduced in: v4.2
 
 ### lake_prepared_split_max_splitted_scan_rows
@@ -200,7 +209,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the prepared-physical-split lake scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
+- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the Prepared Physical Split Lake Scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
 - Introduced in: v4.2
 
 ### lake_put_txn_log_timeout_guard_ms
@@ -227,6 +236,14 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
+
+### lake_vacuum_enable_task_timeout
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether Vacuum tasks honor the timeout carried in the request (`VacuumRequest.timeout_ms`) and abort themselves once it elapses. Set this item to `false` to let Vacuum tasks always run to completion no matter how long the FE caller waits.
 
 ### lake_vacuum_min_batch_delete_size
 

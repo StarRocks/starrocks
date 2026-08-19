@@ -96,6 +96,13 @@ message FileMetaPB {
     // without reading that version's tablet metadata. Unset (0) means "creation version unknown" and
     // is treated conservatively (retained under any covering retain version).
     optional int64 version = 5;
+    // Masked CRC32C (crc32c::Mask) of the file's LOGICAL content -- the bytes a reader gets back,
+    // i.e. before encryption on write / after decryption on read. Computed once at write time; the
+    // file is immutable afterwards, so a recorded checksum always describes the current content and
+    // a mismatch is genuine corruption. Currently only del files (.del) populate it. Absent means
+    // "not recorded" (file written before this field existed, or a producer that cannot compute it
+    // such as the replication transcode path) and readers then skip verification.
+    optional uint32 crc32c = 6;
 }
 
 message DelvecMetadataPB {
@@ -317,6 +324,10 @@ message DelfileWithRowsetId {
     // cloud-native PK index to account tombstone volume toward the rebuild-rows threshold. Absent
     // on del files written before this field existed (treated as 0).
     optional int64 num_rows = 7;
+    // Masked CRC32C of the del file's logical content, carried over verbatim from
+    // FileMetaPB.crc32c at apply/persist time (see FileMetaPB.crc32c for the exact definition).
+    // Absent means "not recorded" -> readers skip verification.
+    optional uint32 crc32c = 8;
 }
 
 message SegmentMetadataPB {

@@ -617,6 +617,33 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
 
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the range-colocate checker sends to StarOS in a single `getShardInfo` membership-read batch RPC on shared-data clusters. Values less than `1` are treated as `1`.
+- Introduced in: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of PACK shard groups that the range-colocate checker sends to StarOS in a single `queryShardGroupStable` placement-convergence batch RPC. Each group's stability check is computed server-side, so a smaller batch bounds per-RPC latency, and the full result is assembled across repeated calls. Values less than `1` are treated as `1`.
+- Introduced in: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The TTL of the range-colocate checker's placement-convergence negative cache. Within this window, a PACK shard group that StarOS last reported as not yet converged is not re-queried, which throttles the per-tick `queryShardGroupStable` load while the group is still migrating. Only not-converged results are cached, so a stale entry can only delay the group's flip to stable by up to this window, never cause a premature flip. Values less than or equal to `0` disable the cache.
+- Introduced in: v4.1.3
+
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - Default: true
@@ -641,7 +668,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads (INSERT-from-OLAP-table). On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP or external Iceberg table. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
@@ -697,6 +724,14 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
 - Introduced in: v4.1.0
+
+### `tablet_pre_split_target_size`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Target tablet size that Sample-Based Tablet Pre-Split sizes a load's split count against. `0` (the default) inherits `tablet_reshard_target_size`. Lower it to give a load more write parallelism without shrinking every tablet in the cluster: the background tablet split/merge daemon keeps measuring against `tablet_reshard_target_size`, so it merges the finer tablets back together after the load finishes. This matters most for a load that writes brand-new range-distributed partitions (for example the replacement partitions of an `INSERT OVERWRITE`), which start from a single catch-all tablet and would otherwise be written by a single backend.
 
 #### Rolling back Sample-Based Tablet Pre-Split
 

@@ -282,6 +282,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     + " in physical partition " + physicalPartition.getId()
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
+        // A superseded index passes every check above (still reachable via getIndex, still NORMAL,
+        // still owns the tablet, still mapped by TabletInvertedIndex), so it needs its own gate.
+        TabletReshardUtils.checkIndexNotSuperseded(physicalPartition, index, tabletId,
+                db.getFullName(), table.getName());
         Tablet tablet = index.getTablet(tabletId);
         if (tablet == null) {
             throw new StarRocksException("Cannot find tablet " + tabletId

@@ -617,6 +617,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群下，Range Colocate 检查器在单次 `getShardInfo` 成员关系读取批量 RPC 中发送给 StarOS 的最大 Tablet 数量。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Range Colocate 检查器在单次 `queryShardGroupStable` 放置收敛批量 RPC 中发送给 StarOS 的最大 PACK Shard Group 数量。每个 Group 的稳定性检查在服务端计算，因此较小的批量可以限制单次 RPC 的延迟，完整结果通过多次调用累积得到。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: Range Colocate 检查器放置收敛负缓存的 TTL。在该时间窗口内，StarOS 上次报告为尚未收敛的 PACK Shard Group 不会被重新查询，从而在该 Group 仍在迁移期间降低每轮 `queryShardGroupStable` 的负载。仅缓存未收敛的结果，因此过期条目最多只会将该 Group 转为稳定状态的时间延迟一个时间窗口，而不会导致提前转为稳定。小于或等于 `0` 的值将禁用该缓存。
+- 引入版本: v4.1.3
+
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - 默认值: true
@@ -641,7 +668,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
@@ -697,6 +724,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
+
+### `tablet_pre_split_target_size`
+
+- 默认值: 0
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
 
 #### 回滚基于采样的 Tablet 预分裂
 

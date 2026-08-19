@@ -16,6 +16,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT2 }}
+      MS_PAT: ${{ secrets.MS_PAT }}
     steps:
       - name: commit_sha
         id: commit_sha

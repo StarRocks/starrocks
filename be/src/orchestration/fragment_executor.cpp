@@ -377,41 +377,6 @@ static void mark_filtered_above_scans(ExecNode* node, bool saw_filter) {
     }
 }
 
-static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
-    for (const auto* child : node->children()) {
-        collect_non_broadcast_rf_ids(child, filter_ids);
-    }
-    if (node->type() == TPlanNodeType::HASH_JOIN_NODE) {
-        const auto* join_node = down_cast<const HashJoinNode*>(node);
-        if (join_node->distribution_mode() != TJoinDistributionMode::BROADCAST) {
-            for (const auto* rf : join_node->build_runtime_filters()) {
-                filter_ids.insert(rf->filter_id());
-            }
-        }
-    }
-}
-
-static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
-        const ExecNode* node, BroadcastJoinRightOffsprings& broadcast_join_right_offsprings) {
-    std::vector<std::unordered_set<int32_t>> offsprings_per_child;
-    std::unordered_set<int32_t> offsprings;
-    offsprings_per_child.reserve(node->children().size());
-    for (const auto* child : node->children()) {
-        auto child_offspring = collect_broadcast_join_right_offsprings(child, broadcast_join_right_offsprings);
-        offsprings.insert(child_offspring.begin(), child_offspring.end());
-        offsprings_per_child.push_back(std::move(child_offspring));
-    }
-    offsprings.insert(node->id());
-    if (node->type() == TPlanNodeType::HASH_JOIN_NODE) {
-        const auto* join_node = down_cast<const HashJoinNode*>(node);
-        if (join_node->distribution_mode() == TJoinDistributionMode::BROADCAST &&
-            join_node->can_generate_global_runtime_filter()) {
-            broadcast_join_right_offsprings.insert(offsprings_per_child[1].begin(), offsprings_per_child[1].end());
-        }
-    }
-    return offsprings;
-}
-
 Status FragmentExecutor::add_scan_ranges_partition_values(RuntimeState* runtime_state,
                                                           const std::vector<TScanRangeParams>& scan_ranges) {
     auto* obj_pool = RuntimeStateHelper::global_obj_pool(runtime_state);
@@ -488,13 +453,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     RETURN_IF_ERROR(ExecFactory::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl,
                                              &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
-    std::unordered_set<int32_t> filter_ids;
-    collect_non_broadcast_rf_ids(plan, filter_ids);
-    runtime_state->set_non_broadcast_rf_ids(std::move(filter_ids));
-    BroadcastJoinRightOffsprings broadcast_join_right_offsprings_map;
-    collect_broadcast_join_right_offsprings(plan, broadcast_join_right_offsprings_map);
-    runtime_state->set_broadcast_join_right_offsprings(std::move(broadcast_join_right_offsprings_map));
-    plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
     runtime_state->set_fragment_root_id(plan->id());

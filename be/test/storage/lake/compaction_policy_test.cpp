@@ -39,6 +39,19 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_compaction_policy";
 
     void SetUp() override {
+        // The whole BE test binary runs in one process, so snapshot every global config this fixture
+        // (or its test bodies) overrides and restore it in TearDown. Leaked values change how later
+        // suites pick compaction inputs -- max_cumulative_compaction_num_singleton_deltas=10 caps
+        // SizeTieredCompactionPolicy::pick_rowsets() at 10 segments instead of the default 500.
+        _saved_tablet_max_versions = config::tablet_max_versions;
+        _saved_min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _saved_max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _saved_min_base_deltas = config::min_base_compaction_num_singleton_deltas;
+        _saved_size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _saved_size_tiered_level_multiple = config::size_tiered_level_multiple;
+        _saved_size_tiered_level_num = config::size_tiered_level_num;
+        _saved_enable_size_tiered = config::enable_size_tiered_compaction_strategy;
+
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 3;
         config::max_cumulative_compaction_num_singleton_deltas = 10;
@@ -51,7 +64,18 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        config::tablet_max_versions = _saved_tablet_max_versions;
+        config::min_cumulative_compaction_num_singleton_deltas = _saved_min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _saved_max_cumulative_deltas;
+        config::min_base_compaction_num_singleton_deltas = _saved_min_base_deltas;
+        config::size_tiered_min_level_size = _saved_size_tiered_min_level_size;
+        config::size_tiered_level_multiple = _saved_size_tiered_level_multiple;
+        config::size_tiered_level_num = _saved_size_tiered_level_num;
+        config::enable_size_tiered_compaction_strategy = _saved_enable_size_tiered;
+
+        remove_test_dir_ignore_error();
+    }
 
     void add_data_rowset(uint32 id, bool overlap, int64_t level) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
@@ -81,6 +105,16 @@ protected:
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
+
+    // Config values captured in SetUp and put back in TearDown.
+    int16_t _saved_tablet_max_versions = 0;
+    int64_t _saved_min_cumulative_deltas = 0;
+    int64_t _saved_max_cumulative_deltas = 0;
+    int64_t _saved_min_base_deltas = 0;
+    int64_t _saved_size_tiered_min_level_size = 0;
+    int64_t _saved_size_tiered_level_multiple = 0;
+    int64_t _saved_size_tiered_level_num = 0;
+    bool _saved_enable_size_tiered = false;
 };
 
 // ------ BaseAndCumulativeCompactionPolicy ------

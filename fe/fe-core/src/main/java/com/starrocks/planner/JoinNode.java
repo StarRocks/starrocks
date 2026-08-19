@@ -66,6 +66,7 @@ import java.util.stream.Collectors;
  * a single input tuple.
  */
 public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
+
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
     protected final JoinOperator joinOp;
@@ -346,7 +347,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
         boolean result = false;
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
-                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs, context.getDescTbl());
         if (optCandidatePartitionByExprs.isEmpty()) {
             return Optional.of(false);
         }

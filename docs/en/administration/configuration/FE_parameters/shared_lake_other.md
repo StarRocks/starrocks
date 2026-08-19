@@ -149,6 +149,15 @@ This topic introduces the following types of FE configurations:
 - Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
 - Introduced in: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth 2.0 token endpoint of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. Before v3.5.19, v4.0.12, and v4.1.2, this item was named `azure_adls2_oauth2_oauth2_client_endpoint`. The former name is still accepted as an alias.
+- Introduced in: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - Default: Empty string
@@ -247,6 +256,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
+
+### `s3_use_native_sdk_for_glob`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native AWS S3 SDK to resolve glob paths in the FILES() table function for S3 and S3-compatible object stores (`s3`, `s3a`, `s3n`, `oss`, `cosn`, `ks3`, `obs`, and `tos`). When this item is set to `true`, the longest literal prefix of a wildcard is pushed down to S3 `ListObjectsV2` instead of listing the whole parent prefix through Hadoop `globStatus`, which is much faster when the prefix holds many objects but few of them match. Set this item to `false` to fall back to the Hadoop `globStatus` path.
+- Introduced in: v4.1.4
 
 ### `cloud_native_hdfs_url`
 
@@ -355,6 +373,14 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Time-to-live in seconds for an unused cached HDFS/ObjectStore FileSystem managed by HdfsFsManager. The FileSystemExpirationChecker (runs every 60s) calls each HdfsFs.isExpired(...) using this value; when expired the manager closes the underlying FileSystem and removes it from the cache. Accessor methods (for example `HdfsFs.getDFSFileSystem`, `getUserName`, `getConfiguration`) update the last-access timestamp, so expiry is based on inactivity. Lower values reduce idle resource holding but increase reopen overhead; higher values keep handles longer and may consume more resources.
 - Introduced in: v3.2.0
+
+### `enable_lake_add_index_fast_path`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to route ADD INDEX and DROP INDEX alters on shared-data tables through the metadata-only fast path, which creates no shadow index. Set this item to `false` to fall back to the regular schema change path. This item is intended as a safety valve; the fast path is the supported default.
 
 ### `lake_autovacuum_grace_period_minutes`
 

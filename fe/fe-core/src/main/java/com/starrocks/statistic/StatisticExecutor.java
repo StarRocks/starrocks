@@ -404,7 +404,8 @@ public class StatisticExecutor {
             String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                     "cast(" + version + " as bigint), " +
                     "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
-                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnName +
+                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as " +
+                    StatisticUtils.quoting("_dict_merge_" + columnName) +
                     " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
             return executeStatisticDQLWithoutContext(sql);
         } else {
@@ -434,7 +435,8 @@ public class StatisticExecutor {
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + columnRef + ", " +
-                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnAlias +
+                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as " +
+                StatisticUtils.quoting("_dict_merge_" + columnAlias) +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         return executeStatisticDQLWithoutContext(sql);
@@ -689,55 +691,95 @@ public class StatisticExecutor {
                 }
             } else {
                 // for external table
-                ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
-                        statsJob.getCatalogName(), db.getFullName(), table.getName());
-                if (externalBasicStatsMeta == null) {
-                    externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(), db.getFullName(),
-                            table.getName(), Lists.newArrayList(statsJob.getColumnNames()), statsJob.getAnalyzeType(),
-                            analyzeStatus.getEndTime(), statsJob.getProperties());
-                } else {
-                    externalBasicStatsMeta = externalBasicStatsMeta.clone();
-                    externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
-                    externalBasicStatsMeta.setProperties(statsJob.getProperties());
-                    externalBasicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
-                    // set columns to the latest collect job's columns
-                    externalBasicStatsMeta.setColumns(Lists.newArrayList(statsJob.getColumnNames()));
-                }
-
                 Set<Long> sampledPartitions = new HashSet<>();
+                Set<Long> fullCoveragePartitions = Collections.emptySet();
                 int allPartitionSize = -1;
                 if (statsJob.getAnalyzeType() == StatsConstants.AnalyzeType.SAMPLE) {
                     ExternalSampleStatisticsCollectJob sampleStatsJob = (ExternalSampleStatisticsCollectJob) statsJob;
                     sampledPartitions = sampleStatsJob.getSampledPartitionsHashValue();
+                    fullCoveragePartitions = sampleStatsJob.getAllPartitionsHashValue();
                     allPartitionSize = sampleStatsJob.getAllPartitionSize();
                 }
-                for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
-                    // merge sampled partitions
-                    if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
-                        sampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
-                                getSampledPartitionsHashValue());
-                    }
-                    ColumnStatsMeta meta =
-                            new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
-                                    sampledPartitions, allPartitionSize);
-                    externalBasicStatsMeta.addColumnStatsMeta(meta);
-                }
-                // Persist the table UUID (best-effort) so followers can invalidate the connector stats cache
-                // during journal replay without resolving external table metadata. If the UUID can't be
-                // resolved, leave it null and replay will fall back to the metadata-based path.
-                try {
-                    externalBasicStatsMeta.setTableUUID(table.getUUID());
-                } catch (Exception e) {
-                    LOG.warn("Failed to resolve table UUID for external basic stats meta, table: {}.{}.{}",
-                            statsJob.getCatalogName(), db.getFullName(), table.getName(), e);
-                }
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                        .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
-                                db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
+                commitExternalColumnStatsMeta(db, table, statsJob.getCatalogName(), statsJob.getColumnNames(),
+                        statsJob.getColumnNames(), statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
+                        statsJob.getProperties(), sampledPartitions, fullCoveragePartitions, allPartitionSize,
+                        refreshAsync);
             }
         }
         return analyzeStatus;
+    }
+
+    // Durably records ColumnStatsMeta for `columnNamesToCommit` and refreshes the connector stats cache.
+    // Normally called once, for every column in the job, only after the whole job finishes successfully
+    // (see the call site above). ExternalSampleStatisticsCollectJob also calls this directly, right after
+    // its direct-value-column phase (see StatisticUtils#isDirectValuePartitionColumn) completes, so a
+    // later failure in the sampled-column phase can't retroactively erase an already-successful
+    // full-partition scan's metadata. Safe to call twice for the same columns: addColumnStatsMeta
+    // overwrites by column name, so the final post-job call is a harmless re-write for columns already
+    // committed early.
+    //
+    // Direct-value columns are recorded with `fullCoveragePartitions` (honestly "every partition was
+    // sampled for this column") instead of the job's own `sampledPartitions` subset, and with AnalyzeType
+    // FULL. This makes the standard SAMPLE row-count extrapolation formula in
+    // connector.statistics.StatisticsUtils#estimateColumnStatistics a 1x no-op for them if it's ever
+    // reached, and lets FULL's early-return handle the common case - without any special-cased read-time
+    // bypass. Legacy metadata written before this distinction existed keeps its own (genuinely partial)
+    // sampledPartitions and is extrapolated normally, so it is never silently treated as already-complete.
+    //
+    // `allJobColumnNames` is the job's full declared column set (used for ExternalBasicStatsMeta's own
+    // bookkeeping, e.g. setColumns); `columnNamesToCommit` is the (possibly smaller) subset to actually
+    // build/store a ColumnStatsMeta entry for in this call.
+    void commitExternalColumnStatsMeta(Database db, Table table, String catalogName, List<String> allJobColumnNames,
+                                       List<String> columnNamesToCommit, StatsConstants.AnalyzeType jobAnalyzeType,
+                                       LocalDateTime updateTime, Map<String, String> properties,
+                                       Set<Long> sampledPartitions, Set<Long> fullCoveragePartitions,
+                                       int allPartitionSize, boolean refreshAsync) {
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
+                catalogName, db.getFullName(), table.getName());
+        if (externalBasicStatsMeta == null) {
+            externalBasicStatsMeta = new ExternalBasicStatsMeta(catalogName, db.getFullName(),
+                    table.getName(), Lists.newArrayList(allJobColumnNames), jobAnalyzeType, updateTime, properties);
+        } else {
+            externalBasicStatsMeta = externalBasicStatsMeta.clone();
+            externalBasicStatsMeta.setUpdateTime(updateTime);
+            externalBasicStatsMeta.setProperties(properties);
+            externalBasicStatsMeta.setAnalyzeType(jobAnalyzeType);
+            // set columns to the latest collect job's columns
+            externalBasicStatsMeta.setColumns(Lists.newArrayList(allJobColumnNames));
+        }
+
+        for (String column : ListUtils.emptyIfNull(columnNamesToCommit)) {
+            boolean isDirectValue = StatisticUtils.isDirectValuePartitionColumn(table, column);
+            Set<Long> columnSampledPartitions;
+            if (isDirectValue) {
+                // Full coverage should always just be full coverage - no merging with whatever
+                // (necessarily smaller) sampled-partition set a prior, non-eligible-era run recorded.
+                columnSampledPartitions = fullCoveragePartitions;
+            } else {
+                columnSampledPartitions = new HashSet<>(sampledPartitions);
+                if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
+                    columnSampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
+                            getSampledPartitionsHashValue());
+                }
+            }
+            StatsConstants.AnalyzeType columnAnalyzeType = isDirectValue ? StatsConstants.AnalyzeType.FULL : jobAnalyzeType;
+            ColumnStatsMeta meta =
+                    new ColumnStatsMeta(column, columnAnalyzeType, updateTime, columnSampledPartitions, allPartitionSize);
+            externalBasicStatsMeta.addColumnStatsMeta(meta);
+        }
+        // Persist the table UUID (best-effort) so followers can invalidate the connector stats cache
+        // during journal replay without resolving external table metadata. If the UUID can't be
+        // resolved, leave it null and replay will fall back to the metadata-based path.
+        try {
+            externalBasicStatsMeta.setTableUUID(table.getUUID());
+        } catch (Exception e) {
+            LOG.warn("Failed to resolve table UUID for external basic stats meta, table: {}.{}.{}",
+                    catalogName, db.getFullName(), table.getName(), e);
+        }
+        analyzeMgr.addExternalBasicStatsMeta(externalBasicStatsMeta);
+        analyzeMgr.refreshConnectorTableBasicStatisticsCache(catalogName, db.getFullName(), table.getName(),
+                columnNamesToCommit, refreshAsync);
     }
 
     public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {

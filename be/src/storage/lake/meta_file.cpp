@@ -23,6 +23,7 @@
 #include "base/container/raw_container.h"
 #include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -37,6 +38,7 @@
 #include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
+#include "storage/rowset/page_io.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
@@ -99,6 +101,79 @@ uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const Rowset
     //    synthesized rows, never interleaved, so the persisted offset must match that apply order; or
     //  - op_offset < 0: not recorded (OpWrite.del_op_offsets absent or holds kUnknownDelOpOffset).
     return get_max_segment_idx(rowset_meta);
+}
+
+// Shared body of the two verify_del_file_crc32c() overloads: FileMetaPB (txn log `dels_meta`) and
+// DelfileWithRowsetId (persisted `del_files`) carry the same optional crc32c/name pair but are
+// unrelated protobuf types.
+template <typename DelMetaPB>
+static Status do_verify_del_file_crc32c(const DelMetaPB& del_meta, int64_t tablet_id, std::string_view content) {
+    if (!del_meta.has_crc32c() || !config::lake_enable_del_file_crc_check) {
+        return Status::OK();
+    }
+    const uint32_t expect = crc32c::Unmask(del_meta.crc32c());
+    const uint32_t actual = crc32c::Value(content.data(), content.size());
+    if (expect == actual) {
+        return Status::OK();
+    }
+    auto msg = fmt::format("del file crc32c mismatch, tablet: {}, file: {}, size: {}, expect: {}, actual: {}",
+                           tablet_id, del_meta.name(), content.size(), expect, actual);
+    LOG(ERROR) << msg;
+    return Status::Corruption(msg);
+}
+
+Status verify_del_file_crc32c(const FileMetaPB& del_meta, int64_t tablet_id, std::string_view content) {
+    return do_verify_del_file_crc32c(del_meta, tablet_id, content);
+}
+
+Status verify_del_file_crc32c(const DelfileWithRowsetId& del_meta, int64_t tablet_id, std::string_view content) {
+    return do_verify_del_file_crc32c(del_meta, tablet_id, content);
+}
+
+// Drop a del file's local data cache after its checksum failed to verify. Only meaningful in
+// shared-data mode, where the file is backed by remote storage and cached locally; elsewhere there is
+// no cache layer to invalidate and this reports NotSupported so the caller does not retry.
+static Status drop_corrupted_del_file_cache(const std::string& path) {
+    Status drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    drop_status = drop_local_cache_data(path);
+#endif
+    // Outside the platform guard on purpose, so tests can drive the retry path on any build.
+    TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_del_file_cache", &drop_status);
+    return drop_status;
+}
+
+template <typename DelMetaPB>
+static StatusOr<std::string> do_read_and_verify_del_file(RandomAccessFile* rf, const DelMetaPB& del_meta,
+                                                         int64_t tablet_id) {
+    ASSIGN_OR_RETURN(auto content, rf->read_all());
+    auto st = do_verify_del_file_crc32c(del_meta, tablet_id, content);
+    if (st.ok()) {
+        return content;
+    }
+    // A del file is immutable once written, so bytes that do not match the recorded checksum are not
+    // the bytes that were written. The likeliest culprit is a corrupted block in the local data cache
+    // rather than in remote storage, so drop the cache and read once more -- the retry then reads
+    // through to the remote object. Segment pages (PageIO::read_and_decompress_page) and
+    // persistent-index sstables (PersistentIndexSstable) recover from cache corruption the same way.
+    auto drop_status = drop_corrupted_del_file_cache(rf->filename());
+    if (!drop_status.ok()) {
+        VLOG(2) << "skip clearing corrupted cache for " << rf->filename() << ": " << drop_status;
+        return st; // report the original corruption, not the drop failure
+    }
+    LOG(INFO) << "cleared corrupted cache for " << rf->filename() << ", re-reading the del file";
+    ASSIGN_OR_RETURN(content, rf->read_all());
+    RETURN_IF_ERROR(do_verify_del_file_crc32c(del_meta, tablet_id, content));
+    return content;
+}
+
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const FileMetaPB& del_meta, int64_t tablet_id) {
+    return do_read_and_verify_del_file(rf, del_meta, tablet_id);
+}
+
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const DelfileWithRowsetId& del_meta,
+                                               int64_t tablet_id) {
+    return do_read_and_verify_del_file(rf, del_meta, tablet_id);
 }
 
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
@@ -390,6 +465,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         // toward the PK index rebuild-rows threshold. Absent/misaligned means "not recorded" -> 0.
         if (del_id < op_write.del_num_rows_size()) {
             del_file_with_rid.set_num_rows(op_write.del_num_rows(del_id));
+        }
+        // Carry the content checksum recorded at write time. Absent (older writer / replication
+        // transcode) stays absent, which readers treat as "not recorded" and skip verifying.
+        if (del_meta.has_crc32c()) {
+            del_file_with_rid.set_crc32c(del_meta.crc32c());
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
@@ -1712,6 +1792,10 @@ Status MetaFileBuilder::set_final_rowset() {
         // rebuild-rows threshold. The writer always provides a count (0 when a del carries none).
         if (i < _pending_rowset_data.del_num_rows.size()) {
             del_file_with_rid.set_num_rows(_pending_rowset_data.del_num_rows[i]);
+        }
+        // Carry the content checksum recorded at write time (see apply_opwrite).
+        if (del.has_crc32c()) {
+            del_file_with_rid.set_crc32c(del.crc32c());
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }

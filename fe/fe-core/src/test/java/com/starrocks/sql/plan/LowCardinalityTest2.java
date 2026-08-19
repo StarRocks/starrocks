@@ -2857,8 +2857,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [14: c_user, VARCHAR, true]\n" +
                     "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [15: c_dept, VARCHAR, true]\n" +
                     "  |  build runtime filters:\n" +
-                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = false\n" +
-                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = false\n" +
+                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = true\n" +
+                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = true\n" +
                     "  |  output columns: 2, 15\n" +
                     "  |  cardinality: 1\n" +
                     "  |  \n" +
@@ -2914,14 +2914,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  analytic partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "  |  offset: 0\n" +
                     "  |  cardinality: 1\n" +
-                    "  |  probe runtime filters:\n" +
-                    "  |  - filter_id = 0, probe_expr = (2: c_user)\n" +
-                    "  |  - filter_id = 1, probe_expr = (3: c_dept)\n" +
                     "  |  \n" +
                     "  1:EXCHANGE\n" +
                     "     distribution type: SHUFFLE\n" +
                     "     partition exprs: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "     cardinality: 1");
+            // Both filters now cross the exchange and land on the scan, which is what actually
+            // evaluates them; the probe columns are exactly the analytic partition-by columns,
+            // so pruning here removes whole window partitions and cannot change a surviving row.
+            assertContains(plan, "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (2: c_user), partition_exprs = (2: c_user,3: c_dept)\n" +
+                    "     - filter_id = 1, probe_expr = (3: c_dept), partition_exprs = (2: c_user,3: c_dept)");
 
         } finally {
             FeConstants.runningUnitTest = false;

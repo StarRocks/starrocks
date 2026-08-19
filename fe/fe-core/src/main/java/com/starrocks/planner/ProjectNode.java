@@ -39,6 +39,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
+    // ProjectOperator only computes the projection; it never evaluates runtime filters.
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        return false;
+    }
+
     private final Map<SlotId, Expr> slotMap;
     private final Map<SlotId, Expr> commonSlotMap;
 
@@ -134,24 +140,51 @@ public class ProjectNode extends PlanNode {
 
     @Override
     public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
-        if (!(expr instanceof SlotRef)) {
-            return Optional.empty();
-        }
         if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
-        List<Expr> newExprs = Lists.newArrayList();
-        for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
-            // Replace the probeExpr only when:
-            // 1. when probeExpr is slot ref
-            // 2. and probe expr slot id == kv.getKey()
-            // then replace probeExpr with kv.getValue()
-            // and push down kv.getValue()
-            if (ExprUtils.isBound(expr, kv.getKey())) {
-                newExprs.add(kv.getValue());
+        if (expr instanceof SlotRef) {
+            List<Expr> newExprs = Lists.newArrayList();
+            for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
+                // Replace the probeExpr only when:
+                // 1. when probeExpr is slot ref
+                // 2. and probe expr slot id == kv.getKey()
+                // then replace probeExpr with kv.getValue()
+                // and push down kv.getValue()
+                if (ExprUtils.isBound(expr, kv.getKey())) {
+                    newExprs.add(kv.getValue());
+                }
+            }
+            return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
+        }
+        // The expr is no longer a bare SlotRef because an upper projection already rewrote it --
+        // typically into the implicit widening CAST of a join key. It can still descend as long as
+        // every slot it references is merely *relayed* by this projection: substituting a computed
+        // slot instead would move that computation into the child's per-row runtime-filter
+        // evaluation, so give up in that case and let this node probe with the filter itself.
+        Expr relayed = expr.clone();
+        if (!relaySlotRefsThroughProjection(relayed)) {
+            return Optional.empty();
+        }
+        return Optional.of(Lists.newArrayList(relayed));
+    }
+
+    // Rewrite every SlotRef inside `node` to what this projection relays it from. Returns false as
+    // soon as a slot is produced by an expression rather than relayed, leaving `node` unusable.
+    private boolean relaySlotRefsThroughProjection(Expr node) {
+        for (int i = 0; i < node.getChildren().size(); i++) {
+            Expr child = node.getChild(i);
+            if (child instanceof SlotRef) {
+                Expr relayedFrom = slotMap.get(((SlotRef) child).getSlotId());
+                if (!(relayedFrom instanceof SlotRef)) {
+                    return false;
+                }
+                node.setChild(i, relayedFrom.clone());
+            } else if (!relaySlotRefsThroughProjection(child)) {
+                return false;
             }
         }
-        return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
+        return true;
     }
 
     @Override
@@ -173,7 +206,7 @@ public class ProjectNode extends PlanNode {
 
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                 optProbeExprCandidates,
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl)), 0, true);
     }
 
     // This functions is used by query cache to compute digest of fragments. for examples:
