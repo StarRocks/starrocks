@@ -16,6 +16,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -222,7 +223,7 @@ public class InsertOverwriteJobRunnerTest {
                 // positionally to map each sampled logical partition onto the replacement partition
                 // the load will actually write.
                 hook.verify(() -> InsertPreSplitHook.maybeRunStaticOverwritePreSplit(
-                        insertStmt, context, List.of("p1"), List.of("tp1")));
+                        insertStmt, context, List.of("p1"), List.of("tp1"), Estimates.ZERO));
             }
         });
     }

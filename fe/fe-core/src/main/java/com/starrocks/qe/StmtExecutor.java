@@ -44,6 +44,7 @@ import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -3254,7 +3255,7 @@ public class StmtExecutor {
         return statisticsForAuditLog;
     }
 
-    public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
+    public void handleInsertOverwrite(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
         TableRef tableRef = insertStmt.getTableRef();
         Database db =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableRef.getCatalogName(), tableRef.getDbName());
@@ -3294,7 +3295,9 @@ public class StmtExecutor {
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
-        manager.executeJob(context, this, job);
+        // The runner replans against the temporary partitions and never sees the plan built for this
+        // statement, so the size the optimizer estimated has to be read here and handed down.
+        manager.executeJob(context, this, job, PreSplitEstimates.fromExecPlan(execPlan));
     }
 
     /**
@@ -3431,7 +3434,7 @@ public class StmtExecutor {
 
         if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
-            handleInsertOverwrite((InsertStmt) parsedStmt);
+            handleInsertOverwrite(execPlan, (InsertStmt) parsedStmt);
             return;
         }
 

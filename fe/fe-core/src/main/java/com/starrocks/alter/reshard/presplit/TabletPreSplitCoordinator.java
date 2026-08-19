@@ -85,6 +85,12 @@ public final class TabletPreSplitCoordinator {
 
     private static final Logger LOG = LogManager.getLogger(TabletPreSplitCoordinator.class);
 
+    /**
+     * Placeholder byte budget for a derived route's {@link SampleRequest}. The derived pipeline never reads
+     * it; it exists only because the shared request type requires a positive value.
+     */
+    private static final long DERIVED_ROUTE_UNUSED_SAMPLE_BYTE_LIMIT = 1L;
+
     private TabletPreSplitCoordinator() {
     }
 
@@ -145,6 +151,14 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
+     * Whether {@code loadKind} is served by the derived tier, which reads no data. Such a route must not be
+     * measured, configured or diagnosed as though a sampler had run.
+     */
+    private static boolean derivedRoute(LoadKind loadKind) {
+        return loadKind == LoadKind.MV_REFRESH;
+    }
+
+    /**
      * Picks the per-path Config flag that gates the caller's load kind, then checks the
      * session opt-out. Returns {@code null} when both gates are open.
      */
@@ -153,6 +167,7 @@ public final class TabletPreSplitCoordinator {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
             case INSERT_FROM_TABLE -> Config.enable_tablet_pre_split_for_insert_from_table;
+            case MV_REFRESH -> Config.enable_tablet_pre_split_for_mv_refresh;
         };
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
@@ -225,9 +240,17 @@ public final class TabletPreSplitCoordinator {
             return eligibility;
         }
 
+        // A route that reads nothing must not consult -- or be blocked by -- sampler-only configuration.
+        // SampleRequest rejects a non-positive sampleByteLimit, and tablet_pre_split_sample_byte_limit is
+        // mutable, so reading it here would let an operator turn a derived refresh into an unrecorded
+        // IllegalArgumentException that escapes to the caller's fail-safe with no skip reason at all.
+        // The derived pipeline ignores the request entirely; the placeholder only keeps the shared request
+        // type valid.
+        long sampleByteLimit = derivedRoute(loadKind)
+                ? DERIVED_ROUTE_UNUSED_SAMPLE_BYTE_LIMIT
+                : Config.tablet_pre_split_sample_byte_limit;
         SampleRequest sampleRequest = new SampleRequest(
-                scanContext, MetaUtils.getRangeDistributionColumns(table),
-                Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
+                scanContext, MetaUtils.getRangeDistributionColumns(table), sampleByteLimit, /*seed*/ 0L);
         Duration preSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_pre_submit_timeout_seconds);
 
         Optional<PreSplitPipeline.PreparedReshardJob> prepared;
@@ -261,7 +284,12 @@ public final class TabletPreSplitCoordinator {
             // (table-state changed, journal write rejected, job-id collision, etc.).
             LOG.warn("Pre-split skipped for table {}: TabletReshardJobMgr rejected admission — {}",
                     table.getName(), submitFailure.getMessage());
-            return skipPostEligibility(SkipReason.SUBMIT_FAILED);
+            // On a derived route this lands in the eligibility family rather than the sampler-failed one:
+            // no sampler ran, so a sampler-failure counter with no matching invocation would break the
+            // ratio the invocation counter exists to support. Sampled routes keep their existing family.
+            return derivedRoute(loadKind)
+                    ? skipEligibility(SkipReason.SUBMIT_FAILED)
+                    : skipPostEligibility(SkipReason.SUBMIT_FAILED);
         }
         return new PreSplitOutcome.Submitted(preparedJob);
     }
@@ -660,6 +688,14 @@ public final class TabletPreSplitCoordinator {
      * Static-overwrite / explicit INSERT counterpart for temporary partitions that already exist.
      * No transaction is excluded from cleanup: unlike dynamic overwrite, the static overwrite
      * transaction has not been opened before this synchronous pre-split wait.
+     *
+     * <p>That is true when the job is admitted but does not make the load immune to the job's cleanup
+     * watermark, which {@code SplitTabletJob#runRunningJob} captures only at the END of its RUNNING
+     * phase. A load whose transaction opens after this wait times out can therefore still fall below it
+     * and be waited on by CLEANING. Excluding that transaction would not be sound — by then it is
+     * writing to the very tablets CLEANING is about to unregister, which is why dynamic overwrite
+     * revokes its own exclusion at the same point and shares the same window. See the note on
+     * {@code InsertOverwriteJobRunner#lockForCommitWaitingOutReshard}.
      */
     public static PreSplitOutcome submitForExistingTemporaryPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
