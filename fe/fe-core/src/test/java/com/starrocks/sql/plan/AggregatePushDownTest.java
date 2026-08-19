@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,31 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+    }
+
+    @Test
+    public void testCountNotPushedBelowKeylessJoin() throws Exception {
+        // A count() pushed down with an empty group-by set degenerates into a scalar aggregate
+        // that always emits exactly one row, even when its side has zero input rows. Re-joining
+        // that phantom row through a keyless join (CROSS JOIN, or an INNER JOIN whose condition
+        // contributes no columns) would corrupt the join's cardinality instead of correctly
+        // producing no rows/groups, so PushDownAggregateCollector#splitJoinAggregate must refuse
+        // to push count() in that shape.
+        String crossJoinPlan = getFragmentPlan("select t1.v4, count(*) from t0, t1 group by t1.v4");
+        Assertions.assertEquals(1, StringUtils.countMatches(crossJoinPlan, ":AGGREGATE "));
+        assertNotContains(crossJoinPlan, "group by: \n");
+
+        String constCondPlan =
+                getFragmentPlan("select t1.v4, count(*) from t0 inner join t1 on 1 = 1 group by t1.v4");
+        Assertions.assertEquals(1, StringUtils.countMatches(constCondPlan, ":AGGREGATE "));
+        assertNotContains(constCondPlan, "group by: \n");
+
+        // Sanity: a real equi-join still gets count() pushed below it (the two-stage aggregate
+        // this whole feature exists for), since the join column populates a non-empty group-by
+        // set on the pushed side.
+        String realJoinPlan =
+                getFragmentPlan("select t0.v1, count(*) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(realJoinPlan, ":AGGREGATE "));
     }
 
     @Test
