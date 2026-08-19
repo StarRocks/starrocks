@@ -1698,7 +1698,7 @@ TEST_F(LakeReplicationRemoteStorageTest, raw_s3_uses_virtual_shard_uri) {
     SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_partition_starlet_uri",
                                           [&](void* arg) { captured_uri = *static_cast<std::string*>(arg); });
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
         *fs_st = absl::InternalError("stop after URI construction");
     });
 
@@ -1715,7 +1715,7 @@ TEST_F(LakeReplicationRemoteStorageTest, non_s3_uses_virtual_shard_uri_authority
     SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_meta_dir",
                                           [&](void* arg) { captured_meta_dir = *static_cast<std::string*>(arg); });
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
         *fs_st = absl::InternalError("stop after source path construction");
     });
 
@@ -2378,8 +2378,8 @@ TEST_F(LakeReplicationRemoteStorageTest, copies_complete_bundle_object_through_f
     const std::string physical_contents = "AAAAABBBBBBB-physical-tail";
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_contents);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     const std::string bundle_name = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000072.dat";
@@ -2446,8 +2446,8 @@ TEST_F(LakeReplicationRemoteStorageTest, bundle_siblings_reuse_shared_file_witho
     const std::string contents = "shared-bundle-segment";
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(contents);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     const std::string segment_name = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000074.dat";
@@ -2525,8 +2525,8 @@ TEST_F(LakeReplicationRemoteStorageTest, range_siblings_reuse_shared_file_withou
     const std::string contents = "shared-range-segment";
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(contents);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     const std::string segment_name = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000073.dat";
@@ -2612,8 +2612,8 @@ TEST_F(LakeReplicationRemoteStorageTest, range_siblings_reuse_shared_file_withou
 TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion__encrypted_slices_before_copy) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -2658,8 +2658,8 @@ TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion_
 TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
