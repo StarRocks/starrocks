@@ -12212,5 +12212,162 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
     EXPECT_EQ(0, totals[3].num_dels);
 }
 
+// An entry in a NON-shared legacy sstable whose rssid projects below the merged id space must be
+// dropped, not fail the merge. ctx.rssid_offset() is next_rowset_id - min_carried_id, so a negative
+// projection means the entry references a rowset id below the smallest one this old tablet carries
+// into the merged tablet: it was compacted away, no segment in the merged metadata can resolve it,
+// and returning the error instead aborts the reshard publish, which the FE retries forever.
+//
+// rebuild_legacy_shared_sstable already drops its out-of-range entries; this covers the non-shared
+// twin. Layout, chosen so the rebuild path is the one that runs:
+//   ctx[0]: canonical rowset id 10, uid U, ancestor segment_idx 0. next_rowset_id 11.
+//   ctx[1]: local rowset id 100 (own uid, sets the carried floor) + the same-uid duplicate at id
+//           101 carrying segment_idx 1, which dedups into the canonical and therefore populates
+//           shared_rssid_map -- that is what makes ctx_disagreement_keys non-empty and sends the
+//           sstable through rebuild_non_shared_legacy_sstable instead of the PB-level shift.
+//   ctx[1]'s offset is 11 - 100 = -89, so the sstable's stored rssid 50 lifts to -39 (dropped)
+//   while stored rssid 101 resolves through shared_rssid_map to the canonical (kept).
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_rebuild_drops_below_floor_entry) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    constexpr uint32_t kCanonicalRowsetId = 10;
+    constexpr uint32_t kLocalRowsetId = 100;
+    constexpr uint32_t kDuplicateRowsetId = 101;
+    constexpr uint32_t kDeadStoredRssid = 50;                 // lifts below zero => dead
+    constexpr uint32_t kLiveStoredRssid = kDuplicateRowsetId; // resolves via shared_rssid_map
+    const std::string kAncestorSegPrefix = "ancestor_seg_";
+
+    auto add_shared_segment = [&](RowsetMetadataPB* rowset, uint32_t segment_idx) {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(fmt::format("{}{}.dat", kAncestorSegPrefix, segment_idx));
+        sm->set_size(128);
+        sm->set_segment_idx(segment_idx);
+        sm->set_shared(true);
+    };
+
+    // ctx[0]: the canonical copy of the ancestor rowset.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(kCanonicalRowsetId + 1);
+    set_primary_key_schema(meta_a.get(), 1001);
+    {
+        auto* rowset = meta_a->add_rowsets();
+        rowset->set_id(kCanonicalRowsetId);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(128);
+        rowset->set_overlapped(false);
+        add_shared_segment(rowset, 0);
+        stamp_physical_identity_uid(rowset, kAncestorSegPrefix); // same uid across children => dedup
+        (*meta_a->mutable_rowset_to_schema())[kCanonicalRowsetId] = 1001;
+    }
+
+    // ctx[1]: a local rowset that fixes the carried floor at 100, the same-uid duplicate, and a
+    // non-shared sstable holding one dead entry plus one live one.
+    const std::string sst_filename = "non_shared_below_floor.sst";
+    const auto sst_path = _tablet_manager->sst_location(child_b, sst_filename);
+    const uint64_t sst_filesize = write_legacy_pk_sstable(
+            sst_path, {{"k_dead", kDeadStoredRssid, /*rowid=*/0}, {"k_live", kLiveStoredRssid, /*rowid=*/7}});
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(kDuplicateRowsetId + 2);
+    set_primary_key_schema(meta_b.get(), 1001);
+    {
+        auto* local = meta_b->add_rowsets();
+        local->set_id(kLocalRowsetId);
+        local->set_version(base_version);
+        local->set_num_rows(5);
+        local->set_data_size(64);
+        local->set_overlapped(false);
+        auto* sm = local->add_segment_metas();
+        sm->set_filename("child_b_local.dat");
+        sm->set_size(64);
+        lake::tablet_reshard_helper::set_rowset_uid(local); // own uid => emitted, never deduped
+        (*meta_b->mutable_rowset_to_schema())[kLocalRowsetId] = 1001;
+
+        auto* duplicate = meta_b->add_rowsets();
+        duplicate->set_id(kDuplicateRowsetId);
+        duplicate->set_version(base_version);
+        duplicate->set_num_rows(10);
+        duplicate->set_data_size(128);
+        duplicate->set_overlapped(false);
+        add_shared_segment(duplicate, 1);
+        stamp_physical_identity_uid(duplicate, kAncestorSegPrefix);
+        (*meta_b->mutable_rowset_to_schema())[kDuplicateRowsetId] = 1001;
+    }
+    {
+        auto* sst = meta_b->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(sst_filename);
+        sst->set_filesize(sst_filesize);
+        sst->set_rssid_offset(0);
+        // High word must reach the disagreement key so needs_rebuild fires.
+        sst->set_max_rss_rowid((static_cast<uint64_t>(kLiveStoredRssid) << 32) | 7);
+    }
+
+    ASSERT_OK(put_tablet_metadata(meta_a));
+    ASSERT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(child_a);
+    merging_tablet.add_old_tablet_ids(child_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    // Before the fix this returned InvalidArgument("Segment id overflow during tablet merge") from
+    // rebuild_non_shared_legacy_sstable and the MERGE job never left RUNNING.
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& rebuilt = merged->sstable_meta().sstables(0);
+    EXPECT_NE(sst_filename, rebuilt.filename()) << "the rebuild must emit a fresh file";
+    EXPECT_EQ(0, rebuilt.rssid_offset()) << "rebuilt entries are pre-remapped";
+
+    ASSIGN_OR_ABORT(
+            auto rebuilt_sstable,
+            lake::PersistentIndexSstable::new_sstable(
+                    rebuilt, _tablet_manager->sst_location(merged_tablet, rebuilt.filename()),
+                    /*cache=*/nullptr, /*need_filter=*/false, /*delvec=*/nullptr, merged, _tablet_manager.get()));
+    sstable::ReadOptions read_options;
+    read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iter(rebuilt_sstable->new_iterator(read_options));
+    std::map<std::string, uint32_t> rebuilt_entries;
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+        IndexValuesWithVerPB values_pb;
+        ASSERT_TRUE(values_pb.ParseFromArray(iter->value().data, static_cast<int>(iter->value().size)));
+        ASSERT_GT(values_pb.values_size(), 0);
+        rebuilt_entries.emplace(iter->key().to_string(), values_pb.values(0).rssid());
+    }
+    ASSERT_OK(iter->status());
+
+    EXPECT_FALSE(rebuilt_entries.count("k_dead"))
+            << "an entry below the carried floor references an erased rowset and must be dropped";
+    ASSERT_TRUE(rebuilt_entries.count("k_live")) << "the live entry must survive the rebuild";
+    // The duplicate deduped into the canonical, so its rssid resolves into the canonical's span.
+    EXPECT_GE(rebuilt_entries["k_live"], kCanonicalRowsetId);
+    EXPECT_LE(rebuilt_entries["k_live"], kCanonicalRowsetId + 1);
+}
+
 // =============================================================================
 } // namespace starrocks
