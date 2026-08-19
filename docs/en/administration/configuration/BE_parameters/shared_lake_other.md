@@ -86,6 +86,15 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_del_file_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to verify a Primary Key delete file (`.del`) of a shared-data cluster against the CRC32C recorded in its metadata when the file is read back during transaction publish or Primary Key index rebuild. When a mismatch is detected, the operation fails with a corruption error instead of erasing the wrong primary keys. Delete files written before the checksum existed carry none and are always accepted, so this item has no effect on data written by an earlier version. Writing the checksum is not controlled by this item; this item only controls verification.
+- Introduced in: v4.2
+
 ### lake_enable_pk_preserve_txn_delete_order
 
 - Default: false
