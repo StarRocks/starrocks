@@ -2336,12 +2336,17 @@ static ColumnPtr cast_from_string_to_geometry_fn(ColumnPtr& column) {
             builder.append_null();
             continue;
         }
-        auto wkt = viewer.value(row);
-        GeoParseStatus status;
-        std::unique_ptr<GeoShape> shape(GeoShape::from_wkt(wkt.data, wkt.size, &status));
+        auto val = viewer.value(row);
+        // 1. Try binary-encoded geometry (result of legacy VARCHAR-based ST_* functions)
+        std::unique_ptr<GeoShape> shape(GeoShape::from_encoded(val.data, val.size));
+        if (shape == nullptr) {
+            // 2. Fall back to WKT parsing (raw string like 'POINT (1 2)')
+            GeoParseStatus status;
+            shape.reset(GeoShape::from_wkt(val.data, val.size, &status));
+        }
         if (shape == nullptr) {
             if constexpr (AllowThrowException) {
-                throw std::runtime_error("Invalid WKT geometry string");
+                throw std::runtime_error("Cannot cast string to GEOMETRY: not valid WKT or encoded geometry");
             }
             builder.append_null();
         } else {
@@ -2354,6 +2359,6 @@ static ColumnPtr cast_from_string_to_geometry_fn(ColumnPtr& column) {
 }
 
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
-CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
+CUSTOMIZE_FN_CAST(TYPE_CHAR,    TYPE_GEOMETRY, cast_from_string_to_geometry_fn);
 
 } // namespace starrocks
