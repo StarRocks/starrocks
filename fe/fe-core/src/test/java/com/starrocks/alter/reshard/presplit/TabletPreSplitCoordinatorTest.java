@@ -65,6 +65,7 @@ public class TabletPreSplitCoordinatorTest {
     private int savedConfigReshardMaxSplitCount;
     private long savedConfigReshardMinSplitSize;
     private long savedConfigSampleByteLimit;
+    private long savedConfigPreSplitTargetSize;
 
     @BeforeEach
     public void setUp() {
@@ -74,6 +75,7 @@ public class TabletPreSplitCoordinatorTest {
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
         savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         savedConfigSampleByteLimit = Config.tablet_pre_split_sample_byte_limit;
+        savedConfigPreSplitTargetSize = Config.tablet_pre_split_target_size;
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
@@ -172,6 +174,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
         Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
         Config.tablet_pre_split_sample_byte_limit = savedConfigSampleByteLimit;
+        Config.tablet_pre_split_target_size = savedConfigPreSplitTargetSize;
     }
 
     private PreSplitOutcome invokeMaybeAct() {
@@ -461,6 +464,70 @@ public class TabletPreSplitCoordinatorTest {
         Config.tablet_reshard_max_split_count = 1;
         Assertions.assertThrows(IllegalStateException.class,
                 () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+    }
+
+    // ---- selectPreSplitTabletCount / tablet_pre_split_target_size ----
+
+    private static int selectPreSplitTabletCount(long totalBytes, int activeComputeNodeCount) {
+        return TabletPreSplitCoordinator.selectPreSplitTabletCount(
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
+    }
+
+    @Test
+    public void testPreSplitTargetSizeDefaultsToReshardTargetSize() {
+        // Zero is the default: pre-split must size exactly as it did before the config existed.
+        Config.tablet_pre_split_target_size = 0L;
+        Assertions.assertEquals(Config.tablet_reshard_target_size,
+                TabletPreSplitCoordinator.preSplitTargetSize());
+        Assertions.assertEquals(selectTabletCount(100L * DebugUtil.GIGABYTE, 3),
+                selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testPreSplitTargetSizeOverridesReshardTargetSize() {
+        Config.tablet_pre_split_target_size = DebugUtil.GIGABYTE;
+        Assertions.assertEquals(DebugUtil.GIGABYTE, TabletPreSplitCoordinator.preSplitTargetSize());
+    }
+
+    @Test
+    public void testPreSplitTargetSizeNegativeFallsBackToReshardTargetSize() {
+        // Guards the > 0 test: a negative value must not reach the sizing precondition as a
+        // "configured" override, because that would fail the load's pre-split with an
+        // IllegalStateException instead of falling back.
+        Config.tablet_pre_split_target_size = -1L;
+        Assertions.assertEquals(Config.tablet_reshard_target_size,
+                TabletPreSplitCoordinator.preSplitTargetSize());
+        Assertions.assertEquals(12, selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testPreSplitTargetSizeUnblocksSinkParallelismForSmallPartitions() {
+        // A ~4 GB range partition on a 30-node warehouse. Under the 10 GB reshard target the
+        // byte volume asks for one tablet and the 2 GB min-split-size bound caps node alignment
+        // at two, so the clamp floor produces the minimum 2 tablets -- barely more sink
+        // parallelism than the single catch-all tablet the partition started from.
+        Assertions.assertEquals(2, selectPreSplitTabletCount(4L * DebugUtil.GIGABYTE, 30));
+
+        // Lowering only the pre-split target to 512 MB carves the same partition into 8 tablets,
+        // so the load's sink spreads over 8 backends instead of 1. tablet_reshard_target_size is
+        // untouched: the two-argument form still answers 2, and the background split/merge daemon
+        // still measures against 10 GB, so it merges these back together after the load.
+        Config.tablet_pre_split_target_size = 512L * DebugUtil.MEGABYTE;
+        Assertions.assertEquals(8, selectPreSplitTabletCount(4L * DebugUtil.GIGABYTE, 30));
+        Assertions.assertEquals(2, selectTabletCount(4L * DebugUtil.GIGABYTE, 30));
+    }
+
+    @Test
+    public void testPreSplitTargetSizeAloneOvercomesMinSplitSize() {
+        // effectiveMinSize is min(tablet_reshard_min_split_size, targetSize), so lowering the
+        // pre-split target alone is sufficient and no second knob is needed: the 2 GB
+        // min-split-size does not veto the finer split. Were it not clamped, 1900 MB would fill
+        // zero whole 2 GB tablets, node alignment would collapse to 1, and this would answer 4
+        // instead of aligning to 3 nodes for 6.
+        Config.tablet_pre_split_target_size = 512L * DebugUtil.MEGABYTE;
+        Config.tablet_reshard_min_split_size = 2L * DebugUtil.GIGABYTE;
+        Assertions.assertEquals(6, selectPreSplitTabletCount(1900L * DebugUtil.MEGABYTE, 30));
+        Assertions.assertEquals(2, selectTabletCount(1900L * DebugUtil.MEGABYTE, 30));
     }
 
     // ---- runPreSplit pipeline orchestration ----

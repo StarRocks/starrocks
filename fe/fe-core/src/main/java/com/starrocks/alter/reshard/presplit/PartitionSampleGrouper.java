@@ -16,12 +16,15 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
@@ -33,6 +36,8 @@ import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -98,7 +103,15 @@ public final class PartitionSampleGrouper {
                                                long dbId, long totalFileBytes,
                                                Set<Long> sampledSecondaryIndexMetaIds) {
         return group(samples, table, ctx, dbId, totalFileBytes, sampledSecondaryIndexMetaIds,
-                false, null);
+                false, null, PreSplitPartitionScope.unrestricted());
+    }
+
+    /** Explicit real/temporary partition variant. Never creates a partition outside the SQL scope. */
+    public static List<PartitionSamples> groupSpecified(
+            SampleSet samples, OlapTable table, ConnectContext ctx, long dbId, long totalFileBytes,
+            Set<Long> sampledSecondaryIndexMetaIds, PreSplitPartitionScope partitionScope) {
+        return group(samples, table, ctx, dbId, totalFileBytes, sampledSecondaryIndexMetaIds,
+                partitionScope.isTemporary(), null, partitionScope);
     }
 
     /**
@@ -109,12 +122,13 @@ public final class PartitionSampleGrouper {
             SampleSet samples, OlapTable table, ConnectContext ctx, long dbId, long totalFileBytes,
             Set<Long> sampledSecondaryIndexMetaIds, long transactionId) {
         return group(samples, table, ctx, dbId, totalFileBytes, sampledSecondaryIndexMetaIds,
-                true, "txn" + transactionId);
+                true, "txn" + transactionId, PreSplitPartitionScope.unrestricted());
     }
 
     private static List<PartitionSamples> group(
             SampleSet samples, OlapTable table, ConnectContext ctx, long dbId, long totalFileBytes,
-            Set<Long> sampledSecondaryIndexMetaIds, boolean temporaryPartition, String partitionNamePrefix) {
+            Set<Long> sampledSecondaryIndexMetaIds, boolean temporaryPartition, String partitionNamePrefix,
+            PreSplitPartitionScope partitionScope) {
         List<Tuple> partitionSourceTuples = samples.getPartitionSourceTuples();
         if (partitionSourceTuples.isEmpty()) {
             // Sampler did not project partition source columns (target was unpartitioned).
@@ -204,10 +218,39 @@ public final class PartitionSampleGrouper {
             return Collections.emptyList();
         }
 
+        // Scope phase (no lock): when the INSERT named its target partitions, drop every group that
+        // resolves outside that set BEFORE the cap ranks anything. Capping first lets out-of-scope
+        // partitions with more sampled rows evict the named target, and the scope check further down
+        // then discards whatever the cap kept -- so an explicitly targeted INSERT or overwrite would
+        // silently receive no pre-split at all. Resolving here also memoizes the mapping, so the
+        // locked pass below does not repeat the range-fallback scan. Catalog name lookups are safe
+        // outside the lock for the same reason the analyzer above is: the locked pass re-resolves
+        // every partition it actually uses.
+        Map<String, String> scopedCatalogNames = new LinkedHashMap<>();
+        List<MergedGroup> mergedGroups;
+        if (partitionScope.isSpecified()) {
+            mergedGroups = new ArrayList<>();
+            for (MergedGroup group : byPartitionName.values()) {
+                String catalogPartitionName =
+                        resolveCatalogPartitionName(table, group, partitionColumns, partitionScope);
+                if (catalogPartitionName == null) {
+                    // The sample row belongs to a partition outside the explicit INSERT target.
+                    continue;
+                }
+                scopedCatalogNames.put(group.partitionName, catalogPartitionName);
+                mergedGroups.add(group);
+            }
+            if (mergedGroups.isEmpty()) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.GROUPER_EMPTY);
+                return Collections.emptyList();
+            }
+        } else {
+            mergedGroups = new ArrayList<>(byPartitionName.values());
+        }
+
         // Cap phase (no lock): rank merged groups heaviest-first and trim to the
         // per-load cap BEFORE the catalog lock so both analyzer (already done) and
         // catalog work are bounded for high-cardinality loads.
-        List<MergedGroup> mergedGroups = new ArrayList<>(byPartitionName.values());
         mergedGroups.sort((left, right) -> Integer.compare(right.rows.size(), left.rows.size()));
         int cap = Config.tablet_pre_split_max_partitions_per_load;
         if (cap > 0 && mergedGroups.size() > cap) {
@@ -229,12 +272,20 @@ public final class PartitionSampleGrouper {
                 long estimatedBytes = sampleRowCount == 0 ? 0L :
                         Math.round((double) group.rows.size() / sampleRowCount * totalFileBytes);
 
+                // Resolved by the scope phase above for an explicit target; an unrestricted load
+                // writes the deterministic auto-partition name itself.
+                String catalogPartitionName =
+                        scopedCatalogNames.getOrDefault(group.partitionName, group.partitionName);
                 Partition partition = temporaryPartition
-                        ? table.getPartition(group.partitionName, true)
-                        : table.getPartition(group.partitionName);
+                        ? table.getPartition(catalogPartitionName, true)
+                        : table.getPartition(catalogPartitionName);
                 if (partition == null) {
+                    if (partitionScope.isSpecified()) {
+                        PreSplitMetrics.recordEligibilitySkip(SkipReason.STALE_CATALOG_STATE);
+                        continue;
+                    }
                     resolved.add(new PartitionSamples(
-                            group.formattedValues, group.partitionName, false,
+                            group.formattedValues, catalogPartitionName, false,
                             -1L, -1L, group.clause,
                             ImmutableList.copyOf(group.rows), estimatedBytes));
                     continue;
@@ -281,7 +332,7 @@ public final class PartitionSampleGrouper {
                 }
                 long oldTabletId = baseIndex.getTablets().get(0).getId();
                 resolved.add(new PartitionSamples(
-                        group.formattedValues, group.partitionName, true,
+                        group.formattedValues, catalogPartitionName, true,
                         physicalPartition.getId(), oldTabletId, null,
                         ImmutableList.copyOf(group.rows), estimatedBytes));
             }
@@ -292,6 +343,61 @@ public final class PartitionSampleGrouper {
         // already explain why each group was dropped. There WERE groups; they were
         // ineligible, not empty. Return the (possibly empty) heaviest-first list.
         return resolved;
+    }
+
+    /**
+     * Resolves the deterministic auto-partition name to a partition inside the explicit scope.
+     * Static overwrite normally hits the direct source-to-temp mapping. For an explicitly named
+     * custom real/temp range partition, compare the analyzed fixed range with the catalog range so
+     * correctness does not depend on a naming convention.
+     */
+    private static String resolveCatalogPartitionName(
+            OlapTable table, MergedGroup group, List<Column> partitionColumns,
+            PreSplitPartitionScope partitionScope) {
+        if (!partitionScope.isSpecified()) {
+            return null;
+        }
+        String mapped = partitionScope.mappedCatalogName(group.partitionName);
+        if (mapped != null) {
+            return mapped;
+        }
+        if (!(table.getPartitionInfo() instanceof RangePartitionInfo rangePartitionInfo)) {
+            return null;
+        }
+        Range<PartitionKey> sampledRange = rangeFromAnalyzedClause(group.clause, partitionColumns);
+        if (sampledRange == null) {
+            return null;
+        }
+        for (String partitionName : partitionScope.catalogPartitionNames()) {
+            Partition candidate = table.getPartition(partitionName, partitionScope.isTemporary());
+            if (candidate != null && sampledRange.equals(rangePartitionInfo.getRange(candidate.getId()))) {
+                return partitionName;
+            }
+        }
+        return null;
+    }
+
+    private static Range<PartitionKey> rangeFromAnalyzedClause(
+            AddPartitionClause clause, List<Column> partitionColumns) {
+        if (clause == null || clause.getResolvedPartitionDescList() == null
+                || clause.getResolvedPartitionDescList().size() != 1
+                || !(clause.getResolvedPartitionDescList().get(0) instanceof SingleRangePartitionDesc desc)) {
+            return null;
+        }
+        PartitionKeyDesc keyDesc = desc.getPartitionKeyDesc();
+        if (keyDesc.getPartitionType() != PartitionKeyDesc.PartitionRangeType.FIXED
+                || !keyDesc.hasLowerValues() || !keyDesc.hasUpperValues()) {
+            return null;
+        }
+        try {
+            PartitionKey lower = PartitionKey.createPartitionKey(keyDesc.getLowerValues(), partitionColumns);
+            PartitionKey upper = PartitionKey.createPartitionKey(keyDesc.getUpperValues(), partitionColumns);
+            return Range.closedOpen(lower, upper);
+        } catch (Throwable invalidRange) {
+            LOG.debug("Pre-split: cannot resolve analyzed range for explicit partition {}: {}",
+                    desc.getPartitionName(), invalidRange.getMessage());
+            return null;
+        }
     }
 
     /**

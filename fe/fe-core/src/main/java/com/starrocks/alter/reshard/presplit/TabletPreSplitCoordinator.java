@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
@@ -475,7 +476,10 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Choose how many tablets to pre-split a load into.
+     * Choose how many tablets to split into, sized against {@code tablet_reshard_target_size}.
+     * Load-time pre-split calls {@link #selectPreSplitTabletCount} instead, which sizes against
+     * {@code tablet_pre_split_target_size}; this form serves the non-load callers that reshape an
+     * index outside a load (range-rewrite schema change, range rollup).
      *
      * <p>Takes the byte-volume estimate
      * ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)}), rounds it up
@@ -499,15 +503,55 @@ public final class TabletPreSplitCoordinator {
      *                               Must be {@code >= 1}.
      */
     public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+        return selectTabletCount(estimates, activeComputeNodeCount, Config.tablet_reshard_target_size);
+    }
+
+    /**
+     * Pre-split variant of {@link #selectTabletCount(Estimates, int)}, sized against
+     * {@link #preSplitTargetSize()} instead of {@code tablet_reshard_target_size}.
+     *
+     * <p>Every load-time pre-split path routes here so one config controls how finely a load's
+     * target partitions are carved, independently of the size the background split/merge daemon
+     * maintains for the rest of the cluster. Non-load callers (range-rewrite schema change,
+     * range rollup) keep using the two-argument form: they reshape an index that is not being
+     * written by a load, so the daemon's steady-state target is the right size for them.
+     */
+    public static int selectPreSplitTabletCount(Estimates estimates, int activeComputeNodeCount) {
+        return selectTabletCount(estimates, activeComputeNodeCount, preSplitTargetSize());
+    }
+
+    /**
+     * The target tablet size load-time pre-split sizes against: {@code tablet_pre_split_target_size}
+     * when set to a positive value, otherwise {@code tablet_reshard_target_size}.
+     *
+     * <p>A load that starts from one catch-all range tablet is bottlenecked on a single writer, and
+     * the split count that fixes that is driven by write parallelism, not by the steady-state
+     * tablet size the cluster wants to keep. Splitting below {@code tablet_reshard_target_size}
+     * is therefore deliberate and self-correcting: the background merge daemon still measures
+     * against {@code tablet_reshard_target_size} and merges the finer tablets back after the load.
+     */
+    @VisibleForTesting
+    static long preSplitTargetSize() {
+        long preSplitTargetSize = Config.tablet_pre_split_target_size;
+        return preSplitTargetSize > 0 ? preSplitTargetSize : Config.tablet_reshard_target_size;
+    }
+
+    /**
+     * Shared sizing implementation. {@code targetSize} is the caller-selected target tablet size;
+     * every other bound still comes from the {@code tablet_reshard_*} configs.
+     *
+     * @param targetSize target tablet size in bytes the byte-volume estimate is divided by.
+     *                   Must be {@code > 0}.
+     */
+    private static int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        long targetSize = Config.tablet_reshard_target_size;
         int maxSplitCount = Config.tablet_reshard_max_split_count;
         long minSplitSize = Config.tablet_reshard_min_split_size;
         Preconditions.checkState(targetSize > 0,
-                "tablet_reshard_target_size must be > 0, was %s", targetSize);
+                "target tablet size must be > 0, was %s", targetSize);
         Preconditions.checkState(maxSplitCount >= 2,
                 "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
         Preconditions.checkState(minSplitSize > 0,
@@ -610,6 +654,19 @@ public final class TabletPreSplitCoordinator {
                 "overwriteTransactionId must be positive, was %s", overwriteTransactionId);
         return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
                 ctx, loadComputeResource, sampledSecondaryIndexMetaIds, true, overwriteTransactionId);
+    }
+
+    /**
+     * Static-overwrite / explicit INSERT counterpart for temporary partitions that already exist.
+     * No transaction is excluded from cleanup: unlike dynamic overwrite, the static overwrite
+     * transaction has not been opened before this synchronous pre-split wait.
+     */
+    public static PreSplitOutcome submitForExistingTemporaryPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds) {
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, sampledSecondaryIndexMetaIds, true, -1L);
     }
 
     private static PreSplitOutcome submitForPartitionsCombined(
@@ -745,7 +802,7 @@ public final class TabletPreSplitCoordinator {
                 return new PreSplitOutcome.Skipped(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
             }
 
-            int requestedTabletCount = selectTabletCount(
+            int requestedTabletCount = selectPreSplitTabletCount(
                     new Estimates(entry.estimatedBytes(), 0L), activeComputeNodeCount);
             // Plan every index into a LOCAL map first; merge only on full success so a throw
             // mid-way never leaves a base-only remnant in the combined map. targets.get(0) is the
