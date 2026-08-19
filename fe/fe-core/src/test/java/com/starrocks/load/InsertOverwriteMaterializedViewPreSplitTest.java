@@ -339,7 +339,6 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             // The one target shape the derived tier serves: an incremental view whose single visible
             // index is keyed by the storage-generated row-id column alone.
             this.materializedView = mock(MaterializedView.class);
-            MaterializedView materializedView = this.materializedView;
             when(materializedView.getId()).thenReturn(MV_ID);
             when(materializedView.getName()).thenReturn("mv_row_id");
             when(materializedView.getRowIdStrategy()).thenReturn(RowIdStrategy.AUTO_INCREMENT);
