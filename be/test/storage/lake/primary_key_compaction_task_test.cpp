@@ -56,6 +56,61 @@
 
 namespace starrocks::lake {
 
+// Restores every config the tests in this suite override. They set the overrides inline and put the
+// old value back at the end, so any early exit (a fatal assertion, an ASSIGN_OR_ABORT, a crash) used
+// to leak the override into every later test in the process -- e.g. test_compaction_policy2 crashing
+// before its `lake_pk_compaction_max_input_rowsets = 1000` left the cap at 4 for the whole binary. As
+// a fixture member this destructor runs after TearDown on every exit path.
+class PkCompactionConfigGuard {
+public:
+    ~PkCompactionConfigGuard() {
+        config::vertical_compaction_max_columns_per_group = _vertical_max_columns;
+        config::lake_pk_compaction_min_input_segments = _min_input_segments;
+        config::lake_pk_compaction_max_input_rowsets = _max_input_rowsets;
+        config::write_buffer_size = _write_buffer_size;
+        config::size_tiered_min_level_size = _size_tiered_min_level_size;
+        config::update_compaction_ratio_threshold = _update_ratio_threshold;
+        config::update_compaction_delvec_file_io_amp_ratio = _delvec_io_amp_ratio;
+        config::update_compaction_result_bytes = _update_result_bytes;
+        config::max_segment_file_size = _max_segment_file_size;
+        config::vector_chunk_size = _vector_chunk_size;
+        config::enable_pk_size_tiered_compaction_strategy = _pk_size_tiered;
+        config::enable_lake_pk_compaction_score_gate = _score_gate;
+        config::lake_pk_compaction_min_level_score = _min_level_score;
+        config::lake_pk_compaction_min_benefit_cost_ratio = _min_benefit_cost_ratio;
+        config::lake_pk_compaction_emergency_score = _emergency_score;
+        config::lake_pk_compaction_size_overflow_ratio = _size_overflow_ratio;
+        config::lake_pk_compaction_delvec_benefit_weight = _delvec_benefit_weight;
+        config::l0_max_mem_usage = _l0_max_mem_usage;
+        config::lake_publish_version_slow_log_ms = _publish_slow_log_ms;
+        config::enable_light_pk_compaction_publish = _light_pk_publish;
+        config::primary_key_compaction_replace_batch_rows = _replace_batch_rows;
+    }
+
+private:
+    int64_t _vertical_max_columns = config::vertical_compaction_max_columns_per_group;
+    int64_t _min_input_segments = config::lake_pk_compaction_min_input_segments;
+    int64_t _max_input_rowsets = config::lake_pk_compaction_max_input_rowsets;
+    int64_t _write_buffer_size = config::write_buffer_size;
+    int64_t _size_tiered_min_level_size = config::size_tiered_min_level_size;
+    double _update_ratio_threshold = config::update_compaction_ratio_threshold;
+    int32_t _delvec_io_amp_ratio = config::update_compaction_delvec_file_io_amp_ratio;
+    int64_t _update_result_bytes = config::update_compaction_result_bytes;
+    int64_t _max_segment_file_size = config::max_segment_file_size;
+    int32_t _vector_chunk_size = config::vector_chunk_size;
+    bool _pk_size_tiered = config::enable_pk_size_tiered_compaction_strategy;
+    bool _score_gate = config::enable_lake_pk_compaction_score_gate;
+    double _min_level_score = config::lake_pk_compaction_min_level_score;
+    double _min_benefit_cost_ratio = config::lake_pk_compaction_min_benefit_cost_ratio;
+    double _emergency_score = config::lake_pk_compaction_emergency_score;
+    double _size_overflow_ratio = config::lake_pk_compaction_size_overflow_ratio;
+    double _delvec_benefit_weight = config::lake_pk_compaction_delvec_benefit_weight;
+    int64_t _l0_max_mem_usage = config::l0_max_mem_usage;
+    int64_t _publish_slow_log_ms = config::lake_publish_version_slow_log_ms;
+    bool _light_pk_publish = config::enable_light_pk_compaction_publish;
+    int32_t _replace_batch_rows = config::primary_key_compaction_replace_batch_rows;
+};
+
 class LakePrimaryKeyCompactionTest : public TestBase, public testing::WithParamInterface<CompactionParam> {
 public:
     LakePrimaryKeyCompactionTest() : TestBase(kTestDirectory), _partition_id(next_id()) {
@@ -181,6 +236,10 @@ protected:
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id;
     RuntimeProfile _dummy_runtime_profile{"dummy"};
+
+    // Constructed before SetUp() and destroyed after TearDown(), so no test in this suite can leave
+    // a config override behind for the rest of the binary.
+    PkCompactionConfigGuard _config_guard;
 };
 
 // each time overwrite last rows
@@ -490,7 +549,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
-    EXPECT_EQ(4, input_rowsets.size());
+    ASSERT_EQ(4, input_rowsets.size());
 
     // check the rowset order, pick rowset#1 first, because it is empty.
     // Next order is rowset#4#2#3, by their byte size.
@@ -569,7 +628,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
-    EXPECT_EQ(4, input_rowsets.size());
+    ASSERT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
     EXPECT_EQ(1, input_rowsets[1]->num_segments());
     EXPECT_EQ(1, input_rowsets[2]->num_segments());
