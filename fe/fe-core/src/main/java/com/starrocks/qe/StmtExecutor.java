@@ -44,6 +44,7 @@ import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -495,6 +496,7 @@ public class StmtExecutor {
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
         Tracers.toRuntimeProfile(plannerProfile);
+        PreSplitProfile.appendTo(profile, context);
         return profile;
     }
 

@@ -232,9 +232,11 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             if (outcome.result().isNoSplit()) {
                 continue;
             }
+            PreSplitProfile.recordBoundariesPlanned(outcome.result().getBoundaries().size());
             if (oldTabletIdToRanges.isEmpty()) {
                 // first index that produced cuts -> record load-level tier/boundary metrics once
                 recordTierUsed(outcome.tier());
+                PreSplitProfile.recordSourceTier(outcome.tier());
                 recordBoundariesPlanned(outcome.result().getBoundaries().size());
             }
             oldTabletIdToRanges.put(indexTarget.oldTabletId(), buildTabletRanges(outcome.result().getBoundaries()));
@@ -342,7 +344,12 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     private TierOutcome runMetaTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
-        BoundaryPlannerResult result = metaTierSampler.tryPlan(request, requestedTabletCount);
+        BoundaryPlannerResult result;
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.SOURCE_SAMPLING)) {
+            // The metadata tier reads footer statistics and computes boundaries in one operation.
+            result = metaTierSampler.tryPlan(request, requestedTabletCount);
+        }
         checkDeadline(deadline);
         return new TierOutcome(result, TIER_LABEL_META_TIER);
     }
@@ -354,11 +361,20 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         // Cap the sample at the remaining budget (see class doc); an over-budget
         // sample is cancelled by the BE → SAMPLE_FAILED → the load proceeds.
         SampleRequest budgetedRequest = request.withQueryTimeoutSeconds(remainingBudgetSeconds(deadline));
-        SampleSet sampleSet = dataTierSampler.sample(budgetedRequest);
+        SampleSet sampleSet;
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.SOURCE_SAMPLING)) {
+            sampleSet = dataTierSampler.sample(budgetedRequest);
+        }
+        PreSplitProfile.recordSample(sampleSet);
         checkDeadline(deadline);
-        BoundaryPlannerResult result = BoundaryPlanner.planRowQuantileBoundaries(
-                sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
-                request.getSortKey());
+        BoundaryPlannerResult result;
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
+            result = BoundaryPlanner.planRowQuantileBoundaries(
+                    sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
+                    request.getSortKey());
+        }
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
     }
 

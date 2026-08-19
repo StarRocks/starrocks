@@ -40,6 +40,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -259,6 +260,10 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
+
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. Keep its
+    // per-statement timings here so the eventual INSERT/Broker Load profile can attach them.
+    private volatile PreSplitProfile preSplitProfile;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -790,6 +795,7 @@ public class ConnectContext {
         startTime = Instant.now();
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
     }
 
     @VisibleForTesting
@@ -797,6 +803,24 @@ public class ConnectContext {
         startTime = start;
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
+    }
+
+    public PreSplitProfile getPreSplitProfile() {
+        return preSplitProfile;
+    }
+
+    public PreSplitProfile getOrCreatePreSplitProfile() {
+        PreSplitProfile current = preSplitProfile;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (preSplitProfile == null) {
+                preSplitProfile = new PreSplitProfile();
+            }
+            return preSplitProfile;
+        }
     }
 
     public void setEndTime() {
