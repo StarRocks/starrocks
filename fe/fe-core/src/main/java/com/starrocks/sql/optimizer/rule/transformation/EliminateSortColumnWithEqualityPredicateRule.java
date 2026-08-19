@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class EliminateSortColumnWithEqualityPredicateRule extends TransformationRule {
@@ -62,6 +63,22 @@ public class EliminateSortColumnWithEqualityPredicateRule extends Transformation
         }
 
         if (reservedOrdering.isEmpty()) {
+            // if topn has projection, we should merge topn's projection into scan's projection
+            // partial cherry-pick from https://github.com/StarRocks/starrocks/pull/58345
+            if (topn.getProjection() != null) {
+                if (scan.getProjection() == null) {
+                    scan.setProjection(topn.getProjection());
+                } else {
+                    Map<ColumnRefOperator, ScalarOperator> scanProjectMap = scan.getProjection().getColumnRefMap();
+                    topn.getProjection().getColumnRefMap().forEach(((columnRefOperator, scalarOperator) -> {
+                        if (!scanProjectMap.containsKey(columnRefOperator)) {
+                            scanProjectMap.put(columnRefOperator, scalarOperator);
+                        }
+
+                    }));
+                }
+            }
+
             if (topn.hasLimit()) {
                 // Eliminating the sort removes the only operator that would force a global merge.
                 // This rule runs after the limit split/merge rules, so emitting an init-phase limit
