@@ -418,6 +418,145 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
     EXPECT_EQ(sink_ctx->parquet_field_ids[2].field_id, 2147483539); // _last_updated_sequence_number reserved field ID
 }
 
+// Without this the target column's nullability never reaches the file writer, and a NOT NULL
+// Iceberg field gets written as an OPTIONAL parquet column.
+TEST_F(IcebergTableSinkTest, nullable_flags_follow_schema) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot2 =
+            slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("c2").column_pos(1).nullable(false).build();
+    auto slot3 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c3").column_pos(2).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.add_slot(slot3);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn c1, c2, c3;
+    c1.__set_column_name("c1");
+    c2.__set_column_name("c2");
+    c3.__set_column_name("c3");
+    t_iceberg_table.__set_columns({c1, c2, c3});
+
+    TIcebergSchema iceberg_schema;
+    TIcebergSchemaField f1, f2, f3;
+    f1.__set_field_id(1);
+    f1.__set_name("c1");
+    f1.__set_is_optional(true);
+    f2.__set_field_id(2);
+    f2.__set_name("c2");
+    f2.__set_is_optional(false);
+    f3.__set_field_id(3);
+    f3.__set_name("c3");
+    f3.__set_is_optional(true);
+    iceberg_schema.__set_fields({f1, f2, f3});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    TDataSink data_sink;
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("s3://bucket/table-location");
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs;
+    exprs.resize(3);
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(pl->sink_operator_factory());
+    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+    ASSERT_NE(sink_ctx, nullptr);
+
+    ASSERT_EQ(sink_ctx->nullable.size(), 3);
+    EXPECT_TRUE(sink_ctx->nullable[0]);
+    EXPECT_FALSE(sink_ctx->nullable[1]) << "c2 is declared NOT NULL and must be written as REQUIRED";
+    EXPECT_TRUE(sink_ctx->nullable[2]);
+}
+
+// The output tuple may carry more slots than there are output expressions; the nullable vector
+// must stay aligned with the evaluators (and with column_names) rather than with the whole tuple.
+TEST_F(IcebergTableSinkTest, nullable_flags_aligned_with_evaluators_not_tuple) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot2 =
+            slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("c2").column_pos(1).nullable(false).build();
+    // Third slot exists in the tuple but has no matching output expression.
+    auto slot3 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c3").column_pos(2).nullable(false).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.add_slot(slot3);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn c1, c2;
+    c1.__set_column_name("c1");
+    c2.__set_column_name("c2");
+    t_iceberg_table.__set_columns({c1, c2});
+
+    TIcebergSchema iceberg_schema;
+    TIcebergSchemaField f1, f2;
+    f1.__set_field_id(1);
+    f1.__set_name("c1");
+    f1.__set_is_optional(true);
+    f2.__set_field_id(2);
+    f2.__set_name("c2");
+    f2.__set_is_optional(false);
+    iceberg_schema.__set_fields({f1, f2});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    TDataSink data_sink;
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("s3://bucket/table-location");
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs;
+    exprs.resize(2); // fewer expressions than slots
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(pl->sink_operator_factory());
+    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+    ASSERT_NE(sink_ctx, nullptr);
+
+    EXPECT_EQ(sink_ctx->nullable.size(), sink_ctx->column_names.size());
+    ASSERT_EQ(sink_ctx->nullable.size(), 2);
+    EXPECT_TRUE(sink_ctx->nullable[0]);
+    EXPECT_FALSE(sink_ctx->nullable[1]);
+}
+
 // Test that parquet_field_ids is extended even when column_names already includes
 // row lineage columns but iceberg_schema still only contains user columns.
 TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_already_present) {
