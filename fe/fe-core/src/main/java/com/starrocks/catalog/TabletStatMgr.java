@@ -169,21 +169,30 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
                                 // inside an admitted job, so the floor holds even for manual size-based merges.
                                 boolean eligibleForMerge = tablets.size() > parallelismFloor;
-                                // The early bound sits at or below the merge floor, so no index can be
-                                // under-provisioned and mergeable at once: the two rules can never pull
-                                // one index back and forth.
+                                // Under-provisioned means what the planner means by it: fewer tablets than
+                                // the bound, which is also the headroom the planner spends. Testing it here
+                                // is what keeps the adaptive rule and auto-merge disjoint -- the bound sits
+                                // at or below the merge floor, so an index is one rule's business or the
+                                // other's, never both -- and it is what stops an index parked at its bound
+                                // from signalling on every scan for a plan that can only come out empty.
+                                // It also keeps the index walk below off every table that cannot reshard at
+                                // all: a follower FE, or a shared-nothing table whose tablets take a lock
+                                // per size read.
+                                boolean underProvisioned = adaptiveBound > 0 && tablets.size() < adaptiveBound;
                                 // The index's own target: narrowed while it has less parallelism
                                 // than the warehouse can drive, the steady-state target once it does.
-                                long indexTarget = TabletReshardUtils.adaptiveTargetSize(
-                                        index.getDataSize(true), Config.tablet_reshard_target_size,
-                                        adaptiveBound);
+                                long indexTarget = underProvisioned
+                                        ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
+                                                Config.tablet_reshard_target_size, adaptiveBound)
+                                        : 0;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
-                                    if (TabletReshardUtils.adaptiveSplitCount(dataSize, indexTarget) > 1) {
+                                    if (underProvisioned
+                                            && TabletReshardUtils.adaptiveSplitCount(dataSize, indexTarget) > 1) {
                                         maxAdaptiveSplitTabletSize =
                                                 Math.max(maxAdaptiveSplitTabletSize, dataSize);
                                     }

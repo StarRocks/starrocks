@@ -82,12 +82,14 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     private int adaptiveBound() {
         if (adaptiveBound < 0) {
-            // An explicit target size in the statement means the caller asked for exactly that size, so
-            // leave the target alone. A zero bound is what tells adaptiveTargetSize to do that.
+            // A statement that names its own tablets, or its own target size, asked for exactly what it
+            // asked for: leave the target alone and resolve nothing. A zero bound is what tells
+            // adaptiveTargetSize to do that.
             boolean explicitTarget = splitTabletClause.getProperties() != null
                     && splitTabletClause.getProperties()
                             .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
-            adaptiveBound = explicitTarget ? 0 : TabletReshardUtils.adaptiveSplitBound(
+            boolean explicitTablets = splitTabletClause.getTabletList() != null;
+            adaptiveBound = explicitTarget || explicitTablets ? 0 : TabletReshardUtils.adaptiveSplitBound(
                     TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
         }
         return adaptiveBound;
@@ -491,16 +493,16 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 }
 
                 long clauseTargetSize = splitTabletClause.getTabletReshardTargetSize();
+                // When not specifying which tablets to split, tablet_reshard_target_size must be
+                // greater than 0. A property of the clause, so checked once for the whole statement.
+                Preconditions.checkState(clauseTargetSize > 0,
+                        "Invalid tablet_reshard_target_size: " + clauseTargetSize);
 
                 // Plan and materialize per index. This is the only place a tablet id is minted.
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex :
                             physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                        // When not specifying which tablets to split,
-                        // tablet_reshard_target_size must be greater than 0
-                        Preconditions.checkState(clauseTargetSize > 0,
-                                "Invalid tablet_reshard_target_size: " + clauseTargetSize);
                         Map<Long, Integer> splitCounts =
                                 planIndexSplits(oldIndex, clauseTargetSize, adaptiveBound());
                         if (splitCounts.isEmpty()) {

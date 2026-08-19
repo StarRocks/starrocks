@@ -740,6 +740,28 @@ public class TabletReshardJobMgrTest {
     }
 
     @Test
+    public void anEmptyPlanLatchesWhereATransientFailureDoesNot() {
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
+                    com.starrocks.sql.ast.SplitTabletClause clause) throws StarRocksException {
+                throw new EmptyReshardPlanException("nothing to split");
+            }
+        };
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+
+        // Adaptive-only, because a live size signal rethrows rather than classifying. An empty plan is
+        // deterministic -- the same layout and configuration produce it again -- so it must latch, which
+        // is what stops the drain re-walking the table under its read lock on every unchanged scan.
+        // The sibling case, testAutoSplitCreationFailureRetries, pins that a transient failure must not.
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, Long.MAX_VALUE, Config.tablet_reshard_min_split_size * 4, 8);
+        Assertions.assertTrue(mgr.hasSizeSplitLatch(reshardTable.getId()),
+                "a deterministic empty plan must latch");
+    }
+
+    @Test
     public void testAutoSplitCreationFailureRetries() throws Exception {
         int[] attempts = {0};
         new MockUp<TabletReshardJobMgr>() {

@@ -19,6 +19,8 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -205,6 +207,15 @@ public class TabletReshardUtils {
      * (whose floor derives from it) and adaptive split (whose bound does), keeping all three consistent.
      */
     public static int computeNodeCount(ComputeResource computeResource) {
+        // Kept from the StarMgr-backed lookup this replaced: pre-split and the range rollup/rewrite jobs
+        // size a brand-new partition or shadow index by this count, and a warehouse that no longer
+        // exists has to fail them outright rather than quietly size them for a single node. The reshard
+        // callers stay graceful because safeComputeNodeCountForTable turns this into a zero bound.
+        if (!GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
         long workerGroupId = computeResource.getWorkerGroupId();
         return Math.max(1, (int) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .backendAndComputeNodeStream()

@@ -4832,10 +4832,11 @@ public class Config extends ConfigBase {
      * during pre-split so that splitting a small load across many compute nodes does not
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
      *
-     * <p>Also the target tablet size while a materialized index holds fewer tablets than its
-     * warehouse has compute nodes, so raising this to tune pre-split also delays the early split
-     * of an under-provisioned index. Tablets produced during that phase can be temporarily smaller
-     * than this value, since the split count is rounded to nearest rather than floored.
+     * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
+     * fewer tablets than its warehouse has compute nodes aims at one tablet per node, but never at
+     * less than this -- so raising this to tune pre-split also delays that split. The adaptive walk
+     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
+     * the size rule it does not produce children below the target it aimed at.
      */
     @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
             + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "

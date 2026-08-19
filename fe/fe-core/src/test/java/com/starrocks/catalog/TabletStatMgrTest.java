@@ -742,6 +742,16 @@ public class TabletStatMgrTest {
     }
 
     @Test
+    public void anIndexAtItsBoundEmitsNoEarlySignalHoweverLargeItsTabletsAre() {
+        // The same four nodes and the same 12 GiB tablet as the case below, but five tablets against a
+        // bound of four. The planner spends that bound as headroom and has none left here, so a signal
+        // would only buy a walk of every partition under the table read lock for a plan that must come
+        // out empty -- on every scan, for as long as the index keeps this shape. At its bound an index
+        // is auto-merge's business, not the split rule's.
+        assertEquals(0, runScan(true, 4, 6L << 30, 12L << 30, 4L << 30, 1L << 30, 1L << 30));
+    }
+
+    @Test
     public void emitsTheEarlySignalOnlyForUnderProvisionedIndexes() {
         // 4 nodes -> bound 4. 22 GiB over that bound wants 5.5 GiB tablets, so only a tablet worth two
         // of them splits: 12 GiB does, 6 and 4 do not. The largest is neither the first nor the last the

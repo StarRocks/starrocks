@@ -82,7 +82,10 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // split-only publish mark and a split+merge periodic mark compose by (max, min, max, max)
     // regardless of arrival order. adaptiveBound rides along because the scan has already resolved it
     // -- resolving a warehouse probes StarMgr -- and it is a plan input the drain would otherwise have
-    // to fetch again; taking the max prefers a producer that resolved it over one that passed 0.
+    // to fetch again. It takes the newer mark's value rather than the larger, so a warehouse scaled
+    // down between two marks is fingerprinted against the bound it now has: taking the max would keep
+    // the stale wider one and re-create the permanent suppression the bound was folded in to prevent.
+    // A producer that resolved nothing passes 0, which never displaces a resolved value.
     // Self-contained (carries db/table id) so the drain needs no side key. Transient (not persisted):
     // leader failover falls back to the scan.
     private record ReshardCandidate(long dbId, long tableId, long maxTabletSize,
@@ -131,7 +134,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                         Math.min(existing.minAdjacentTabletPairSize(), incoming.minAdjacentTabletPairSize()),
                         Math.max(existing.maxAdaptiveSplitTabletSize(),
                                 incoming.maxAdaptiveSplitTabletSize()),
-                        Math.max(existing.adaptiveBound(), incoming.adaptiveBound())));
+                        incoming.adaptiveBound() != 0 ? incoming.adaptiveBound() : existing.adaptiveBound()));
     }
 
     public TabletReshardJobMgr() {
@@ -179,7 +182,10 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // 64-bit fingerprint of the requested split plan: the raw reshard-config knobs plus the computed
     // child count of the tablet each rule would act on. Folding the raw configs guarantees any admin
     // config change re-arms the size-split latch even when calcSplitCount is capped at max_split_count;
-    // the computed counts also capture a size-band crossing. The bound is folded in because the plan
+    // the computed count also captures a size-band crossing. The adaptive term is folded raw, because
+    // the target it would be counted against is per-index and cannot be rebuilt from one flat number
+    // here -- so a growing tablet moves this fingerprint by every byte, and suppression only settles a
+    // table whose data has stopped moving. That is the case it exists for. The bound is folded in because the plan
     // depends on it and the signal alone does not carry it: an eight-way attempt that latched after
     // producing an identical tablet would, on a warehouse scaled down to two nodes, become a two-way
     // attempt that might well succeed -- with the same tablet size, and so the same fingerprint,
@@ -259,8 +265,8 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                         }
                     }
                 } else if (sizeSplitLatch.claimSuppressionLog(tableId)) {
-                    LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout "
-                                    + "(tablet not splittable); suppressing further split jobs until its data changes",
+                    LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout; "
+                                    + "suppressing further split jobs until its data changes",
                             db.getFullName(), table.getName());
                 }
                 if (normalSignal) {
