@@ -579,6 +579,21 @@ public class Config extends ConfigBase {
     public static String ext_dir = System.getenv("STARROCKS_HOME") + "/lib";
 
     /**
+     * Enable multi-warehouse support (CREATE/DROP/ALTER WAREHOUSE, ALTER SYSTEM ADD COMPUTE NODE ... INTO
+     * WAREHOUSE, SET warehouse = '...'). Each warehouse owns a StarMgr worker group, so queries pinned to a
+     * warehouse only ever schedule fragments onto that warehouse's compute nodes.
+     *
+     * Requires shared_data mode. Set it identically on every FE: a follower with the flag off ignores the
+     * warehouse journal entries, so its catalog would silently diverge from the leader's.
+     *
+     * This is NOT mutable and must not be flipped back to false once warehouses exist: the base
+     * WarehouseManager does not read the persisted warehouses, so they would vanish from the catalog while
+     * compute nodes still reference their ids.
+     */
+    @ConfField
+    public static boolean enable_multi_warehouse = false;
+
+    /**
      * Labels of finished or cancelled load jobs will be removed
      * 1. after *label_keep_max_second*
      * or

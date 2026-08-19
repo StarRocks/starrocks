@@ -312,6 +312,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否允许 StarRocks 使用 FE 配置文件中指定的对象存储相关属性创建内置存储卷。从 v3.4.1 开始，默认值从 `true` 更改为 `false`。
 - 引入版本: v3.1.0
 
+### `enable_multi_warehouse`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否启用多仓库（Warehouse）支持，即 `CREATE WAREHOUSE`、`DROP WAREHOUSE`、`ALTER WAREHOUSE` 以及 `ALTER SYSTEM ADD COMPUTE NODE ... INTO WAREHOUSE`。每个 Warehouse 拥有独立的 Worker Group，因此通过 `SET warehouse = '<name>'` 绑定的会话只会将查询 Fragment 调度到该 Warehouse 的 CN 节点上，从而将查询的 Shuffle 限制在单个可用区（AZ）内。该功能仅支持存算分离集群，在存算一体模式下相关语句会被拒绝。请在所有 FE 上设置相同的值：如果 Follower 未开启该配置，它会忽略 Warehouse 相关的日志，其元数据会与 Leader 静默地产生分歧。一旦创建了 Warehouse，请勿再将该配置改回 `false`，否则这些 Warehouse 会从元数据中消失，而 CN 节点仍然引用其 ID。修改后需重启 FE。
+- 引入版本: v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - 默认值: 空字符串
