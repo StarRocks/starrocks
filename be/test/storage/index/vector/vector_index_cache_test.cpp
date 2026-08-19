@@ -211,6 +211,17 @@ TEST_F(VectorIndexCacheTest, Lookup_ReusedIvfPqListHandleKeepsEntryCached) {
 // the buffer the first call returned must outlive the second.
 TEST_F(VectorIndexCacheTest, IvfPqListBlock_GetPtrLoopLoadsOnce) {
     const tenann::CacheKey key("/ivfpq.vi_7");
+    auto frees = std::make_shared<std::atomic<int>>(0);
+    auto make_tracked_ref = [frees]() -> tenann::IndexRef {
+        void* buf = std::malloc(kDummyBytes);
+        return std::make_shared<tenann::Index>(
+                buf, tenann::IndexType::kFaissIvfPqOneInvertedList,
+                [frees](void* v) {
+                    frees->fetch_add(1, std::memory_order_relaxed);
+                    std::free(v);
+                },
+                /*explicit_bytes=*/kDummyBytes);
+    };
     tenann::IndexCacheHandle list_handle; // stands in for cache_handles[list_no]
     int loads = 0;
     auto get_ptr = [&]() {
@@ -218,7 +229,7 @@ TEST_F(VectorIndexCacheTest, IvfPqListBlock_GetPtrLoopLoadsOnce) {
             return;
         }
         ++loads;
-        cache_->Insert(key, make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList), &list_handle);
+        cache_->Insert(key, make_tracked_ref(), &list_handle);
     };
 
     for (int scan = 0; scan < 4; ++scan) {
@@ -226,8 +237,11 @@ TEST_F(VectorIndexCacheTest, IvfPqListBlock_GetPtrLoopLoadsOnce) {
         const void* codes = list_handle.index_ref()->index_raw();
         get_ptr(); // get_ids()
         EXPECT_EQ(codes, list_handle.index_ref()->index_raw()) << "scan " << scan;
+        EXPECT_EQ(0, frees->load(std::memory_order_relaxed)) << "scan " << scan;
     }
     EXPECT_EQ(1, loads);
+    list_handle = tenann::IndexCacheHandle{};
+    EXPECT_EQ(1, frees->load(std::memory_order_relaxed));
 }
 
 // Guards the TTL PR's grouping rule: a list block leaves the cache as soon as
