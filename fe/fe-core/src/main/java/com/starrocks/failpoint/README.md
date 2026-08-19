@@ -51,6 +51,56 @@ ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' WITH 10 TIMES ON FRONTEND;
 // Trigger with 10% probability
 ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' WITH 0.1 PROBABILITY ON FRONTEND;
 
-// Disable
+// Pause every thread that reaches the failpoint, until it is disabled
+ADMIN ENABLE FAILPOINT 'bdb_ha_get_leader_exception' WITH PAUSE ON FRONTEND;
+
+// Disable (also releases a pause)
 ADMIN DISABLE FAILPOINT 'bdb_ha_get_leader_exception' ON FRONTEND;
 ```
+
+All of these require the `OPERATE` system privilege.
+
+## Pausing at a failpoint
+
+`WITH PAUSE` blocks every thread that reaches the failpoint instead of injecting a fault. It exists
+for the fault pattern that a fail-only failpoint cannot express:
+
+> stop at phase X -> act externally (kill a node, switch the leader) -> release -> assert
+
+```sql
+ADMIN ENABLE FAILPOINT 'some_failpoint' WITH PAUSE ON BACKEND '10.0.0.2:9060';
+-- ... poll SHOW FAILPOINTS until PausedThreads > 0, then do the external action ...
+ADMIN DISABLE FAILPOINT 'some_failpoint' ON BACKEND '10.0.0.2:9060';
+```
+
+Points worth knowing:
+
+- **A released pause never injects.** Once released, the trigger evaluates to false and the flow
+  continues normally, so arming an existing fail-style failpoint `WITH PAUSE` turns it into a pure
+  stop point. To pause *and* fail, arm a second failpoint downstream.
+- **Any mode change releases**, not just `ADMIN DISABLE FAILPOINT`.
+- **A forgotten disable self-heals.** A parked thread resumes after
+  `failpoint_pause_timeout_second` (FE config, default 300, mutable) with a `pause timed out`
+  WARNING. The FE sends this value to BEs/CNs with the arming request, so both sides share one
+  timeout.
+- **Observability.** `SHOW FAILPOINTS` reports `TriggerCount` (cumulative fires) and `PausedThreads`
+  (threads parked right now) for backends. FE failpoints are not listed by `SHOW FAILPOINTS`; an FE
+  pause logs `failpoint <name> paused, waiting for ADMIN DISABLE FAILPOINT` in `fe.log`, and the
+  effect on a reshard job is visible in `information_schema.tablet_reshard_jobs`.
+- **Mixed versions are safe but not useful.** A pause is sent as `DISABLE` plus a request-level pause
+  flag, so a node that predates this feature simply disables the failpoint rather than arming it.
+  Nothing is injected, but nothing pauses either, and such a node reports `DISABLE` rather than
+  `PAUSE`. Always confirm a pause with `PausedThreads > 0`, which is the only signal that proves a
+  thread actually parked.
+- **A pause blocks its logical thread.** The backend wait uses bthread primitives, so a pause inside
+  a brpc handler yields the worker rather than occupying it and `ADMIN DISABLE FAILPOINT` stays
+  serviceable. On the frontend, `TabletReshardJobMgr` runs every reshard job on one daemon thread, so
+  a pause inside a job also freezes the other reshard jobs on that frontend. A node shutdown while a
+  thread is parked waits out that thread's pause timeout.
+
+## Build requirement for BE failpoints
+
+FE failpoints need `--failpoint` at FE startup. **BE/CN failpoints exist only in a backend compiled
+with `ENABLE_FAULT_INJECTION=ON`** (`ENABLE_FAULT_INJECTION=ON ./build.sh --be`); the default build
+has them compiled out and `ADMIN ENABLE FAILPOINT ... ON BACKEND` returns
+`FailPoint is not supported, need re-compile BE with ENABLE_FAULT_INJECTION`.

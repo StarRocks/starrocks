@@ -312,6 +312,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否允许 StarRocks 使用 FE 配置文件中指定的对象存储相关属性创建内置存储卷。从 v3.4.1 开始，默认值从 `true` 更改为 `false`。
 - 引入版本: v3.1.0
 
+### `failpoint_pause_timeout_second`
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：failpoint 挂起（pause）模式的兜底超时。通过 `ADMIN ENABLE FAILPOINT ... WITH PAUSE` 挂起的线程，即使一直没有执行 `ADMIN DISABLE FAILPOINT`，也会在该秒数后自动放行，避免遗漏放行导致节点必须重启才能恢复。小于 1 的取值会被归一为 1。该值同时随挂起请求下发给 BE/CN，因此 FE 与 BE 侧的挂起共用同一个超时。仅用于故障注入测试：FE 需以 `--failpoint` 启动，BE 侧 failpoint 还需使用 `ENABLE_FAULT_INJECTION=ON` 编译的 BE。
+- 引入版本：v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - 默认值: 空字符串

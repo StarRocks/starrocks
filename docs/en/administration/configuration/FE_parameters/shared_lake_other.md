@@ -311,6 +311,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
 - Introduced in: v3.1.0
 
+### `failpoint_pause_timeout_second`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Safety net for the failpoint pause mode. A thread parked at a failpoint armed with `ADMIN ENABLE FAILPOINT ... WITH PAUSE` resumes automatically after this many seconds even if `ADMIN DISABLE FAILPOINT` is never issued, so a forgotten pause cannot block a node until it is restarted. Values below 1 are clamped to 1. The value is also sent to BEs/CNs with the arming request, so a frontend pause and a backend pause share the same timeout. Only relevant for fault-injection testing: the frontend must be started with `--failpoint`, and backend failpoints additionally require a backend compiled with `ENABLE_FAULT_INJECTION=ON`.
+- Introduced in: v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - Default: Empty string
