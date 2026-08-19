@@ -1003,10 +1003,9 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
-        ASSIGN_OR_RETURN(auto buf, rf->read_all());
         // Verify before decoding: a corrupt del file that still deserializes cleanly would erase the
-        // wrong primary keys from the index.
-        RETURN_IF_ERROR(verify_del_file_crc32c(del, _tablet_id, buf));
+        // wrong primary keys from the index. Drops the local data cache and re-reads once on a mismatch.
+        ASSIGN_OR_RETURN(auto buf, read_and_verify_del_file(rf.get(), del, _tablet_id));
         auto pkc = pk_column->clone();
         const auto* data = reinterpret_cast<const uint8_t*>(buf.data());
         RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(data, data + buf.size(), pkc.get()));
