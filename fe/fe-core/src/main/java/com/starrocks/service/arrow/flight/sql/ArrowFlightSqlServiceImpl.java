@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
@@ -928,6 +929,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                     return buildPlaceholderSchema();
                 }
                 stmt.setOrigStmt(new OriginStatement(query));
+                SecurityPolicyRewriteRule.markRelationsForRewrite(stmt);
 
                 Analyzer.analyze(stmt, ctx);
 
