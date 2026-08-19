@@ -22,24 +22,30 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "fmt/format.h"
 #include "simdjson.h"
 
 namespace starrocks::failpoint {
 
 namespace {
-// Minimal scope guard for the parked-thread gauge. Hand-rolled because be/src/base must not depend
-// on be/src/util, where DeferOp lives.
-class PausedThreadGuard {
-public:
-    explicit PausedThreadGuard(std::atomic<int64_t>* counter) : _counter(counter) {}
-    ~PausedThreadGuard() { _counter->fetch_sub(1, std::memory_order_relaxed); }
-    PausedThreadGuard(const PausedThreadGuard&) = delete;
-    PausedThreadGuard& operator=(const PausedThreadGuard&) = delete;
+// Fallback for a pause whose arming request carries no pause_timeout_second -- a failpoint armed
+// straight through the brpc HTTP endpoint or from the conf file. A local constant rather than an
+// FE-style config: be/src/base must not depend on be/src/common (see be/module_boundary_manifest.json).
+constexpr int32_t kDefaultPauseTimeoutSecond = 300;
 
-private:
-    std::atomic<int64_t>* _counter;
-};
+// The one place that knows how a pause is encoded into a stored trigger mode. Shared by the RPC
+// path (trigger_mode_from_request) and the conf-file path so the mixed-version safety property --
+// an old node must see DISABLE, never ENABLE -- is enforced once rather than asserted twice.
+void set_pause_trigger_mode(PFailPointTriggerMode* trigger_mode, int32_t timeout_second) {
+    // mode = DISABLE, never a dedicated enum value: proto2 reports an unknown enum as the default
+    // ENABLE, so a node predating the pause would inject the fault instead of pausing.
+    trigger_mode->set_mode(FailPointTriggerModeType::DISABLE);
+    trigger_mode->set_pause(true);
+    if (timeout_second > 0) {
+        trigger_mode->set_pause_timeout_second(timeout_second);
+    }
+}
 } // namespace
 
 int check_fail_point(const char* name, int* failnum, void** failinfo, unsigned int* flags) {
@@ -57,7 +63,7 @@ FailPoint::FailPoint(std::string name) : _name(std::move(name)) {
 
 bool FailPoint::shouldFail() {
     uint64_t gen = 0;
-    int64_t timeout_us = 0;
+    int32_t timeout_second = 0;
     {
         std::shared_lock l(_mu);
         // Check the pause flag BEFORE the mode: a pause request carries mode = DISABLE so that a
@@ -89,16 +95,16 @@ bool FailPoint::shouldFail() {
         // setMode() landing in the gap look like the CURRENT generation, so the thread would then
         // wait for a further change and sleep until its timeout.
         gen = _mode_generation.load(std::memory_order_relaxed);
-        const int32_t timeout_second = _trigger_mode.pause_timeout_second() > 0
-                                               ? _trigger_mode.pause_timeout_second()
-                                               : kDefaultPauseTimeoutSecond;
-        timeout_us = static_cast<int64_t>(timeout_second) * 1000000L;
+        timeout_second = _trigger_mode.pause_timeout_second();
     }
     // _mu is released before blocking -- see the _pause_mu comment in the header.
-    return wait_until_released(gen, timeout_us);
+    return wait_until_released(gen, timeout_second);
 }
 
-bool FailPoint::wait_until_released(uint64_t gen, int64_t timeout_us) {
+bool FailPoint::wait_until_released(uint64_t gen, int32_t timeout_second) {
+    if (timeout_second <= 0) {
+        timeout_second = kDefaultPauseTimeoutSecond;
+    }
     std::unique_lock<bthread::Mutex> l(_pause_mu);
     if (_mode_generation.load(std::memory_order_relaxed) != gen) {
         // Released between dropping _mu and taking _pause_mu. This thread never parks, so it must
@@ -107,11 +113,14 @@ bool FailPoint::wait_until_released(uint64_t gen, int64_t timeout_us) {
     }
     _trigger_count.fetch_add(1, std::memory_order_relaxed);
     _paused_thread_count.fetch_add(1, std::memory_order_relaxed);
-    PausedThreadGuard gauge(&_paused_thread_count);
+    DeferOp gauge([this] { _paused_thread_count.fetch_sub(1, std::memory_order_relaxed); });
 
     LOG(INFO) << "failpoint " << _name << " paused, waiting for ADMIN DISABLE FAILPOINT";
+    // A condition variable rather than Awaitility's polling loop: a pause runs for
+    // failpoint_pause_timeout_second (300s by default), so polling would wake a bthread every
+    // interval for the whole window, and release should be immediate once DISABLE lands.
     // steady_clock so a wall-clock adjustment cannot extend or truncate the wait.
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(timeout_us);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_second);
     bool timed_out = false;
     while (_mode_generation.load(std::memory_order_relaxed) == gen) {
         const auto now = std::chrono::steady_clock::now();
@@ -124,8 +133,7 @@ bool FailPoint::wait_until_released(uint64_t gen, int64_t timeout_us) {
         (void)_pause_cv.wait_for(l, std::chrono::duration_cast<std::chrono::microseconds>(deadline - now).count());
     }
     if (timed_out) {
-        LOG(WARNING) << "failpoint " << _name << " pause timed out after " << (timeout_us / 1000000)
-                     << "s, resuming";
+        LOG(WARNING) << "failpoint " << _name << " pause timed out after " << timeout_second << "s, resuming";
     } else {
         LOG(INFO) << "failpoint " << _name << " pause released";
     }
@@ -136,10 +144,7 @@ bool FailPoint::wait_until_released(uint64_t gen, int64_t timeout_us) {
 PFailPointTriggerMode trigger_mode_from_request(const PUpdateFailPointStatusRequest& request) {
     PFailPointTriggerMode trigger_mode = request.trigger_mode();
     if (request.pause()) {
-        trigger_mode.set_pause(true);
-        if (request.pause_timeout_second() > 0) {
-            trigger_mode.set_pause_timeout_second(request.pause_timeout_second());
-        }
+        set_pause_trigger_mode(&trigger_mode, request.pause_timeout_second());
     }
     return trigger_mode;
 }
@@ -279,11 +284,9 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
                 trigger_mode.set_mode(FailPointTriggerModeType::PROBABILITY_ENABLE);
                 trigger_mode.set_probability(probability.value());
             } else if (mode.value() == "pause") {
-                // Mirror the wire encoding: mode = DISABLE plus the pause flag.
-                trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-                trigger_mode.set_pause(true);
-                // Optional. Absent leaves the field unset and the failpoint layer falls back to
-                // kDefaultPauseTimeoutSecond.
+                // Optional: absent or out of range leaves the field unset and the failpoint layer
+                // falls back to kDefaultPauseTimeoutSecond.
+                int32_t timeout_second = 0;
                 auto pause_timeout_second = value["pause_timeout_second"].get_int64();
                 if (pause_timeout_second.error() == simdjson::SUCCESS) {
                     const int64_t raw = pause_timeout_second.value();
@@ -291,9 +294,10 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
                         LOG(WARNING) << "ignoring out-of-range pause_timeout_second " << raw << " for failpoint "
                                      << std::string(fp_name.value());
                     } else {
-                        trigger_mode.set_pause_timeout_second(static_cast<int32_t>(raw));
+                        timeout_second = static_cast<int32_t>(raw);
                     }
                 }
+                set_pause_trigger_mode(&trigger_mode, timeout_second);
             }
             fp->setMode(trigger_mode);
         }

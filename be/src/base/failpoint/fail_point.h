@@ -49,14 +49,10 @@ public:
     PFailPointInfo to_pb() const;
 
 protected:
-    // Fallback for a pause whose arming request carries no pause_timeout_second -- a failpoint armed
-    // straight through the brpc HTTP endpoint or from the conf file. A local constant rather than a
-    // config: be/src/base must not depend on be/src/common.
-    static constexpr int32_t kDefaultPauseTimeoutSecond = 300;
-
-    // Blocks until setMode() moves _mode_generation past |gen|, or |timeout_us| elapses.
+    // Blocks until setMode() moves _mode_generation past |gen|, or |timeout_second| elapses
+    // (|timeout_second| <= 0 falls back to the failpoint layer's default).
     // ALWAYS returns false -- a released pause continues normally and never injects.
-    bool wait_until_released(uint64_t gen, int64_t timeout_us);
+    bool wait_until_released(uint64_t gen, int32_t timeout_second);
 
     std::string _name;
     mutable std::shared_mutex _mu;

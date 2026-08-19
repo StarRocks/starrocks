@@ -19,6 +19,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/concurrency/await.h"
+#include "base/utility/defer_op.h"
+
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -150,38 +153,49 @@ PFailPointTriggerMode simple_mode(FailPointTriggerModeType type) {
     return mode;
 }
 
-// Spin until |fp| reports |expected| parked threads, so the pause tests synchronise on real state
+// Wait until |fp| reports |expected| parked threads, so the pause tests synchronise on real state
 // instead of a fixed sleep. Returns false if the state is not reached within the budget.
-bool wait_for_parked(failpoint::FailPoint& fp, int64_t expected, int budget_ms = 10000) {
-    for (int waited = 0; waited < budget_ms; waited += 5) {
-        if (fp.to_pb().paused_thread_count() == expected) {
-            return true;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-    return false;
+bool wait_for_parked(failpoint::FailPoint& fp, int64_t expected, int64_t budget_us = 10 * 1000 * 1000) {
+    return Awaitility().timeout(budget_us).until([&] { return fp.to_pb().paused_thread_count() == expected; });
 }
 
 // Always disables |fp| and joins |threads| on scope exit, so a failed ASSERT_* cannot leave a
 // joinable std::thread behind -- that would call std::terminate and take the whole suite down.
-class PauseTestCleanup {
-public:
-    PauseTestCleanup(failpoint::FailPoint& fp, std::vector<std::thread>& threads) : _fp(fp), _threads(threads) {}
-    ~PauseTestCleanup() {
-        _fp.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
-        for (auto& t : _threads) {
+auto pause_test_cleanup(failpoint::FailPoint& fp, std::vector<std::thread>& threads) {
+    return DeferOp([&fp, &threads] {
+        fp.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
+        for (auto& t : threads) {
             if (t.joinable()) {
                 t.join();
             }
         }
-    }
-    PauseTestCleanup(const PauseTestCleanup&) = delete;
-    PauseTestCleanup& operator=(const PauseTestCleanup&) = delete;
+    });
+}
 
-private:
-    failpoint::FailPoint& _fp;
-    std::vector<std::thread>& _threads;
+struct BoundedRun {
+    bool finished;
+    bool injected;
+    int64_t elapsed_ms;
 };
+
+// Runs fp.shouldFail() on a worker bounded by |budget_seconds|, so a regression in the timeout path
+// fails the test instead of hanging the suite (run-be-ut.sh imposes no per-test limit). On timeout it
+// disables the failpoint through the other code path to unblock the worker.
+BoundedRun should_fail_bounded(failpoint::FailPoint& fp, int budget_seconds = 20) {
+    std::promise<bool> done;
+    auto future = done.get_future();
+    auto start = std::chrono::steady_clock::now();
+    std::thread worker([&] { done.set_value(fp.shouldFail()); });
+
+    const bool finished = future.wait_for(std::chrono::seconds(budget_seconds)) == std::future_status::ready;
+    if (!finished) {
+        fp.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
+    }
+    worker.join();
+    const auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+    return {finished, finished && future.get(), elapsed_ms};
+}
 
 } // namespace
 
@@ -192,7 +206,7 @@ TEST(FailPointTest, pause_released_by_disable) {
     std::atomic<bool> returned{false};
     std::atomic<bool> result{true};
     std::vector<std::thread> threads;
-    PauseTestCleanup cleanup(fp, threads);
+    auto cleanup = pause_test_cleanup(fp, threads);
     threads.emplace_back([&] {
         result = fp.shouldFail();
         returned = true;
@@ -217,7 +231,7 @@ TEST(FailPointTest, pause_released_by_rearm) {
 
     std::atomic<bool> result{true};
     std::vector<std::thread> threads;
-    PauseTestCleanup cleanup(fp, threads);
+    auto cleanup = pause_test_cleanup(fp, threads);
     threads.emplace_back([&] { result = fp.shouldFail(); });
     ASSERT_TRUE(wait_for_parked(fp, 1));
 
@@ -233,7 +247,7 @@ TEST(FailPointTest, pause_releases_all_waiters) {
 
     std::atomic<int> injected{0};
     std::vector<std::thread> threads;
-    PauseTestCleanup cleanup(fp, threads);
+    auto cleanup = pause_test_cleanup(fp, threads);
     for (int i = 0; i < 4; i++) {
         threads.emplace_back([&] {
             if (fp.shouldFail()) {
@@ -256,26 +270,10 @@ TEST(FailPointTest, pause_times_out) {
     failpoint::FailPoint fp("test_pause_timeout");
     fp.setMode(pause_mode(1));
 
-    // shouldFail() runs on a worker and is bounded by a future deadline. Calling it synchronously
-    // and asserting on elapsed time afterwards cannot catch a hang -- the assertion would never be
-    // reached -- and run-be-ut.sh imposes no per-test limit.
-    std::promise<bool> done;
-    auto future = done.get_future();
-    auto start = std::chrono::steady_clock::now();
-    std::thread worker([&] { done.set_value(fp.shouldFail()); });
-
-    const bool finished = future.wait_for(std::chrono::seconds(20)) == std::future_status::ready;
-    if (!finished) {
-        // Unblock the worker through the other code path so the test can fail instead of hanging.
-        fp.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
-    }
-    worker.join();
-    auto elapsed_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-
-    ASSERT_TRUE(finished) << "pause_timeout_second was ignored: shouldFail() never returned on its own";
-    ASSERT_FALSE(future.get());
-    ASSERT_GE(elapsed_ms, 900);
+    const auto run = should_fail_bounded(fp);
+    ASSERT_TRUE(run.finished) << "pause_timeout_second was ignored: shouldFail() never returned on its own";
+    ASSERT_FALSE(run.injected);
+    ASSERT_GE(run.elapsed_ms, 900);
     ASSERT_EQ(0, fp.to_pb().paused_thread_count());
     ASSERT_EQ(1, fp.to_pb().trigger_count());
 }
@@ -288,7 +286,7 @@ TEST(FailPointTest, pause_does_not_block_set_mode) {
     fp.setMode(pause_mode(5));
 
     std::vector<std::thread> threads;
-    PauseTestCleanup cleanup(fp, threads);
+    auto cleanup = pause_test_cleanup(fp, threads);
     threads.emplace_back([&] { (void)fp.shouldFail(); });
     ASSERT_TRUE(wait_for_parked(fp, 1));
 
@@ -308,7 +306,7 @@ TEST(FailPointTest, pause_default_timeout_applies_when_unset) {
     fp.setMode(pause_mode(0));
 
     std::vector<std::thread> threads;
-    PauseTestCleanup cleanup(fp, threads);
+    auto cleanup = pause_test_cleanup(fp, threads);
     threads.emplace_back([&] { (void)fp.shouldFail(); });
     ASSERT_TRUE(wait_for_parked(fp, 1));
 
@@ -372,22 +370,11 @@ TEST(FailPointTest, init_from_conf_pause_mode) {
     ASSERT_TRUE(fp.to_pb().trigger_mode().pause());
     ASSERT_EQ(1, fp.to_pb().trigger_mode().pause_timeout_second());
 
-    // The armed timeout is honoured: the call returns on its own without any setMode(). Bounded on a
-    // worker for the same reason as pause_times_out.
-    std::promise<bool> done;
-    auto future = done.get_future();
-    auto start = std::chrono::steady_clock::now();
-    std::thread worker([&] { done.set_value(fp.shouldFail()); });
-    const bool finished = future.wait_for(std::chrono::seconds(20)) == std::future_status::ready;
-    if (!finished) {
-        fp.setMode(simple_mode(FailPointTriggerModeType::DISABLE));
-    }
-    worker.join();
-    auto elapsed_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-    ASSERT_TRUE(finished) << "conf-file pause_timeout_second was ignored";
-    ASSERT_FALSE(future.get());
-    ASSERT_GE(elapsed_ms, 900);
+    // The armed timeout is honoured: the call returns on its own without any setMode().
+    const auto run = should_fail_bounded(fp);
+    ASSERT_TRUE(run.finished) << "conf-file pause_timeout_second was ignored";
+    ASSERT_FALSE(run.injected);
+    ASSERT_GE(run.elapsed_ms, 900);
 
     std::remove(conf_path.c_str());
 }
