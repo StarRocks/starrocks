@@ -1693,7 +1693,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
         for (auto& rowset_metadata : *new_tablet_new_metadata->mutable_rowsets()) {
             RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
 
-            // Phase-1 per-segment shared. The uid (family identity for the later MERGE) is
+            // Phase-1 per-segment shared. The uid (logical rowset identity for a later MERGE) is
             // preserved verbatim by the metadata copy, identical across new tablets. Segments
             // are then pruned to those overlapping this new tablet (shared=false where provably
             // exclusive+contained), or for non-pruneable / degraded rowsets stay all-shared.
