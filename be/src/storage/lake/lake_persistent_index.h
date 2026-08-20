@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -141,7 +142,8 @@ public:
     Status commit(MetaFileBuilder* builder, int64_t generation_version = 0);
 
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                                 const MetaFileBuilder* builder);
+                                 const MetaFileBuilder* builder,
+                                 std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
 
     size_t memory_usage() const override;
 
@@ -167,8 +169,9 @@ public:
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
     // Return the {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
-    static std::pair<size_t, int64_t> need_rebuild_counts(const TabletMetadataPB& metadata,
-                                                          const PersistentIndexSstableMetaPB& sstable_meta);
+    static std::pair<size_t, int64_t> need_rebuild_counts(
+            const TabletMetadataPB& metadata, const PersistentIndexSstableMetaPB& sstable_meta,
+            std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
 
     Status flush_memtable(bool force = false);
 

@@ -1409,13 +1409,22 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
     return true;
 }
 
+static uint64_t effective_rebuild_rss_rowid_point(const PersistentIndexSstableMetaPB& sstable_meta,
+                                                  std::optional<uint64_t> override_point) {
+    if (override_point.has_value()) {
+        return *override_point;
+    }
+    const auto& sstables = sstable_meta.sstables();
+    return sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+}
+
 // Return {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
 std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const TabletMetadataPB& metadata,
-                                                                    const PersistentIndexSstableMetaPB& sstable_meta) {
+                                                                    const PersistentIndexSstableMetaPB& sstable_meta,
+                                                                    std::optional<uint64_t> rebuild_rss_rowid_point) {
     size_t file_cnt = 0;
     int64_t row_cnt = 0;
-    const auto& sstables = sstable_meta.sstables();
-    const uint32_t rebuild_rss_id = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid() >> 32;
+    const uint32_t rebuild_rss_id = effective_rebuild_rss_rowid_point(sstable_meta, rebuild_rss_rowid_point) >> 32;
     for (const auto& rowset : metadata.rowsets()) {
         if (!needs_rowset_rebuild(rowset, rebuild_rss_id)) {
             continue; // skip rowset
@@ -1745,7 +1754,8 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
 } // namespace
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                                  int64_t base_version, const MetaFileBuilder* builder) {
+                                                  int64_t base_version, const MetaFileBuilder* builder,
+                                                  std::optional<uint64_t> rebuild_rss_rowid_point_override) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -1755,7 +1765,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    auto [file_cnt, row_cnt] = need_rebuild_counts(*metadata, metadata->sstable_meta());
+    auto [file_cnt, row_cnt] =
+            need_rebuild_counts(*metadata, metadata->sstable_meta(), rebuild_rss_rowid_point_override);
     _need_rebuild_file_cnt = file_cnt;
     _need_rebuild_row_cnt = row_cnt;
     ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
@@ -1763,9 +1774,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
-    const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
-    const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+    const uint64_t rebuild_rss_rowid_point =
+            effective_rebuild_rss_rowid_point(metadata->sstable_meta(), rebuild_rss_rowid_point_override);
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     const bool need_encode = pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
