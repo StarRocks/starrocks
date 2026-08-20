@@ -30,9 +30,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "common/runtime_profile.h"
+#include "common/config.h"
 #include "exec/analytor.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "gen_cpp/Exprs_types.h"
@@ -44,6 +42,7 @@
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/runtime_state.h"
 #include "testutil/function_utils.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -877,11 +876,12 @@ std::vector<OptInt> run_analytor_lag(const std::vector<OptInt>& input, int64_t o
     const TupleId out_tuple_id = 1;
     const SlotId col_slot_id = desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[0]->id();
     const SlotId res_slot_id = desc_tbl->get_tuple_descriptor(out_tuple_id)->slots()[0]->id();
+    RowDescriptor input_row_desc(*desc_tbl, std::vector<TTupleId>{in_tuple_id});
     TupleDescriptor* result_tuple = desc_tbl->get_tuple_descriptor(out_tuple_id);
 
     TPlanNode tnode = make_lag_tnode(in_tuple_id, col_slot_id, offset);
     RuntimeProfile profile("Analytor");
-    auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
+    auto analytor = std::make_shared<Analytor>(tnode, input_row_desc, result_tuple, false);
     CHECK(analytor->prepare(state, &pool, &profile).ok());
     CHECK(analytor->open(state).ok());
 
