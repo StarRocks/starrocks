@@ -312,6 +312,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：StarRocks が FE 設定ファイルで指定されたオブジェクトストレージ関連プロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値は v3.4.1 以降 `true` から `false` に変更されました。
 - 導入時期：v3.1.0
 
+### `failpoint_pause_timeout_second`
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: はい
+- 説明: failpoint の一時停止 (pause) モードのフォールバックタイムアウト。`ADMIN ENABLE FAILPOINT ... WITH PAUSE` で一時停止したスレッドは、`ADMIN DISABLE FAILPOINT` が実行されなくてもこの秒数の経過後に自動的に再開し、その failpoint は解除されます。これにより、解除し忘れてもノードの再起動が必要になることはありません。1 未満の値は 1 に丸められます。この値は failpoint を有効化するリクエストとともに BE/CN にも送信されるため、FE と BE の一時停止は同じタイムアウトを共有します。障害注入テスト専用です。FE は `--failpoint` を付けて起動する必要があり、BE 側の failpoint にはさらに `ENABLE_FAULT_INJECTION=ON` でコンパイルした BE が必要です。
+- 導入バージョン: v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - デフォルト：Empty string
