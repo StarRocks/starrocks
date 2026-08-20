@@ -2279,13 +2279,27 @@ void delete_partial_legacy_rebuild_output(LegacyRebuildOutputWriter& writer) {
     }
 }
 
+// |values_pb| holds every version this sstable stores for one key, each with its own
+// (rssid, rowid). Filter it PER VALUE: an old version whose rowset has since been compacted
+// away, or whose rowid the merged delvec marks deleted, is dead on its own and says nothing
+// about the newer versions beside it -- superseded versions going dead is the normal steady
+// state of a PK index. Dropping the whole entry on the first dead value therefore evicts the
+// key's LIVE version too, the index loses the key, and the next upsert cannot find the row it
+// should supersede: both versions stay in the table as duplicate primary keys, with a wrong
+// COUNT(*) and no error anywhere. Returns false only when nothing survives, which is the
+// caller's signal that the entry itself is dead.
+//
+// rebuild_non_shared_legacy_sstable filters per value for the same reason.
 StatusOr<bool> remap_legacy_entry_or_drop(IndexValuesWithVerPB* values_pb, int32_t source_rssid_offset,
                                           const std::unordered_map<uint32_t, uint32_t>& data_rssid_map,
                                           const std::function<StatusOr<DelVectorPtr>(uint32_t)>& load_del_vector) {
-    bool delvec_already_checked = false;
+    IndexValuesWithVerPB kept;
     for (auto& index_value_ref : *values_pb->mutable_values()) {
         auto* index_value = &index_value_ref;
-        if (is_index_tombstone(*index_value)) continue;
+        if (is_index_tombstone(*index_value)) {
+            *kept.add_values() = *index_value; // preserve sentinel as-is
+            continue;
+        }
         const int64_t lifted_rssid = static_cast<int64_t>(index_value->rssid()) + source_rssid_offset;
         if (lifted_rssid < 0 || lifted_rssid > std::numeric_limits<uint32_t>::max()) {
             return Status::Corruption(fmt::format(
@@ -2294,17 +2308,21 @@ StatusOr<bool> remap_legacy_entry_or_drop(IndexValuesWithVerPB* values_pb, int32
         }
         auto mapped_entry = data_rssid_map.find(static_cast<uint32_t>(lifted_rssid));
         if (mapped_entry == data_rssid_map.end()) {
-            return false; // dead source rowset
+            continue; // this version's source rowset is dead; other versions may still be live
         }
         index_value->set_rssid(mapped_entry->second);
-        if (!delvec_already_checked) {
-            ASSIGN_OR_RETURN(auto del_vector, load_del_vector(mapped_entry->second));
-            if (del_vector && del_vector->roaring() && del_vector->roaring()->contains(index_value->rowid())) {
-                return false; // rowid filtered by merged delvec
-            }
-            delvec_already_checked = true;
+        // Per value, not once per entry: each version carries its own rowid, so one version
+        // being delvec-deleted tells us nothing about the others.
+        ASSIGN_OR_RETURN(auto del_vector, load_del_vector(mapped_entry->second));
+        if (del_vector && del_vector->roaring() && del_vector->roaring()->contains(index_value->rowid())) {
+            continue; // this version's rowid is deleted in the merged delvec
         }
+        *kept.add_values() = *index_value;
     }
+    if (kept.values_size() == 0) {
+        return false; // every version was dead: the entry really is gone
+    }
+    values_pb->mutable_values()->Swap(kept.mutable_values());
     return true;
 }
 
