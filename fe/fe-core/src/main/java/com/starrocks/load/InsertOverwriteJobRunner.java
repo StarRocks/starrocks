@@ -769,6 +769,13 @@ public class InsertOverwriteJobRunner {
         // it. ConnectContext.getExecTimeout() honors a statement-level timeout property and excludes
         // query-queue waiting time, matching the normal timeout checker. Replay and test callers have
         // no context and no budget, so they never wait.
+        //
+        // A cancelled statement also stops waiting, so the request is released instead of sitting here
+        // for the rest of its budget: by this point the data is written and the coordinator has already
+        // finished, so nothing else interrupts this thread. isKilled is the same signal the pre-split
+        // hook's own await uses, and it covers a disconnected client, COM_QUIT, KILL CONNECTION and a
+        // session killing itself. A KILL QUERY aimed at another session only cancels that session's
+        // coordinator and leaves no flag here, so the deadline stays the backstop for that case.
         Instant deadline = context == null
                 ? Instant.EPOCH
                 : context.getStartTimeInstant().plusSeconds(context.getExecTimeout());
@@ -783,7 +790,9 @@ public class InsertOverwriteJobRunner {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
                 throw resolveFailure;
             }
-            if (state != OlapTable.OlapTableState.TABLET_RESHARD || !Instant.now().isBefore(deadline)) {
+            if (state != OlapTable.OlapTableState.TABLET_RESHARD
+                    || !Instant.now().isBefore(deadline)
+                    || (context != null && context.isKilled())) {
                 return;
             }
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);

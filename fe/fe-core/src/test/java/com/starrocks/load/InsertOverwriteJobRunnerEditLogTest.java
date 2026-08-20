@@ -226,6 +226,36 @@ public class InsertOverwriteJobRunnerEditLogTest {
         Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
     }
 
+    @Test
+    public void testDoCommitGivesUpOnReshardingTableWhenTheStatementIsCancelled() {
+        // A cancelled statement must not keep the request alive for the rest of its budget. By this
+        // point the data is written and the coordinator has finished, so nothing else would interrupt
+        // this thread -- only the explicit check does.
+        InsertOverwriteJob job = new InsertOverwriteJob(2104L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        // Enough budget left that returning quickly can only be the cancellation check, but not so much
+        // that losing the check would hang this test instead of failing it.
+        ConnectContext context = contextWithBudget(60);
+        context.setKilled();
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, null);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        try {
+            long startMs = System.currentTimeMillis();
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::doCommit);
+            long elapsedMs = System.currentTimeMillis() - startMs;
+            assertTableStateFailure(ex);
+            Assertions.assertTrue(elapsedMs < 2000,
+                    "a cancelled statement must not wait out the reshard, waited " + elapsedMs + "ms");
+        } finally {
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
+    }
+
     /** A context whose remaining budget is {@code timeoutSeconds} from now. */
     private static ConnectContext contextWithBudget(int timeoutSeconds) {
         ConnectContext context = UtFrameUtils.createDefaultCtx();
