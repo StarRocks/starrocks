@@ -39,10 +39,13 @@
 #endif
 #include <zlib.h>
 
+#include <atomic>
+
 #include "base/coding.h"
 #include "base/compression/compression_context_pool_singletons.h"
 #include "base/compression/compression_headers.h"
 #include "base/compression/lzo_decompressor_registry.h"
+#include "base/compression/zstd_dict.h"
 #include "base/string/faststring.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
@@ -717,6 +720,130 @@ public:
     }
 };
 
+namespace {
+
+// dictionary-bound decompression contexts.
+//
+// Page decompression normally borrows a ZSTD_DCtx from the shared pool, and the
+// pool's resetter runs ZSTD_DCtx_reset(reset_session_and_parameters) on return --
+// which per the ZSTD contract clears a sticky refDDict. That reset is what
+// guarantees no cross-talk between borrowers (see the compression-dict design), but it
+// also means a dictionary would have to be re-loaded into a cold context for
+// EVERY page. Measured on real data (56MB / 898 pages of a log column): a
+// dictionary costs nothing on decode when the context is reused (2334 vs 2287
+// MB/s without one), but re-establishing the dictionary session per page drops it
+// to 1615 MB/s (-31%). The cost is a fixed per-page session setup, not
+// proportional to dictionary size (2KB and 64KB dictionaries cost the same).
+//
+// So dictionary decompression uses its own small thread-local set of contexts
+// instead of the shared pool. The cost is bounded and small: at most
+// kDictDCtxCacheSize contexts (~94KB each, independent of dictionary size) on a
+// thread that has actually decoded such a page, released when the thread exits. Each entry remembers which dictionary it has
+// loaded; consecutive pages of the same column hit it and skip the reload
+// entirely. These contexts never enter the shared pool, so the no-cross-talk
+// invariant is untouched.
+//
+// Keyed by ZstdDDict::id(), never by address: an address can be recycled by a
+// later allocation, and a stale entry would then look like a hit and decode
+// against the wrong (already freed) dictionary.
+//
+// That key is also what makes the entries safe when a segment is evicted while
+// these threads live on. The context keeps a raw ZSTD_DDict* that the eviction
+// just freed, but nothing ever dereferences it: zstd only reads dctx->ddict
+// while decompressing, decompression only happens on a context acquire() just
+// returned, and acquire() returns a cached context only when its dict_id matches
+// -- which a freed dictionary's id never will, because ids are handed out by a
+// monotonic counter and never reused. The stale pointer is overwritten the next
+// time the slot is chosen as victim, and ZSTD_freeDCtx does not touch a
+// dictionary it does not own. So the DDict outlives every *use* by the context,
+// which is what ZSTD_DCtx_refDDict requires.
+namespace {
+// RAII so the installed scope is left even on the error returns below.
+struct DctxAllocScope {
+    DctxAllocScope() {
+        if (detail::g_dict_dctx_scope_enter != nullptr) detail::g_dict_dctx_scope_enter();
+    }
+    ~DctxAllocScope() {
+        if (detail::g_dict_dctx_scope_leave != nullptr) detail::g_dict_dctx_scope_leave();
+    }
+};
+} // namespace
+
+constexpr int kDictDCtxCacheSize = 4; // a scan alternates between a few columns
+
+struct DictDCtxCache {
+    struct Entry {
+        ZSTD_DCtx* ctx = nullptr;
+        uint64_t dict_id = 0;
+    };
+    Entry entries[kDictDCtxCacheSize];
+    int next_victim = 0;
+
+    ~DictDCtxCache() {
+        for (auto& e : entries) {
+            free_ctx(e.ctx);
+            e.ctx = nullptr;
+        }
+    }
+
+    // One place for every free, so the byte counter and the tracker attribution cannot
+    // drift apart from the actual contexts.
+    static void free_ctx(ZSTD_DCtx* ctx) {
+        if (ctx == nullptr) return;
+        const size_t bytes = ZSTD_sizeof_DCtx(ctx);
+        DctxAllocScope scope;
+        ZSTD_freeDCtx(ctx);
+        detail::g_dict_dctx_cache_bytes.fetch_sub(bytes, std::memory_order_relaxed);
+    }
+
+    // Returns a context with `ddict` loaded, or nullptr if one cannot be created.
+    ZSTD_DCtx* acquire(const compression::ZstdDDict* ddict) {
+        const uint64_t want = ddict->id();
+        for (auto& e : entries) {
+            if (e.ctx != nullptr && e.dict_id == want) {
+                return e.ctx; // dictionary already loaded: nothing to do
+            }
+        }
+        Entry& victim = entries[next_victim];
+        next_victim = (next_victim + 1) % kDictDCtxCacheSize;
+        if (victim.ctx == nullptr) {
+            DctxAllocScope scope;
+            victim.ctx = ZSTD_createDCtx();
+            if (victim.ctx == nullptr) {
+                victim.dict_id = 0;
+                return nullptr;
+            }
+            detail::g_dict_dctx_cache_bytes.fetch_add(ZSTD_sizeof_DCtx(victim.ctx), std::memory_order_relaxed);
+        }
+        victim.dict_id = 0;
+        if (ZSTD_isError(ZSTD_DCtx_refDDict(victim.ctx, ddict->dict()))) {
+            return nullptr;
+        }
+        victim.dict_id = want;
+        return victim.ctx;
+    }
+
+    // Drop a context that failed mid-decompression: its internal state is
+    // undefined, so it must not be reused.
+    void discard(ZSTD_DCtx* ctx) {
+        for (auto& e : entries) {
+            if (e.ctx == ctx) {
+                free_ctx(e.ctx);
+                e.ctx = nullptr;
+                e.dict_id = 0;
+                return;
+            }
+        }
+    }
+};
+
+DictDCtxCache& dict_dctx_cache() {
+    static thread_local DictDCtxCache cache;
+    return cache;
+}
+
+} // namespace
+
 class ZstdBlockCompression final : public BlockCompressionCodec {
 public:
     ZstdBlockCompression() : BlockCompressionCodec(CompressionTypePB::ZSTD), _level(-1) {}
@@ -757,13 +884,28 @@ public:
         return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body1, compressed_body2);
     }
 
+    // same as above but referencing a per-column compression dictionary.
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const compression::ZstdCDict* cdict) const override {
+        return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body1, compressed_body2,
+                         cdict);
+    }
+
     Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
+
+    // decompress a frame referencing a per-column compression dictionary.
+    Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict,
+                      bool use_ctx_cache = true) const override {
+        return _decompress(input, output, ddict, use_ctx_cache);
+    }
 
     size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
 
 private:
     Status _compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
-                     size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2) const {
+                     size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
+                     const compression::ZstdCDict* cdict = nullptr) const {
         StatusOr<compression::ZSTD_CCtx_Pool::Ref> ref = compression::getZSTD_CCtx();
         Status status = ref.status();
         if (!status.ok()) {
@@ -777,7 +919,21 @@ private:
         // with level = ZSTD_CLEVEL_DEFAULT(3). And the context will be return to the
         // pool by reseting back to level = ZSTD_CLEVEL_DEFAULT(3).
         // What we should do here is simply set the level as we wanted.
-        if (_level != -1) {
+        if (cdict != nullptr) {
+            // reference the per-column compression dictionary. The compression
+            // level is baked into the CDict, so we must NOT also set
+            // ZSTD_c_compressionLevel here (that would be ignored / conflict).
+            // The referenced CDict is sticky on the ctx but is cleared when the
+            // ctx is returned to the pool (ZSTD_CCtx_reset with
+            // reset_session_and_parameters), so it never leaks to the next
+            // borrower. See compression_context_pool_singletons.cpp.
+            ret = ZSTD_CCtx_refCDict(ctx, cdict->dict());
+            if (ZSTD_isError(ret)) {
+                context->compression_fail = true;
+                return Status::InternalError(
+                        strings::Substitute("ZSTD refCDict failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+            }
+        } else if (_level != -1) {
             if (_level < 1 || _level > 22) {
                 return Status::InternalError(strings::Substitute("ZSTD with invalid compression level: $0", _level));
             }
@@ -872,7 +1028,36 @@ private:
         return Status::OK();
     }
 
-    Status _decompress(const Slice& input, Slice* output) const {
+    Status _decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict = nullptr,
+                       bool use_ctx_cache = true) const {
+        if (output->data == nullptr) {
+            // We may pass a NULL 0-byte output buffer but some zstd versions
+            // demand a valid pointer:
+            // https://github.com/facebook/zstd/issues/1385
+            static uint8_t empty_buffer;
+            output->data = (char*)&empty_buffer;
+            output->size = 0;
+        }
+
+        if (ddict != nullptr && use_ctx_cache) {
+            // Dictionary path: use a thread-local context that already has this
+            // dictionary loaded, so consecutive pages of a column do not each pay
+            // to re-establish the dictionary session. See DictDCtxCache above.
+            ZSTD_DCtx* ctx = dict_dctx_cache().acquire(ddict);
+            if (ctx != nullptr) {
+                size_t ret = ZSTD_decompressDCtx(ctx, output->data, output->size, input.data, input.size);
+                if (ZSTD_isError(ret)) {
+                    dict_dctx_cache().discard(ctx);
+                    return Status::InvalidArgument(strings::Substitute("ZSTD decompress failed: $0",
+                                                                       ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+                }
+                output->size = ret;
+                return Status::OK();
+            }
+            // Could not get a cached context (allocation failure): fall through to
+            // the shared pool below, which still decodes correctly.
+        }
+
         StatusOr<compression::ZSTD_DCtx_Pool::Ref> ref = compression::getZSTD_DCtx();
         Status status = ref.status();
         if (!status.ok()) {
@@ -882,13 +1067,16 @@ private:
         ZSTD_DCtx* ctx = context->ctx;
         // Decompression context does not depend on level parameter
 
-        if (output->data == nullptr) {
-            // We may pass a NULL 0-byte output buffer but some zstd versions
-            // demand a valid pointer:
-            // https://github.com/facebook/zstd/issues/1385
-            static uint8_t empty_buffer;
-            output->data = (char*)&empty_buffer;
-            output->size = 0;
+        if (ddict != nullptr) {
+            // Fallback path only. A no-dict frame (dictID=0 raw content) decodes
+            // identically whether or not a raw-content DDict is referenced, which
+            // is what makes mixed dict/no-dict pages in one column safe.
+            size_t const r = ZSTD_DCtx_refDDict(ctx, ddict->dict());
+            if (ZSTD_isError(r)) {
+                context->decompression_fail = true;
+                return Status::InternalError(
+                        strings::Substitute("ZSTD refDDict failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(r))));
+            }
         }
 
         size_t ret = ZSTD_decompressDCtx(ctx, output->data, output->size, input.data, input.size);
