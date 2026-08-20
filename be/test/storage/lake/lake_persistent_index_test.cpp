@@ -2030,6 +2030,42 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_rebuild_point_overrid
     EXPECT_EQ(IndexValue((static_cast<uint64_t>(1) << 32) | 2), override_values[2]);
 }
 
+TEST_F(LakePersistentIndexTest, test_flush_pk_memtable_reloads_for_rebuild_point_override) {
+    const int64_t base_version = 2;
+    auto metadata = make_varchar_pk_metadata();
+    metadata->set_version(base_version);
+    metadata->set_next_rowset_id(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    std::vector<std::string> keys;
+    append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/3, /*rowset_id=*/1, &keys);
+
+    const std::string sst_filename = "cached_rebuild_point_empty.sst";
+    ASSIGN_OR_ABORT(auto writable_file, fs::new_writable_file(_tablet_mgr->sst_location(metadata->id(), sst_filename)));
+    sstable::Options options;
+    sstable::TableBuilder sst_builder(options, writable_file.get());
+    ASSERT_OK(sst_builder.Finish());
+    const uint64_t sst_filesize = sst_builder.FileSize();
+    ASSERT_OK(writable_file->close());
+
+    auto* sst = metadata->mutable_sstable_meta()->add_sstables();
+    sst->set_filename(sst_filename);
+    sst->set_filesize(sst_filesize);
+    sst->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | 2);
+
+    ASSIGN_OR_ABORT(auto persisted_snapshot, _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/3));
+    ASSERT_EQ(1, persisted_snapshot->sstable_meta().sstables_size());
+
+    const uint64_t override_point = static_cast<uint64_t>(1) << 32;
+    ASSIGN_OR_ABORT(auto rebuilt_snapshot,
+                    _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/3, override_point));
+    ASSERT_EQ(2, rebuilt_snapshot->sstable_meta().sstables_size());
+    EXPECT_EQ(sst_filename, rebuilt_snapshot->sstable_meta().sstables(0).filename());
+    EXPECT_EQ((static_cast<uint64_t>(1) << 32) | 2, rebuilt_snapshot->sstable_meta().sstables(0).max_rss_rowid());
+    EXPECT_GE(rebuilt_snapshot->sstable_meta().sstables(1).max_rss_rowid(),
+              rebuilt_snapshot->sstable_meta().sstables(0).max_rss_rowid());
+}
+
 // A del file that did NOT originate from the rebuilt rowset must run get()+filter and drop deletes
 // that are too old for the current index entry. too_old = origin_rowset_id + op_offset: keys whose
 // current rssid (value >> 32) is <= too_old get erased; keys with a newer rssid keep their value.
