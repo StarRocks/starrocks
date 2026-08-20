@@ -53,6 +53,8 @@ public:
         bool shared = false;
     };
     using ExistingFileMap = std::unordered_map<std::string, ExistingFileInfo>;
+    using ExistingBundleSliceEncryptionMetaMap =
+            std::unordered_map<std::string, std::unordered_map<int64_t, std::string>>;
 
     explicit LakeReplicationTxnManager(lake::TabletManager* tablet_manager)
             : _tablet_manager(tablet_manager)
@@ -82,10 +84,11 @@ public:
 
     // Helper function to build existed filename UUIDs map from target tablet metadata
     // For files that replicated from source storage, we keep the `uuid` part of file name, and use it to decide if the file
-    // is already replicated to target storage. Map from UUID to target filename.
-    // Also, in order to support file encryption, we also need to keep the encryption meta.
+    // Files already replicated to target storage are indexed by physical UUID. Bundled target
+    // segments additionally keep encryption metadata per logical slice offset.
     Status build_existed_filename_uuids_map(const TabletMetadataPtr& target_data_version_tablet_meta,
-                                            ExistingFileMap& existed_filename_uuids);
+                                            ExistingFileMap& existed_filename_uuids,
+                                            ExistingBundleSliceEncryptionMetaMap& bundle_slice_encryption_metas);
 
     // Helper function to create replication txn log with converted metadata
     // generate and replace file names to adapt for target storage

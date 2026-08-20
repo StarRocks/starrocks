@@ -519,21 +519,19 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
         bool use_converter = is_seg || is_del(src_file_name);
         const auto& target_file_name = pair.second.first;
-        FileEncryptionInfo encryption_info;
+        FileEncryptionInfo target_encryption_info;
         if (config::enable_transparent_data_encryption) {
-            encryption_info = pair.second.second.info;
+            target_encryption_info = pair.second.second.info;
         }
-        RandomAccessFileOptions source_random_access_opts;
-        SequentialFileOptions source_sequential_opts;
+        FileEncryptionInfo source_encryption_info;
         auto source_encryption_it = source_encryption_infos.find(src_file_name);
         if (source_encryption_it != source_encryption_infos.end()) {
-            source_random_access_opts.encryption_info = source_encryption_it->second;
-            source_sequential_opts.encryption_info = source_encryption_it->second;
+            source_encryption_info = source_encryption_it->second;
         }
 
         tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
-                            is_seg, is_bundled_segment, is_shared_file, use_converter, encryption_info,
-                            source_random_access_opts, source_sequential_opts]() -> Status {
+                            is_seg, is_bundled_segment, is_shared_file, use_converter, target_encryption_info,
+                            source_encryption_info]() -> Status {
             // Fast cancel: check right before each file copy starts.
             if (txn_id < get_master_info().min_active_txn_id) {
                 LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
@@ -567,8 +565,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
+                    RandomAccessFileOptions source_opts{.encryption_info = source_encryption_info};
                     auto copy_status = ReplicationUtils::download_lake_file_with_converter(
-                            src_file_location, src_file_name, src_file_size, shared_src_fs, source_random_access_opts,
+                            src_file_location, src_file_name, src_file_size, shared_src_fs, source_opts,
                             active_file_converters, &final_file_size);
                     if (is_shared_file) {
                         remove_cleanup_file(&files_to_delete, target_file_location, shared_mutex);
@@ -598,7 +597,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             } else if (copy_needed) {
                 WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
                 if (config::enable_transparent_data_encryption) {
-                    opts.encryption_info = encryption_info;
+                    opts.encryption_info = target_encryption_info;
                 }
                 int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
@@ -612,9 +611,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                             files_to_delete.push_back(target_file_location);
                         }
                     }
-                    auto copy_result =
-                            copy_non_segment_file_with_retry(src_file_location, shared_src_fs, source_sequential_opts,
-                                                             target_file_location, opts, max_retry);
+                    SequentialFileOptions source_opts{.encryption_info = source_encryption_info};
+                    auto copy_result = copy_non_segment_file_with_retry(src_file_location, shared_src_fs, source_opts,
+                                                                        target_file_location, opts, max_retry);
                     if (!copy_result.ok() && is_shared_file && copy_result.status().is_already_exist()) {
                         ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
                         if (!existing_size.has_value()) {
@@ -866,14 +865,27 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_m
 }
 
 Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
-        const TabletMetadataPtr& target_data_version_tablet_meta, ExistingFileMap& existed_filename_uuids) {
+        const TabletMetadataPtr& target_data_version_tablet_meta, ExistingFileMap& existed_filename_uuids,
+        ExistingBundleSliceEncryptionMetaMap& bundle_slice_encryption_metas) {
     // Collect UUIDs from rowsets (segments and del files)
     for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
         for (const auto& segment_meta : rowset.segment_metas()) {
             const auto& segment_name = segment_meta.filename();
+            const auto uuid = extract_uuid_from(segment_name);
             existed_filename_uuids.emplace(
-                    extract_uuid_from(segment_name),
-                    ExistingFileInfo{segment_name, segment_meta.encryption_meta(), segment_meta.shared()});
+                    uuid, ExistingFileInfo{segment_name,
+                                           segment_meta.has_bundle_file_offset() ? "" : segment_meta.encryption_meta(),
+                                           segment_meta.shared()});
+            if (segment_meta.has_bundle_file_offset()) {
+                auto& slice_metas = bundle_slice_encryption_metas[uuid];
+                auto [it, inserted] =
+                        slice_metas.emplace(segment_meta.bundle_file_offset(), segment_meta.encryption_meta());
+                if (!inserted && it->second != segment_meta.encryption_meta()) {
+                    return Status::Corruption(
+                            fmt::format("Conflicting target bundle slice encryption metadata for UUID {} at offset {}",
+                                        uuid, segment_meta.bundle_file_offset()));
+                }
+            }
         }
         for (const auto& del : rowset.del_files()) {
             const auto& del_filename = del.name();
@@ -961,11 +973,16 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     // `existed_filename_uuids` represented files that already replicated to target storage in previous txns
     // <uuid, destination filename/encryption/shared ownership>
     ExistingFileMap existed_filename_uuids;
-    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids));
+    ExistingBundleSliceEncryptionMetaMap bundle_slice_encryption_metas;
+    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids,
+                                                     bundle_slice_encryption_metas));
 
     const bool preserve_source_shared = src_tablet_meta->has_range() && target_tablet_meta->has_range();
-    SourceEncryptionMetaMap exact_source_encryption_metas;
-    std::unordered_set<std::string> aggregate_shared_or_bundled_files;
+    struct SourceFileDeclaration {
+        std::string encryption_meta;
+        bool shared_or_bundled = false;
+    };
+    std::unordered_map<std::string, SourceFileDeclaration> source_file_declarations;
     auto destination_shared = [&existed_filename_uuids, preserve_source_shared](const std::string& source_filename,
                                                                                 bool source_shared,
                                                                                 bool existed) -> StatusOr<bool> {
@@ -991,14 +1008,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         if (existed) {
             return Status::OK();
         }
-        auto [it, inserted] = exact_source_encryption_metas.emplace(source_filename, encryption_meta);
-        if (!inserted && it->second != encryption_meta) {
+        auto [it, inserted] = source_file_declarations.try_emplace(
+                source_filename, SourceFileDeclaration{.encryption_meta = encryption_meta});
+        if (!inserted && it->second.encryption_meta != encryption_meta) {
             return Status::Corruption(
                     fmt::format("Conflicting source encryption metadata for file: {}", source_filename));
         }
-        if (destination_file_shared || source_bundled) {
-            aggregate_shared_or_bundled_files.emplace(source_filename);
-        }
+        it->second.shared_or_bundled |= destination_file_shared || source_bundled;
         return Status::OK();
     };
 
@@ -1051,20 +1067,34 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             if (!is_existed) {
                 if (config::enable_transparent_data_encryption) {
                     // segment file doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_segment_filename];
+                    const auto& pair = filename_map[src_segment_filename];
                     new_seg_meta->set_encryption_meta(pair.second.encryption_meta);
                 }
             } else {
                 // segment file already exists, use the existing encryption metadata from target tablet
                 auto uuid = extract_uuid_from(src_segment_filename);
-                auto it = existed_filename_uuids.find(uuid);
-                if (it != existed_filename_uuids.end()) {
-                    const std::string& existing_encryption_meta = it->second.encryption_meta;
-                    new_seg_meta->set_encryption_meta(existing_encryption_meta);
+                if (src_seg_meta.has_bundle_file_offset()) {
+                    auto uuid_it = bundle_slice_encryption_metas.find(uuid);
+                    if (uuid_it == bundle_slice_encryption_metas.end()) {
+                        return Status::Corruption(fmt::format(
+                                "No existing target bundle slice encryption metadata found for UUID {}", uuid));
+                    }
+                    auto offset_it = uuid_it->second.find(src_seg_meta.bundle_file_offset());
+                    if (offset_it == uuid_it->second.end()) {
+                        return Status::Corruption(fmt::format(
+                                "No existing target bundle slice encryption metadata found for UUID {} at offset {}",
+                                uuid, src_seg_meta.bundle_file_offset()));
+                    }
+                    new_seg_meta->set_encryption_meta(offset_it->second);
                 } else {
-                    // should never happend
-                    return Status::Corruption(
-                            fmt::format("no existing encryption metadata found for file: {}", src_segment_filename));
+                    auto it = existed_filename_uuids.find(uuid);
+                    if (it != existed_filename_uuids.end()) {
+                        new_seg_meta->set_encryption_meta(it->second.encryption_meta);
+                    } else {
+                        // should never happend
+                        return Status::Corruption(fmt::format("no existing encryption metadata found for file: {}",
+                                                              src_segment_filename));
+                    }
                 }
             }
 
@@ -1103,7 +1133,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             if (!is_existed) {
                 if (config::enable_transparent_data_encryption) {
                     // del doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_del_filename];
+                    const auto& pair = filename_map[src_del_filename];
                     new_del->set_encryption_meta(pair.second.encryption_meta);
                 }
             } else {
@@ -1142,7 +1172,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             if (!is_existed) {
                 if (config::enable_transparent_data_encryption) {
                     // sst doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_sst_filename];
+                    const auto& pair = filename_map[src_sst_filename];
                     sst->set_encryption_meta(pair.second.encryption_meta);
                 }
             } else {
@@ -1181,7 +1211,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             if (!is_existed) {
                 if (config::enable_transparent_data_encryption) {
                     // del file doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_delvec_filename];
+                    const auto& pair = filename_map[src_delvec_filename];
                     item.set_encryption_meta(pair.second.encryption_meta);
                 }
             } else {
@@ -1229,7 +1259,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                 std::string destination_encryption_meta;
                 if (!is_existed && config::enable_transparent_data_encryption) {
                     // dcg file doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_dcg_filename];
+                    const auto& pair = filename_map[src_dcg_filename];
                     destination_encryption_meta = pair.second.encryption_meta;
                 } else if (is_existed) {
                     // dcg file already exists, use the existing encryption metadata from target tablet
@@ -1309,7 +1339,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                 if (!is_existed) {
                     if (config::enable_transparent_data_encryption) {
                         // .idx file doesn't exist on target, use the newly generated encryption metadata
-                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_idx_filename];
+                        const auto& pair = filename_map[src_idx_filename];
                         entry.set_encryption_meta(pair.second.encryption_meta);
                     }
                 } else {
@@ -1324,13 +1354,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         }
     }
 
-    for (const auto& [source_filename, encryption_meta] : exact_source_encryption_metas) {
-        if (aggregate_shared_or_bundled_files.contains(source_filename)) {
-            if (!encryption_meta.empty() || config::enable_transparent_data_encryption) {
+    for (const auto& [source_filename, declaration] : source_file_declarations) {
+        if (declaration.shared_or_bundled) {
+            if (!declaration.encryption_meta.empty() || config::enable_transparent_data_encryption) {
                 return Status::NotSupported("Copying new encrypted shared or bundled physical files is not supported");
             }
         } else {
-            source_encryption_metas.emplace(source_filename, encryption_meta);
+            source_encryption_metas.emplace(source_filename, declaration.encryption_meta);
         }
     }
 

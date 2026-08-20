@@ -50,6 +50,7 @@
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "exec/exec_env.h"
+#include "fs/bundle_file.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
@@ -1520,6 +1521,7 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_t
     target_rowset->set_id(1);
     auto* target_segment = target_rowset->add_segment_metas();
     target_segment->set_filename(target_filename);
+    target_segment->set_bundle_file_offset(0);
     target_segment->set_shared(true);
     target_segment->set_encryption_meta("target-encryption-meta");
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
@@ -1543,6 +1545,90 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_t
     ASSERT_EQ(1, (*result)->rowsets(0).segment_metas_size());
     EXPECT_EQ(target_filename, (*result)->rowsets(0).segment_metas(0).filename());
     EXPECT_EQ("target-encryption-meta", (*result)->rowsets(0).segment_metas(0).encryption_meta());
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_per_slice_target_metadata) {
+    seed_test_encryption_keys();
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+    ASSIGN_OR_ABORT(auto target_pair0, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+    ASSIGN_OR_ABORT(auto target_pair1, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+    ASSERT_NE(target_pair0.info.key, target_pair1.info.key);
+
+    auto source = make_metadata(53037, 2);
+    auto target = make_metadata(53038, 1);
+    const auto source_bundle_filename = file_name(37, "dat");
+    const auto target_bundle_filename = fmt::format("00000000000000ff_{}", source_bundle_filename.substr(17));
+    const auto target_bundle_path = _tablet_mgr->segment_location(target->id(), target_bundle_filename);
+    const std::array<std::string, 2> plaintexts = {"first-target-bundle-slice", "second-target-bundle-slice"};
+
+    BundleWritableFileContext bundle_context;
+    WritableFileOptions bundle_opts{.sync_on_close = true,
+                                    .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                    .encryption_info = target_pair0.info};
+    ASSERT_OK(bundle_context.try_create_bundle_file(
+            [&]() { return fs::new_writable_file(bundle_opts, target_bundle_path); }));
+    BundleWritableFile writer0(&bundle_context, target_pair0.info);
+    BundleWritableFile writer1(&bundle_context, target_pair1.info);
+    bundle_context.increase_active_writers();
+    bundle_context.increase_active_writers();
+    ASSERT_OK(writer0.append(plaintexts[0]));
+    ASSERT_OK(writer1.append(plaintexts[1]));
+    ASSERT_OK(writer0.close());
+    ASSERT_OK(writer1.close());
+    ASSERT_OK(bundle_context.decrease_active_writers());
+    ASSERT_OK(bundle_context.decrease_active_writers());
+    ASSERT_EQ(0, writer0.bundle_file_offset());
+    ASSERT_EQ(plaintexts[0].size(), writer1.bundle_file_offset());
+
+    auto* target_rowset = target->add_rowsets();
+    target_rowset->set_id(1);
+    for (int i = 0; i < 2; ++i) {
+        auto* segment = target_rowset->add_segment_metas();
+        segment->set_filename(target_bundle_filename);
+        segment->set_size(plaintexts[i].size());
+        segment->set_bundle_file_offset(i == 0 ? writer0.bundle_file_offset() : writer1.bundle_file_offset());
+        segment->set_encryption_meta(i == 0 ? target_pair0.encryption_meta : target_pair1.encryption_meta);
+    }
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    auto* source_rowset = source->add_rowsets();
+    source_rowset->set_id(1);
+    for (int i = 0; i < 2; ++i) {
+        auto* segment = source_rowset->add_segment_metas();
+        segment->set_filename(source_bundle_filename);
+        segment->set_size(plaintexts[i].size());
+        segment->set_bundle_file_offset(i == 0 ? writer0.bundle_file_offset() : writer1.bundle_file_offset());
+        segment->set_encryption_meta(fmt::format("deliberately-unresolvable-source-slice-{}", i));
+    }
+
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
+                          &source_encryption_metas);
+    ASSERT_OK(result.status());
+    EXPECT_TRUE(filename_map.empty());
+    EXPECT_TRUE(source_encryption_metas.empty());
+
+    const auto& output_segments = (*result)->rowsets(0).segment_metas();
+    ASSERT_EQ(2, output_segments.size());
+    EXPECT_EQ(target_bundle_filename, output_segments.Get(0).filename());
+    EXPECT_EQ(target_bundle_filename, output_segments.Get(1).filename());
+    EXPECT_EQ(target_pair0.encryption_meta, output_segments.Get(0).encryption_meta());
+    EXPECT_EQ(target_pair1.encryption_meta, output_segments.Get(1).encryption_meta());
+
+    ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_bundle_path));
+    for (int i = 0; i < 2; ++i) {
+        ASSIGN_OR_ABORT(auto output_info,
+                        KeyCache::instance().unwrap_encryption_meta(output_segments.Get(i).encryption_meta()));
+        RandomAccessFileOptions read_opts{.encryption_info = output_info};
+        FileInfo file_info{.path = target_bundle_path,
+                           .size = output_segments.Get(i).size(),
+                           .bundle_file_offset = output_segments.Get(i).bundle_file_offset()};
+        ASSIGN_OR_ABORT(auto reader, target_fs->new_random_access_file_with_bundling(read_opts, file_info));
+        ASSIGN_OR_ABORT(auto plaintext, reader->read_all());
+        EXPECT_EQ(plaintexts[i], plaintext);
+    }
 }
 
 TEST_F(LakeReplicationMetadataConversionTest, mixed_dcg_encryption_metadata_preserves_column_file_positions) {
