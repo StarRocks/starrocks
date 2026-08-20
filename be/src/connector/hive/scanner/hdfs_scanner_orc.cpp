@@ -181,8 +181,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             // Rate-limited: this runs per min/max conjunct per row group, and a conjunct that fails
             // once usually fails for every row group in the file.
             LOG_EVERY_N(INFO, 100) << "min/max conjunct evaluation failed, skip row-group pruning. min="
-                                   << min_or.status()
-                                   << ", max=" << (max_or.ok() ? Status::OK() : max_or.status());
+                                   << min_or.status() << ", max=" << (max_or.ok() ? Status::OK() : max_or.status());
             continue;
         }
         const ColumnPtr& min_col = min_or.value();
