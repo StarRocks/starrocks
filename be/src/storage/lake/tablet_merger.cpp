@@ -81,6 +81,8 @@ bvar::Adder<int64_t> g_tablet_merge_non_shared_sstable_rebuild_total("tablet_mer
 
 namespace starrocks::lake {
 
+DEFINE_FAIL_POINT(skip_lake_pk_index_merge_source_flush);
+
 namespace {
 
 class TabletMergeContext {
@@ -3121,6 +3123,34 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
     return project_non_shared_legacy_sstable(src_pb, ctx, out);
 }
 
+// max_rss_rowid orders sstables and breaks same-version ties, but after merging
+// independent source tablets the latest projected max is not necessarily a
+// coverage boundary shared by every source. Return the earliest source rebuild
+// point in the merged rssid space so the uncovered tail can be materialized
+// without changing any projected sstable watermark.
+StatusOr<uint64_t> compute_safe_merged_rebuild_point(const std::vector<TabletMergeContext>& merge_contexts) {
+    std::optional<uint64_t> safe_point;
+    for (const auto& ctx : merge_contexts) {
+        const auto& source_sstables = ctx.metadata()->sstable_meta().sstables();
+        if (source_sstables.empty()) return uint64_t{0};
+
+        const uint64_t source_point = source_sstables.rbegin()->max_rss_rowid();
+        if (source_point == 0) return uint64_t{0};
+
+        const uint32_t source_high = extract_rss_rowid_high(source_point);
+        auto mapped_high = ctx.map_rssid(source_high);
+        if (!mapped_high.ok()) {
+            const int64_t naturally_mapped = static_cast<int64_t>(source_high) + ctx.rssid_offset();
+            if (naturally_mapped < 0) return uint64_t{0};
+            return mapped_high.status();
+        }
+
+        const uint64_t candidate = encode_rss_rowid(mapped_high.value(), extract_rss_rowid_low(source_point));
+        safe_point = safe_point.has_value() ? std::min(*safe_point, candidate) : candidate;
+    }
+    return safe_point.value_or(0);
+}
+
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
@@ -3140,6 +3170,9 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     // Flush every source before grouping SST occurrences. The grouped rebuild
     // must see one stable snapshot of all source rowsets and freshly-flushed SSTs.
     for (auto& ctx : merge_contexts) {
+        bool skip_source_flush = false;
+        FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
+        if (skip_source_flush) continue;
         ASSIGN_OR_RETURN(auto flushed_metadata,
                          update_manager->flush_pk_memtable(ctx.metadata(), new_metadata->version()));
         ctx.set_metadata(std::move(flushed_metadata));
@@ -3273,6 +3306,22 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     // signed-monotone (I1) and contiguous-fileset (I2) invariants. See the
     // helper for the full reasoning.
     reassign_fileset_ids_for_ordered_runs(dest);
+
+    if (!dest->empty()) {
+        ASSIGN_OR_RETURN(const uint64_t safe_rebuild_point, compute_safe_merged_rebuild_point(merge_contexts));
+        const uint64_t persisted_rebuild_point = dest->rbegin()->max_rss_rowid();
+        if (safe_rebuild_point > persisted_rebuild_point) {
+            return Status::Corruption(
+                    fmt::format("tablet merge safe rebuild point {} exceeds persisted point {} for tablet {}",
+                                safe_rebuild_point, persisted_rebuild_point, new_metadata->id()));
+        }
+        if (safe_rebuild_point < persisted_rebuild_point) {
+            ASSIGN_OR_RETURN(auto materialized_metadata,
+                             update_manager->flush_pk_memtable(std::make_shared<TabletMetadataPB>(*new_metadata),
+                                                               new_metadata->version(), safe_rebuild_point));
+            new_metadata->mutable_sstable_meta()->CopyFrom(materialized_metadata->sstable_meta());
+        }
+    }
     return Status::OK();
 }
 
