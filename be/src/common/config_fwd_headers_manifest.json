@@ -163,6 +163,7 @@
         "pipeline_analytic_removable_chunk_num",
         "pipeline_analytic_enable_streaming_process",
         "pipeline_analytic_enable_removable_cumulative_process",
+        "pipeline_analytic_enable_ignore_nulls_streaming",
         "pipline_limit_max_delivery",
         "jdbc_connection_pool_size",
         "jdbc_minimum_idle_connections",
