@@ -3824,6 +3824,31 @@ public class Config extends ConfigBase {
                     "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
     public static double lake_balance_tablets_threshold = 0.15;
 
+    @ConfField(mutable = true, comment =
+            "Whether the tablet scheduler estimates a large colocate group's replica distribution " +
+                    "from a random sample of its tablets instead of scanning every tablet, which " +
+                    "markedly cuts the per-schedule cost in shared-data clusters. Default: true")
+    public static boolean lake_scheduler_enable_colocate_group_sample = true;
+
+    @ConfField(mutable = true, comment =
+            "A colocate group is sampled only when it holds more than this many tablets. Takes " +
+                    "effect only when lake_scheduler_enable_colocate_group_sample is true. " +
+                    "Default: 256")
+    public static int lake_scheduler_colocate_group_sample_threshold = 256;
+
+    @ConfField(mutable = true, comment =
+            "Number of tablets sampled when a colocate group exceeds " +
+                    "lake_scheduler_colocate_group_sample_threshold. Larger values reduce the " +
+                    "sampling error at a higher scan cost. Default: 128")
+    public static int lake_scheduler_colocate_group_sample_size = 128;
+
+    @ConfField(mutable = true, comment =
+            "Density guard for colocate group sampling: if more than this percentage of the sampled " +
+                    "tablets hold no replica on a candidate compute node, the group is too sparsely " +
+                    "placed for the sample to be representative, so the scheduler discards it and " +
+                    "falls back to a full scan. Lower is more conservative. Default: 40")
+    public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
     /**
      * Default lake compaction txn timeout
      */
