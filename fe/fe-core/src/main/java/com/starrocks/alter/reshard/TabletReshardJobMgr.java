@@ -76,12 +76,22 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     private final TableAlignmentLatch sizeSplitLatch = new TableAlignmentLatch();
 
     // Coalescible reshard candidate for one table, marked by both the publish path and the periodic
-    // TabletStatMgr scan: the largest tablet (split) and the smallest adjacent fresh-pair sum (merge).
-    // Long.MAX_VALUE is the "no merge" identity, so a split-only publish mark and a split+merge periodic
-    // mark compose by (max, min) regardless of arrival order. Self-contained (carries db/table id) so
-    // the drain needs no side key. Transient (not persisted): leader failover falls back to the scan.
-    private record ReshardCandidate(long dbId, long tableId,
-                                    long maxTabletSize, long minAdjacentTabletPairSize) {
+    // TabletStatMgr scan: the largest tablet (split), the smallest adjacent fresh-pair sum (merge) and
+    // the largest tablet living in an index that still has fewer tablets than the warehouse can drive
+    // in parallel (early split; 0 when there is none). Long.MAX_VALUE is the "no merge" identity, so a
+    // split-only publish mark and a split+merge periodic mark compose the three signals by
+    // (max, min, max) regardless of arrival order; the bound composes as last-nonzero, which is
+    // deliberately order-dependent for the reason below. adaptiveBound rides along because the scan has already resolved it
+    // -- resolving a warehouse probes StarMgr -- and it is a plan input the drain would otherwise have
+    // to fetch again. It takes the newer mark's value rather than the larger, so a warehouse scaled
+    // down between two marks is fingerprinted against the bound it now has: taking the max would keep
+    // the stale wider one and re-create the permanent suppression the bound was folded in to prevent.
+    // A producer that resolved nothing passes 0, which never displaces a resolved value.
+    // Self-contained (carries db/table id) so the drain needs no side key. Transient (not persisted):
+    // leader failover falls back to the scan.
+    private record ReshardCandidate(long dbId, long tableId, long maxTabletSize,
+                                    long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize,
+                                    int adaptiveBound) {
     }
 
     // tableId (globally unique) -> coalesced reshard candidate awaiting a drain evaluation.
@@ -90,22 +100,42 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     // Enqueue a table for a reshard evaluation, carrying the signals its caller already computed so the
     // drain triggers without re-walking the table. Both the write-locked publish path (split-only:
     // minAdjacentTabletPairSize = Long.MAX_VALUE) and the periodic scan (split+merge) mark here;
-    // concurrent marks for the same table coalesce by (max, min) before the next drain. Callers need
-    // only supply the signals (and gate on leader/eligibility for their own reasons); the split/merge
-    // actionability decision lives here, so non-actionable signals are dropped and never queued.
-    public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
+    // concurrent marks for the same table coalesce by (max, min, max) before the next drain. Callers
+    // need only supply the signals (and gate on leader/eligibility for their own reasons); the
+    // split/merge actionability decision lives here, so non-actionable signals are dropped and never
+    // queued.
+    public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+            long minAdjacentTabletPairSize) {
+        addReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize, 0L, 0);
+    }
+
+    /**
+     * As above, plus the largest tablet of an index that still holds fewer tablets than the warehouse
+     * can drive in parallel, and the bound that judgement was made against. Only the periodic scan
+     * knows either, because only it walks an index's tablet list and it has already resolved the
+     * warehouse; every other producer passes 0 through the overload above.
+     */
+    public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+            long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
         if (!isLeaderAdmissionOpen()) {
             return;
         }
         // Keep the queue empty in the common (no-reshard) case; the drain re-checks authoritatively.
-        if (!TabletReshardUtils.needSplit(maxTabletSize) && !TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
+        // All three disjuncts are required: dropping the merge one disables automatic merge.
+        if (!TabletReshardUtils.needSplit(maxTabletSize)
+                && maxAdaptiveSplitTabletSize <= 0
+                && !TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
             return;
         }
         reshardCandidates.merge(tableId,
-                new ReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize),
+                new ReshardCandidate(dbId, tableId, maxTabletSize, minAdjacentTabletPairSize,
+                        maxAdaptiveSplitTabletSize, adaptiveBound),
                 (existing, incoming) -> new ReshardCandidate(existing.dbId(), existing.tableId(),
                         Math.max(existing.maxTabletSize(), incoming.maxTabletSize()),
-                        Math.min(existing.minAdjacentTabletPairSize(), incoming.minAdjacentTabletPairSize())));
+                        Math.min(existing.minAdjacentTabletPairSize(), incoming.minAdjacentTabletPairSize()),
+                        Math.max(existing.maxAdaptiveSplitTabletSize(),
+                                incoming.maxAdaptiveSplitTabletSize()),
+                        incoming.adaptiveBound() != 0 ? incoming.adaptiveBound() : existing.adaptiveBound()));
     }
 
     public TabletReshardJobMgr() {
@@ -150,17 +180,27 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         addTabletReshardJob(job);
     }
 
-    // 64-bit fingerprint of the requested split plan: the raw reshard-config knobs plus the max
-    // tablet's computed split count. Folding the raw configs guarantees any admin config change
-    // re-arms the size-split latch even when calcSplitCount is capped at max_split_count; the computed
-    // count also captures a max-tablet size-band crossing. murmur3 (matching ColocateChecker) avoids
-    // the 32-bit Objects.hash collision that could hide a config change.
+    // 64-bit fingerprint of the requested split plan: the raw reshard-config knobs plus the computed
+    // child count of the tablet each rule would act on. Folding the raw configs guarantees any admin
+    // config change re-arms the size-split latch even when calcSplitCount is capped at max_split_count;
+    // the computed count also captures a size-band crossing. The adaptive term is folded raw, because
+    // the target it would be counted against is per-index and cannot be rebuilt from one flat number
+    // here -- so a growing tablet moves this fingerprint by every byte, and suppression only settles a
+    // table whose data has stopped moving. That is the case it exists for. The bound is folded in because the plan
+    // depends on it and the signal alone does not carry it: an eight-way attempt that latched after
+    // producing an identical tablet would, on a warehouse scaled down to two nodes, become a two-way
+    // attempt that might well succeed -- with the same tablet size, and so the same fingerprint,
+    // suppressing it forever. murmur3 (matching ColocateChecker) avoids the 32-bit Objects.hash
+    // collision that could hide a config change.
     @VisibleForTesting
-    static long splitPlanSignature(long maxTabletSize) {
+    static long splitPlanSignature(long maxTabletSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
         return Hashing.murmur3_128().newHasher()
                 .putLong(Config.tablet_reshard_target_size)
                 .putInt(Config.tablet_reshard_max_split_count)
                 .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
+                .putLong(Config.tablet_reshard_min_split_size)
+                .putLong(maxAdaptiveSplitTabletSize)
+                .putInt(adaptiveBound)
                 .hash().asLong();
     }
 
@@ -171,8 +211,9 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
      * and NORMAL table state; the authoritative NORMAL re-check happens in the job factory under its
      * own lock.
      */
-    private void triggerTabletReshard(Database db, OlapTable table,
-                                      long maxTabletSize, long minAdjacentTabletPairSize) {
+    private void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize,
+                                      long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize,
+                                      int adaptiveBound) {
         if (!isLeaderAdmissionOpen()) {
             return;
         }
@@ -184,24 +225,60 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         }
         try {
             long tableId = table.getId();
-            if (TabletReshardUtils.needSplit(maxTabletSize)) {
+            boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
+            boolean adaptiveSignal = maxAdaptiveSplitTabletSize > 0;
+            if (normalSignal || adaptiveSignal) {
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
-                        splitPlanSignature(maxTabletSize));
+                        splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize, adaptiveBound));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
-                    TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause());
-                    sizeSplitLatch.recordFired(tableId, signature, job.getJobId(), decision.nextAbortRetries());
-                    LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
-                            db.getFullName(), table.getName(), maxTabletSize);
+                    try {
+                        TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause());
+                        sizeSplitLatch.recordFired(tableId, signature, job.getJobId(),
+                                decision.nextAbortRetries());
+                        LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}, "
+                                        + "maxAdaptiveSplitTabletSize {}",
+                                db.getFullName(), table.getName(), maxTabletSize,
+                                maxAdaptiveSplitTabletSize);
+                        return;
+                    } catch (StarRocksException e) {
+                        // An empty plan is not a failure for an early-only trigger: fall through so an
+                        // actionable merge signal on the same candidate is still evaluated.
+                        if (normalSignal) {
+                            throw e;
+                        }
+                        if (e instanceof EmptyReshardPlanException) {
+                            // Deterministic: the same layout and configuration will produce the same
+                            // empty plan, so latch it. Without that, such a table re-plans on every
+                            // scan forever, walking every partition and index under the table read
+                            // lock each time. -1 is not a tracked job, which the latch's abort and
+                            // settled probes both resolve to "no job" -- correct, nothing is running.
+                            sizeSplitLatch.recordFired(tableId, signature, -1L, decision.nextAbortRetries());
+                            LOG.info("Adaptive split produced no work for table {}.{}; suppressing until "
+                                            + "its layout or configuration changes: {}",
+                                    db.getFullName(), table.getName(), e.getMessage());
+                        } else {
+                            // Not now, rather than never: an exhausted parallel-tablet budget or a table
+                            // another job owns clears on its own, and latching it here would suppress
+                            // the retry until something unrelated moved the fingerprint.
+                            LOG.info("Adaptive split for table {}.{} could not start; will retry: {}",
+                                    db.getFullName(), table.getName(), e.getMessage());
+                        }
+                    }
                 } else if (sizeSplitLatch.claimSuppressionLog(tableId)) {
-                    LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout "
-                                    + "(tablet not splittable); suppressing further split jobs until its data changes",
+                    LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout; "
+                                    + "suppressing further split jobs until its data changes",
                             db.getFullName(), table.getName());
                 }
-                return;
+                if (normalSignal) {
+                    return;
+                }
+            } else {
+                // No split signal at all, so drop any stale suppression and let future growth re-arm.
+                // Clearing it while an adaptive signal is live would erase the tombstone that stops a
+                // deterministic no-progress split from re-firing on the next unchanged candidate.
+                sizeSplitLatch.forgetTable(tableId);
             }
-            // Below the split threshold: drop any stale suppression so future growth re-arms, and bound the map.
-            sizeSplitLatch.forgetTable(tableId);
             if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
                 createTabletReshardJob(db, table, new MergeTabletClause());
                 LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
@@ -319,6 +396,13 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         return reshardCandidates.size();
     }
 
+    /** The queued candidate's early-split signal for {@code tableId}, or {@code -1} when none is queued. */
+    @VisibleForTesting
+    long peekMaxUnderProvisionedTabletSize(long tableId) {
+        ReshardCandidate candidate = reshardCandidates.get(tableId);
+        return candidate == null ? -1L : candidate.maxAdaptiveSplitTabletSize();
+    }
+
     @VisibleForTesting
     boolean hasSizeSplitLatch(long tableId) {
         return sizeSplitLatch.hasRecordedAttempt(tableId);
@@ -349,8 +433,9 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
                 sizeSplitLatch.forgetTable(tableId);
                 continue;
             }
-            triggerTabletReshard(db, (OlapTable) table,
-                    candidate.maxTabletSize(), candidate.minAdjacentTabletPairSize());
+            triggerTabletReshard(db, (OlapTable) table, candidate.maxTabletSize(),
+                    candidate.minAdjacentTabletPairSize(), candidate.maxAdaptiveSplitTabletSize(),
+                    candidate.adaptiveBound());
         }
     }
 
