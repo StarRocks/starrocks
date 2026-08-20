@@ -637,7 +637,6 @@ public class IcebergTableTest extends TableTestBase {
         specs.put(0, PartitionSpec.unpartitioned());
         specs.put(1, PartitionSpec.unpartitioned());
         Mockito.when(nativeTable.specs()).thenReturn(specs);
-
         // spec().specId() returns the "current" spec id used for comparison.
         PartitionSpec currentSpec = Mockito.mock(PartitionSpec.class);
         Mockito.when(currentSpec.specId()).thenReturn(currentSpecId);
