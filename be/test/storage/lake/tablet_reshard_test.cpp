@@ -978,8 +978,8 @@ TEST_F(LakeTabletReshardTest, test_reshard_failpoint_between_metadata_writes) {
         txn_info.set_gtid(1);
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
-                                               base_version + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, base_version + 1,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
     };
 
     {
@@ -12639,9 +12639,9 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_sstable) {
 
         const std::string legacy_filename = "ghost_rssid.sst";
         const auto legacy_path = _tablet_manager->sst_location(child_a, legacy_filename);
-        const uint64_t legacy_filesize = write_legacy_pk_sstable(legacy_path, {{"k1", /*rssid=*/1, /*rowid=*/0},
-                                                                              {"k2", /*rssid=*/2, /*rowid=*/0},
-                                                                              {"k3", /*rssid=*/3, /*rowid=*/0}});
+        const uint64_t legacy_filesize = write_legacy_pk_sstable(
+                legacy_path,
+                {{"k1", /*rssid=*/1, /*rowid=*/0}, {"k2", /*rssid=*/2, /*rowid=*/0}, {"k3", /*rssid=*/3, /*rowid=*/0}});
 
         auto make_child = [&](int64_t tablet_id, uint32_t live_rowset_id, const std::string& seg_filename) {
             auto meta = std::make_shared<TabletMetadataPB>();
