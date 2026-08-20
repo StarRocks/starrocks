@@ -107,6 +107,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_ENGINE_REQUEST_METRIC(lake_add_index, failed, lake_add_index_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(lake_drop_index, total, lake_drop_index_requests_total);
     REGISTER_STORAGE_METRIC(lake_idg_files_written_total);
+    REGISTER_STORAGE_METRIC(lake_tablet_metadata_get_not_found_total);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, total, base_compaction_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, failed, base_compaction_request_failed);
     REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, total, cumulative_compaction_request_total);
