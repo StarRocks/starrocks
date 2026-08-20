@@ -101,6 +101,20 @@ TEST(QueryRuntimeStateTest, TracksReadStats) {
 
     EXPECT_EQ(10, state.get_read_local_cnt());
     EXPECT_EQ(16, state.get_read_remote_cnt());
+
+    // Deltas drain once consumed, while totals stay intact.
+    EXPECT_EQ(10, state.consume_delta_read_local_cnt());
+    EXPECT_EQ(16, state.consume_delta_read_remote_cnt());
+    EXPECT_EQ(0, state.consume_delta_read_local_cnt());
+    EXPECT_EQ(0, state.consume_delta_read_remote_cnt());
+    EXPECT_EQ(10, state.get_read_local_cnt());
+    EXPECT_EQ(16, state.get_read_remote_cnt());
+
+    state.incr_read_stats(2, 4);
+    EXPECT_EQ(2, state.consume_delta_read_local_cnt());
+    EXPECT_EQ(4, state.consume_delta_read_remote_cnt());
+    EXPECT_EQ(12, state.get_read_local_cnt());
+    EXPECT_EQ(20, state.get_read_remote_cnt());
 }
 
 TEST(QueryRuntimeStateTest, ProfileControlsDefaultToDisabledMergeProfile) {
