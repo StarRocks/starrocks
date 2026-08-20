@@ -4936,6 +4936,7 @@ public class PlanFragmentBuilder {
             ComputeResource computeResource = ConnectContext.get() != null ?
                     ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
             scanNode.computeRangeLocations(computeResource);
+            scanNode.setLimit(scan.getLimit());
             // scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 

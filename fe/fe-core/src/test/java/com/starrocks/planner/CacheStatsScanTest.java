@@ -141,6 +141,28 @@ public class CacheStatsScanTest {
     }
 
     @Test
+    public void testCacheStatsScanWithSqlSelectLimit() throws Exception {
+        long originalLimit = connectContext.getSessionVariable().getSqlSelectLimit();
+        connectContext.getSessionVariable().setSqlSelectLimit(1000);
+        try {
+            String sql = "SELECT * FROM lake_t0 [_CACHE_STATS_]";
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan.contains("CacheStatsScan"), plan);
+            Assertions.assertTrue(plan.contains("limit: 1000"), plan);
+        } finally {
+            connectContext.getSessionVariable().setSqlSelectLimit(originalLimit);
+        }
+    }
+
+    @Test
+    public void testCacheStatsScanWithExplicitLimit() throws Exception {
+        String sql = "SELECT * FROM lake_t0 [_CACHE_STATS_] LIMIT 10";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("CacheStatsScan"), plan);
+        Assertions.assertTrue(plan.contains("limit: 10"), plan);
+    }
+
+    @Test
     public void testCacheStatsScanWithGeneratedColumn() throws Exception {
         String sql = "SELECT * FROM lake_gen_t0 [_CACHE_STATS_]";
         String plan = getFragmentPlan(sql);
