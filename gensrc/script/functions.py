@@ -1586,3 +1586,14 @@ vectorized_functions = [
     # ai functions
     [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
 ]
+
+# AI functions are registered as FE metadata independently from ordinary builtins. They are
+# dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
+# BE builtin descriptor table.
+ai_vectorized_functions = [
+    [200100, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR'], 'AiFunctions::ai_complete', 'SYSTEM'],
+    [200101, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_complete', 'SYSTEM'],
+    [200102, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_complete', 'SYSTEM'],
+    [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
+     'AiFunctions::ai_complete', 'SYSTEM'],
+]

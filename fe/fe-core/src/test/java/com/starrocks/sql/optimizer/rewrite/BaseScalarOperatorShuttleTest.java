@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
@@ -57,7 +58,9 @@ import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.IntegerType.TINYINT;
 import static com.starrocks.type.StringType.STRING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class BaseScalarOperatorShuttleTest {
 
@@ -499,6 +502,30 @@ class BaseScalarOperatorShuttleTest {
         DictionaryGetOperator newDictGet = (DictionaryGetOperator) newSubfield.getChild(0);
         assertEquals(col2, newDictGet.getChild(0));
         assertEquals(100L, newDictGet.getDictionaryId());
+    }
+
+    @Test
+    void testLargeInPredicateChildUpdatePreservesMetadata() {
+        ColumnRefOperator originalColumn = new ColumnRefOperator(1, INT, "original", true);
+        ColumnRefOperator replacementColumn = new ColumnRefOperator(2, INT, "replacement", true);
+        List<Object> rawConstants = Lists.newArrayList(1, 2);
+        LargeInPredicateOperator predicate = new LargeInPredicateOperator(
+                "1, 2", rawConstants, 2, true, INT, List.of(originalColumn));
+        BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                return variable.equals(originalColumn) ? replacementColumn : variable;
+            }
+        };
+
+        LargeInPredicateOperator rewritten = assertInstanceOf(
+                LargeInPredicateOperator.class, predicate.accept(replaceShuttle, null));
+        assertSame(replacementColumn, rewritten.getCompareExpr());
+        assertEquals(predicate.getRawText(), rewritten.getRawText());
+        assertSame(rawConstants, rewritten.getRawConstantList());
+        assertEquals(predicate.getConstantCount(), rewritten.getConstantCount());
+        assertEquals(predicate.isNotIn(), rewritten.isNotIn());
+        assertEquals(predicate.getConstantType(), rewritten.getConstantType());
     }
 
 

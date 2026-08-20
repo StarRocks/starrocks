@@ -90,7 +90,8 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE,
+  AI_PROJECT_NODE
 }
 
 // phases of an execution node
@@ -1545,6 +1546,22 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
+struct TAIEndpointConfig {
+  1: optional string endpoint
+  2: optional string model
+  3: optional string provider
+}
+
+struct TAIModelConfiguration {
+  1: optional TAIEndpointConfig chat
+}
+
+struct TAIProjectNode {
+  1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
+  2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+  3: optional map<string, TAIModelConfiguration> ai_model_configs
+}
+
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -1631,6 +1648,7 @@ struct TPlanNode {
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+  87: optional TAIProjectNode ai_project_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
