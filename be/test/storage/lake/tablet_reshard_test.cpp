@@ -270,6 +270,19 @@ protected:
         return rowset;
     }
 
+    PersistentIndexSstablePB* add_shared_rssid_sstable(TabletMetadataPB* metadata, const std::string& filename,
+                                                       uint32_t rssid, int64_t shared_version, uint32_t max_rowid,
+                                                       uint64_t filesize = 512) {
+        auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
+        sstable->set_filename(filename);
+        sstable->set_filesize(filesize);
+        sstable->set_shared(true);
+        sstable->set_shared_rssid(rssid);
+        sstable->set_shared_version(shared_version);
+        sstable->set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | max_rowid);
+        return sstable;
+    }
+
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                     const std::string& file_name, const std::string& content) {
         FileMetaPB file_meta;
@@ -6140,6 +6153,71 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_shared_rssid_projectio
     // max_rss_rowid high part should match projected shared_rssid
     uint64_t expected_max = (static_cast<uint64_t>(out_sst.shared_rssid()) << 32) | 99;
     EXPECT_EQ(expected_max, out_sst.max_rss_rowid());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_effective_owner) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t compacted_child = next_id();
+    const int64_t live_child = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(compacted_child);
+    prepare_tablet_dirs(live_child);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id, uint32_t rowset_id, const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(rowset_id + 1);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+
+        auto* sstable = add_shared_rssid_sstable(metadata.get(), "effective_owner.sst", /*rssid=*/1,
+                                                 /*shared_version=*/1, /*max_rowid=*/0);
+        sstable->set_rssid_offset(1);
+        sstable->set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+        return metadata;
+    };
+
+    // The first occurrence no longer owns effective rssid 2. The second does.
+    auto compacted = make_child(compacted_child, /*rowset_id=*/3, "compacted_segment.dat");
+    auto live = make_child(live_child, /*rowset_id=*/2, "live_segment.dat");
+    ASSERT_OK(put_tablet_metadata(compacted));
+    ASSERT_OK(put_tablet_metadata(live));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(compacted_child);
+    merging_info.add_old_tablet_ids(live_child);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& output = merged->sstable_meta().sstables(0);
+    EXPECT_EQ(4, output.shared_rssid());
+    EXPECT_EQ(0, output.rssid_offset());
+    EXPECT_EQ(static_cast<uint64_t>(4) << 32, output.max_rss_rowid());
+    ASSERT_EQ(2, merged->rowsets_size());
+    EXPECT_EQ("live_segment.dat", merged->rowsets(1).segment_metas(0).filename());
+    EXPECT_EQ(output.shared_rssid(), merged->rowsets(1).id());
 }
 
 // --- union_range unit tests ---
