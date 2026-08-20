@@ -189,10 +189,10 @@ let
       md5 = "09a8328574dab22a7df848eae6dbbf53";
       sha256 = "1apyxjd1ixy4g8xkr61p0ny8jiz8vyv1j0k4nxqkxpqrf4g2vf1d";
     };
-    "krb5-1.19.4.tar.gz" = {
-      url = "https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz";
-      md5 = "ef76083e58f8c49066180642d7c2814a";
-      sha256 = "1sslkcbzg4dc98957lhzchwkfnyd2shpkrip75ms5q2db8f9ixa1";
+    "krb5-1.21.3.tar.gz" = {
+      url = "https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz";
+      md5 = "beb34d1dfc72ba0571ce72bed03e06eb";
+      sha256 = "0ddd81431pfsqv89w31jxa2pw8gp1wavs6mjh2whiyv7mmgcv95p";
     };
     "leveldb-1.20.tar.gz" = {
       url = "https://github.com/google/leveldb/archive/v1.20.tar.gz";
@@ -254,10 +254,10 @@ let
       md5 = "86c4052adeb8447900bf33b4e2ddd1f9";
       sha256 = "13ia4a1zh9r22pnwsdi55wax9kj9y8b9b02lis0rfw269j1g0596";
     };
-    "openssl-OpenSSL_1_1_1m.tar.gz" = {
-      url = "https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz";
-      md5 = "710c2368d28f1a25ab92e25b5b9b11ec";
-      sha256 = "0q5kvar91asbv7k203sx3rafqirf4rhqih3anz829a7hgjnj9bin";
+    "openssl-3.5.7.tar.gz" = {
+      url = "https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz";
+      md5 = "36608cd5445f708d0c2200aea9682c35";
+      sha256 = "1s4qmjp33ai43ahlm3iw59aq86fj5hp7kxbcygwq194waa5d5h58";
     };
     "opentelemetry-cpp-v1.9.1.tar.gz" = {
       url = "https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.9.1.tar.gz";
@@ -462,7 +462,7 @@ let
     "x86_64-linux" = [
       "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
-      "openssl-OpenSSL_1_1_1m.tar.gz"
+      "openssl-3.5.7.tar.gz"
       "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
@@ -481,7 +481,7 @@ let
       "leveldb-1.20.tar.gz"
       "brpc-1.9.0.tar.gz"
       "rocksdb-6.22.1.zip"
-      "krb5-1.19.4.tar.gz"
+      "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
@@ -533,7 +533,7 @@ let
     "aarch64-linux" = [
       "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
-      "openssl-OpenSSL_1_1_1m.tar.gz"
+      "openssl-3.5.7.tar.gz"
       "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
@@ -552,7 +552,7 @@ let
       "leveldb-1.20.tar.gz"
       "brpc-1.9.0.tar.gz"
       "rocksdb-6.22.1.zip"
-      "krb5-1.19.4.tar.gz"
+      "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
@@ -602,7 +602,7 @@ let
     "aarch64-darwin" = [
       "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
-      "openssl-OpenSSL_1_1_1m.tar.gz"
+      "openssl-3.5.7.tar.gz"
       "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
@@ -621,7 +621,7 @@ let
       "leveldb-1.20.tar.gz"
       "brpc-1.9.0.tar.gz"
       "rocksdb-6.22.1.zip"
-      "krb5-1.19.4.tar.gz"
+      "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
