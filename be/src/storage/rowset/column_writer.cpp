@@ -779,8 +779,7 @@ Status ScalarColumnWriter::finish_current_page() {
             const double min_gain = _opts.zstd_compression_dict_min_gain;
             const bool worth_the_margin =
                     (min_gain < 0.0 || saved > 0) &&
-                    static_cast<double>(saved) >=
-                            static_cast<double>(_zstd_compression_dict_trial_without) * min_gain;
+                    static_cast<double>(saved) >= static_cast<double>(_zstd_compression_dict_trial_without) * min_gain;
             if (!worth_the_margin) {
                 _compression_cdict.reset();
                 _zstd_compression_dict_sample.clear();
