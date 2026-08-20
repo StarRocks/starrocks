@@ -109,6 +109,31 @@ TEST_F(ReplicationUtilsTest, EncryptedSourceConverterDecryptsBeforeTargetEncrypt
     ASSIGN_OR_ABORT(auto target_file, target_fs->new_random_access_file(target_read_opts, target_path));
     ASSIGN_OR_ABORT(auto copied_plaintext, target_file->read_all());
     EXPECT_EQ(plaintext, copied_plaintext);
+
+    ASSIGN_OR_ABORT(auto default_target_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+    EXPECT_NE(source_pair.info.key, default_target_pair.info.key);
+    const std::string default_target_path = _test_dir + "/converter-default-source-options-target";
+    ASSIGN_OR_ABORT(auto default_target_fs, FileSystemFactory::CreateSharedFromString(default_target_path));
+    WritableFileOptions default_target_write_opts{.sync_on_close = true,
+                                                  .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                                  .encryption_info = default_target_pair.info};
+    FileConverterCreatorFunc default_converter =
+            [default_target_path, default_target_fs, default_target_write_opts](
+                    const std::string& file_name,
+                    uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        ASSIGN_OR_RETURN(auto default_target_file,
+                         default_target_fs->new_writable_file(default_target_write_opts, default_target_path));
+        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(default_target_file));
+    };
+
+    ASSERT_OK(ReplicationUtils::download_lake_file_with_converter(source_path, "converter-source", plaintext.size(),
+                                                                  source_fs, default_converter));
+
+    RandomAccessFileOptions default_target_read_opts{.encryption_info = default_target_pair.info};
+    ASSIGN_OR_ABORT(auto default_target_file,
+                    default_target_fs->new_random_access_file(default_target_read_opts, default_target_path));
+    ASSIGN_OR_ABORT(auto copied_without_source_opts, default_target_file->read_all());
+    EXPECT_NE(plaintext, copied_without_source_opts);
 }
 
 TEST_F(ReplicationUtilsTest, EncryptedSourceSequentialCopyDecryptsBeforeTargetEncryption) {
@@ -140,6 +165,21 @@ TEST_F(ReplicationUtilsTest, EncryptedSourceSequentialCopyDecryptsBeforeTargetEn
     ASSIGN_OR_ABORT(auto target_file, target_fs->new_random_access_file(target_read_opts, target_path));
     ASSIGN_OR_ABORT(auto copied_plaintext, target_file->read_all());
     EXPECT_EQ(plaintext, copied_plaintext);
+
+    ASSIGN_OR_ABORT(auto default_target_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+    EXPECT_NE(source_pair.info.key, default_target_pair.info.key);
+    const std::string default_target_path = _test_dir + "/sequential-default-source-options-target";
+    ASSIGN_OR_ABORT(auto default_target_fs, FileSystemFactory::CreateSharedFromString(default_target_path));
+    WritableFileOptions default_target_write_opts{.sync_on_close = true,
+                                                  .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                                  .encryption_info = default_target_pair.info};
+    ASSERT_OK(fs::copy_file(source_path, source_fs, default_target_path, default_target_fs, default_target_write_opts));
+
+    RandomAccessFileOptions default_target_read_opts{.encryption_info = default_target_pair.info};
+    ASSIGN_OR_ABORT(auto default_target_file,
+                    default_target_fs->new_random_access_file(default_target_read_opts, default_target_path));
+    ASSIGN_OR_ABORT(auto copied_without_source_opts, default_target_file->read_all());
+    EXPECT_NE(plaintext, copied_without_source_opts);
 }
 
 } // namespace starrocks
