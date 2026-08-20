@@ -24,6 +24,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/failpoint/fail_point.h"
 #include "base/hash/crc32c.h"
 #include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
@@ -425,6 +426,7 @@ int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata,
     return static_cast<int64_t>(base_metadata.next_rowset_id()) - min_carried_id;
 }
 
+DEFINE_FAIL_POINT(tablet_merge_before_delete_predicate_range);
 Status add_rowset(TabletMergeContext& ctx, const RowsetMetadataPB& rowset, TabletMetadataPB* new_metadata) {
     auto* new_rowset = new_metadata->add_rowsets();
     new_rowset->CopyFrom(rowset);
@@ -440,6 +442,14 @@ Status add_rowset(TabletMergeContext& ctx, const RowsetMetadataPB& rowset, Table
         del.set_origin_rowset_id(new_origin);
     }
     // range update
+    if (rowset.has_delete_predicate()) {
+        // update_rowset_range below is what confines this delete predicate to its SOURCE tablet's
+        // range, so that merging tablet A into (A, B) cannot let A's DELETE remove B's rows. This is
+        // the window where the predicate is present but not yet range-confined. Guarded on the
+        // predicate so the hook expresses that window rather than firing on the first rowset of every
+        // merge.
+        FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_before_delete_predicate_range);
+    }
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(new_rowset, ctx.metadata()->range()));
     // schema mapping
     const auto& rowset_to_schema = ctx.metadata()->rowset_to_schema();
@@ -3070,6 +3080,7 @@ void reconcile_vector_index_built_version(const std::vector<TabletMergeContext>&
 
 } // namespace
 
+DEFINE_FAIL_POINT(tablet_merge_after_rssid_reassign);
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,
@@ -3131,6 +3142,12 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                          tablet_reshard_helper::union_range(merged_range, merge_contexts[i].metadata()->range()));
     }
     new_tablet_metadata->mutable_range()->CopyFrom(merged_range);
+
+    // Phase 1 is the rowset/segment-id reassignment stage: every ctx now carries the rssid_offset that
+    // lifts its id space above the earlier ctxs'. Stopping here, before any projection consumes those
+    // offsets, is the window for asserting that an interrupted merge leaves no id conflict and loses
+    // no rowset once it is retried.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_rssid_reassign);
 
     // Phase 2: Merge rowsets (version-driven k-way merge with dedup).
     // canonical_contribs collects each canonical rowset's contributing

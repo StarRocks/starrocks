@@ -12346,4 +12346,118 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
 }
 
 // =============================================================================
+// Reachability nets for the merge-path failpoints. Same shape as the reshard-path ones: ARMED first
+// (so the failure returns before any metadata is written and the disarmed run below still takes the
+// full path rather than the metacache retry fast path), then disarmed on fresh tablet ids.
+// =============================================================================
+
+// Merge phase 1 -- the rowset-id reassignment stage. Fires on every merge.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_rssid_reassign) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t tablet_a = next_id();
+        const int64_t tablet_b = next_id();
+        const int64_t new_tablet = next_id();
+
+        prepare_tablet_dirs(tablet_a);
+        prepare_tablet_dirs(tablet_b);
+        prepare_tablet_dirs(new_tablet);
+
+        TabletMetadataPB meta_a;
+        meta_a.set_id(tablet_a);
+        meta_a.set_version(base_version);
+        meta_a.set_next_rowset_id(3);
+        add_rowset_with_predicate(&meta_a, 1, 1, false);
+        add_rowset_with_predicate(&meta_a, 2, 2, false);
+        CHECK_OK(put_tablet_metadata(meta_a));
+
+        TabletMetadataPB meta_b;
+        meta_b.set_id(tablet_b);
+        meta_b.set_version(base_version);
+        meta_b.set_next_rowset_id(2);
+        add_rowset_with_predicate(&meta_b, 1, 1, false);
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.set_new_tablet_id(new_tablet);
+        merging_tablet.add_old_tablet_ids(tablet_a);
+        merging_tablet.add_old_tablet_ids(tablet_b);
+
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_rssid_reassign", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_rssid_reassign", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached at the merge rssid-reassignment stage";
+
+    EXPECT_OK(run_merge());
+}
+
+// The window in which a delete predicate has been copied into the merged metadata but is not yet
+// confined to its source tablet's range. The hook is guarded on has_delete_predicate(), so it fires
+// only for a merge whose source actually carries one -- that guard is what makes it express this
+// window rather than "the first rowset of any merge". Both sources here get a predicate; neither
+// tablet is a primary-key tablet, which is the case that uses delete predicates in production.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_before_delete_predicate_range) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t tablet_a = next_id();
+        const int64_t tablet_b = next_id();
+        const int64_t new_tablet = next_id();
+
+        prepare_tablet_dirs(tablet_a);
+        prepare_tablet_dirs(tablet_b);
+        prepare_tablet_dirs(new_tablet);
+
+        TabletMetadataPB meta_a;
+        meta_a.set_id(tablet_a);
+        meta_a.set_version(base_version);
+        meta_a.set_next_rowset_id(3);
+        add_rowset_with_predicate(&meta_a, 1, 1, false); // data
+        add_rowset_with_predicate(&meta_a, 2, 2, true);  // delete predicate
+        CHECK_OK(put_tablet_metadata(meta_a));
+
+        TabletMetadataPB meta_b;
+        meta_b.set_id(tablet_b);
+        meta_b.set_version(base_version);
+        meta_b.set_next_rowset_id(3);
+        add_rowset_with_predicate(&meta_b, 1, 1, false); // data
+        add_rowset_with_predicate(&meta_b, 2, 2, true);  // delete predicate
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.set_new_tablet_id(new_tablet);
+        merging_tablet.add_old_tablet_ids(tablet_a);
+        merging_tablet.add_old_tablet_ids(tablet_b);
+
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_before_delete_predicate_range", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_before_delete_predicate_range", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached before the delete-predicate range attachment";
+
+    EXPECT_OK(run_merge());
+}
+
 } // namespace starrocks
