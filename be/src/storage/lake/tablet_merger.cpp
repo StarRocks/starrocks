@@ -2605,10 +2605,17 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
     // only widens this initial value as non-tombstone entries are
     // written.
     const uint32_t source_max_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
-    ASSIGN_OR_RETURN(uint32_t projected_max_high, ctx.map_rssid(source_max_high));
-    uint64_t max_encoded_rss_rowid =
-            encode_rss_rowid(projected_max_high, extract_rss_rowid_low(src_pb.max_rss_rowid()));
-    bool max_encoded_initialized = true;
+    uint64_t max_encoded_rss_rowid = 0;
+    bool max_encoded_initialized = false;
+    if (auto projected_max_high = ctx.map_rssid(source_max_high); projected_max_high.ok()) {
+        max_encoded_rss_rowid =
+                encode_rss_rowid(projected_max_high.value(), extract_rss_rowid_low(src_pb.max_rss_rowid()));
+        max_encoded_initialized = true;
+    } else if (static_cast<int64_t>(source_max_high) + ctx.rssid_offset() >= 0) {
+        // Only a projection below the carried source-rowset floor describes a
+        // stale watermark. Positive overflow remains a fatal metadata error.
+        return projected_max_high.status();
+    }
 
     uint64_t kept_entry_count = 0;
     uint64_t dropped_entry_count = 0;
@@ -2680,7 +2687,8 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(finalize_legacy_rebuild_output(output_writer, max_encoded_rss_rowid, out_pb));
+    RETURN_IF_ERROR(
+            finalize_legacy_rebuild_output(output_writer, max_encoded_initialized ? max_encoded_rss_rowid : 0, out_pb));
     cleanup_partial_output.cancel();
     g_tablet_merge_non_shared_sstable_rebuild_total << 1;
     return Status::OK();

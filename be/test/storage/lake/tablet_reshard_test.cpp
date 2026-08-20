@@ -9782,6 +9782,70 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_rejects_sha
     EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
 }
 
+// A stale non-shared SST watermark below the source tablet's carried rowset floor
+// must not abort a merge with a negative context offset. This reproduces the
+// #11939 arithmetic exactly: source high 47 plus ctx offset -106 is -59.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_drops_below_floor_watermark) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t cold_tablet = next_id();
+    const int64_t hot_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(cold_tablet);
+    prepare_tablet_dirs(hot_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto cold = std::make_shared<TabletMetadataPB>();
+    cold->set_id(cold_tablet);
+    cold->set_version(base_version);
+    cold->set_next_rowset_id(1);
+    set_primary_key_schema(cold.get(), 1001);
+
+    auto hot = std::make_shared<TabletMetadataPB>();
+    hot->set_id(hot_tablet);
+    hot->set_version(base_version);
+    hot->set_next_rowset_id(108);
+    set_primary_key_schema(hot.get(), 1001);
+    auto* live_rowset = hot->add_rowsets();
+    live_rowset->set_id(107);
+    live_rowset->set_version(1);
+    live_rowset->set_num_rows(1);
+    live_rowset->set_data_size(10);
+    auto* segment = live_rowset->add_segment_metas();
+    segment->set_filename("hot_live.dat");
+    segment->set_size(10);
+
+    const std::string sst_filename = "below_floor_watermark.sst";
+    const uint64_t sst_filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(hot_tablet, sst_filename),
+                                                          {{"dead-key", /*rssid=*/47, /*rowid=*/0}});
+    auto* sst = hot->mutable_sstable_meta()->add_sstables();
+    sst->set_filename(sst_filename);
+    sst->set_filesize(sst_filesize);
+    sst->set_shared(false);
+    sst->set_max_rss_rowid(static_cast<uint64_t>(47) << 32);
+
+    ASSERT_OK(put_tablet_metadata(cold));
+    ASSERT_OK(put_tablet_metadata(hot));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(cold_tablet);
+    merging_info.add_old_tablet_ids(hot_tablet);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(101);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    const auto& merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(1, merged->rowsets(0).id()) << "107 + (-106) must project to rssid 1";
+    EXPECT_EQ(0, merged->sstable_meta().sstables_size()) << "the SST contains only a below-floor dead entry";
+}
 
 // TODO(round-3 follow-up): test_tablet_merging_legacy_sstable_rebuild_filters_outside_tablet_range
 // This test would set up real INT-typed PK columns + tablet ranges with
