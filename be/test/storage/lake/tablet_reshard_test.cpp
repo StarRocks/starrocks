@@ -878,6 +878,139 @@ TEST_F(LakeTabletReshardTest, test_identical_tablet_flush_failure_propagates) {
     EXPECT_FALSE(res.ok());
 }
 
+// Reachability net for the reshard-path failpoints. Each asserts BOTH directions: armed -> the
+// reshard fails, disarmed -> it succeeds. The armed direction is what catches a typo'd name or a
+// DEFINE_FAIL_POINT that never registers, since set_failpoint_mode() silently no-ops on an unknown
+// name and the reshard would then succeed. The disarmed direction catches a site that fails
+// unconditionally.
+//
+// Each direction gets its OWN tablet ids, and the ARMED run goes first. A successful
+// publish_resharding_tablet writes the new-version metadata through put_tablet_metadata, which also
+// caches it, and handle_identical_tablet opens with a metacache lookup of exactly that key and
+// returns early on a hit -- so reusing one tablet id and running the success first would make the
+// armed run take the retry fast path and never reach the hook at all.
+//
+// Note what this does NOT prove: SetUp arms skip_lake_pk_index_flush, so flush_pk_memtable returns
+// immediately and writes nothing. The hook sits after that call so it is still reached, but the
+// orphan-file window it exists for (flushed sstables that no metadata references yet) needs a real
+// PK index and belongs to the cluster test.
+TEST_F(LakeTabletReshardTest, test_identical_reshard_failpoint_after_pk_flush) {
+    auto run_identical_reshard = [&]() {
+        starrocks::TabletMetadata metadata;
+        auto tablet_id = next_id();
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+
+        auto* rowset_meta_pb = metadata.add_rowsets();
+        rowset_meta_pb->set_id(2);
+        {
+            auto* sm = rowset_meta_pb->add_segment_metas();
+            sm->set_filename("test_0.dat");
+            sm->set_size(512);
+            sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+            sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+            sm->set_num_rows(3);
+        }
+        rowset_meta_pb->set_data_size(512);
+        rowset_meta_pb->set_num_rows(3);
+        CHECK_OK(put_tablet_metadata(metadata));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& identical_tablet = *resharding_tablet.mutable_identical_tablet_info();
+        identical_tablet.set_old_tablet_id(tablet_id);
+        identical_tablet.set_new_tablet_id(next_id());
+
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, metadata.version(),
+                                               metadata.version() + 1, txn_info, false, tablet_metadatas,
+                                               tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_reshard_after_identical_pk_flush", FailPointTriggerModeType::ENABLE);
+    auto armed = run_identical_reshard();
+    set_failpoint_mode("tablet_reshard_after_identical_pk_flush", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached on the identical-reshard path";
+
+    EXPECT_OK(run_identical_reshard());
+}
+
+// The hook sits at the END of publish_resharding_tablet's per-tablet metadata-write loop, so when the
+// armed run returns it has already persisted exactly ONE of the two tablets' new-version metadata.
+// tablet_metadatas is an unordered_map, so which one is unspecified -- assert "exactly one", never a
+// particular id.
+TEST_F(LakeTabletReshardTest, test_reshard_failpoint_between_metadata_writes) {
+    auto build_identical_reshard = [&](int64_t* old_tablet_id, int64_t* new_tablet_id,
+                                       ReshardingTabletInfoPB* resharding_tablet, int64_t* base_version) {
+        starrocks::TabletMetadata metadata;
+        *old_tablet_id = next_id();
+        metadata.set_id(*old_tablet_id);
+        metadata.set_version(2);
+
+        auto* rowset_meta_pb = metadata.add_rowsets();
+        rowset_meta_pb->set_id(2);
+        {
+            auto* sm = rowset_meta_pb->add_segment_metas();
+            sm->set_filename("test_0.dat");
+            sm->set_size(512);
+            sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+            sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+            sm->set_num_rows(3);
+        }
+        rowset_meta_pb->set_data_size(512);
+        rowset_meta_pb->set_num_rows(3);
+        CHECK_OK(put_tablet_metadata(metadata));
+
+        *new_tablet_id = next_id();
+        auto& identical_tablet = *resharding_tablet->mutable_identical_tablet_info();
+        identical_tablet.set_old_tablet_id(*old_tablet_id);
+        identical_tablet.set_new_tablet_id(*new_tablet_id);
+        *base_version = metadata.version();
+    };
+
+    auto run = [&](const ReshardingTabletInfoPB& resharding_tablet, int64_t base_version) {
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
+                                               base_version + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    {
+        int64_t old_tablet_id = 0;
+        int64_t new_tablet_id = 0;
+        int64_t base_version = 0;
+        ReshardingTabletInfoPB resharding_tablet;
+        build_identical_reshard(&old_tablet_id, &new_tablet_id, &resharding_tablet, &base_version);
+
+        set_failpoint_mode("tablet_reshard_between_metadata_writes", FailPointTriggerModeType::ENABLE);
+        auto armed = run(resharding_tablet, base_version);
+        set_failpoint_mode("tablet_reshard_between_metadata_writes", FailPointTriggerModeType::DISABLE);
+        EXPECT_FALSE(armed.ok()) << "hook not reached in the metadata-write loop";
+
+        const int64_t new_version = base_version + 1;
+        const bool old_written = _tablet_manager->get_tablet_metadata(old_tablet_id, new_version, false).ok();
+        const bool new_written = _tablet_manager->get_tablet_metadata(new_tablet_id, new_version, false).ok();
+        EXPECT_NE(old_written, new_written)
+                << "expected exactly one tablet to be switched, got old=" << old_written << " new=" << new_written;
+    }
+
+    {
+        int64_t old_tablet_id = 0;
+        int64_t new_tablet_id = 0;
+        int64_t base_version = 0;
+        ReshardingTabletInfoPB resharding_tablet;
+        build_identical_reshard(&old_tablet_id, &new_tablet_id, &resharding_tablet, &base_version);
+        EXPECT_OK(run(resharding_tablet, base_version));
+    }
+}
+
 // Phase-1 per-segment shared (end-to-end). After splitting a rowset whose two
 // segments occupy disjoint key ranges, each child keeps only its overlapping
 // segment, marks it private (shared=false), drops the sibling's segment,
