@@ -148,10 +148,20 @@ reshard.
 | `tablet_merge_after_write_sstable` | a rebuilt persistent-index sstable is written, metadata not yet updated | primary-key table with a cloud-native persistent index **and** a legacy-form shared sstable or a remap that disagrees with the natural offset — in practice a multi-generation split/merge history with compaction on only some of the old tablets |
 
 The three `after_write_*` hooks are the orphan-file windows: the file is durable and unreferenced.
-They differ in what an armed `ENABLE` leaves behind. The sstable hook's callers delete the partial
-output, so nothing is left. The `.cols` hook's caller records the rebuilt path only *after* the
-rebuild returns successfully, so an injected error leaves the file for ordinary orphan-file vacuum to
-reclaim — do not expect an immediate zero from a garbage-file check there.
+They differ in what an armed `ENABLE` leaves behind, and the difference matters if you are counting
+orphan files.
+
+- **`tablet_merge_after_write_sstable` cleans up.** Both callers arm a cleanup guard *before* the
+  call and cancel it only after the output metadata is built, so an injected error deletes the
+  rebuilt sstable. A garbage-file check straight afterwards should see nothing.
+- **`tablet_merge_after_write_dcg_cols` does not.** Its caller records the rebuilt path only *after*
+  the rebuild returns successfully, so an injected error returns before the caller learns the
+  filename and the `.cols` file is left for ordinary orphan-file vacuum.
+- **`tablet_merge_after_write_delvec` does not either.** Nothing arms a cleanup guard over the merged
+  delvec file, so an injected error leaves it for vacuum as well.
+
+So for two of the three, do not expect an immediate zero from a garbage-file check — wait for vacuum,
+or scope the check to the sstable hook.
 
 ### Frontend rules (in `conf/failpoint.btm`)
 

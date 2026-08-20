@@ -1943,8 +1943,10 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                                            &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset));
     }
 
-    // The merged delvec file is written; new_metadata does not point at it yet. Orphan-file window,
-    // same shape as the .cols and sstable hooks.
+    // The merged delvec file is written; new_metadata does not point at it until Phase 5 below.
+    // Orphan-file window, and like the .cols hook -- not like the sstable one -- nothing cleans this
+    // file up: neither this function nor merge_tablet arms a cleanup guard over it, so an error
+    // injected here leaves the file for ordinary orphan-file vacuum.
     FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_write_delvec);
 
     // Build base_offset_by_file_name. Empty for synthesized-only route since
