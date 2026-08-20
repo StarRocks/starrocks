@@ -5053,10 +5053,18 @@ public class Config extends ConfigBase {
      * The minimum size of a tablet produced by pre-split. Bounds the compute-node alignment
      * during pre-split so that splitting a small load across many compute nodes does not
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
+     *
+     * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
+     * fewer tablets than the bound aims at one tablet per slot in it, but never at less than this --
+     * so raising this to tune pre-split also delays that split. The bound is the warehouse's
+     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
+     * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
+     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
+     * the size rule it does not produce children below the target it aimed at.
      */
-    @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
-            + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
-            + "Should be no larger than tablet_reshard_target_size.")
+    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
+            + "bound on the target an under-provisioned index splits at. Should be no larger than "
+            + "tablet_reshard_target_size; setting it at or above that disables the adaptive split.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "

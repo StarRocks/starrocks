@@ -605,7 +605,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. Should be no larger than `tablet_reshard_target_size`.
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest target size automatic splitting will aim at: while a materialized index holds fewer tablets than its warehouse has compute nodes (capped by `tablet_reshard_max_split_count`), splitting aims at the size that would give it one tablet per such slot, floored at this value, so a tablet splits once it is worth at least two of that target. Raising this value therefore also delays that splitting, and setting it at or above `tablet_reshard_target_size` turns it off, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
