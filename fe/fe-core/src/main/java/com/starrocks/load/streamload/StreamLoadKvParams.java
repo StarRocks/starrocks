@@ -25,6 +25,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -226,7 +227,15 @@ public class StreamLoadKvParams implements StreamLoadParams {
             return Optional.empty();
         }
         TPartialUpdateMode mode = null;
-        switch (partialUpdateMode) {
+        // Case-INSENSITIVE, matching the other stream-load headers (format, compression, trim_space are
+        // all parsed with boost::iequals in be/src/http/action/stream_load.cpp) and normalized the SAME
+        // way in isFlexiblePartialUpdate() below and in the BE header parsing. Both sides must normalize
+        // identically: if one accepted "Flexible" as flexible while the other read it as non-flexible, the
+        // load would silently apply a heterogeneous update as a homogeneous union and NULL-clobber the
+        // columns a row did not declare. Locale.ROOT (not the default locale) so "AUTO" folds to "auto"
+        // even under a Turkish locale, where 'I' lowercases to a dotless 'i'. A genuinely unknown value
+        // still throws rather than silently degrading to the default (row) full-row upsert.
+        switch (partialUpdateMode.toLowerCase(Locale.ROOT)) {
             case "column":
                 mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
                 break;
@@ -236,8 +245,47 @@ public class StreamLoadKvParams implements StreamLoadParams {
             case "row":
                 mode = TPartialUpdateMode.ROW_MODE;
                 break;
+            case "flexible":
+                // SDCG flexible partial update: per-row heterogeneous column sets. The
+                // underlying storage mode is the sparse/column mode; flexibility is
+                // surfaced separately via isFlexiblePartialUpdate().
+                mode = TPartialUpdateMode.COLUMN_UPDATE_MODE;
+                break;
+            case "flexible_row":
+                // FLEXIBLE-on-ROW partial update: per-row heterogeneous column sets that
+                // are applied via ROW mode (full-row rewrite) instead of COLUMN/SDCG. The
+                // flexible bit (isFlexiblePartialUpdate) is decoupled from the storage MODE:
+                // it stays true so FE still injects the hidden "__cset__" slot and BE folds
+                // the per-row column-set dictionary, while the storage mode is ROW_MODE so
+                // the apply takes the masked full-row rewrite path.
+                mode = TPartialUpdateMode.ROW_MODE;
+                break;
+            default:
+                throw new RuntimeException("Unknown partial_update_mode: " + partialUpdateMode
+                        + " (expected one of: row, column, auto, flexible, flexible_row)");
         }
         return Optional.ofNullable(mode);
+    }
+
+    @Override
+    public Optional<Boolean> isFlexiblePartialUpdate() {
+        String rawMode = params.get(HTTP_PARTIAL_UPDATE_MODE);
+        // Normalize EXACTLY as getPartialUpdateMode() does. These two must agree on every input: a value
+        // that parses as "flexible" there but reads as non-flexible here would apply a heterogeneous load
+        // as a homogeneous union and NULL-clobber the columns a row did not declare.
+        String partialUpdateMode = rawMode == null ? null : rawMode.toLowerCase(Locale.ROOT);
+        // Both "flexible" (COLUMN/SDCG apply) and "flexible_row" (ROW-mode masked rewrite)
+        // are flexible loads: each row updates a different column subset. The flexible BIT
+        // is intentionally decoupled from the storage MODE chosen in getPartialUpdateMode().
+        boolean flexible = "flexible".equals(partialUpdateMode) || "flexible_row".equals(partialUpdateMode);
+        // "auto" is also flexible-aware so BE can derive per-row column sets (homogeneous == a single set)
+        // and cost-select the write mode. Gate on partial_update: "auto" is ALSO the default mode for full
+        // upserts, and a full write must NOT get the hidden "__cset__" column. Gate on JSON format too:
+        // flexible partial update is only supported for json loads (FE rejects it for CSV), so CSV auto+
+        // partial must fall through to the homogeneous path where BE still cost-picks dense/sparse.
+        boolean jsonFormat = getFileFormatType().map(f -> f == TFileFormatType.FORMAT_JSON).orElse(false);
+        boolean autoFlexible = "auto".equals(partialUpdateMode) && getPartialUpdate().orElse(false) && jsonFormat;
+        return Optional.of(flexible || autoFlexible);
     }
 
     @Override

@@ -27,6 +27,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergRowDeltaSink;
@@ -199,7 +200,19 @@ public class UpdatePlanner {
                 olapTable.enableReplicatedStorage(), false,
                 olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
         if (updateStmt.usePartialUpdate()) {
-            ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+            // UPDATE lands on the same column-mode apply path as a partial-update load, so it needs the
+            // same GIN guard the load planners apply: a column-mode overlay cannot serve a correct
+            // inverted index, and a stale sidecar index over the base segment silently prunes the rows
+            // the update rewrote. See Load.forceRowModeForInvertedIndexedColumn.
+            List<Column> updateColumns = Lists.newArrayList();
+            for (Column column : targetTable.getFullSchema()) {
+                if (!column.isKey() && !column.isGeneratedColumn()
+                        && updateStmt.isAssignmentColumn(column.getName())) {
+                    updateColumns.add(column);
+                }
+            }
+            ((OlapTableSink) dataSink).setPartialUpdateMode(Load.forceRowModeForInvertedIndexedColumn(
+                    targetTable, updateColumns, TPartialUpdateMode.COLUMN_UPDATE_MODE));
         }
         if (session.getTxnId() != 0) {
             ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
