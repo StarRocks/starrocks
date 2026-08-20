@@ -40,6 +40,7 @@
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
@@ -3309,13 +3310,9 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
 
     if (!dest->empty()) {
         ASSIGN_OR_RETURN(const uint64_t safe_rebuild_point, compute_safe_merged_rebuild_point(merge_contexts));
-        const uint64_t persisted_rebuild_point = dest->rbegin()->max_rss_rowid();
-        if (safe_rebuild_point > persisted_rebuild_point) {
-            return Status::Corruption(
-                    fmt::format("tablet merge safe rebuild point {} exceeds persisted point {} for tablet {}",
-                                safe_rebuild_point, persisted_rebuild_point, new_metadata->id()));
-        }
-        if (safe_rebuild_point < persisted_rebuild_point) {
+        const auto rebuild_counts = LakePersistentIndex::need_rebuild_counts(
+                *new_metadata, new_metadata->sstable_meta(), safe_rebuild_point);
+        if (rebuild_counts.first > 0) {
             ASSIGN_OR_RETURN(auto materialized_metadata,
                              update_manager->flush_pk_memtable(std::make_shared<TabletMetadataPB>(*new_metadata),
                                                                new_metadata->version(), safe_rebuild_point));
