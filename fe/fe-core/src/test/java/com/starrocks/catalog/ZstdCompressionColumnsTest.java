@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -112,7 +113,7 @@ public class ZstdCompressionColumnsTest {
      * compression-dict change forced {@code needAlter} in SchemaChangeHandler#finalAnalyze: without
      * that, the resolved schema map stays empty and no job is produced.
      */
-    private static void waitForSchemaChangeJob(OlapTable table) throws InterruptedException {
+    private static AlterJobV2 waitForSchemaChangeJob(OlapTable table) throws InterruptedException {
         AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().values().stream()
                 .filter(j -> j.getTableId() == table.getId())
                 .max(Comparator.comparingLong(AlterJobV2::getJobId))
@@ -124,6 +125,27 @@ public class ZstdCompressionColumnsTest {
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        return job;
+    }
+
+    private static int schemaChangeJobCount(OlapTable table) {
+        return (int) GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().values().stream()
+                .filter(j -> j.getTableId() == table.getId())
+                .count();
+    }
+
+    /** Reads a private field, so a job's internals can be asserted without widening its API. */
+    private static Object fieldOf(Object object, String name) throws Exception {
+        for (Class<?> clazz = object.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
+            try {
+                Field field = clazz.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(object);
+            } catch (NoSuchFieldException ignored) {
+                // keep walking up
+            }
+        }
+        throw new NoSuchFieldException(name + " on " + object.getClass());
     }
 
     // ------------------------------------------------------------------
@@ -473,6 +495,128 @@ public class ZstdCompressionColumnsTest {
         assertCreateTableFails("t_page_big", "v1:4m", "must be between");
         assertCreateTableFails("t_page_junk", "v1:abc", "Invalid page size");
         assertCreateTableFails("t_page_empty", "v1:", "missing value");
+    }
+
+    // ------------------------------------------------------------------
+    // RENAME COLUMN: a ColumnId keeps the ORIGINAL name, so anything that re-derives
+    // an id from the column's current name loses track of the renamed column
+    // ------------------------------------------------------------------
+
+    @Test
+    public void testRenameColumnKeepsPerColumnPageSize() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_rename",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:1m\""));
+        OlapTable table = getTable("t_cdict_rename");
+
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_rename RENAME COLUMN v1 TO w1");
+
+        // The set and the page-size map are both keyed by the id, and the id still resolves to the
+        // renamed column, so the property survives -- under its NEW name and with its page size.
+        Assertions.assertEquals(Sets.newHashSet("w1"), table.getZstdCompressionColumnNames());
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 1024 * 1024),
+                table.getZstdCompressionPageSizes());
+        String ddl = showCreateTable("t_cdict_rename");
+        Assertions.assertTrue(
+                ddl.contains("\"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"w1:1048576\""),
+                ddl);
+
+        // What BE is told is unchanged by the rename: the tablet schema names columns by id.
+        TTabletSchema schema = SchemaInfo.newBuilder()
+                .setId(table.getBaseIndexMetaId())
+                .setKeysType(table.getKeysType())
+                .setShortKeyColumnCount(
+                        table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getShortKeyColumnCount())
+                .setSchemaHash(0)
+                .setStorageType(table.getStorageType())
+                .addColumns(table.getBaseSchema())
+                .setZstdCompressionColumns(table.getZstdCompressionColumnIds(),
+                        table.getZstdCompressionPageSizes())
+                .build()
+                .toTabletSchema();
+        boolean seen = false;
+        for (TColumn tColumn : schema.getColumns()) {
+            if ("v1".equalsIgnoreCase(tColumn.getColumn_name())) {
+                seen = true;
+                Assertions.assertTrue(tColumn.isUse_zstd_compression());
+                Assertions.assertEquals(1024 * 1024, tColumn.getZstd_compression_page_size());
+            }
+        }
+        Assertions.assertTrue(seen, "the renamed column is missing from the tablet schema");
+    }
+
+    @Test
+    public void testRestatingPropertyAfterRenameIsNotAChange() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_rename_restate",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:1m\""));
+        OlapTable table = getTable("t_cdict_rename_restate");
+        starRocksAssert.alterTable(
+                "ALTER TABLE " + DB_NAME + ".t_cdict_rename_restate RENAME COLUMN v1 TO w1");
+        int jobsBefore = schemaChangeJobCount(table);
+
+        // Restating exactly what the table already has must be a no-op. The table keys page sizes
+        // by id ("v1") and the property names the column as it is called now ("w1"), so comparing
+        // the two raw reports a change and rewrites every tablet for nothing.
+        starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_rename_restate SET (\""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"w1:1m\")");
+
+        Assertions.assertEquals(jobsBefore, schemaChangeJobCount(table));
+        Assertions.assertEquals(Sets.newHashSet("w1"), table.getZstdCompressionColumnNames());
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 1024 * 1024),
+                table.getZstdCompressionPageSizes());
+
+        // A real change on the renamed column is still detected.
+        starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_rename_restate SET (\""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"w1:256k\")");
+        waitForSchemaChangeJob(table);
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 256 * 1024),
+                table.getZstdCompressionPageSizes());
+    }
+
+    // ------------------------------------------------------------------
+    // The job has to carry the setting: it is what the shadow tablets are created from,
+    // and what copyForPersist() hands to the followers and to the next leader
+    // ------------------------------------------------------------------
+
+    @Test
+    public void testCopyForPersistCarriesZstdCompressionColumns() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_persist",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\""));
+        OlapTable table = getTable("t_cdict_persist");
+
+        starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_persist SET (\""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:1m, v2\")");
+        AlterJobV2 job = waitForSchemaChangeJob(table);
+
+        // A field missing from the copy is a field the edit log never carries, so a follower or a
+        // restarted leader finishes this job without applying the property at all.
+        AlterJobV2 persisted = job.copyForPersist();
+        Assertions.assertEquals(Boolean.TRUE, fieldOf(persisted, "hasZstdCompressionChange"));
+        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v1"), ColumnId.create("v2")),
+                fieldOf(persisted, "zstdCompressionColumns"));
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 1024 * 1024),
+                fieldOf(persisted, "zstdCompressionPageSizes"));
+    }
+
+    @Test
+    public void testModifySortKeyJobCarriesZstdCompressionColumns() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_sortkey",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:256k\""));
+        OlapTable table = getTable("t_cdict_sortkey");
+
+        // ORDER BY rewrites every tablet through a shadow index built from the sets handed to the
+        // job, not from the table, so the existing setting has to travel with it -- otherwise the
+        // rewritten data comes out with the table codec while the property stays on the table.
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_sortkey ORDER BY (k1, v3)");
+        AlterJobV2 job = waitForSchemaChangeJob(table);
+
+        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v1")), fieldOf(job, "zstdCompressionColumns"));
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 256 * 1024),
+                fieldOf(job, "zstdCompressionPageSizes"));
+        // Not a change to the property itself, so the job must not write it back at finish.
+        Assertions.assertEquals(Boolean.FALSE, fieldOf(job, "hasZstdCompressionChange"));
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 256 * 1024),
+                table.getZstdCompressionPageSizes());
     }
 
     private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {

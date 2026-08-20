@@ -241,6 +241,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.hasBfChange = job.hasBfChange;
         this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
         this.bfFpp = job.bfFpp;
+        // This constructor produces what copyForPersist() writes to the edit log, so a field
+        // missing here is a field the followers and the next leader never see: the job would
+        // finish there without applying the property, and its shadow tablets would be created
+        // without it.
+        this.hasZstdCompressionChange = job.hasZstdCompressionChange;
+        this.zstdCompressionColumns =
+                job.zstdCompressionColumns == null ? null : Sets.newHashSet(job.zstdCompressionColumns);
+        this.zstdCompressionPageSizes =
+                job.zstdCompressionPageSizes == null ? null : Maps.newHashMap(job.zstdCompressionPageSizes);
         this.indexChange = job.indexChange;
         this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
         this.startTime = job.startTime;
@@ -427,8 +436,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            // Light-weight's on-demand shadow schema reads the table's index/BF set, written back only at job finish.
-            lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange;
+            // Light-weight's on-demand shadow schema reads the table's index/BF/ZSTD-column set,
+            // written back only at job finish. Light-weight creation skips CreateReplicaTask, which
+            // is the only carrier of this job's new sets, so the CN builds the shadow tablet's
+            // version 1 metadata from the table as it stands -- still the OLD sets. The conversion
+            // would then rewrite every segment with the old setting while the job reports success
+            // and FE goes on to show the new one.
+            lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange
+                    && !hasZstdCompressionChange;
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {
@@ -1081,6 +1096,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.bfFpp = other.bfFpp;
             this.hasZstdCompressionChange = other.hasZstdCompressionChange;
             this.zstdCompressionColumns = other.zstdCompressionColumns;
+            this.zstdCompressionPageSizes = other.zstdCompressionPageSizes;
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;

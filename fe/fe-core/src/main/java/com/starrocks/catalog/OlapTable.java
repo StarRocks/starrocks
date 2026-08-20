@@ -3147,16 +3147,24 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
         }
 
-        // columns using a compression dictionary
-        Set<String> zstdCompressionColumnNames = getZstdCompressionColumnNames();
-        if (zstdCompressionColumnNames != null && !zstdCompressionColumnNames.isEmpty()) {
-            List<String> specs = Lists.newArrayListWithCapacity(zstdCompressionColumnNames.size());
-            for (String columnName : zstdCompressionColumnNames) {
-                Integer pageSize = zstdCompressionPageSizes == null
-                        ? null : zstdCompressionPageSizes.get(ColumnId.create(columnName));
+        // columns using a compression dictionary. Both halves are keyed by ColumnId, which is the
+        // column's original name, so the page size has to be looked up by the same id the name is
+        // resolved from -- re-deriving an id from the current name loses it after RENAME COLUMN.
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            List<String> specs = Lists.newArrayListWithCapacity(zstdCompressionColumns.size());
+            for (ColumnId columnId : zstdCompressionColumns) {
+                Column column = idToColumn.get(columnId);
+                if (column == null) {
+                    continue;
+                }
+                Integer pageSize = zstdCompressionPageSizes == null ? null : zstdCompressionPageSizes.get(columnId);
+                String columnName = column.getName();
                 specs.add(pageSize == null || pageSize <= 0 ? columnName : columnName + ":" + pageSize);
             }
-            properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, Joiner.on(", ").join(specs));
+            if (!specs.isEmpty()) {
+                Collections.sort(specs, String.CASE_INSENSITIVE_ORDER);
+                properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, Joiner.on(", ").join(specs));
+            }
         }
 
         // colocate group

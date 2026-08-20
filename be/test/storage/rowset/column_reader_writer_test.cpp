@@ -1510,6 +1510,69 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pa
     EXPECT_EQ(without_dict, with_dict);
 }
 
+// zstd_compression_dict_min_gain = 0 means "take any gain", not "take anything".
+// The margin alone cannot say that: the saving it is compared against is clamped at
+// zero, so at a margin of zero it is satisfied even by a dictionary that made the
+// pages bigger. On data with nothing to share, the dictionary has to be dropped at
+// this setting too.
+TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_at_zero_min_gain) {
+    const double saved_min_gain = config::zstd_compression_dict_min_gain;
+    config::zstd_compression_dict_min_gain = 0.0;
+    DeferOp restore([&]() { config::zstd_compression_dict_min_gain = saved_min_gain; });
+
+    const int N = 4000;
+    // Same shape as zstd_compression_dict_dropped_when_it_does_not_pay: pseudo-random
+    // bytes, distinct per row, nothing for a dictionary to carry across rows.
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    uint64_t r = 88172645463325252ULL;
+    for (int i = 0; i < N; i++) {
+        std::string v;
+        v.reserve(512);
+        for (int j = 0; j < 512; j++) {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            v.push_back(static_cast<char>('a' + (r % 26)));
+        }
+        strs[i] = std::move(v);
+        slices.emplace_back(strs[i]);
+    }
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    const std::string fname = strings::Substitute("$0/zstd_dict_zero_gain.data", TEST_DIR);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        meta.set_column_id(0);
+        meta.set_unique_id(0);
+        meta.set_type(TYPE_VARCHAR);
+        meta.set_length(1024 * 1024);
+        meta.set_encoding(PLAIN_ENCODING);
+        meta.set_compression(starrocks::ZSTD);
+        meta.set_compression_level(-1);
+        meta.set_is_nullable(true);
+        writer_opts.use_zstd_compression = true;
+        TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        ASSERT_OK(writer->finish());
+        ASSERT_OK(writer->write_data());
+        ASSERT_OK(writer->write_ordinal_index());
+        ASSERT_OK(wfile->close());
+    }
+
+    ASSERT_EQ(PLAIN_ENCODING, meta.encoding());
+    EXPECT_FALSE(meta.has_zstd_compression_dict_page());
+}
+
 // The other half of the same rule: on data the dictionary does help, it is kept
 // and the column really does get smaller.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_kept_when_it_pays) {

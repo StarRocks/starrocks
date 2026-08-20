@@ -447,7 +447,7 @@ description: "Alphabetical a - c"
 ## `zstd_compression_dict_build_fallback`
 
 - 单位：计数
-- 描述：符合压缩字典条件的列未能获得字典、回退为普通 ZSTD 压缩的累计次数。原因可能是采样门限拒绝了该数据页，也可能是字典构建或训练失败。按“列 + Segment”计数。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
+- 描述：符合压缩字典条件的列最终没有拿到字典、按普通 ZSTD 写出的累计次数。原因可能是试压页带字典后不够小（见 `zstd_compression_dict_min_gain`），也可能是字典构建失败。按“列 + Segment”计数。数据页太小无法用于采样不计入本项——写入端会改用后面的页再试。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
 
 ## `zstd_compression_dict_bytes`
 

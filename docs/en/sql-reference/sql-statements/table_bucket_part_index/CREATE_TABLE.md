@@ -662,8 +662,8 @@ Accepted sizes range from 4 KB to 1 MB. The ceiling is where a point lookup stil
 costs a bounded amount: a 1 MB page reads a single row in roughly a tenth of a
 millisecond, and past that the bill grows faster than the ratio does.
 
-Two things decide whether the internal dictionary is actually built for a column,
-and neither is under the property's control:
+Whether the internal dictionary is actually built for a column is decided by the
+data, not by the property:
 
 - The column has to end up plain-encoded. StarRocks picks the encoding from the
   data, and a column with few distinct values is dictionary-encoded instead, which
@@ -671,18 +671,29 @@ and neither is under the property's control:
   on such a column has no effect.
 - A column holding 256 rows or fewer is dictionary-encoded outright, so very small
   tables never get an internal dictionary either.
+- The column has to fill more than nine data pages in one segment. The first page
+  is what the dictionary is sampled from and the next eight measure whether it
+  pays; all nine are written without it, and the dictionary is used from the tenth
+  page on. A column that ends before that never uses one, which is the right answer
+  for it: the dictionary costs a page of its own and cannot pay for itself over a
+  handful of pages.
+- Those eight pages have to come out clearly smaller with the dictionary than
+  without it -- by default at least a tenth smaller, see
+  `zstd_compression_dict_min_gain`. Otherwise the dictionary is dropped and the
+  rest of the column is written without it.
 
-Neither case is an error and neither changes what the column is compressed with:
-the nominated columns are still ZSTD. `zstd_compression_dict_pages_written` and
-`zstd_compression_dict_bytes` show whether dictionaries are actually being
-produced.
+None of this is an error and none of it changes what the column is compressed
+with: the nominated columns are still ZSTD. `zstd_compression_dict_pages_written`
+counts the columns that ended up with a dictionary and
+`zstd_compression_dict_build_fallback` the ones that did not.
 
 The property can also be changed later with
-`ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. The new setting
-governs data written from then on; segments that already exist are not rewritten
-and keep the encoding they were written with. Both encodings remain readable,
-because each segment records how it was written. Existing data is re-encoded only
-when it is rewritten for some other reason, such as compaction.
+`ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. This is a schema
+change: it rewrites every tablet, so the existing data is re-encoded to the new
+setting as well, and it costs what any other schema change on a table that size
+costs. Follow it with `SHOW ALTER TABLE COLUMN`. The table stays readable
+throughout, and so do segments written either way, because each segment records
+how it was written.
 
 ### Colocate Join
 

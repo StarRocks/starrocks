@@ -175,9 +175,29 @@ public class SchemaChangeHandler extends AlterHandler {
     // all shadow indexes should have this prefix in name
     public static final String SHADOW_NAME_PREFIX = "__starrocks_shadow_";
 
+    // The table keys page sizes by ColumnId, which is the column's ORIGINAL name and stops
+    // following it through RENAME COLUMN, while the property always names columns as they are
+    // called now. Re-key to the current names so the two sides are comparable at all; comparing
+    // them raw reports a change for a restatement that changed nothing.
+    private static Map<String, Integer> currentNamePageSizes(OlapTable olapTable) {
+        Map<String, Integer> normalized = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Integer> pageSizes = olapTable.getZstdCompressionPageSizes();
+        if (pageSizes == null) {
+            return normalized;
+        }
+        for (Map.Entry<ColumnId, Integer> entry : pageSizes.entrySet()) {
+            if (entry.getValue() == null || entry.getValue() <= 0) {
+                continue;
+            }
+            Column column = olapTable.getColumn(entry.getKey());
+            normalized.put(column == null ? entry.getKey().toString() : column.getName(), entry.getValue());
+        }
+        return normalized;
+    }
+
     // Page sizes keyed by lower-cased column name, with "no size" and "the default"
     // both erased, so two spellings of the same request compare equal.
-    private static Map<String, Integer> normalizedPageSizes(Map<?, Integer> pageSizes) {
+    private static Map<String, Integer> normalizedPageSizes(Map<String, Integer> pageSizes) {
         Map<String, Integer> normalized = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         if (pageSizes != null) {
             for (Map.Entry<?, Integer> entry : pageSizes.entrySet()) {
@@ -1845,7 +1865,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         boolean hasZstdCompressionChange = false;
         Set<String> oriZstdCompressionColumns = olapTable.getZstdCompressionColumnNames();
-        Map<String, Integer> oriZstdCompressionPageSizes = normalizedPageSizes(olapTable.getZstdCompressionPageSizes());
+        Map<String, Integer> oriZstdCompressionPageSizes = currentNamePageSizes(olapTable);
         Map<String, Integer> newZstdCompressionPageSizes = normalizedPageSizes(zstdCompressionPageSizeNames);
         if (zstdCompressionColumns != null) {
             // the property is specified in this ALTER statement. Comparing the column
@@ -2303,6 +2323,13 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
                 .withSortKeyUniqueIds(sortKeyUniqueIds)
+                // This job rewrites every tablet, and the shadow tablets are created from the sets
+                // handed to the builder rather than from the table, so the existing per-column ZSTD
+                // setting has to travel with it or the rewritten data comes out with the table codec
+                // while the property stays on the table. Not marked as changed: the property itself
+                // is not being modified, so the job must not write it back at finish.
+                .withZstdCompressionColumns(olapTable.getZstdCompressionColumnIds())
+                .withZstdCompressionPageSizes(olapTable.getZstdCompressionPageSizes())
                 .withAlterIndexInfo(false, olapTable.getCopiedIndexes());
 
         if (RunMode.isSharedDataMode()) {

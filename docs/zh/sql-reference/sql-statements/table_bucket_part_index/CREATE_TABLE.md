@@ -674,17 +674,22 @@ PROPERTIES (
 没有写大小的列保持 BE 默认值（`data_page_size`）。可接受的取值范围是 4 KB 到 1 MB。上限取在这里，是因为到 1 MB 为止点查代价仍然有界
 （一次点查读一行约零点几毫秒），再往上压缩率的增长追不上点查代价的增长。
 
-有两件事决定内部字典是否真的会为某一列构建，而它们都不受该属性控制：
+内部字典是否真的会为某一列构建，由数据决定，而不受该属性控制：
 
 - 该列最终必须是 plain 编码。StarRocks 会根据数据自行选择编码，取值种类很少的列会被选为
   字典编码——那本身就已经把它压得比这里的任何手段都好。在这类列上设置该属性不会有任何效果。
 - 行数不超过 256 的列会直接被判为字典编码，因此很小的表也拿不到内部字典。
+- 该列在一个 Segment 内必须写满 9 个以上的数据页。第一页用来采样字典，接下来 8 页用来实测
+  它是否划算；这 9 页都不带字典写出，字典从第 10 页起才真正启用。写不到这个长度的列不会用上
+  字典——这对它也是对的：字典自身要占一个页，摊在寥寥几页上根本回不了本。
+- 那 8 个页带字典必须明显小于不带字典——默认至少小十分之一，见
+  `zstd_compression_dict_min_gain`。否则字典被丢弃，该列余下部分不带字典写出。
 
-这两种情况都不是错误，也不改变该列用什么压缩：被指定的列仍然是 ZSTD。
-`zstd_compression_dict_pages_written` 和 `zstd_compression_dict_bytes` 可以看出字典是否
-真的在产生。
+以上都不是错误，也不改变该列用什么压缩：被指定的列仍然是 ZSTD。
+`zstd_compression_dict_pages_written` 数的是最终拿到字典的列，
+`zstd_compression_dict_build_fallback` 数的是没拿到的。
 
-该属性也可以在建表后通过 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` 修改。新设置只对此后写入的数据生效，已存在的 Segment 不会被重写，仍保留写入时的编码。两种编码都能正常读取，因为每个 Segment 都记录了自己是怎么写的。存量数据只有在因其他原因（例如 Compaction）被重写时才会改用新的编码。
+该属性也可以在建表后通过 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` 修改。这是一次 Schema Change：它会重写每一个 Tablet，因此存量数据也会按新设置重新编码，代价与同等规模表上的其他 Schema Change 相当，可用 `SHOW ALTER TABLE COLUMN` 跟踪进度。整个过程中表都可读，两种方式写出的 Segment 也都可读，因为每个 Segment 都记录了自己是怎么写的。
 
 ### Colocate Join
 

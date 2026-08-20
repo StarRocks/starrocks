@@ -757,14 +757,6 @@ CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
 // already captures most of the repetition. Lower it to about 0.05 to take those
 // too. Values below 0 are treated as 0.
 CONF_mDouble(zstd_compression_dict_min_gain, "0.10");
-// keep dictionary-loaded ZSTD decompression contexts warm in a small
-// thread-local set instead of borrowing from the shared pool (whose reset clears
-// the sticky refDDict, forcing the dictionary to be re-loaded into a cold context
-// once per page). On a paired full-column scan the dictionary read overhead went
-// from +20-25% down to +5.6-8.6%, i.e. roughly 55-60% of it removed. Exposed as a
-// switch so the optimization can be turned off in
-// production without a rollback, and so its effect can be A/B'd on one cluster.
-CONF_mBool(enable_zstd_compression_dict_ctx_cache, "true");
 
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.

@@ -761,17 +761,26 @@ Status ScalarColumnWriter::finish_current_page() {
 
         if (++_zstd_compression_dict_trial_pages >= kZstdDictTrialPages) {
             _zstd_compression_dict_proven = true;
-            const uint64_t saved = _zstd_compression_dict_trial_without > _zstd_compression_dict_trial_with
-                                           ? _zstd_compression_dict_trial_without - _zstd_compression_dict_trial_with
-                                           : 0;
-            // One condition: the saving has to be large, not merely real. The other
-            // half of the rule is structural rather than arithmetic -- a column too
+            // Signed on purpose: a dictionary that made the pages BIGGER has to be able to fail
+            // this test, and a saving floored at zero cannot express that -- it would pass any
+            // margin of zero or less.
+            const int64_t saved = static_cast<int64_t>(_zstd_compression_dict_trial_without) -
+                                  static_cast<int64_t>(_zstd_compression_dict_trial_with);
+            // One condition: the saving has to be large, not merely real, and it has to exist at
+            // all -- a dictionary that broke even is pure cost, a page of its own plus a load per
+            // segment on every read. A negative margin is the one exception: it is not reachable
+            // from config (the value is floored at zero there) and means "keep the dictionary
+            // whatever the measurement says", which is how the roundtrip test gets the dictionary
+            // path to run on data that would rightly decline one.
+            // The other half of the rule is structural rather than arithmetic -- a column too
             // short to finish the trial never gets a dictionary at all, which is the
             // right answer for it, because the dictionary page is roughly a page in
             // size and cannot pay for itself over a handful.
+            const double min_gain = _opts.zstd_compression_dict_min_gain;
             const bool worth_the_margin =
+                    (min_gain < 0.0 || saved > 0) &&
                     static_cast<double>(saved) >=
-                    static_cast<double>(_zstd_compression_dict_trial_without) * _opts.zstd_compression_dict_min_gain;
+                            static_cast<double>(_zstd_compression_dict_trial_without) * min_gain;
             if (!worth_the_margin) {
                 _compression_cdict.reset();
                 _zstd_compression_dict_sample.clear();

@@ -271,6 +271,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.hasBfChange = job.hasBfChange;
         this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
         this.bfFpp = job.bfFpp;
+        // See the note in LakeTableSchemaChangeJob's copy constructor: this is what
+        // copyForPersist() serializes, and onFinished() reads these three fields.
+        this.hasZstdCompressionChange = job.hasZstdCompressionChange;
+        this.zstdCompressionColumns =
+                job.zstdCompressionColumns == null ? null : Sets.newHashSet(job.zstdCompressionColumns);
+        this.zstdCompressionPageSizes =
+                job.zstdCompressionPageSizes == null ? null : Maps.newHashMap(job.zstdCompressionPageSizes);
         this.indexChange = job.indexChange;
         this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
         this.watershedTxnId = job.watershedTxnId;
