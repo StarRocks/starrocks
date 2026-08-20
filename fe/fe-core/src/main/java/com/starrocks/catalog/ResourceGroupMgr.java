@@ -114,6 +114,21 @@ public class ResourceGroupMgr implements Writable {
     // holders of an older snapshot always see a consistent pre-alter view.
     private volatile ResourceGroupSnapshot snapshot = ResourceGroupSnapshot.EMPTY;
 
+    // Package-private: used by unit tests to construct and inject snapshot
+    // state without reflection.  Avoids fragile string-based class lookups
+    // flagged by SonarCloud S2589.
+    static Object newSnapshotForTest(
+            Map<String, ResourceGroup> byName,
+            Map<Long, ResourceGroup> byId,
+            Map<Long, ResourceGroupClassifier> byClassifier,
+            ResourceGroup shortQueryResourceGroup) {
+        return new ResourceGroupSnapshot(
+                byName, byId, byClassifier, shortQueryResourceGroup);
+    }
+
+    void setSnapshotForTest(Object snap) {
+        this.snapshot = (ResourceGroupSnapshot) snap;
+    }
 
     private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();

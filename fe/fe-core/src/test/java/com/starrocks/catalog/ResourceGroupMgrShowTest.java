@@ -17,8 +17,6 @@ package com.starrocks.catalog;
 import com.starrocks.thrift.TWorkGroupType;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -66,7 +64,6 @@ public class ResourceGroupMgrShowTest {
      * <p>Both {@code byName} and {@code byId} are populated so that the full
      * snapshot is consistent; {@code byClassifier} is left empty.
      */
-    @SuppressWarnings("unchecked")
     private void injectMap(ResourceGroupMgr mgr, Object... namesAndGroups) throws Exception {
         Map<String, ResourceGroup> byName = new LinkedHashMap<>();
         Map<Long, ResourceGroup>   byId   = new HashMap<>();
@@ -75,28 +72,9 @@ public class ResourceGroupMgrShowTest {
             byName.put((String) namesAndGroups[i], rg);
             byId.put(rg.getId(), rg);
         }
-
-        // Locate the private static ResourceGroupSnapshot inner class.
-        Class<?> snapClass = null;
-        for (Class<?> c : ResourceGroupMgr.class.getDeclaredClasses()) {
-            if ("ResourceGroupSnapshot".equals(c.getSimpleName())) {
-                snapClass = c;
-                break;
-            }
-        }
-        if (snapClass == null) {
-            throw new IllegalStateException("ResourceGroupSnapshot inner class not found");
-        }
-
-        // Construct: ResourceGroupSnapshot(byName, byId, emptyMap, null).
-        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class, ResourceGroup.class);
-        ctor.setAccessible(true);
-        Object snap = ctor.newInstance(byName, byId, Collections.emptyMap(), null);
-
-        // Inject into mgr.snapshot.
-        Field f = ResourceGroupMgr.class.getDeclaredField("snapshot");
-        f.setAccessible(true);
-        f.set(mgr, snap);
+        Object snap = ResourceGroupMgr.newSnapshotForTest(
+                byName, byId, Collections.emptyMap(), null);
+        mgr.setSnapshotForTest(snap);
     }
 
     // -------------------------------------------------------------------------
