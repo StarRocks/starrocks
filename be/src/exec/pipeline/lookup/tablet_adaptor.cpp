@@ -85,10 +85,10 @@ Status init_global_dicts_for_scan_node(RuntimeState* state, ObjectPool* pool, co
             // caller is asking to read it dictionary-encoded. Skipping quietly leaves the reader to
             // return the raw string into an int column, which surfaces far away as a decode failure
             // against a "key" that is really string bytes, or as an out-of-bounds access.
-            return Status::InternalError(fmt::format(
-                    "no global dict for slot {} ({}), which the plan reads as a dictionary code; "
-                    "query_global_dicts carries {} entries",
-                    slot->id(), slot->col_name(), global_dict_map.size()));
+            return Status::InternalError(
+                    fmt::format("no global dict for slot {} ({}), which the plan reads as a dictionary code; "
+                                "query_global_dicts carries {} entries",
+                                slot->id(), slot->col_name(), global_dict_map.size()));
         }
     }
     *global_dicts = dicts;
