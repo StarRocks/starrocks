@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
@@ -33,6 +34,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
@@ -61,10 +63,109 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
+    private int adaptiveBound = -1;
+
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
         this.db = db;
         this.table = table;
         this.splitTabletClause = splitTabletClause;
+    }
+
+    /**
+     * Tablet count the early rule may not carry an index past, resolved lazily and at most once.
+     *
+     * <p>Resolved here rather than while planning because it goes through the warehouse availability
+     * probe, which reaches StarMgr, and planning holds a table read lock that publish waits on. A
+     * failure to resolve propagates: planning against a fallback bound would produce an empty plan
+     * that the caller could latch as deterministic, suppressing the table until something unrelated
+     * moved its fingerprint.
+     * Resolved on demand rather than in the constructor because the statements that name their own
+     * tablets, or their own target size, never consult it and must not pay for a round trip they do
+     * not use -- the merge side keeps the same property.
+     */
+    private int adaptiveBound() {
+        if (adaptiveBound < 0) {
+            // A statement that names its own tablets, or its own target size, asked for exactly what it
+            // asked for: leave the target alone and resolve nothing. A zero bound is what tells
+            // adaptiveTargetSize to do that.
+            boolean explicitTarget = splitTabletClause.getProperties() != null
+                    && splitTabletClause.getProperties()
+                            .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+            boolean explicitTablets = splitTabletClause.getTabletList() != null;
+            adaptiveBound = explicitTarget || explicitTablets
+                    ? 0 : TabletReshardUtils.adaptiveSplitBoundForTable(table.getId());
+        }
+        return adaptiveBound;
+    }
+
+    /**
+     * Split plan for one index: {@code oldTabletId -> child count}.
+     *
+     * <p>The size rule decides first and is untouched. Where it declines, the adaptive target gets a
+     * turn: while the index holds fewer tablets than the bound, that target is the size that would
+     * give it one tablet per slot in the bound -- the warehouse's compute-node count capped by
+     * {@code tablet_reshard_max_split_count}, so lowering that configuration lowers this width too.
+     * The count is then capped by the slots the index has left, so it lands at or below the
+     * auto-merge floor however its data is spread. Merge acts strictly above that floor, so an index
+     * this widens is never one merge would immediately narrow.
+     *
+     * <p>The size rule wins outright where it applies. That ordering is load bearing: a BE split is
+     * all-or-nothing -- when the key distribution cannot produce exactly the requested number of
+     * boundaries it publishes an identical tablet instead -- so asking for more children than today's
+     * rule would can turn a split that succeeds into one that does nothing.
+     */
+    @VisibleForTesting
+    static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long steadyTargetSize, int bound) {
+        List<Tablet> tablets = index.getTablets();
+        // One read per tablet, for the whole plan. A lake tablet's size is volatile and the stat
+        // collector writes it without the table lock, so reading it again per pass would let the size
+        // rule decline a tablet on one value while the adaptive rule acts on a larger one -- and the
+        // size rule's verdict is the one that has to stand, since BE split is all-or-nothing. Summing
+        // the snapshot rather than calling MaterializedIndex#getDataSize keeps the index total on the
+        // same values, and costs one walk instead of two.
+        long[] dataSizes = new long[tablets.size()];
+        long indexDataSize = 0;
+        for (int i = 0; i < dataSizes.length; ++i) {
+            dataSizes[i] = tablets.get(i).getDataSize(true);
+            indexDataSize += dataSizes[i];
+        }
+        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(indexDataSize, steadyTargetSize, bound);
+        Map<Long, Integer> splitCounts = new LinkedHashMap<>();
+
+        // The size rule decides first and is never overridden: asking for more children than it
+        // computed can turn a working split into a silent no-op.
+        int planned = tablets.size();
+        for (int i = 0; i < dataSizes.length; ++i) {
+            int k = TabletReshardUtils.calcSplitCount(dataSizes[i], steadyTargetSize);
+            if (k > 1) {
+                splitCounts.put(tablets.get(i).getId(), k);
+                planned += k - 1;
+            }
+        }
+        if (adaptiveTarget >= steadyTargetSize) {
+            return splitCounts;
+        }
+
+        // What the adaptive rule may still spend, counted against the width the size rule has ALREADY
+        // committed to -- not against today's tablet count. Charging only the adaptive splits lets a
+        // mixed plan pass the bound: four tablets of 0/0/10/15 GiB against a bound of five give the
+        // size rule one extra tablet and the adaptive rule one more, landing on six, which is back
+        // inside auto-merge's range. Flooring does not catch it either; it bounds the children this
+        // rule asks for, not the ones the other rule already claimed.
+        int headroom = Math.max(0, bound - planned);
+        for (int i = 0; i < dataSizes.length && headroom > 0; ++i) {
+            long tabletId = tablets.get(i).getId();
+            if (splitCounts.containsKey(tabletId)) {
+                continue;
+            }
+            int k = Math.min(TabletReshardUtils.adaptiveSplitCount(dataSizes[i], adaptiveTarget),
+                    headroom + 1);
+            if (k > 1) {
+                splitCounts.put(tabletId, k);
+                headroom -= k - 1;
+            }
+        }
+        return splitCounts;
     }
 
     /*
@@ -75,9 +176,13 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     public TabletReshardJob createTabletReshardJob() throws StarRocksException {
         validateTableLevel(db, table);
 
+        // Resolved before the locked planning section: the resolver goes through the warehouse
+        // availability probe, which reaches StarMgr, and that section holds a table read lock that
+        // publish waits on. The merge factory resolves its own floor the same way.
+        adaptiveBound();
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
         if (reshardingPhysicalPartitions.isEmpty()) {
-            throw new StarRocksException("No tablets need to split in table "
+            throw new EmptyReshardPlanException("No tablets need to split in table "
                     + db.getFullName() + '.' + table.getName());
         }
 
@@ -421,30 +526,27 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     }
                 }
 
+                long clauseTargetSize = splitTabletClause.getTabletReshardTargetSize();
+                // When not specifying which tablets to split, tablet_reshard_target_size must be
+                // greater than 0. A property of the clause, so checked once for the whole statement.
+                Preconditions.checkState(clauseTargetSize > 0,
+                        "Invalid tablet_reshard_target_size: " + clauseTargetSize);
+
+                // Plan and materialize per index. This is the only place a tablet id is minted.
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-
-                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
-                        for (Tablet tablet : oldIndex.getTablets()) {
-                            // When not specifying which tablets to split,
-                            // tablet_reshard_target_size must be greater than 0
-                            Preconditions.checkState(splitTabletClause.getTabletReshardTargetSize() > 0,
-                                    "Invalid tablet_reshard_target_size: "
-                                            + splitTabletClause.getTabletReshardTargetSize());
-
-                            int newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                    splitTabletClause.getTabletReshardTargetSize());
-
-                            if (newTabletCount <= 1) {
-                                continue;
-                            }
-
-                            splittingTablets.put(tablet.getId(), createSplittingTablet(tablet.getId(), newTabletCount));
+                    for (MaterializedIndex oldIndex :
+                            physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        Map<Long, Integer> splitCounts =
+                                planIndexSplits(oldIndex, clauseTargetSize, adaptiveBound());
+                        if (splitCounts.isEmpty()) {
+                            continue;
                         }
 
-                        if (splittingTablets.isEmpty()) {
-                            continue;
+                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
+                        for (Map.Entry<Long, Integer> splitCount : splitCounts.entrySet()) {
+                            splittingTablets.put(splitCount.getKey(),
+                                    createSplittingTablet(splitCount.getKey(), splitCount.getValue()));
                         }
 
                         List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex, splittingTablets);

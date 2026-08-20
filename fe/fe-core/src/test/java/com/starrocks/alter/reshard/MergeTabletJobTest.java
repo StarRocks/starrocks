@@ -68,7 +68,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1019,11 +1018,10 @@ public class MergeTabletJobTest {
         ensureTabletCount(5);
         // floor = parallelismFloor(4, 1024) = max(2, min(4, 1024)) = 4; 5 tiny fresh tablets
         // => budget = 5 - 4 = 1 => exactly one adjacent pair may merge, the rest must stay split.
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 4 matters.
-                return Collections.nCopies(4, 1L);
+            public static int computeNodeCount(ComputeResource computeResource) {
+                return 4;
             }
         };
 
@@ -1062,11 +1060,10 @@ public class MergeTabletJobTest {
         ensureTabletCount(3);
         // floor = parallelismFloor(5, 1024) = max(2, min(5, 1024)) = 5 > 3 tablets
         // => budget = 3 - 5 <= 0 => nothing merges.
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 5 matters.
-                return Collections.nCopies(5, 1L);
+            public static int computeNodeCount(ComputeResource computeResource) {
+                return 5;
             }
         };
 
@@ -1090,9 +1087,9 @@ public class MergeTabletJobTest {
         ensureTabletCount(3);
         // Explicit tablet-group merges must NOT consult the warehouse CN count; even if the lookup
         // throws, the manual merge still succeeds (the floor only applies to size-based auto-merge).
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+            public static int computeNodeCount(ComputeResource computeResource) {
                 throw new RuntimeException("CN lookup must not be called for manual tablet-group merge");
             }
         };
