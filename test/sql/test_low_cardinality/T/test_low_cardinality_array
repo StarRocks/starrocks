@@ -343,3 +343,5 @@ select array_contains(arr, 'Hunan'), array_contains_all(arr, ['Henan', 'Tibet'])
        array_position(arr, 'Macao'), array_remove(arr, 'Henan') from cte;
 
 select  array_contains(a1, NULL), array_contains_all(a1, array_slice(a1, 1, 2)), array_contains_seq(a1, array_slice(a1, 1, 2)) from s1 order by v1 limit 2;
+
+select array_contains_seq(a1, []) from s1 limit 1;

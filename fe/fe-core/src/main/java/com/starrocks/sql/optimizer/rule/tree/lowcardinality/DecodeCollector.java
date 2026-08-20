@@ -1591,9 +1591,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         private static boolean isSupportedArrayFnConstantParameter(ScalarOperator op) {
-            return op.isConstantRef() || (!op.getType().isStringType() && !op.getType().isStringArrayType()) ||
-                    (op instanceof ArrayOperator arrayOp &&
-                            arrayOp.getChildren().stream().allMatch(ScalarOperator::isConstantRef));
+            return op.isConstantRef()
+                    || (!op.getType().isStringType() && !op.getType().isStringArrayType())
+                    || (op instanceof ArrayOperator arrayOp
+                        && arrayOp.getChildren().stream().allMatch(ScalarOperator::isConstantRef))
+                    || (op instanceof CastOperator && op.getType().isStringArrayType()
+                        && op.getChild(0) instanceof ArrayOperator array && array.getChildren().isEmpty());
         }
 
         @Override
