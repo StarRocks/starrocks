@@ -35,6 +35,11 @@ struct TokenizedQueryValue {
     std::vector<std::string> terms;
 };
 
+struct InvertedIndexQueryOptions {
+    bool enable_tantivy_reader_cache = true;
+    bool enable_tantivy_query_cache = true;
+};
+
 enum class InvertedImplementType {
     UNKNOWN = 0,
     CLUCENE = 1,

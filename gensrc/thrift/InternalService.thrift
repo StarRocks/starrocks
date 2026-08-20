@@ -353,6 +353,8 @@ struct TQueryOptions {
   // Use the Tantivy analyzer for the tokenize() SQL function. When false,
   // tokenize() uses the legacy CLucene analyzers introduced in StarRocks 4.1.
   307: optional bool use_tantivy_tokenize = true;
+  308: optional bool enable_tantivy_reader_cache = true;
+  309: optional bool enable_tantivy_query_cache = true;
 }
 
 // A scan range plus the parameters needed to execute that scan.

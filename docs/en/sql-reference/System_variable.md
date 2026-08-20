@@ -463,6 +463,18 @@ Default value: `true`.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_tantivy_query_cache
+
+* **Description**: Whether an individual query can use the BE process-local cache for complete, non-scored Tantivy result bitmaps. The BE configuration `enable_tantivy_query_cache` must also be enabled. Limited, scored, and IS NULL queries always bypass this cache.
+* **Default**: true
+* **Introduced in**: v3.5.14
+
+### enable_tantivy_reader_cache
+
+* **Description**: Whether an individual query can reuse process-local Tantivy readers. The BE configuration `enable_tantivy_reader_cache` must also be enabled. Set this variable to `false` for cache-disabled A/B testing.
+* **Default**: true
+* **Introduced in**: v3.5.14
+
 ### enable_group_execution
 
 * **Description**: Whether to enable Colocate Group Execution. Colocate Group Execution is an execution pattern that leverages physical data partitioning, where a fixed number of threads sequentially process their respective data ranges to enhance locality and throughput. Enabling this feature can reduce memory usage.

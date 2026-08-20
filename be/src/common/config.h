@@ -1807,4 +1807,21 @@ CONF_Int32(tantivy_index_merge_thread_pool_num_threads, "0");
 // never regresses. Range [0.0, 1.0]: 0.0 forces bitmap for every >=2-term
 // MATCH_ALL, 1.0 effectively disables it. Mutable.
 CONF_mDouble(tantivy_match_all_bitmap_min_df_ratio, "0.5");
+
+// Process-local cache for immutable Tantivy IndexReader resources. The limit
+// accepts absolute bytes or a percentage of the BE/CN process memory limit.
+CONF_mBool(enable_tantivy_reader_cache, "true");
+CONF_mString(tantivy_reader_cache_limit, "10%");
+CONF_Int64(tantivy_reader_cache_max_entries, "8192");
+CONF_Int64(tantivy_reader_cache_max_entry_bytes, "67108864");
+
+// Process-local cache for complete, non-scored Tantivy query bitmaps. It is
+// disabled by default for a staged rollout.
+CONF_mBool(enable_tantivy_query_cache, "false");
+CONF_mString(tantivy_query_cache_limit, "1%");
+CONF_Int64(tantivy_query_cache_max_entry_bytes, "16777216");
+CONF_Int64(tantivy_query_cache_max_key_bytes, "8192");
+CONF_Double(tantivy_query_cache_admission_threshold, "0.70");
+CONF_Int64(tantivy_query_cache_ghost_entries, "65536");
+
 } // namespace starrocks::config

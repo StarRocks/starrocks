@@ -64,6 +64,9 @@ public:
     OlapReaderStatistics* stats = nullptr;
 
     std::optional<size_t> segment_rows = std::nullopt;
+
+    bool enable_tantivy_reader_cache = true;
+    bool enable_tantivy_query_cache = true;
 };
 
 } // namespace starrocks

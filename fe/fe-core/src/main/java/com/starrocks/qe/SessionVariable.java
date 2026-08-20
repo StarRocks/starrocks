@@ -338,6 +338,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_GIN_FILTER = "enable_gin_filter";
     public static final String USE_TANTIVY_TOKENIZE = "use_tantivy_tokenize";
+    public static final String ENABLE_TANTIVY_READER_CACHE = "enable_tantivy_reader_cache";
+    public static final String ENABLE_TANTIVY_QUERY_CACHE = "enable_tantivy_query_cache";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -1509,6 +1511,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = USE_TANTIVY_TOKENIZE)
     private boolean useTantivyTokenize = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_TANTIVY_READER_CACHE)
+    private boolean enableTantivyReaderCache = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_TANTIVY_QUERY_CACHE)
+    private boolean enableTantivyQueryCache = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -3604,6 +3612,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.useTantivyTokenize = useTantivyTokenize;
     }
 
+    public boolean isEnableTantivyReaderCache() {
+        return enableTantivyReaderCache;
+    }
+
+    public boolean isEnableTantivyQueryCache() {
+        return enableTantivyQueryCache;
+    }
+
     public boolean isJoinLateMaterialization() {
         return joinLateMaterialization;
     }
@@ -5422,6 +5438,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setColumn_view_concat_rows_limit(columnViewConcatRowsLimit);
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
         tResult.setUse_tantivy_tokenize(useTantivyTokenize);
+        tResult.setEnable_tantivy_reader_cache(enableTantivyReaderCache);
+        tResult.setEnable_tantivy_query_cache(enableTantivyQueryCache);
         return tResult;
     }
 

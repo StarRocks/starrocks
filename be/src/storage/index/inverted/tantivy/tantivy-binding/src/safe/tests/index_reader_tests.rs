@@ -82,6 +82,17 @@ fn match_any() {
 }
 
 #[test]
+fn reader_resource_estimate_is_stable_and_nonzero() {
+    let tmp = build(&["alpha beta", "gamma"]);
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+    let first = r.estimated_bytes();
+    let second = r.estimated_bytes();
+    assert!(first >= std::mem::size_of::<IndexReaderWrapper>() as u64);
+    assert_eq!(first, second);
+    assert_eq!(r.fd_charge(), 0);
+}
+
+#[test]
 fn match_all() {
     let tmp = build(&["alpha beta gamma", "alpha gamma", "alpha beta"]);
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
@@ -229,6 +240,7 @@ fn open_works_with_ram_directory() {
     // compound-reader semantics; RamDirectory is read-only post-commit).
     let r =
         IndexReaderWrapper::open(ram_dir, "f", "english", ReloadPolicy::Manual).expect("open ram");
+    r.prepare_for_search().expect("prepare immutable readers");
     let mut hits = r.term_query("alpha").expect("query");
     hits.sort_unstable();
     assert_eq!(hits, vec![0u32, 2u32], "alpha appears in rows 0 and 2");

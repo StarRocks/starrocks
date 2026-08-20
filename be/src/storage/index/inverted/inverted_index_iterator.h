@@ -30,8 +30,8 @@ enum class InvertedIndexReaderType;
 class InvertedIndexIterator {
 public:
     InvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
-                          OlapReaderStatistics* stats)
-            : _index_meta(index_meta), _stats(stats), _reader(reader) {
+                          OlapReaderStatistics* stats, InvertedIndexQueryOptions query_options = {})
+            : _index_meta(index_meta), _stats(stats), _reader(reader), _query_options(query_options) {
         _analyser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_index_meta->index_properties()));
     }
@@ -79,6 +79,7 @@ protected:
     const std::shared_ptr<TabletIndex> _index_meta;
     OlapReaderStatistics* _stats;
     InvertedReader* _reader;
+    InvertedIndexQueryOptions _query_options;
     InvertedIndexParserType _analyser_type;
     int32_t _bm25_topk_limit = 0;
     int32_t _non_scored_limit = 0;

@@ -31,6 +31,7 @@
 
 use std::ffi::c_void;
 use std::path::Path;
+use std::sync::Arc;
 
 use tantivy::collector::{Collector, SegmentCollector, TopDocs};
 use tantivy::columnar::Column;
@@ -45,6 +46,8 @@ use tantivy::{
 };
 
 use crate::error::{Result, TantivyBindingError};
+use crate::safe::pull_directory::PullDirectoryStats;
+use crate::safe::resident_directory::ResidentDirectoryStats;
 
 /// Block size for flushing collected row ids into the caller's bitmap.
 const BITMAP_FLUSH_BLOCK: usize = 4096;
@@ -82,6 +85,11 @@ pub struct IndexReaderWrapper {
     pub(crate) _index: Index,
     pub(crate) reader: IndexReader,
     pub(crate) text_field: Field,
+    estimated_bytes: u64,
+    fd_charge: u32,
+    pull_directory_stats: Option<Arc<PullDirectoryStats>>,
+    resident_directory_stats: Option<Arc<ResidentDirectoryStats>>,
+    resident_bytes: u64,
 }
 
 impl IndexReaderWrapper {
@@ -117,13 +125,129 @@ impl IndexReaderWrapper {
 
         let reader = index
             .reader_builder()
+            // StarRocks only stores indexed text plus the `row_id` fast field.
+            // No query reconstructs documents through Tantivy's doc store, so
+            // keep its decompressed-block LRU disabled.
+            .doc_store_cache_num_blocks(0)
             .reload_policy(reload_policy)
             .try_into()?;
+        let searcher = reader.searcher();
+        let schema_estimated_bytes = format!("{schema:?}").len();
+        let estimated_bytes = (std::mem::size_of::<Self>()
+            + schema_estimated_bytes
+            + searcher.segment_readers().len() * std::mem::size_of::<SegmentReader>())
+            as u64;
         Ok(Self {
             _index: index,
             reader,
             text_field,
+            estimated_bytes,
+            fd_charge: 0,
+            pull_directory_stats: None,
+            resident_directory_stats: None,
+            resident_bytes: 0,
         })
+    }
+
+    pub fn with_pull_directory_usage(
+        mut self,
+        estimated_bytes: u64,
+        fd_charge: u32,
+        directory_stats: Arc<PullDirectoryStats>,
+    ) -> Self {
+        self.estimated_bytes = self.estimated_bytes.saturating_add(estimated_bytes);
+        self.fd_charge = fd_charge;
+        self.pull_directory_stats = Some(directory_stats);
+        self
+    }
+
+    pub fn with_resident_directory_usage(
+        mut self,
+        estimated_bytes: u64,
+        fd_charge: u32,
+        pull_directory_stats: Arc<PullDirectoryStats>,
+        resident_directory_stats: Arc<ResidentDirectoryStats>,
+        resident_bytes: u64,
+    ) -> Self {
+        self.estimated_bytes = self.estimated_bytes.saturating_add(estimated_bytes);
+        self.fd_charge = fd_charge;
+        self.pull_directory_stats = Some(pull_directory_stats);
+        self.resident_directory_stats = Some(resident_directory_stats);
+        self.resident_bytes = resident_bytes;
+        self
+    }
+
+    pub fn estimated_bytes(&self) -> u64 {
+        if self.resident_directory_stats.is_some() {
+            self.estimated_bytes
+        } else {
+            self.estimated_bytes
+                .saturating_add(self.materialized_bytes())
+        }
+    }
+
+    pub fn fd_charge(&self) -> u32 {
+        self.fd_charge
+    }
+
+    /// Materializes the immutable per-segment structures used by StarRocks
+    /// queries before a compound reader is published to the C++ reader cache.
+    ///
+    /// `SegmentReader::inverted_index` populates Tantivy's field-reader cache,
+    /// which retains the FST term dictionary and term metadata. Resolving the
+    /// `row_id` fast field here also validates the StarRocks index contract.
+    /// Running this while the outer reader-cache singleflight loader owns the
+    /// resource prevents concurrent first queries from opening the same field
+    /// reader more than once.
+    pub fn prepare_for_search(&self) -> Result<()> {
+        let searcher = self.reader.searcher();
+        for segment_reader in searcher.segment_readers() {
+            segment_reader.inverted_index(self.text_field)?;
+            segment_reader.fast_fields().u64("row_id")?;
+        }
+        Ok(())
+    }
+
+    pub fn pull_directory_read_time_ns(&self) -> u64 {
+        self.pull_directory_stats
+            .as_ref()
+            .map_or(0, |stats| stats.read_time_ns())
+    }
+
+    pub fn pull_directory_read_lock_wait_time_ns(&self) -> u64 {
+        self.pull_directory_stats
+            .as_ref()
+            .map_or(0, |stats| stats.read_lock_wait_time_ns())
+    }
+
+    pub fn materialized_bytes(&self) -> u64 {
+        if self.resident_directory_stats.is_some() {
+            self.resident_bytes
+        } else {
+            self.pull_directory_stats
+                .as_ref()
+                .map_or(0, |stats| stats.materialized_bytes())
+        }
+    }
+
+    pub fn resident_bytes(&self) -> u64 {
+        self.resident_bytes
+    }
+
+    pub fn resident_read_count(&self) -> u64 {
+        self.resident_directory_stats
+            .as_ref()
+            .map_or(0, |stats| stats.read_count())
+    }
+
+    pub fn resident_read_bytes(&self) -> u64 {
+        self.resident_directory_stats
+            .as_ref()
+            .map_or(0, |stats| stats.read_bytes())
+    }
+
+    pub fn is_resident_directory(&self) -> bool {
+        self.resident_directory_stats.is_some()
     }
 
     /// Convenience: open a tantivy index laid out as a local directory at

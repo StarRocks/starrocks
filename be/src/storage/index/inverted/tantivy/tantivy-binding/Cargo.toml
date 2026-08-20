@@ -19,6 +19,7 @@ crate-type = ["staticlib", "rlib"]
 #   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #   1   2   3       4     5        6       7
 tantivy = { path = "../../../../../../../contrib/tantivy" }
+ownedbytes = { path = "../../../../../../../contrib/tantivy/ownedbytes" }
 ik-rs = "0.7"
 jieba-rs = "0.7"
 libc = "0.2"

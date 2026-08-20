@@ -86,6 +86,18 @@ struct RustResult {
     const char* error;
 };
 
+struct TantivyReaderResourceUsage {
+  uint64_t estimated_bytes;
+  uint32_t fd_charge;
+  uint64_t pull_directory_read_time_ns;
+  uint64_t pull_directory_read_lock_wait_time_ns;
+  uint64_t materialized_bytes;
+  uint64_t resident_bytes;
+  uint64_t resident_read_count;
+  uint64_t resident_read_bytes;
+  bool resident_directory;
+};
+
 /**
  * Owned `Vec<u32>` flattened to a (ptr, len, cap) triple. The `u32` width
  * matches Roaring bitmap's element type so the C++ side can do
@@ -191,6 +203,7 @@ RustResult tantivy_load_index_reader(const char *path,
  * `ra_file_handle` is a C++ `RandomAccessFile*` (opaque pointer).
  * `file_table_json` is a NUL-terminated JSON string mapping filename to
  * `{"offset": u64, "length": u64}`.
+ * `resident_file_table_json` contains the subset to materialize in memory.
  * `field_name` is the tantivy text field name.
  *
  * Returns a `IndexReaderWrapper*` in `RustResult.value.ptr`. The returned
@@ -199,15 +212,25 @@ RustResult tantivy_load_index_reader(const char *path,
  * `tantivy_match_all_query` / `tantivy_phrase_match_query` and release it
  * via `tantivy_free_index_reader`.
  *
- * SAFETY: `ra_file_handle` must be a valid pointer whose lifetime exceeds
- * the returned reader. `file_table_json` and `field_name` must be valid
- * NUL-terminated C strings.
+ * SAFETY: `ra_file_handle` must remain valid for the returned reader because
+ * a resident directory may delegate non-resident files to PullDirectory.
+ * Both file-table arguments and `field_name` must be valid NUL-terminated C
+ * strings.
  */
 RustResult tantivy_open_compound_reader(void *ra_file_handle,
+                                        void *read_buffer_pool,
+                                        bool use_resident_directory,
                                         const char *file_table_json,
+                                        const char *resident_file_table_json,
                                         const char *field_name,
                                         const char *tokenizer_name,
                                         const char *analyzer_digest);
+
+/**
+ * Return the current resource estimate and cumulative PullDirectory timings.
+ * Returns false for a NULL reader or output pointer.
+ */
+bool tantivy_index_reader_resource_usage(const void *reader, TantivyReaderResourceUsage *out);
 
 /**
  * Single-term query. Matching row ids are written into `*out`. Caller MUST
@@ -512,7 +535,19 @@ void tantivy_binding_drop_pool_task(void* task);
 void tantivy_binding_init_thread_pool(TantivyPoolSubmitFn submit, TantivyPoolSubmitDetachedFn submit_detached,
                                       TantivyPoolJoinFn join);
 
-} // extern "C"
+/**
+ * Lease a buffer from the C++ process-local Tantivy read-buffer pool.
+ */
+extern uint8_t *sr_tantivy_read_buffer_acquire(void *pool,
+                                               uintptr_t requested_bytes,
+                                               uintptr_t *capacity_bytes);
+
+/**
+ * Return a buffer after the last OwnedBytes view has been dropped.
+ */
+extern void sr_tantivy_read_buffer_release(void *pool, uint8_t *buffer, uintptr_t capacity_bytes);
+
+}  // extern "C"
 
 } // namespace starrocks::tantivy_binding
 

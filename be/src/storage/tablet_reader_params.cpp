@@ -14,11 +14,19 @@
 
 #include "storage/tablet_reader_params.h"
 
+#include "gen_cpp/InternalService_types.h"
 #include "thrift/protocol/TDebugProtocol.h"
 
 namespace starrocks {
 
 TabletReaderParams::TabletReaderParams() = default;
+
+void TabletReaderParams::set_tantivy_cache_options(const TQueryOptions& query_options) {
+    enable_tantivy_reader_cache =
+            !query_options.__isset.enable_tantivy_reader_cache || query_options.enable_tantivy_reader_cache;
+    enable_tantivy_query_cache =
+            !query_options.__isset.enable_tantivy_query_cache || query_options.enable_tantivy_query_cache;
+}
 
 std::string TabletReaderParams::to_string() const {
     std::stringstream ss;

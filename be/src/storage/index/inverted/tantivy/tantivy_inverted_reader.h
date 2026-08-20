@@ -20,6 +20,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/index/inverted/inverted_reader.h"
+#include "storage/index/inverted/tantivy/tantivy_cache.h"
 #include "storage/index/inverted/tantivy/tantivy_ffi_guards.h"
 #include "storage/tablet_index.h"
 
@@ -31,7 +32,7 @@ public:
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
 
     static Status open_compound(TantivyInvertedReader* reader, FileSystem* fs, const std::string& bin_path,
-                                int64_t index_id, const std::string& column_name);
+                                int64_t index_id, const std::string& column_name, uint64_t encryption_meta_hash = 0);
 
     TantivyInvertedReader(std::string path, uint32_t index_id, std::string field_name, std::string analyzer_definition,
                           std::string analyzer_digest);
@@ -43,24 +44,30 @@ public:
     // Takes ownership of ra_file (must outlive the Rust compound reader).
     Status load_compound(std::unique_ptr<RandomAccessFile> ra_file, const std::string& file_table_json);
 
-    void set_null_bitmap(roaring::Roaring bitmap) { _null_bitmap = std::move(bitmap); }
+    void set_null_bitmap(roaring::Roaring bitmap) { _preset_null_bitmap = std::move(bitmap); }
     void set_field_name(std::string name) { _field_name = std::move(name); }
+
+    size_t estimated_bytes() const { return _direct_resource == nullptr ? 0 : _direct_resource->estimated_bytes; }
+    uint32_t fd_charge() const { return _direct_resource == nullptr ? 0 : _direct_resource->fd_charge; }
 
     Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator,
                         const IndexReadOptions& index_opt) override;
 
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
+                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                 const InvertedIndexQueryOptions& options = {}) override;
 
     Status query_limited(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                          InvertedIndexQueryType query_type, int32_t limit, std::atomic<int64_t>* global_budget,
-                         roaring::Roaring* bit_map) override;
+                         roaring::Roaring* bit_map, const InvertedIndexQueryOptions& options = {}) override;
 
     Status query_scored(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                         InvertedIndexQueryType query_type, int32_t limit, float min_score, float max_score,
-                        roaring::Roaring* bit_map, std::unordered_map<uint32_t, float>* row_to_score) override;
+                        roaring::Roaring* bit_map, std::unordered_map<uint32_t, float>* row_to_score,
+                        const InvertedIndexQueryOptions& options = {}) override;
 
-    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override;
+    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map,
+                      const InvertedIndexQueryOptions& options = {}) override;
 
     InvertedIndexReaderType get_inverted_index_reader_type() override;
 
@@ -69,8 +76,9 @@ private:
     // branch in `query()` is now just "pick the underlying reader handle";
     // tokenization, FFI invocation, error handling, and result conversion are
     // identical.
-    Status _query_impl(void* reader_handle, const void* query_value, InvertedIndexQueryType query_type,
-                       int32_t limit, std::atomic<int64_t>* global_budget, roaring::Roaring* bit_map);
+    Status _query_impl(void* reader_handle, const roaring::Roaring& null_bitmap, const void* query_value,
+                       InvertedIndexQueryType query_type, int32_t limit, std::atomic<int64_t>* global_budget,
+                       roaring::Roaring* bit_map);
 
     // Scored dispatch: runs a BM25-scoring tantivy query (MATCH_ANY/MATCH_ALL),
     // fills `bit_map` with matched rows AND `row_to_score` with their scores.
@@ -78,20 +86,22 @@ private:
                               int32_t limit, float min_score, float max_score, roaring::Roaring* bit_map,
                               std::unordered_map<uint32_t, float>* row_to_score);
 
+    StatusOr<std::shared_ptr<TantivyReaderResource>> _get_resource(bool enable_cache = true);
+    StatusOr<std::shared_ptr<TantivyReaderResource>> _open_resource(bool allow_resident_directory,
+                                                                    MemTracker* allocation_tracker) const;
+    StatusOr<std::shared_ptr<TantivyReaderResource>> _open_local_resource(MemTracker* allocation_tracker) const;
+    StatusOr<std::shared_ptr<TantivyReaderResource>> _open_compound_resource(bool allow_resident_directory,
+                                                                             MemTracker* allocation_tracker) const;
+
     std::string _field_name;
     std::string _analyzer_definition;
     std::string _analyzer_digest;
     TantivyAnalyzerGuard _analyzer;
 
-    // Local reader (direct .ivt directory).
-    TantivyReaderGuard _reader;
-
-    // Compound reader (reads from .idx via PullDirectory FFI).
-    TantivyCompoundReaderGuard _compound_reader;
-    std::unique_ptr<RandomAccessFile> _compound_ra_file;
-
-    roaring::Roaring _null_bitmap;
-    bool _loaded = false;
+    TantivyIndexIdentity _identity;
+    FileSystem* _compound_fs = nullptr;
+    std::shared_ptr<TantivyReaderResource> _direct_resource;
+    roaring::Roaring _preset_null_bitmap;
     bool _is_compound = false;
 };
 

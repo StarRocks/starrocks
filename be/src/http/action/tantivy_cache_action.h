@@ -12,9 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod ffi_result_tests;
-mod index_reader_tests;
-mod index_writer_tests;
-mod pull_directory_tests;
-mod resident_directory_tests;
-mod tokenizer_tests;
+#pragma once
+
+#include <string>
+
+#include "http/http_handler.h"
+
+namespace starrocks {
+
+class ExecEnv;
+class HttpRequest;
+
+class TantivyCacheAction final : public HttpHandler {
+public:
+    explicit TantivyCacheAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+
+    void handle(HttpRequest* req) override;
+
+private:
+    void _handle_status(HttpRequest* req);
+    void _handle_prune(HttpRequest* req);
+    void _send_error(HttpRequest* req, const std::string& message);
+
+    ExecEnv* _exec_env;
+};
+
+} // namespace starrocks

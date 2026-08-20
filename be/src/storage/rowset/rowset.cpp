@@ -842,6 +842,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.count_on_index = options.count_on_index;
     seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.enable_tantivy_reader_cache = options.enable_tantivy_reader_cache;
+    seg_options.enable_tantivy_query_cache = options.enable_tantivy_query_cache;
     seg_options.has_preaggregation = options.has_preaggregation;
 
     auto segment_schema = schema;

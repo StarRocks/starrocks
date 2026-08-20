@@ -86,6 +86,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "service/staros_worker.h"
+#include "storage/index/inverted/tantivy/tantivy_cache.h"
 #include "storage/index/inverted/tantivy/tantivy_ffi_pool_bridge.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -254,6 +255,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
     _poco_connection_pool_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
+    _tantivy_reader_cache_mem_tracker = regist_tracker(MemTrackerType::TANTIVY_READER_CACHE, -1, process_mem_tracker());
+    _tantivy_query_cache_mem_tracker = regist_tracker(MemTrackerType::TANTIVY_QUERY_CACHE, -1, process_mem_tracker());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
@@ -869,6 +872,29 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
 
+    int64_t process_mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    if (process_mem_limit <= 0) {
+        process_mem_limit = MemInfo::physical_mem();
+    }
+    int64_t reader_cache_capacity = ParseUtil::parse_mem_spec(config::tantivy_reader_cache_limit, process_mem_limit);
+    if (reader_cache_capacity < 0) {
+        reader_cache_capacity = 0;
+    }
+    int64_t query_cache_capacity = ParseUtil::parse_mem_spec(config::tantivy_query_cache_limit, process_mem_limit);
+    if (query_cache_capacity < 0) {
+        query_cache_capacity = 0;
+    }
+    _tantivy_cache_manager = std::make_unique<TantivyCacheManager>(
+            static_cast<size_t>(reader_cache_capacity),
+            static_cast<size_t>(std::max<int64_t>(1, config::tantivy_reader_cache_max_entries)),
+            static_cast<size_t>(std::max<int64_t>(1, config::tantivy_reader_cache_max_entry_bytes)),
+            GlobalEnv::GetInstance()->tantivy_reader_cache_mem_tracker(), static_cast<size_t>(query_cache_capacity),
+            static_cast<size_t>(std::max<int64_t>(1, config::tantivy_query_cache_max_entry_bytes)),
+            static_cast<size_t>(std::max<int64_t>(1, config::tantivy_query_cache_max_key_bytes)),
+            config::tantivy_query_cache_admission_threshold,
+            static_cast<size_t>(std::max<int64_t>(0, config::tantivy_query_cache_ghost_entries)),
+            GlobalEnv::GetInstance()->tantivy_query_cache_mem_tracker());
+
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
@@ -1124,6 +1150,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    _tantivy_cache_manager.reset();
     SAFE_DELETE(_put_combined_txn_log_thread_pool);
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();

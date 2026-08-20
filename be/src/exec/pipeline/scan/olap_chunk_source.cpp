@@ -288,6 +288,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (thrift_olap_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_olap_scan_node.enable_gin_filter;
     }
+    _params.set_tantivy_cache_options(_runtime_state->query_options());
     _params.use_vector_index = _use_vector_index;
     _params.use_bm25_score = _use_bm25_score;
     _params.bm25_score_limit = _bm25_score_limit;

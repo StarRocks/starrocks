@@ -37,7 +37,7 @@
 //! bitmap.addMany(arr.len, arr.ptr);
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, c_void, CStr};
 use std::path::PathBuf;
 
@@ -49,7 +49,22 @@ use crate::ffi::handle::{as_ref, create_binding, free_binding};
 use crate::ffi::result::{raw_to_str, FFISlice, RustF32Array, RustResult, RustU32Array};
 use crate::safe::index_reader::{BitmapSink, SetBitmapFn};
 use crate::safe::pull_directory::PullDirectory;
+use crate::safe::resident_directory::ResidentDirectory;
 use crate::safe::IndexReaderWrapper;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TantivyReaderResourceUsage {
+    pub estimated_bytes: u64,
+    pub fd_charge: u32,
+    pub pull_directory_read_time_ns: u64,
+    pub pull_directory_read_lock_wait_time_ns: u64,
+    pub materialized_bytes: u64,
+    pub resident_bytes: u64,
+    pub resident_read_count: u64,
+    pub resident_read_bytes: u64,
+    pub resident_directory: bool,
+}
 
 macro_rules! cstr_or_err {
     ($ptr:expr, $what:expr) => {{
@@ -220,6 +235,7 @@ struct FileTableEntry {
 /// `ra_file_handle` is a C++ `RandomAccessFile*` (opaque pointer).
 /// `file_table_json` is a NUL-terminated JSON string mapping filename to
 /// `{"offset": u64, "length": u64}`.
+/// `resident_file_table_json` contains the subset to materialize in memory.
 /// `field_name` is the tantivy text field name.
 ///
 /// Returns a `IndexReaderWrapper*` in `RustResult.value.ptr`. The returned
@@ -228,13 +244,17 @@ struct FileTableEntry {
 /// `tantivy_match_all_query` / `tantivy_phrase_match_query` and release it
 /// via `tantivy_free_index_reader`.
 ///
-/// SAFETY: `ra_file_handle` must be a valid pointer whose lifetime exceeds
-/// the returned reader. `file_table_json` and `field_name` must be valid
-/// NUL-terminated C strings.
+/// SAFETY: `ra_file_handle` must remain valid for the returned reader because
+/// a resident directory may delegate non-resident files to PullDirectory.
+/// Both file-table arguments and `field_name` must be valid NUL-terminated C
+/// strings.
 #[no_mangle]
 pub unsafe extern "C" fn tantivy_open_compound_reader(
     ra_file_handle: *mut c_void,
+    read_buffer_pool: *mut c_void,
+    use_resident_directory: bool,
     file_table_json: *const c_char,
+    resident_file_table_json: *const c_char,
     field_name: *const c_char,
     tokenizer_name: *const c_char,
     analyzer_digest: *const c_char,
@@ -244,6 +264,7 @@ pub unsafe extern "C" fn tantivy_open_compound_reader(
             return RustResult::err("ra_file_handle is NULL");
         }
         let json_str = cstr_or_err!(file_table_json, "file_table_json");
+        let resident_json_str = cstr_or_err!(resident_file_table_json, "resident_file_table_json");
         let field_name_str = cstr_or_err!(field_name, "field_name");
         let tokenizer_str = cstr_or_err!(tokenizer_name, "tokenizer_name");
         let analyzer_digest_str = optional_cstr_or_err!(analyzer_digest, "analyzer_digest");
@@ -258,18 +279,107 @@ pub unsafe extern "C" fn tantivy_open_compound_reader(
             .map(|(name, entry)| (PathBuf::from(name), (entry.offset, entry.length)))
             .collect();
 
-        let dir = PullDirectory::new(ra_file_handle, file_table);
-        match IndexReaderWrapper::open_with_digest(
-            dir,
-            field_name_str,
-            tokenizer_str,
-            analyzer_digest_str,
-            ReloadPolicy::Manual,
-        ) {
-            Ok(reader) => RustResult::ok_ptr(create_binding(reader)),
+        let pull_directory = PullDirectory::new(ra_file_handle, read_buffer_pool, file_table);
+        let pull_directory_stats = pull_directory.stats();
+        let reader = if use_resident_directory {
+            let resident_parsed: HashMap<String, FileTableEntry> =
+                match serde_json::from_str(resident_json_str) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return RustResult::err(format!(
+                            "failed to parse resident_file_table_json: {e}"
+                        ))
+                    }
+                };
+            let resident_paths = resident_parsed
+                .into_keys()
+                .map(PathBuf::from)
+                .collect::<HashSet<_>>();
+            if resident_paths.is_empty() {
+                return RustResult::err("resident_file_table_json is empty");
+            }
+            let resident_files = match pull_directory.materialize_selected_files(&resident_paths) {
+                Ok(files) => files,
+                Err(error) => return RustResult::err(error.to_string()),
+            };
+            let pull_directory_estimated_bytes = pull_directory.estimated_bytes();
+            let resident_directory =
+                ResidentDirectory::with_fallback(resident_files, pull_directory);
+            let directory_estimated_bytes = resident_directory
+                .estimated_bytes()
+                .saturating_add(pull_directory_estimated_bytes);
+            let resident_bytes = resident_directory.resident_bytes();
+            let resident_directory_stats = resident_directory.stats();
+            IndexReaderWrapper::open_with_digest(
+                resident_directory,
+                field_name_str,
+                tokenizer_str,
+                analyzer_digest_str,
+                ReloadPolicy::Manual,
+            )
+            .map(|reader| {
+                reader.with_resident_directory_usage(
+                    directory_estimated_bytes,
+                    1,
+                    pull_directory_stats,
+                    resident_directory_stats,
+                    resident_bytes,
+                )
+            })
+        } else {
+            let directory_estimated_bytes = pull_directory.estimated_bytes();
+            IndexReaderWrapper::open_with_digest(
+                pull_directory,
+                field_name_str,
+                tokenizer_str,
+                analyzer_digest_str,
+                ReloadPolicy::Manual,
+            )
+            .map(|reader| {
+                reader.with_pull_directory_usage(directory_estimated_bytes, 1, pull_directory_stats)
+            })
+        };
+        match reader {
+            Ok(reader) => {
+                if let Err(e) = reader.prepare_for_search() {
+                    return RustResult::err(e.to_string());
+                }
+                RustResult::ok_ptr(create_binding(reader))
+            }
             Err(e) => RustResult::err(e.to_string()),
         }
     })
+}
+
+/// Return the current resource estimate and cumulative PullDirectory timings.
+/// Returns false for a NULL reader or output pointer.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_index_reader_resource_usage(
+    reader: *const c_void,
+    out: *mut TantivyReaderResourceUsage,
+) -> bool {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out.is_null() {
+            return false;
+        }
+        let reader: &IndexReaderWrapper = match as_ref(reader) {
+            Some(reader) => reader,
+            None => return false,
+        };
+        *out = TantivyReaderResourceUsage {
+            estimated_bytes: reader.estimated_bytes(),
+            fd_charge: reader.fd_charge(),
+            pull_directory_read_time_ns: reader.pull_directory_read_time_ns(),
+            pull_directory_read_lock_wait_time_ns: reader.pull_directory_read_lock_wait_time_ns(),
+            materialized_bytes: reader.materialized_bytes(),
+            resident_bytes: reader.resident_bytes(),
+            resident_read_count: reader.resident_read_count(),
+            resident_read_bytes: reader.resident_read_bytes(),
+            resident_directory: reader.is_resident_directory(),
+        };
+        true
+    }))
+    .unwrap_or(false)
 }
 
 /// Single-term query. Matching row ids are written into `*out`. Caller MUST

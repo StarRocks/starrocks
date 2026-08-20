@@ -2418,6 +2418,8 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.read_file = _column_files[cid].get();
         index_opts.stats = _opts.stats;
         index_opts.segment_rows = num_rows();
+        index_opts.enable_tantivy_reader_cache = _opts.enable_tantivy_reader_cache;
+        index_opts.enable_tantivy_query_cache = _opts.enable_tantivy_query_cache;
 
         if (inverted_index_iterators[cid] == nullptr) {
             RETURN_IF_ERROR(

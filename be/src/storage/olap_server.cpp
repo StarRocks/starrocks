@@ -45,8 +45,10 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/inverted/tantivy/tantivy_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
@@ -269,6 +271,17 @@ void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<
     }
 }
 
+void prune_tantivy_caches() {
+    auto* manager = ExecEnv::GetInstance()->tantivy_cache_manager();
+    if (manager == nullptr) {
+        return;
+    }
+    // Query bitmaps are cheaper to rebuild than readers, so always reclaim L1
+    // before L2 when process memory crosses a configured water mark.
+    manager->query_cache()->prune();
+    manager->reader_cache()->prune();
+}
+
 void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -315,6 +328,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         int64_t memory_high = memtracker->limit() * memory_high_level / 100;
         if (delta_urgent > 0) {
             // Memory usage exceeds memory_urgent_level, reduce size immediately.
+            prune_tantivy_caches();
             cache->adjust_capacity(-delta_urgent, kcacheMinSize);
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
@@ -323,6 +337,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
 
         int64_t delta_high = memtracker->consumption() - memory_high;
         if (delta_high > 0) {
+            prune_tantivy_caches();
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {

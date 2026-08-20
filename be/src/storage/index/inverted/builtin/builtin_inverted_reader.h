@@ -55,11 +55,13 @@ public:
        Because BuiltinInvertedReader may be accessed by multiple threads, and bitmap index iterator is not thread-safe.
     */
     Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
-                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override {
+                 InvertedIndexQueryType query_type, roaring::Roaring* bit_map,
+                 const InvertedIndexQueryOptions& options = {}) override {
         return Status::InternalError("Unreachable");
     }
 
-    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override {
+    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map,
+                      const InvertedIndexQueryOptions& options = {}) override {
         return Status::InternalError("Unreachable");
     }
 

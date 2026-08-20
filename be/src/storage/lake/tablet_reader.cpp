@@ -339,6 +339,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
     rs_opts.count_on_index = params.count_on_index;
     rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.enable_tantivy_reader_cache = params.enable_tantivy_reader_cache;
+    rs_opts.enable_tantivy_query_cache = params.enable_tantivy_query_cache;
     rs_opts.use_bm25_score = params.use_bm25_score;
     rs_opts.bm25_score_slot_id = params.bm25_score_slot_id;
     rs_opts.bm25_score_column_id = params.bm25_score_column_id;

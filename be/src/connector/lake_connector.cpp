@@ -320,6 +320,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
+    _params.set_tantivy_cache_options(_runtime_state->query_options());
     // BM25 score(): run the scored seek when a score slot (materialize score()) OR
     // a min/max gate (WHERE score()>c, no score output) is present. slot_id < 0
     // means gate-only: narrow the bitmap, do not materialize a score column.

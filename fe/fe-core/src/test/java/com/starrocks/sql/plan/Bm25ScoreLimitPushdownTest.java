@@ -83,6 +83,17 @@ public class Bm25ScoreLimitPushdownTest extends PlanTestBase {
     }
 
     @Test
+    public void disablesCountOnIndexWithCountStarOptimizationSwitch() throws Exception {
+        connectContext.getSessionVariable().setEnableCountStarOptimization(false);
+        try {
+            String plan = getFragmentPlan("SELECT count(*) FROM bm25_docs WHERE request MATCH 'fox'");
+            assertNotContains(plan, "COUNT ON INDEX: ON");
+        } finally {
+            connectContext.getSessionVariable().setEnableCountStarOptimization(true);
+        }
+    }
+
+    @Test
     public void skipsCountOnIndexForNonCountStarAggregates() throws Exception {
         String countColumnPlan = getFragmentPlan("SELECT count(status) FROM bm25_docs WHERE request MATCH 'fox'");
         assertNotContains(countColumnPlan, "COUNT ON INDEX: ON");

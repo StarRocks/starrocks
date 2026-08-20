@@ -232,6 +232,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.enable_gin_filter = options.enable_gin_filter;
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.count_on_index = options.count_on_index;
+    seg_options.enable_tantivy_reader_cache = options.enable_tantivy_reader_cache;
+    seg_options.enable_tantivy_query_cache = options.enable_tantivy_query_cache;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);

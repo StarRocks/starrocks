@@ -920,7 +920,9 @@ public class QueryOptimizer extends Optimizer {
         // that this switch can't turned on after logical optimization, so we only determine
         // whether the PreAggregate can be turned on in the final
         result = new PreAggregateTurnOnRule().rewrite(result, rootTaskContext);
-        result = new CountOnIndexRewriteRule().rewrite(result, rootTaskContext);
+        if (connectContext.getSessionVariable().isEnableCountStarOptimization()) {
+            result = new CountOnIndexRewriteRule().rewrite(result, rootTaskContext);
+        }
 
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result, rootTaskContext);
