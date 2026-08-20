@@ -3273,9 +3273,8 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
 
     if (!dest->empty()) {
         ASSIGN_OR_RETURN(const uint64_t safe_rebuild_point, compute_safe_merged_rebuild_point(merge_contexts));
-        const auto rebuild_counts =
-                LakePersistentIndex::need_rebuild_counts(*new_metadata, new_metadata->sstable_meta(),
-                                                         safe_rebuild_point);
+        const auto rebuild_counts = LakePersistentIndex::need_rebuild_counts(
+                *new_metadata, new_metadata->sstable_meta(), safe_rebuild_point);
         if (rebuild_counts.first > 0) {
             ASSIGN_OR_RETURN(auto materialized_metadata,
                              update_manager->flush_pk_memtable(std::make_shared<TabletMetadataPB>(*new_metadata),
