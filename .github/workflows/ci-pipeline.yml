@@ -1217,12 +1217,19 @@ jobs:
           BRANCH=${{steps.branch.outputs.branch}}
           git config --global user.name "wanpengfei-git";
           git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
+          # The workspace clone is reused across jobs, so it can carry extra
+          # remotes and leftover branches. Resolve the base branch against
+          # origin explicitly and force-update every local branch instead of
+          # relying on `git checkout <name>` DWIM, which dies with
+          # "matched multiple remote tracking branches" once a second remote
+          # exists. defaultRemote keeps the tooling that runs later in this
+          # job safe from the same ambiguity.
+          git config --local checkout.defaultRemote origin;
+          git checkout -B ${BRANCH} refs/remotes/origin/${BRANCH};
           git reset ${BASE_VERSION} --hard || true;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
+          git fetch --force origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout -B merge_pr ${BRANCH_NAME};
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - name: Run Case (${{ needs.deploy.outputs.fe }})

@@ -257,12 +257,16 @@ jobs:
         run: |
           git config --global user.name "wanpengfei-git";
           git config --global user.email "wanpengfei91@163.com";
-          git checkout ${BRANCH};
+          # Reused workspace clone: resolve the base branch against origin and
+          # force-update local branches, so a stale extra remote or a leftover
+          # merge_pr from an earlier job cannot break the checkout. See the
+          # same note in ci-pipeline.yml.
+          git config --local checkout.defaultRemote origin;
+          git checkout -B ${BRANCH} refs/remotes/origin/${BRANCH};
           if [[ -n "${BASE_VERSION}" ]]; then git reset ${BASE_VERSION} --hard || true; fi
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout ${BRANCH_NAME};
-          git checkout -b merge_pr;
+          git fetch --force origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout -B merge_pr ${BRANCH_NAME};
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit 1);
 
       - name: Run SQL-Tester (fe=${{ needs.deploy.outputs.fe }})

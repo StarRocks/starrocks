@@ -30,6 +30,11 @@ Map the local scripts and GitHub workflows that enforce structural rules, run va
   repo exists) so the clone is reused and fetches stay incremental. Workspace-root checkouts
   use `fetch-depth: 0`; shallow or sparse checkouts go to a dedicated `path:` so they never
   flip the shared clone between shallow/full or sparse/full states.
+- Because that clone is reused, no `run:` step may assume a pristine repo. Resolve branches
+  explicitly (`git checkout -B "$BRANCH" "refs/remotes/origin/$BRANCH"`, not `git checkout
+  "$BRANCH"`, which fails with "matched multiple remote tracking branches" when the clone
+  carries a second remote) and force-update anything a previous run may have left behind
+  (`git fetch --force`, `git checkout -B merge_pr`).
 
 ## Test and Validation
 

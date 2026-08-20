@@ -154,7 +154,11 @@ jobs:
 
       - name: Checkout Code
         run: |
-          git checkout $BRANCH;
+          # Reused workspace clone: pin the branch to origin instead of relying
+          # on `git checkout <name>` DWIM, which dies with "matched multiple
+          # remote tracking branches" once the clone carries a second remote.
+          git config --local checkout.defaultRemote origin;
+          git checkout -B ${BRANCH} refs/remotes/origin/${BRANCH};
           git reset ${PR_NUMBER} --hard
 
       - name: Run Case (${{ needs.deploy.outputs.fe }})
