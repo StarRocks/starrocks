@@ -1252,8 +1252,13 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
                    << ", version: " << delvec_page.version();
         return Status::InternalError("Can't find delvec file name");
     }
-    const auto& delvec_name = iter->second.name();
+    const auto& delvec_file = iter->second;
+    const auto& delvec_name = delvec_file.name();
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    if (delvec_file.has_encryption_meta() && !delvec_file.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(opts.encryption_info,
+                         KeyCache::instance().unwrap_encryption_meta(delvec_file.encryption_meta()));
+    }
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
         std::unique_ptr<RandomAccessFile> rf;
