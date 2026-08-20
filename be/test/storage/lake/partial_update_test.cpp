@@ -2049,6 +2049,85 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
     ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
 }
 
+// The other half of the guard in RowsetUpdateState::rewrite_segment: a row-mode partial update whose
+// rowset-level num_rows has been apportioned to 0 by a split cross publish must STILL be rewritten,
+// because its segments do hold this tablet's rows. Emulate the apportionment by zeroing the txn log's
+// rowset counter while leaving the per-segment counts alone -- exactly what
+// tablet_reshard_helper::update_rowset_data_stats does to a sibling.
+//
+// c2 is the assertion that has teeth: it is not in the partial write, so it only survives if the
+// rewrite merged the unmodified columns back in. Skipping the rewrite would attach a segment holding
+// c0 and c1 alone.
+TEST_P(LakePartialUpdateTest, test_partial_update_rewrite_with_apportioned_num_rows) {
+    if (GetParam().enable_persistent_index) return;
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) return;
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Apportion the rowset counter down to 0, leaving the per-segment counts as the only witness
+    // that this rowset holds rows.
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto apportioned = std::make_shared<TxnLogPB>(*txn_log);
+        auto* rowset = apportioned->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->num_rows(), 0);
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->set_num_rows(0);
+        int64_t segment_rows = 0;
+        for (const auto& segment_meta : rowset->segment_metas()) {
+            segment_rows += segment_meta.num_rows();
+        }
+        ASSERT_GT(segment_rows, 0) << "the per-segment counts must survive the apportionment";
+        ASSERT_OK(_tablet_mgr->put_txn_log(apportioned));
+        _tablet_mgr->prune_metacache();
+    }
+
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+}
+
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 5);

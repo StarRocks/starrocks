@@ -248,6 +248,28 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogUncountedSegmentIsKept) {
     EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
 }
 
+// The primary key applier's skip predicate moved the same way, so check it did not broaden: an
+// op_write that really is empty -- a segment was written but holds no rows, no del files, no delete
+// predicate -- must still be skipped. Note the delete-only case never depended on this predicate;
+// dels_meta_size() > 0 short circuits it.
+//
+// The assertion has teeth because the skip returns BEFORE prepare_primary_index(): had the predicate
+// let this through, publish would go on to open "seg_empty", which does not exist.
+TEST(TxnLogApplierBatchTest, PrimaryKeySingleLogEmptySegmentIsSkipped) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
+    auto meta = build_pk_metadata(30010);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(30010, 60, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
+    ASSERT_EQ(0, log->op_write().dels_meta_size());
+    ASSERT_FALSE(log->op_write().rowset().has_delete_predicate());
+
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);
