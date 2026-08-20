@@ -88,7 +88,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // mutable config once so fill and hold never disagree mid-task.
     const bool hold_segments = config::lake_compaction_hold_input_segments;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
-.buffer_size = read_buffer_size,
+                                  .buffer_size = read_buffer_size,
                                   .fill_metadata_cache = !hold_segments,
                                   .hold_segments = hold_segments};
     reader_params.column_access_paths = &_column_access_paths;
@@ -285,7 +285,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // asked). Snapshot the mutable config once so fill and hold never disagree mid-task.
         const bool hold_segments = config::lake_compaction_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
-.buffer_size = read_buffer_size,
+                                   .buffer_size = read_buffer_size,
                                    .fill_metadata_cache = !hold_segments,
                                    .hold_segments = hold_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
