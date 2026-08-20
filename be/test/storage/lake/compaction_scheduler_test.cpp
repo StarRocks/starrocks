@@ -14,11 +14,18 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
+#include <atomic>
+#include <new>
+#include <system_error>
+#include <thread>
+
 #include "base/bthreads/util.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/lake/compaction_task_context.h"
@@ -368,7 +375,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     EXPECT_EQ(response.txn_logs(0).op_compaction().compact_version(), cached->op_compaction().compact_version());
 }
 
-// Test for process_parallel_compaction (lines 299-369 in compaction_scheduler.cpp)
+// Tests for the parallel compaction path driven through compact()
 TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
     // Create a tablet with multiple rowsets for parallel compaction
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
@@ -501,6 +508,329 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
     latch->wait();
+}
+
+// Regression test for issue #76882: the IO-heavy part of parallel compaction -- loading the tablet
+// metadata and building the StarOS/Starlet filesystem while planning the subtasks -- must NOT run on the
+// brpc bthread that called compact(). Blocking filesystem IO on a bthread can make a pthread rwlock
+// (StarOSWorker's std::shared_mutex _cache_mtx) return EDEADLK on an unrelated bthread sharing the same
+// worker pthread, which surfaces as an uncaught std::system_error("Resource deadlock avoided") and aborts
+// the CN. compact() therefore only builds and queues the contexts, exactly as the serial path does, and
+// the planning happens later in do_compaction() on a resident worker. This test pins that: the planning
+// hook must fire on a thread other than the caller.
+// (The other parallel tests above only prove "did not crash / did complete"; they pass against the old
+// inline code too, so they cannot catch a regression back to on-bthread execution.)
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thread) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    const auto caller_id = std::this_thread::get_id();
+    // Compute the "ran off the caller thread" result inside the callback (where both ids are known) and
+    // publish it via an atomic, so the main thread never reads a std::thread::id written on another
+    // thread. caller_id is set before compact() and only read here, so it is not racy.
+    std::atomic<bool> fired{false};
+    std::atomic<bool> ran_off_caller_thread{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks", [&](void* /*arg*/) {
+        ran_off_caller_thread.store(std::this_thread::get_id() != caller_id);
+        fired.store(true);
+    });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
+        sync_point->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // done->Run() (hence latch) only fires after the planning hook has been reached, so the hook is
+    // guaranteed to have run by the time wait() returns.
+    latch->wait();
+
+    EXPECT_TRUE(fired.load());
+    // The offloaded task runs on a _threads pool worker, never on the caller (gtest) thread.
+    EXPECT_TRUE(ran_off_caller_thread.load());
+}
+
+// Once the IO-heavy task creation is offloaded to `_threads`, an exception escaping it stops being a crash
+// and becomes a silent hang: ThreadPool::dispatch_thread only logs an escaping exception (it does not run
+// the runnable's cancel()), compact() has already released the ClosureGuard, and ~CompactionTaskCallback()
+// does not run `done`. Nothing would ever complete the RPC, so the FE would block until its compact timeout.
+//
+// Inject the #76882 exception itself -- std::system_error("Resource deadlock avoided"), what a pthread rwlock
+// returning EDEADLK raises through std::shared_mutex -- into create_parallel_tasks() and assert the RPC still
+// completes. do_compaction() must absorb it and compact the tablet serially with the same context, which
+// keeps one finish_task() per tablet id and therefore still runs `done`. Both handlers are exercised: the
+// std::exception one and the catch-all that covers a foreign exception thrown through the same call.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_completes_rpc) {
+    struct ForeignException {};
+
+    for (bool foreign : {false, true}) {
+        std::atomic<bool> injected{false};
+        auto* sync_point = SyncPoint::GetInstance();
+        sync_point->SetCallBack(
+                "CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks", [&](void* /*arg*/) {
+                    injected.store(true);
+                    if (foreign) {
+                        throw ForeignException{};
+                    }
+                    throw std::system_error(std::make_error_code(std::errc::resource_deadlock_would_occur),
+                                            "Resource deadlock avoided");
+                });
+        sync_point->EnableProcessing();
+        SCOPED_CLEANUP({
+            sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
+            sync_point->DisableProcessing();
+        });
+
+        auto txn_id = next_id();
+        auto latch = std::make_shared<CountDownLatch>(1);
+        CompactRequest request;
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_metadata->id());
+        request.set_timeout_ms(60 * 1000);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        auto* parallel_config = request.mutable_parallel_config();
+        parallel_config->set_enable_parallel(true);
+        parallel_config->set_max_parallel_per_tablet(3);
+        parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+        auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+        _compaction_scheduler.compact(nullptr, &request, &response, cb);
+        // The exception was absorbed into the fallback path, which completes the RPC; wait() must not hang.
+        latch->wait();
+
+        EXPECT_TRUE(injected.load());
+    }
+}
+
+// Companion to the test above, for the dangerous arm it cannot reach. That test injects its throw at the
+// ":create_parallel_tasks" hook, which fires *before* create_parallel_tasks() runs, so no subtask has been
+// submitted yet and falling back to normal compaction is safe.
+//
+// Here the throw lands *after* a subtask was already submitted and is running (the real shape of a
+// std::bad_alloc from the per-group bookkeeping in submit_subtasks_from_groups). That subtask already owns
+// the tablet's single finish_task(): TabletParallelCompactionState::is_complete() is
+// `running_subtasks.empty() && total_subtasks_created > 0`, so it fires when the subtask completes. If the
+// tablet were *also* routed into the fallback path, finish_task() would run twice for one tablet id, push
+// _contexts past tablet_ids_size(), and dereference the `_response` the first completion already nulled ->
+// SIGSEGV. So the RPC must complete exactly once.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_submit_completes_rpc_once) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    // Throw only on the first submitted subtask, so at least one subtask stays in flight.
+    std::atomic<bool> thrown{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_submit",
+                            [&](void* /*arg*/) {
+                                if (!thrown.exchange(true)) {
+                                    throw std::bad_alloc();
+                                }
+                            });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_submit");
+        sync_point->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // The in-flight subtask completes the RPC; wait() must not hang.
+    latch->wait();
+
+    EXPECT_TRUE(thrown.load());
+    // Exactly one finish_task() ran for the single tablet: finish_task() appends one compact_stat per call,
+    // so a second (crashing) completion would show up here as an extra entry.
+    EXPECT_EQ(1, response.compact_stats_size());
+}
+
+// The remaining window: the throw lands while a subtask is registered in running_subtasks but has NOT been
+// handed to the thread pool. Nobody will ever complete that subtask, so if the registration survived,
+// is_complete() (`running_subtasks.empty() && total_subtasks_created > 0`) could never become true and the
+// tablet would never call finish_task() -- the compact RPC would hang forever. rollback_registration must
+// undo it, after which create_parallel_tasks() sees nothing submitted and reports an error so the caller
+// falls back to normal compaction, which then completes the RPC exactly once.
+//
+// Runs both arms so the `catch (const std::exception&)` and the `catch (...)` handlers are both exercised.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_register_completes_rpc_once) {
+    struct ForeignException {};
+
+    for (bool foreign : {false, true}) {
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(next_id());
+        metadata->set_version(11);
+        for (int i = 0; i < 10; i++) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(i);
+            rowset->set_overlapped(true);
+            rowset->set_num_rows(100);
+            rowset->set_data_size(1024 * 1024);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+            segment_meta->set_size(1024 * 1024);
+        }
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+        // Throw on the first registration only, so exactly one subtask is left registered-but-unsubmitted.
+        std::atomic<bool> thrown{false};
+        auto* sync_point = SyncPoint::GetInstance();
+        sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                                [&](void* /*arg*/) {
+                                    if (thrown.exchange(true)) {
+                                        return;
+                                    }
+                                    if (foreign) {
+                                        throw ForeignException{};
+                                    }
+                                    throw std::bad_alloc();
+                                });
+        sync_point->EnableProcessing();
+        SCOPED_CLEANUP({
+            sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+            sync_point->DisableProcessing();
+        });
+
+        auto txn_id = next_id();
+        auto latch = std::make_shared<CountDownLatch>(1);
+        CompactRequest request;
+        CompactResponse response;
+        request.add_tablet_ids(metadata->id());
+        request.set_timeout_ms(60 * 1000);
+        request.set_txn_id(txn_id);
+        request.set_version(11);
+        auto* parallel_config = request.mutable_parallel_config();
+        parallel_config->set_enable_parallel(true);
+        parallel_config->set_max_parallel_per_tablet(3);
+        parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+        auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+        _compaction_scheduler.compact(nullptr, &request, &response, cb);
+        // Hangs here if the stranded registration was not rolled back.
+        latch->wait();
+
+        EXPECT_TRUE(thrown.load());
+        // The fallback owns the completion, and it is the only one: a second finish_task() would add another
+        // compact_stat (and crash on the already-nulled _response).
+        EXPECT_EQ(1, response.compact_stats_size());
+    }
+}
+
+// Planning hands the worker's limiter token back before it starts, so another worker can claim it. Compacting
+// the tablet anyway would run it outside the limiter, next to whoever took the token; it has to be
+// rescheduled for a worker that holds one instead -- and still complete its RPC exactly once.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_planning_token_loss_reschedules) {
+    // Single worker, single token: the token freed for planning cannot go anywhere but to the drain below.
+    _compaction_scheduler.update_compact_threads(1);
+
+    std::atomic<bool> drained_once{false};
+    std::atomic<int> tokens_held{0};
+    std::atomic<int> reschedules{0};
+    auto give_tokens_back = [&]() {
+        for (int i = tokens_held.exchange(0); i > 0; i--) {
+            _compaction_scheduler.return_token_for_test();
+        }
+    };
+
+    auto* sync_point = SyncPoint::GetInstance();
+    // Reached after the worker returned its token and before planning: act as the competing worker and take
+    // every free token. Planning then fails to reserve its all-or-nothing set, and the reclaim that follows
+    // finds nothing left either.
+    sync_point->SetCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks", [&](void* /*arg*/) {
+        if (drained_once.exchange(true)) {
+            return;
+        }
+        while (_compaction_scheduler.acquire_token_for_test()) {
+            tokens_held.fetch_add(1);
+        }
+    });
+    // The reclaim failed and the tablet is about to be rescheduled. Release the tokens: with none free, no
+    // worker could ever pick it up again.
+    sync_point->SetCallBack("CompactionScheduler::try_hand_off_to_parallel:token_lost", [&](void* /*arg*/) {
+        reschedules.fetch_add(1);
+        give_tokens_back();
+    });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
+        sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:token_lost");
+        sync_point->DisableProcessing();
+        give_tokens_back();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // Hangs here if a rescheduled tablet is dropped instead of being compacted by the next worker.
+    latch->wait();
+
+    // Disabling the parallel path on the retry is what bounds this: only planning returns a token mid-flight,
+    // so a rescheduled tablet cannot lose one again and bounce forever.
+    EXPECT_LE(reschedules.load(), 1);
+    EXPECT_EQ(1, response.compact_stats_size());
 }
 
 } // namespace starrocks::lake

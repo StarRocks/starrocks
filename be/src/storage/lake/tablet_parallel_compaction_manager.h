@@ -163,6 +163,26 @@ struct TabletParallelCompactionState {
     // Mutex for thread-safe access
     mutable std::mutex mutex;
 
+    // Time this tablet's context spent queued before a worker picked it up and planned the subtasks.
+    // That context is destroyed at the hand-off, so without carrying these the merged context would only
+    // report each subtask's own queue wait and CompactResponse would under-report the total -- missing
+    // exactly the wait that the hand-off introduces.
+    int64_t handoff_in_queue_time_sec = 0;
+    int64_t handoff_queue_wait_ns = 0;
+
+    // Set once submit_subtasks_from_groups() has stopped registering subtasks for this tablet.
+    // Subtasks are registered and submitted one group at a time, so without this the tablet can look
+    // "complete" in the middle of submission: a subtask that finishes before the next group is registered
+    // finds running_subtasks empty and drives the completion transition, and a later subtask drives it
+    // AGAIN -- two finish_task() calls for one tablet id, which pushes CompactionTaskCallback::_contexts
+    // past the request's tablet count, completes the RPC while other tablets are still running, and leaves
+    // the next real completion dereferencing an already-nulled _response.
+    bool submission_done = false;
+
+    // Guards the completion transition so it runs exactly once per tablet, taken by whoever gets there
+    // first: the last finishing subtask, or the end of submission if every subtask already finished.
+    bool completion_claimed = false;
+
     // Check if we can create a new subtask
     bool can_create_subtask() const { return running_subtasks.size() < static_cast<size_t>(max_parallel); }
 
@@ -172,8 +192,18 @@ struct TabletParallelCompactionState {
         return it != compacting_rowsets.end() && it->second > 0;
     }
 
-    // Check if all subtasks are completed
-    bool is_complete() const { return running_subtasks.empty() && total_subtasks_created > 0; }
+    // Check if all subtasks are completed. Requires submission to be sealed -- see submission_done.
+    bool is_complete() const { return submission_done && running_subtasks.empty() && total_subtasks_created > 0; }
+
+    // Take the right to run the completion transition, if it is due and nobody has taken it yet.
+    // Caller must hold `mutex`.
+    bool claim_completion() {
+        if (!is_complete() || completion_claimed) {
+            return false;
+        }
+        completion_claimed = true;
+        return true;
+    }
 };
 
 // Manager for per-tablet parallel compaction
@@ -186,11 +216,15 @@ public:
 
     // Create parallel compaction tasks for a tablet
     // Returns the number of subtasks created
+    // |handoff_in_queue_time_sec| / |handoff_queue_wait_ns| carry the queue wait already accumulated by
+    // the caller's context, which is destroyed once the subtasks take over; they are added once to the
+    // merged context so the reported queue time stays complete.
     StatusOr<int> create_parallel_tasks(int64_t tablet_id, int64_t txn_id, int64_t version,
                                         const TabletParallelConfig& config,
                                         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-                                        const ReleaseTokenFunc& release_token);
+                                        const ReleaseTokenFunc& release_token, int64_t handoff_in_queue_time_sec = 0,
+                                        int64_t handoff_queue_wait_ns = 0);
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
@@ -199,6 +233,30 @@ public:
     // Subtask completion callback
     void on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
                              std::unique_ptr<CompactionTaskContext> context);
+
+    // Settles every tablet still being compacted in parallel, for shutdown. MUST be called only after the
+    // compaction thread pool has shut down, because it assumes no subtask can still run: shutdown() drops
+    // queued subtasks through a no-op cancel(), and their tablet's context is already gone, so without this
+    // nothing would ever complete those tablets and the compact RPC would hang.
+    void abort_pending_states();
+
+    // Collects the request callbacks of every tablet currently being compacted in parallel under |txn_id|.
+    // CompactionScheduler::abort() needs this because a tablet handed off to subtasks has no node in
+    // CompactionScheduler::_contexts between the hand-off and the merged context being appended, so a walk
+    // of that list alone reports the txn as not found and cancels nothing.
+    std::vector<std::shared_ptr<CompactionTaskCallback>> collect_callbacks_for_txn(int64_t txn_id) const;
+
+    // Declare that no further subtasks will be registered for |tablet_id|, and run the completion
+    // transition if they have all finished already. Must be called on every path that stops registering
+    // subtasks while leaving some running; see TabletParallelCompactionState::submission_done.
+    void seal_submission(int64_t tablet_id, int64_t txn_id,
+                         const std::shared_ptr<TabletParallelCompactionState>& state);
+
+    // Run the one-time completion transition for a tablet. The caller must already have won
+    // TabletParallelCompactionState::claim_completion().
+    void finalize_tablet_completion(int64_t tablet_id, int64_t txn_id,
+                                    const std::shared_ptr<TabletParallelCompactionState>& state,
+                                    const std::shared_ptr<CompactionTaskCallback>& callback);
 
     // Check if all subtasks for a tablet are complete
     bool is_tablet_complete(int64_t tablet_id, int64_t txn_id);
@@ -218,9 +276,16 @@ public:
     void list_tasks(std::vector<CompactionTaskInfo>* infos);
 
     // Test-only: Register a pre-created tablet state for unit testing
-    // This allows tests to bypass the normal create_parallel_tasks flow
+    // This allows tests to bypass the normal create_parallel_tasks flow.
+    // The handed-over state already lists every subtask the test intends to run, which is exactly what
+    // submit_subtasks_from_groups() would have sealed on its way out, so seal it here too -- otherwise
+    // is_complete() stays false forever and the subtasks could never complete the tablet.
     void register_tablet_state_for_test(int64_t tablet_id, int64_t txn_id,
                                         std::shared_ptr<TabletParallelCompactionState> state) {
+        if (state != nullptr) {
+            std::lock_guard<std::mutex> state_lock(state->mutex);
+            state->submission_done = true;
+        }
         std::lock_guard<std::mutex> lock(_states_mutex);
         std::string key = make_state_key(tablet_id, txn_id);
         _tablet_states[key] = std::move(state);
@@ -268,11 +333,14 @@ private:
                                   const ReleaseTokenFunc& release_token);
 
     // Submit subtasks from SubtaskGroup to thread pool (new API for large rowset split)
-    // Returns the number of subtasks successfully submitted
+    // Returns the number of subtasks successfully submitted.
+    // |submitted_out|, when non-null, is kept up to date with that count as the subtasks are handed to the
+    // thread pool, so it stays readable if this throws. The tablet state cannot be used for that: a subtask
+    // may already have completed and cleaned the state up by the time the exception is handled.
     StatusOr<int> submit_subtasks_from_groups(const std::shared_ptr<TabletParallelCompactionState>& state_ptr,
                                               std::vector<SubtaskGroup> groups, bool force_base_compaction,
                                               ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-                                              const ReleaseTokenFunc& release_token);
+                                              const ReleaseTokenFunc& release_token, int* submitted_out = nullptr);
 
     // Execute a single subtask for large rowset split (segment range mode)
     void execute_subtask_segment_range(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
