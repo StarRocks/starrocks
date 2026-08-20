@@ -1212,11 +1212,11 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         for (auto& [segment_id, dcg_ver_pb] : *dest_meta->mutable_dcgs()) {
             std::vector<bool> source_shared_files;
             source_shared_files.reserve(dcg_ver_pb.column_files_size());
-            std::vector<std::string> source_encryption_metas;
-            source_encryption_metas.reserve(dcg_ver_pb.column_files_size());
+            std::vector<std::string> source_dcg_encryption_metas;
+            source_dcg_encryption_metas.reserve(dcg_ver_pb.column_files_size());
             for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
                 source_shared_files.emplace_back(i < dcg_ver_pb.shared_files_size() && dcg_ver_pb.shared_files(i));
-                source_encryption_metas.emplace_back(
+                source_dcg_encryption_metas.emplace_back(
                         i < dcg_ver_pb.encryption_metas_size() ? dcg_ver_pb.encryption_metas(i) : "");
             }
             dcg_ver_pb.clear_shared_files();
@@ -1231,10 +1231,10 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                 dcg_ver_pb.set_column_files(i, final_dcg_filename);
                 ASSIGN_OR_RETURN(auto destination_file_shared,
                                  destination_shared(src_dcg_filename, source_shared_files[i], is_existed,
-                                                    !source_encryption_metas[i].empty()));
+                                                    !source_dcg_encryption_metas[i].empty()));
                 dcg_ver_pb.add_shared_files(destination_file_shared);
-                RETURN_IF_ERROR(record_source_encryption_meta(src_dcg_filename, source_encryption_metas[i], is_existed,
-                                                              destination_file_shared));
+                RETURN_IF_ERROR(record_source_encryption_meta(src_dcg_filename, source_dcg_encryption_metas[i],
+                                                              is_existed, destination_file_shared));
 
                 std::string destination_encryption_meta;
                 if (!is_existed && config::enable_transparent_data_encryption) {
