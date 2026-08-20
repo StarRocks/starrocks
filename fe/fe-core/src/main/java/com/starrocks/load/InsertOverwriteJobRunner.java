@@ -772,10 +772,10 @@ public class InsertOverwriteJobRunner {
         //
         // A cancelled statement also stops waiting, so the request is released instead of sitting here
         // for the rest of its budget: by this point the data is written and the coordinator has already
-        // finished, so nothing else interrupts this thread. isKilled is the same signal the pre-split
-        // hook's own await uses, and it covers a disconnected client, COM_QUIT, KILL CONNECTION and a
-        // session killing itself. A KILL QUERY aimed at another session only cancels that session's
-        // coordinator and leaves no flag here, so the deadline stays the backstop for that case.
+        // finished, so nothing else interrupts this thread. It has to be isStatementCancelled() rather
+        // than isKilled() -- the routes that matter for an overwrite all call kill(false, ...), which
+        // leaves isKilled false: KILL QUERY, a cancelled MV TaskRun (TaskRunManager) and a closed client
+        // (MySQLReadListener).
         Instant deadline = context == null
                 ? Instant.EPOCH
                 : context.getStartTimeInstant().plusSeconds(context.getExecTimeout());
@@ -792,7 +792,7 @@ public class InsertOverwriteJobRunner {
             }
             if (state != OlapTable.OlapTableState.TABLET_RESHARD
                     || !Instant.now().isBefore(deadline)
-                    || (context != null && context.isKilled())) {
+                    || (context != null && context.isStatementCancelled())) {
                 return;
             }
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);

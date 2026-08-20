@@ -189,7 +189,7 @@ public final class InsertPreSplitHook {
         }
         PreSplitFlow.runStaticOverwriteMaterializedViewFlow(
                 resolvedTable.database(), resolvedTable.olapTable(), partitionScope, estimates,
-                context.getCurrentComputeResource(), context::isKilled);
+                context.getCurrentComputeResource(), context::isStatementCancelled);
     }
 
     private static void tryRunPreSplit(StatementBase parsedStmt, ConnectContext context)
@@ -242,13 +242,13 @@ public final class InsertPreSplitHook {
         }
         if (overwriteTransactionId > 0) {
             PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context, overwriteTransactionId);
+                    prepared, source.loadKind(), context::isStatementCancelled, context, overwriteTransactionId);
         } else if (staticOverwrite) {
             PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context, partitionScope);
+                    prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
         } else {
             PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context, partitionScope);
+                    prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
         }
     }
 

@@ -38,6 +38,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.InsertStmt;
@@ -239,7 +240,12 @@ public class InsertOverwriteJobRunnerEditLogTest {
         // Enough budget left that returning quickly can only be the cancellation check, but not so much
         // that losing the check would hang this test instead of failing it.
         ConnectContext context = contextWithBudget(60);
-        context.setKilled();
+        // The real cancellation route, not setKilled(): kill(false, ...) is what KILL QUERY, a cancelled
+        // MV TaskRun and a closed client all use, and it deliberately leaves isKilled false.
+        context.setExecutor(new StmtExecutor(context, mock(InsertStmt.class)));
+        context.kill(false, "kill TaskRun");
+        Assertions.assertFalse(context.isKilled(), "kill(false, ...) must not set the connection flag");
+        Assertions.assertTrue(context.isStatementCancelled(), "the statement must still read as cancelled");
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, null);
 
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
