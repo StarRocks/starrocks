@@ -1159,7 +1159,7 @@ alterFailoverGroupResumeStatement
 
 updateFailPointStatusStatement
     : ADMIN (DISABLE | ENABLE) FAILPOINT string
-      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY | PAUSE))?
       (ON (BACKEND string | FRONTEND))?
     ;
 

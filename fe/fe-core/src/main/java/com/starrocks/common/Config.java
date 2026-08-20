@@ -5323,4 +5323,12 @@ public class Config extends ConfigBase {
             "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
             "or equal to 0 are treated as 0, which truncates the list entirely.")
     public static int explain_dict_column_size = 5;
+
+    @ConfField(mutable = true, comment = "Safety net for the failpoint pause mode. A thread parked " +
+            "at a failpoint armed with ADMIN ENABLE FAILPOINT ... WITH PAUSE resumes after this many " +
+            "seconds even if ADMIN DISABLE FAILPOINT is never issued, so a forgotten pause cannot " +
+            "wedge a node until it is restarted. Values below 1 are clamped to 1. The value is also " +
+            "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
+            "timeout.")
+    public static int failpoint_pause_timeout_second = 300;
 }

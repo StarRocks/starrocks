@@ -1355,11 +1355,15 @@ public class ShowResultMetaFactory implements AstVisitorEPack<ShowResultSetMetaD
 
     @Override
     public ShowResultSetMetaData visitShowFailPointStatement(ShowFailPointStatement statement, Void context) {
+        // TriggerCount / PausedThreads are appended AFTER Host on purpose: the QA harness parses
+        // this result positionally, so inserting them earlier would shift the existing columns.
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
                 .addColumn(new Column("TriggerMode", TypeFactory.createVarcharType(32)))
                 .addColumn(new Column("Times/Probability", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("Host", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("TriggerCount", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("PausedThreads", TypeFactory.createVarcharType(20)))
                 .build();
     }
 

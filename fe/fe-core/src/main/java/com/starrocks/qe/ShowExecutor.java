@@ -3647,10 +3647,17 @@ public class ShowExecutor {
                         if (matcher != null && !matcher.match(name)) {
                             continue;
                         }
+                        // pause and both counters are optional on the wire: a BE built before them
+                        // sends null, so never dereference a boxed value here.
+                        boolean paused = Boolean.TRUE.equals(triggerMode.pause);
                         List<String> row = Lists.newArrayList();
                         row.add(failPointInfo.name);
-                        row.add(triggerMode.mode.toString());
-                        if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                        // A pause is sent as DISABLE + pause=true so old backends degrade safely;
+                        // report what it actually means.
+                        row.add(paused ? "PAUSE" : triggerMode.mode.toString());
+                        if (paused) {
+                            row.add("");
+                        } else if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
                             row.add(Integer.toString(triggerMode.nTimes));
                         } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
                             row.add(Double.toString(triggerMode.probability));
@@ -3658,6 +3665,10 @@ public class ShowExecutor {
                             row.add("");
                         }
                         row.add(String.format("%s:%d", node.getHost(), node.getBePort()));
+                        row.add(Long.toString(failPointInfo.triggerCount == null
+                                ? 0L : failPointInfo.triggerCount));
+                        row.add(Long.toString(failPointInfo.pausedThreadCount == null
+                                ? 0L : failPointInfo.pausedThreadCount));
                         rows.add(row);
                     }
                 } catch (InterruptedException e) {

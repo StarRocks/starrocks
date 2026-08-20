@@ -1510,11 +1510,14 @@ public class ShowStmtMetaTest {
     public void testShowFailPointStatement() {
         ShowFailPointStatement stmt = new ShowFailPointStatement(null, null, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(4, metaData.getColumnCount());
+        Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("TriggerMode", metaData.getColumn(1).getName());
         Assertions.assertEquals("Times/Probability", metaData.getColumn(2).getName());
         Assertions.assertEquals("Host", metaData.getColumn(3).getName());
+        // Appended after Host so existing positional consumers keep working.
+        Assertions.assertEquals("TriggerCount", metaData.getColumn(4).getName());
+        Assertions.assertEquals("PausedThreads", metaData.getColumn(5).getName());
     }
 
     @Test
