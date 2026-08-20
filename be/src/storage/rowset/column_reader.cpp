@@ -59,14 +59,6 @@
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
-<<<<<<< HEAD
-=======
-#include "base/bit/rle_encoding.h"
-#include "base/compression/block_compression.h"
-#include "base/compression/zstd_dict.h"
-#include "cache/mem_cache/page_handle.h"
-#include "common/bloom_filter.h"
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355))
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -87,6 +79,7 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
+#include "util/compression/zstd_dict.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks {
@@ -133,20 +126,16 @@ ColumnReader::~ColumnReader() {
                                  _builtin_inverted_index_meta->SpaceUsedLong());
         _builtin_inverted_index_meta.reset(nullptr);
     }
-<<<<<<< HEAD
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
-=======
     if (_zstd_compression_ddict != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(),
                                  _zstd_compression_ddict->mem_usage());
         // Free under the same tracker the allocation was charged to. Eviction runs on
         // whatever thread happened to trigger it, so without this the process tracker
         // would keep the charge while an unrelated query's tracker went negative.
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(GlobalEnv::GetInstance()->process_mem_tracker());
         _zstd_compression_ddict.reset();
     }
-    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355))
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
@@ -457,7 +446,7 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                        // ~ColumnReader releases under the same scope.
                        StatusOr<std::unique_ptr<compression::ZstdDDict>> ddict_or;
                        {
-                           SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
+                           SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(GlobalEnv::GetInstance()->process_mem_tracker());
                            ddict_or = compression::ZstdDDict::create(body);
                        }
                        RETURN_IF_ERROR(ddict_or.status());
@@ -468,7 +457,7 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                        // lazily loaded per-column structure here does, or the metacache
                        // sizes itself against a number that leaves these dictionaries out.
                        const size_t ddict_bytes = _zstd_compression_ddict->mem_usage();
-                       MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), ddict_bytes);
+                       MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), ddict_bytes);
                        _meta_mem_usage.fetch_add(ddict_bytes, std::memory_order_relaxed);
                        _segment->update_cache_size();
                        return Status::OK();

@@ -34,17 +34,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <iostream>
 
-<<<<<<< HEAD
-=======
-#include "base/compression/block_compression.h"
-#include "base/compression/zstd_dict.h"
-#include "base/testutil/assert.h"
-#include "base/types/decimal12.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355))
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -60,11 +52,8 @@
 #include "storage/chunk_helper.h"
 #include "storage/decimal12.h"
 #include "storage/olap_common.h"
-<<<<<<< HEAD
 #include "storage/range.h"
-=======
 #include "storage/rowset/binary_plain_page.h"
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355))
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -78,6 +67,8 @@
 #include "storage/types.h"
 #include "testutil/assert.h"
 #include "types/date_value.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/zstd_dict.h"
 
 using std::string;
 
@@ -931,286 +922,6 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
     }
 }
 
-<<<<<<< HEAD
-=======
-// Reproduces SIGSEGV at offset 0x44 in ScalarColumnWriter::finish() when a
-// VARCHAR/CHAR column writer is finalized without any append. String columns
-// set need_speculate_encoding = true, so ScalarColumnWriter::init() skips
-// set_encoding() and _encoding_info stays nullptr. StringColumnWriter::finish()
-// only fixes that up if _buf_column != nullptr (i.e. at least one append
-// happened). With no appends, _encoding_info->encoding() dereferences nullptr
-// and reads _encoding at offset 0x44.
-TEST_F(ColumnReaderWriterTest, test_string_writer_finish_without_append) {
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-    ColumnMetaPB meta;
-    ColumnWriterOptions writer_opts = make_writer_opts<TYPE_VARCHAR, DEFAULT_ENCODING, 2>(&meta);
-
-    TabletColumn column = create_varchar_key(1, true, 128);
-    ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-    ASSERT_OK(writer->init());
-
-    // No writer->append(...) call here.
-    ASSERT_OK(writer->finish());
-}
-
-// Reading past the end of a column must be idempotent.
-//
-// Before the fix this crashed with
-//   Check failed: _cur_idx < _index->_num_pages (1 vs. 1)
-// in OrdinalPageIndexIterator::next(). The call that consumes the last rows
-// returns a SHORT batch (n < requested) and, on its way out, already steps the
-// page iterator one past the last data page to detect eos. A caller that only
-// stops on n == 0 -- e.g. the lake ADD INDEX bitmap builder -- then issues one
-// more next_batch(), and _load_next_page() stepped the exhausted page iterator
-// again, tripping the DCHECK in debug/ASAN builds.
-TEST_F(ColumnReaderWriterTest, test_next_batch_after_eos_is_idempotent) {
-    // 100 rows: fewer than one batch, so the very first read is short and the
-    // column fits in a single data page (_num_pages == 1).
-    constexpr size_t kNumRows = 100;
-    constexpr size_t kBatch = 4096;
-
-    auto src = ChunkFactory::column_from_field_type(TYPE_INT, true);
-    for (size_t i = 0; i < kNumRows; ++i) {
-        src->append_datum(Datum(static_cast<int32_t>(i)));
-    }
-
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    auto segment = create_dummy_segment(fname);
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_INT, DEFAULT_ENCODING, 2>(&meta);
-        TabletColumn column = make_tablet_column<TYPE_INT>();
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_OK(writer->append(*src));
-        flush_column_writer(writer.get());
-        ASSERT_OK(wfile->close());
-    }
-
-    auto iter = create_and_init_iterator(meta, segment.get(), fname);
-    ASSERT_OK(iter->seek_to_first());
-
-    // First read: short batch, all rows.
-    auto dst = ChunkFactory::column_from_field_type(TYPE_INT, true);
-    size_t n = kBatch;
-    ASSERT_OK(iter->next_batch(&n, dst.get()));
-    ASSERT_EQ(kNumRows, n);
-
-    // Every subsequent read must report zero rows instead of crashing.
-    for (int i = 0; i < 3; ++i) {
-        dst->reset_column();
-        n = kBatch;
-        ASSERT_OK(iter->next_batch(&n, dst.get()));
-        ASSERT_EQ(0U, n);
-        ASSERT_EQ(0U, dst->size());
-    }
-}
-
-// ---------------------------------------------------------------------------
-// IDG read-side probe tests (covers scalar_column_iterator.cpp lines 80-99,
-// the `_opts.idg_loader != nullptr` block in init() that flips
-// `_has_idg_{original,ngram}_bf` so the upstream pruning gates surface the
-// fast-path sidecar without a footer rewrite).
-// ---------------------------------------------------------------------------
-
-namespace {
-// Stub loader: returns a caller-provided IndexDeltaGroupList (or empty),
-// optionally fails. Trips a counter so we can assert single-shot probing.
-class StubIdgLoader : public lake::IndexDeltaGroupLoader {
-public:
-    StubIdgLoader(lake::IndexDeltaGroupList list, Status load_st = Status::OK())
-            : _list(std::move(list)), _load_st(std::move(load_st)) {}
-    Status load(const TabletSegmentId& tsid, int64_t query_version, lake::IndexDeltaGroupList* out) override {
-        ++calls;
-        if (!_load_st.ok()) return _load_st;
-        *out = _list;
-        return Status::OK();
-    }
-    int calls = 0;
-
-private:
-    lake::IndexDeltaGroupList _list;
-    Status _load_st;
-};
-
-// Make a ColumnIteratorOptions wired to use `idg_loader`. Only the fields
-// the probe consults are populated; everything else inherits the legacy
-// path's defaults.
-ColumnIteratorOptions make_idg_iter_opts(RandomAccessFile* read_file, OlapReaderStatistics* stats,
-                                         std::shared_ptr<lake::IndexDeltaGroupLoader> loader, int32_t col_uid) {
-    ColumnIteratorOptions o;
-    o.stats = stats;
-    o.read_file = read_file;
-    o.use_page_cache = true;
-    o.idg_loader = std::move(loader);
-    o.tablet_id = 1;
-    o.segment_id = 0;
-    o.query_version = 100;
-    o.col_unique_id = col_uid;
-    return o;
-}
-} // namespace
-
-// Probe records NGRAMBF: has_ngram_bloom_filter_index() flips true even when
-// the segment footer carries no BF metadata.
-TEST_F(ColumnReaderWriterTest, idg_probe_sets_ngram_bf_flag) {
-    auto col = numeric_data<TYPE_INT>(10000);
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    auto segment = create_dummy_segment(fname);
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
-        TabletColumn column = make_tablet_column<TYPE_INT>();
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_OK(writer->append(*col));
-        flush_column_writer(writer.get());
-        ASSERT_OK(wfile->close());
-    }
-    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
-    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
-    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
-
-    lake::IndexDeltaGroupEntry e;
-    e.keys.push_back({/*col_unique_id=*/0, IndexType::NGRAMBF});
-    e.index_file = "ix.idx";
-    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
-    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
-
-    ASSERT_OK(iter_base->init(opts));
-    EXPECT_TRUE(iter_base->has_ngram_bloom_filter_index());
-    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
-    EXPECT_EQ(1, loader->calls); // probe is one-shot at init()
-}
-
-// Probe records original BF: has_original_bloom_filter_index() flips true.
-TEST_F(ColumnReaderWriterTest, idg_probe_sets_original_bf_flag) {
-    auto col = numeric_data<TYPE_INT>(10000);
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    auto segment = create_dummy_segment(fname);
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
-        TabletColumn column = make_tablet_column<TYPE_INT>();
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_OK(writer->append(*col));
-        flush_column_writer(writer.get());
-        ASSERT_OK(wfile->close());
-    }
-    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
-    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
-    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
-
-    lake::IndexDeltaGroupEntry e;
-    e.keys.push_back({/*col_unique_id=*/0, IndexType::BLOOM_FILTER});
-    e.index_file = "ix.idx";
-    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
-    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
-
-    ASSERT_OK(iter_base->init(opts));
-    EXPECT_TRUE(iter_base->has_original_bloom_filter_index());
-    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
-}
-
-// Probe ignores entries whose col_unique_id does not match. Both flags stay
-// false.
-TEST_F(ColumnReaderWriterTest, idg_probe_skips_wrong_column) {
-    auto col = numeric_data<TYPE_INT>(10000);
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    auto segment = create_dummy_segment(fname);
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
-        TabletColumn column = make_tablet_column<TYPE_INT>();
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_OK(writer->append(*col));
-        flush_column_writer(writer.get());
-        ASSERT_OK(wfile->close());
-    }
-    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
-    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
-    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
-
-    lake::IndexDeltaGroupEntry e;
-    e.keys.push_back({/*col_unique_id=*/77, IndexType::NGRAMBF});
-    e.index_file = "ix.idx";
-    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
-    // Iterator's column_unique_id is 0, loader entry is 77 -> no match.
-    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
-
-    ASSERT_OK(iter_base->init(opts));
-    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
-    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
-}
-
-// Loader returns an error: probe swallows it (init() must still succeed),
-// neither flag is set.
-TEST_F(ColumnReaderWriterTest, idg_probe_tolerates_loader_error) {
-    auto col = numeric_data<TYPE_INT>(10000);
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    auto segment = create_dummy_segment(fname);
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
-        TabletColumn column = make_tablet_column<TYPE_INT>();
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_OK(writer->append(*col));
-        flush_column_writer(writer.get());
-        ASSERT_OK(wfile->close());
-    }
-    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
-    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
-    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
-
-    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{}, Status::IOError("simulated"));
-    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/0);
-
-    ASSERT_OK(iter_base->init(opts));
-    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
-    EXPECT_FALSE(iter_base->has_original_bloom_filter_index());
-}
-
-// Negative col_unique_id (non-lake / pre-IDG path) skips the probe entirely.
-// Loader is never called.
-TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
-    auto col = numeric_data<TYPE_INT>(10000);
-    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
-    auto segment = create_dummy_segment(fname);
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        auto wopts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta);
-        TabletColumn column = make_tablet_column<TYPE_INT>();
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(wopts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_OK(writer->append(*col));
-        flush_column_writer(writer.get());
-        ASSERT_OK(wfile->close());
-    }
-    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
-    ASSIGN_OR_ABORT(auto iter_base, _reader->new_iterator());
-    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
-
-    lake::IndexDeltaGroupEntry e;
-    e.keys.push_back({/*col_unique_id=*/0, IndexType::NGRAMBF});
-    e.index_file = "ix.idx";
-    auto loader = std::make_shared<StubIdgLoader>(lake::IndexDeltaGroupList{e});
-    auto opts = make_idg_iter_opts(_read_file.get(), &_stats, loader, /*col_uid=*/-1);
-
-    ASSERT_OK(iter_base->init(opts));
-    EXPECT_FALSE(iter_base->has_ngram_bloom_filter_index());
-    EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
-}
-
 // End-to-end read of a column that carries a compression dictionary.
 //
 // This build has no writer for such a column -- that is the point of splitting the
@@ -1238,6 +949,9 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_OK(get_block_compression_codec(CompressionTypePB::ZSTD, &codec));
 
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+
     ColumnMetaPB meta;
     meta.set_column_id(0);
     meta.set_unique_id(0);
@@ -1250,7 +964,7 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     meta.set_num_rows(N);
 
     {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
 
         // Encode each group of rows into a plain page body, exactly as the writer's
         // page builder would.
@@ -1325,10 +1039,10 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     ASSERT_TRUE(meta.has_zstd_compression_dict_page());
     ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
 
-    auto segment = create_dummy_segment(fname);
+    auto segment = create_dummy_segment(fs, fname);
     ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
     ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
     ColumnIteratorOptions iter_opts;
     OlapReaderStatistics stats;
     iter_opts.stats = &stats;
@@ -1339,7 +1053,7 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     // Scan: every value has to come back byte for byte, including the plain first
     // page and the dictionary-compressed ones after it.
     ASSERT_OK(iter->seek_to_first());
-    auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     size_t remaining = N;
     while (remaining > 0) {
         size_t n = std::min<size_t>(128, remaining);
@@ -1355,12 +1069,11 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     // And a seek straight into a dictionary-compressed page, which is the path a
     // point lookup takes.
     ASSERT_OK(iter->seek_to_ordinal(kRowsPerPage * 3 + 7));
-    auto one = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    auto one = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     size_t one_row = 1;
     ASSERT_OK(iter->next_batch(&one_row, one.get()));
     ASSERT_EQ(1, one->size());
     ASSERT_EQ(values[kRowsPerPage * 3 + 7], one->get(0).get_slice().to_string());
 }
 
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355))
 } // namespace starrocks

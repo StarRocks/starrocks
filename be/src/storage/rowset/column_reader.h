@@ -233,8 +233,6 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
-<<<<<<< HEAD
-=======
     // true when this column carries a compression-dictionary page.
     bool has_zstd_compression_dict() const { return _zstd_compression_dict_page_pointer.size > 0; }
     // build the shared DDict once (per segment, per column) by bootstrap
@@ -242,19 +240,6 @@ private:
     // would re-enter the OnceFlag on the same thread and deadlock).
     Status _ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts);
 
-    // Build a fresh BitmapIndexReader backed by a standalone .idx file
-    // (Index Delta Group payload). Used when IndexReadOptions carries an
-    // IDG entry that supersedes the segment footer's bitmap meta. The
-    // returned iterator owns its file handle and reader; the cached
-    // _bitmap_index footer reader is left untouched.
-    // `encryption_meta` is the IDG entry's serialized EncryptionMetaPB
-    // (empty when encryption is off); when non-empty it is unwrapped and
-    // passed through RandomAccessFileOptions so that the .idx file is
-    // read as cleartext rather than ciphertext.
-    Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
-                                                 const std::string& encryption_meta, BitmapIndexIterator** iterator);
-
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355))
     // Determines the logical type to use when parsing zone map values for predicate filtering,
     // handling type mismatches between column and predicate types after fast schema evolution
     LogicalType _get_zone_map_parse_type(const ColumnPredicate* predicate) const;

@@ -30,7 +30,7 @@
 #include <atomic>
 #include <cstring>
 
-#include "base/compression/zstd_dict.h"
+#include "util/compression/zstd_dict.h"
 
 namespace starrocks::compression {
 

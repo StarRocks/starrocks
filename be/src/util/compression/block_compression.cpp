@@ -41,22 +41,14 @@
 #endif
 #include <zlib.h>
 
-<<<<<<< HEAD:be/src/util/compression/block_compression.cpp
-=======
 #include <atomic>
 
-#include "base/coding.h"
-#include "base/compression/compression_context_pool_singletons.h"
-#include "base/compression/compression_headers.h"
-#include "base/compression/lzo_decompressor_registry.h"
-#include "base/compression/zstd_dict.h"
-#include "base/string/faststring.h"
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355)):be/src/base/compression/block_compression.cpp
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 #include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/compression/compression_headers.h"
+#include "util/compression/zstd_dict.h"
 #include "util/faststring.h"
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);

@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#include "base/statusor.h"
-#include "base/string/slice.h"
+#include "common/statusor.h"
+#include "util/slice.h"
 
 // Forward-declare the opaque zstd dictionary handles so this header never leaks
 // <zstd.h> into its includers (page_io.h / column_reader.h etc.). The real

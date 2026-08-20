@@ -41,16 +41,9 @@
 #include <set>
 #include <thread>
 
-<<<<<<< HEAD:be/test/util/block_compression_test.cpp
-=======
-#include "base/compression/compression_context_pool_singletons.h"
-#include "base/compression/zstd_dict.h"
-#include "base/container/raw_container.h"
-#include "base/random/random.h"
-#include "base/string/faststring.h"
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355)):be/test/base/compression/block_compression_test.cpp
 #include "gen_cpp/segment.pb.h"
 #include "util/compression/compression_context_pool_singletons.h"
+#include "util/compression/zstd_dict.h"
 #include "util/faststring.h"
 #include "util/random.h"
 #include "util/raw_container.h"

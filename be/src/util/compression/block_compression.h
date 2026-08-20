@@ -45,8 +45,6 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD:be/src/util/compression/block_compression.h
-=======
 // Handles for the per-column ZSTD compression dictionary. Forward-declared (defined
 // in zstd_dict.h) so this widely-included header does not pull in <zstd.h>.
 namespace compression {
@@ -54,11 +52,6 @@ class ZstdCDict;
 class ZstdDDict;
 } // namespace compression
 
-struct BlockCompressionOptions {
-    int32_t lz4_acceleration = 1;
-};
-
->>>>>>> 811ea99853 ([Enhancement] Read support for per-column ZSTD compression dictionaries (#77355)):be/src/base/compression/block_compression.h
 // This class is used to encapsulate Compression/Decompression algorithm.
 // This class only used to compress a block data, which means all data
 // should given when call compress or decompress. This class don't handle
