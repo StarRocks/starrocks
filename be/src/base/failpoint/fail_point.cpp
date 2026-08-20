@@ -325,6 +325,14 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
                     }
                 }
                 set_pause_trigger_mode(&trigger_mode, timeout_second);
+            } else {
+                // Without this branch trigger_mode stays default-constructed, and proto2 reports an
+                // unset optional enum as its first value -- ENABLE -- so a typo here would silently
+                // ARM the failpoint instead of being reported. Bail like every other parse failure in
+                // this loop does.
+                LOG(WARNING) << "unknown failpoint mode \"" << mode.value() << "\" for failpoint "
+                             << std::string(fp_name.value());
+                return false;
             }
             fp->setMode(trigger_mode);
         }
