@@ -15,20 +15,25 @@
 package com.starrocks.extension;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.DefaultGsonBuilderFactory;
 import com.starrocks.persist.gson.IGsonBuilderFactory;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.multi.MultiWarehouseManager;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class DefaultExtensionContext implements ExtensionContext {
     private final Map<Class<?>, Object> capabilityMap = Maps.newHashMap();
     private final Map<Class<?>, ConstructorMetadata> constructorMetadataMap = Maps.newHashMap();
+    // Implementations that can only be chosen once Config has been loaded; see registerDefault().
+    private final Map<Class<?>, Supplier<Class<?>>> lazyImplementationMap = Maps.newHashMap();
 
     public DefaultExtensionContext() {
         registerDefault();
@@ -73,7 +78,9 @@ public class DefaultExtensionContext implements ExtensionContext {
             // Get or resolve constructor metadata
             ConstructorMetadata metadata = constructorMetadataMap.get(clazz);
             if (metadata == null) {
-                metadata = resolveConstructorInternal(clazz);
+                Supplier<Class<?>> lazyImplementation = lazyImplementationMap.get(clazz);
+                metadata = resolveConstructorInternal(
+                        lazyImplementation == null ? clazz : lazyImplementation.get());
                 constructorMetadataMap.put(clazz, metadata);
             }
 
@@ -169,10 +176,13 @@ public class DefaultExtensionContext implements ExtensionContext {
     public void registerDefault() {
         // Register constructor for ResourceUsageMonitor to enable dependency injection
         registerConstructor(ResourceUsageMonitor.class, ResourceUsageMonitor.class);
-        
-        // Register constructor for WarehouseManager to enable dependency injection
-        registerConstructor(WarehouseManager.class, WarehouseManager.class);
-        
+        // Which WarehouseManager to build depends on Config.enable_multi_warehouse, and this context is
+        // constructed from a static initializer that can run before the config file is read (GsonUtils pulls
+        // it in). So record the choice as a supplier and let the first get() resolve it, by which time
+        // Config.init() has run.
+        lazyImplementationMap.put(WarehouseManager.class,
+                () -> Config.enable_multi_warehouse ? MultiWarehouseManager.class : WarehouseManager.class);
+
         // Register constructor for BaseSlotManager to enable dependency injection
         registerConstructor(BaseSlotManager.class, SlotManager.class);
         

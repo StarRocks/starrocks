@@ -311,6 +311,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
 - Introduced in: v3.1.0
 
+### `enable_multi_warehouse`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable multi-warehouse support: `CREATE WAREHOUSE`, `DROP WAREHOUSE`, `ALTER WAREHOUSE`, and `ALTER SYSTEM ADD COMPUTE NODE ... INTO WAREHOUSE`. Each warehouse owns its own worker group, so a session pinned with `SET warehouse = '<name>'` only schedules query fragments onto that warehouse's compute nodes — which is how you keep a query's shuffles inside a single availability zone. Requires a shared-data cluster; the statements are rejected in shared-nothing mode. Set this item identically on every FE: a follower with it disabled ignores the warehouse journal entries and its catalog silently diverges from the leader's. Do not set it back to `false` once warehouses exist, because the warehouses would disappear from the catalog while compute nodes still reference their IDs. Restart required.
+- Introduced in: v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - Default: Empty string

@@ -312,6 +312,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：StarRocks が FE 設定ファイルで指定されたオブジェクトストレージ関連プロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値は v3.4.1 以降 `true` から `false` に変更されました。
 - 導入時期：v3.1.0
 
+### `enable_multi_warehouse`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：マルチウェアハウス機能（`CREATE WAREHOUSE`、`DROP WAREHOUSE`、`ALTER WAREHOUSE`、および `ALTER SYSTEM ADD COMPUTE NODE ... INTO WAREHOUSE`）を有効にするかどうか。各ウェアハウスは独自の Worker Group を持つため、`SET warehouse = '<name>'` で固定されたセッションはそのウェアハウスの CN ノードにのみクエリフラグメントをスケジュールします。これにより、クエリのシャッフルを単一のアベイラビリティゾーン (AZ) 内に閉じ込めることができます。共有データクラスタでのみ利用可能で、共有なしモードでは関連するステートメントは拒否されます。すべての FE に同じ値を設定してください。この設定が無効な Follower はウェアハウスのジャーナルエントリを無視するため、そのカタログは Leader のものと静かに乖離します。ウェアハウスが存在する状態でこの設定を `false` に戻さないでください。ウェアハウスがカタログから消える一方で、CN ノードはその ID を参照し続けます。変更後は FE の再起動が必要です。
+- 導入時期：v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - デフォルト：Empty string
