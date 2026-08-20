@@ -27,21 +27,46 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.thrift.TTabletReshardJobsItem;
+import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TabletReshardJobMgrTest {
     // A JMockit @Mock for a static method must itself be static, so it cannot capture a local of the
     // enclosing test method; the counters it writes live here instead. Reset before each test.
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
+
+    private static class WarnCounterAppender extends AbstractAppender {
+        private final AtomicInteger warnCount = new AtomicInteger();
+
+        WarnCounterAppender() {
+            super("tablet-reshard-warn-counter", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            if (event.getLevel() == Level.WARN) {
+                warnCount.incrementAndGet();
+            }
+        }
+
+        int getWarnCount() {
+            return warnCount.get();
+        }
+    }
 
     private static void stubCountingNodeCount() {
         new MockUp<TabletReshardUtils>() {
@@ -303,6 +328,49 @@ public class TabletReshardJobMgrTest {
         jobMgr.addTabletReshardJob(job2);
 
         Assertions.assertEquals(2, jobMgr.getAllJobsInfo().getItems().size());
+    }
+
+    @Test
+    public void testGetTabletReshardJobsInfoDoesNotWarnForDroppedMetadata() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        long splitJobId = 101L;
+        long mergeJobId = 102L;
+        SplitTabletJob splitJob = new SplitTabletJob(splitJobId, -1L, -1L, Map.of());
+        splitJob.jobState = TabletReshardJob.JobState.FINISHED;
+        jobMgr.tabletReshardJobs.put(splitJobId, splitJob);
+        MergeTabletJob mergeJob = new MergeTabletJob(mergeJobId, reshardDb.getId(), -1L, Map.of());
+        mergeJob.jobState = TabletReshardJob.JobState.FINISHED;
+        jobMgr.tabletReshardJobs.put(mergeJobId, mergeJob);
+
+        WarnCounterAppender appender = new WarnCounterAppender();
+        org.apache.logging.log4j.core.Logger splitLogger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(SplitTabletJob.class);
+        org.apache.logging.log4j.core.Logger mergeLogger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(MergeTabletJob.class);
+        appender.start();
+        splitLogger.addAppender(appender);
+        mergeLogger.addAppender(appender);
+
+        TTabletReshardJobsResponse response;
+        try {
+            response = jobMgr.getAllJobsInfo();
+        } finally {
+            splitLogger.removeAppender(appender);
+            mergeLogger.removeAppender(appender);
+            appender.stop();
+        }
+
+        Assertions.assertEquals(0, appender.getWarnCount(),
+                "dropped metadata is expected for retained history jobs and must not produce warnings");
+        Assertions.assertEquals(2, response.getItemsSize());
+        TTabletReshardJobsItem splitItem = response.getItems().stream()
+                .filter(item -> item.getJob_id() == splitJobId).findFirst().orElseThrow();
+        Assertions.assertEquals("", splitItem.getDb_name());
+        Assertions.assertEquals("", splitItem.getTable_name());
+        TTabletReshardJobsItem mergeItem = response.getItems().stream()
+                .filter(item -> item.getJob_id() == mergeJobId).findFirst().orElseThrow();
+        Assertions.assertEquals(reshardDb.getFullName(), mergeItem.getDb_name());
+        Assertions.assertEquals("", mergeItem.getTable_name());
     }
 
     @Test
