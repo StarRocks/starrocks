@@ -36,7 +36,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <iostream>
+#include <set>
 #include <thread>
 
 #include "base/compression/compression_context_pool_singletons.h"
@@ -649,7 +651,7 @@ TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
 }
 #endif
 
-// ===================== compression dict compression-dict codec tests =====================
+// ===================== per-column ZSTD dictionary: codec tests =====================
 
 // Roundtrip: a body compressed referencing a CDict decodes correctly with the
 // matching DDict built from the same sample.
@@ -726,7 +728,7 @@ TEST_F(BlockCompressionTest, dict_reset_safety_no_leak_to_next_borrow) {
 
 // I5: a no-dict frame (dictID=0) decodes identically whether or not a
 // raw-content DDict is referenced. This is what makes mixed dict/no-dict pages
-// (raw pages, value-dict pages) in one compression dict column safe on the read path.
+// (raw pages, value-dict pages) in one dictionary column safe on the read path.
 TEST_F(BlockCompressionTest, nodict_frame_decodes_under_ddict) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
@@ -780,17 +782,22 @@ TEST_F(BlockCompressionTest, dict_overload_not_supported_on_non_zstd) {
 //      by dictionary identity, and a stale entry must never be treated as a hit);
 //   2. it does not disturb the shared pool -- interleaved no-dict decompression
 //      still matches a clean reference.
-TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
+// `use_ctx_cache` is not an operator switch -- reads always pass true. It exists so the
+// pooled path stays reachable from a test: that path is also where a context-allocation
+// failure lands, and it must decode correctly there too. Both values are exercised.
+static void run_multi_dict_interleave(bool use_ctx_cache) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
-    // Three different dictionaries + matching bodies.
+    // One more dictionary than the cache has slots (kDictDCtxCacheSize == 4), so a
+    // full round is guaranteed to evict, whatever the thread's slots held before.
     struct Arm {
         std::string sample, body, compressed;
         std::unique_ptr<compression::ZstdDDict> ddict;
     };
-    std::vector<Arm> arms(3);
-    for (int i = 0; i < 3; i++) {
+    constexpr int kArms = 5;
+    std::vector<Arm> arms(kArms);
+    for (int i = 0; i < kArms; i++) {
         for (int k = 0; k < 300; k++) {
             arms[i].sample += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " ";
         }
@@ -809,8 +816,10 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
         arms[i].compressed.resize(out.size);
     }
     // Every dictionary must have a distinct identity, which is what the cache keys on.
-    ASSERT_NE(arms[0].ddict->id(), arms[1].ddict->id());
-    ASSERT_NE(arms[1].ddict->id(), arms[2].ddict->id());
+    std::set<uint64_t> ids;
+    for (const auto& arm : arms) {
+        ASSERT_TRUE(ids.insert(arm.ddict->id()).second);
+    }
 
     // A clean no-dict reference to compare the interleaved no-dict work against.
     std::string plain = generate_str(4000);
@@ -819,13 +828,13 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
     ASSERT_TRUE(codec->compress(plain, &pc).ok());
     plain_c.resize(pc.size);
 
-    // Interleave: dict 0, 1, 2, 0, ... plus no-dict in between. More rounds than
-    // the cache has slots, so entries really do get evicted and re-loaded.
+    // Interleave: dict 0..4, then round again, plus no-dict in between. Five
+    // identities against four slots means each round evicts and re-loads.
     for (int round = 0; round < 25; round++) {
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < kArms; i++) {
             std::string got(arms[i].body.size(), '\0');
             Slice g(got);
-            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok())
+            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get(), use_ctx_cache).ok())
                     << "round " << round << " dict " << i;
             ASSERT_EQ(arms[i].body, std::string(g.data, g.size)) << "round " << round << " dict " << i;
         }
@@ -836,22 +845,317 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
     }
 }
 
-// The dictionary builders reject bad input instead of trusting it. The two size
-// guards matter most: zstd_compression_dict_max_size is an operator-settable mutable
-// config, and a value that is non-positive (widening to a huge size_t) or simply
-// absurd would otherwise reach std::string::resize on a flush or compaction
-// thread -- an allocation failure where the documented behaviour is "give up and
-// write without a dictionary".
+// Run on a fresh thread: the cache is thread-local, so on a thread another test has
+// already used, "evicted" could mean "replaced an entry that test left behind" and the
+// coverage would depend on test order.
+static void run_multi_dict_interleave_on_fresh_thread(bool use_ctx_cache) {
+    std::thread t([use_ctx_cache] { run_multi_dict_interleave(use_ctx_cache); });
+    t.join();
+}
+
+TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
+    run_multi_dict_interleave_on_fresh_thread(/*use_ctx_cache=*/true);
+}
+
+// Same, with the context cache turned off: every page then goes through the shared
+// pool, which must load the dictionary per call and drop it again on return.
+TEST_F(BlockCompressionTest, dict_pooled_ctx_multi_dict_and_pool_isolation) {
+    run_multi_dict_interleave_on_fresh_thread(/*use_ctx_cache=*/false);
+}
+
+// A page that fails to decompress leaves the context in an undefined state, so the
+// cached-context path throws that context away. What must survive is the thread:
+// the next page decoded on it has to be correct, and this has to hold however many
+// times it happens (a dropped context is recreated, never reused).
+TEST_F(BlockCompressionTest, dict_decompress_failure_does_not_poison_the_thread) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int k = 0; k < 300; k++) {
+        sample += "recurring phrase " + std::to_string(k % 40) + " ";
+    }
+    std::string body;
+    for (int k = 0; k < 600; k++) {
+        body += "recurring phrase " + std::to_string(k % 40) + " payload ";
+    }
+    auto cd = compression::ZstdCDict::create(Slice(sample), 3);
+    ASSERT_TRUE(cd.ok());
+    auto dd = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(dd.ok());
+
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice out(compressed);
+    std::vector<Slice> in{Slice(body)};
+    ASSERT_TRUE(codec->compress(in, &out, false, body.size(), nullptr, nullptr, cd.value().get()).ok());
+    compressed.resize(out.size);
+
+    for (int round = 0; round < 5; round++) {
+        // Garbage in: must be reported, not crash, and must not be mistaken for data.
+        std::string garbage = "this is not a zstd frame at all";
+        std::string sink(body.size(), '\0');
+        Slice s1(sink);
+        ASSERT_FALSE(codec->decompress(Slice(garbage), &s1, dd.value().get()).ok()) << "round " << round;
+
+        // Truncating a real frame fails inside the decoder rather than at the header.
+        std::string truncated = compressed.substr(0, compressed.size() / 2);
+        std::string sink2(body.size(), '\0');
+        Slice s2(sink2);
+        ASSERT_FALSE(codec->decompress(Slice(truncated), &s2, dd.value().get()).ok()) << "round " << round;
+
+        // The thread must still decode correctly right after both failures.
+        std::string got(body.size(), '\0');
+        Slice g(got);
+        ASSERT_TRUE(codec->decompress(Slice(compressed), &g, dd.value().get()).ok()) << "round " << round;
+        ASSERT_EQ(body, std::string(g.data, g.size)) << "round " << round;
+    }
+}
+
+// The segment metacache sizes itself from what the readers report, and a DDict is
+// held for as long as the reader that built it. So its reported size has to be
+// real: roughly the dictionary it copied, and it has to grow with it.
+TEST_F(BlockCompressionTest, ddict_reports_its_memory) {
+    size_t last = 0;
+    for (size_t dict_size : {4096UL, 64UL * 1024, 256UL * 1024}) {
+        std::string sample = generate_str(dict_size);
+        auto dd = compression::ZstdDDict::create(Slice(sample));
+        ASSERT_TRUE(dd.ok());
+        const size_t reported = dd.value()->mem_usage();
+        EXPECT_GE(reported, dict_size) << "dict_size " << dict_size;
+        EXPECT_LT(reported, dict_size * 2 + 128 * 1024) << "dict_size " << dict_size;
+        EXPECT_GT(reported, last) << "dict_size " << dict_size;
+        last = reported;
+    }
+}
+
 TEST_F(BlockCompressionTest, dict_builders_reject_bad_input) {
     // Empty bytes are the one input the builders must reject: a zero-length
-    // dictionary would otherwise be handed to zstd, and the column would be
-    // marked dictionary-ready while every page referenced nothing.
+    // dictionary would otherwise be handed to zstd, and a column would be marked
+    // dictionary-ready while every page referenced nothing.
     ASSERT_FALSE(compression::ZstdCDict::create(Slice(), 3).ok());
     ASSERT_FALSE(compression::ZstdDDict::create(Slice()).ok());
 
     std::string sample = generate_str(64 * 1024);
     ASSERT_TRUE(compression::ZstdCDict::create(Slice(sample), 3).ok());
     ASSERT_TRUE(compression::ZstdDDict::create(Slice(sample)).ok());
+}
+
+// The cached contexts are ~94 KB each and live until their thread exits, so the bytes
+// have to be both visible and returned. Pins three things: the counter rises when a
+// thread first decodes a dictionary page, the installed allocation scope is entered and
+// left in pairs (that is what moves the charge off whatever query created the context),
+// and everything is given back when the thread goes away.
+namespace {
+std::atomic<int> g_scope_enters{0};
+std::atomic<int> g_scope_leaves{0};
+void count_enter() {
+    g_scope_enters.fetch_add(1);
+}
+void count_leave() {
+    g_scope_leaves.fetch_add(1);
+}
+} // namespace
+
+TEST_F(BlockCompressionTest, dict_ctx_cache_memory_is_accounted_and_returned) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int k = 0; k < 400; k++) {
+        sample += "recurring phrase " + std::to_string(k % 40) + " ";
+    }
+    std::string body;
+    for (int k = 0; k < 800; k++) {
+        body += "recurring phrase " + std::to_string(k % 40) + " payload ";
+    }
+    auto cd = compression::ZstdCDict::create(Slice(sample), 3);
+    ASSERT_TRUE(cd.ok());
+    auto dd = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(dd.ok());
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice out(compressed);
+    std::vector<Slice> in{Slice(body)};
+    ASSERT_TRUE(codec->compress(in, &out, false, body.size(), nullptr, nullptr, cd.value().get()).ok());
+    compressed.resize(out.size);
+
+    const size_t before = dict_dctx_cache_memory_bytes();
+    g_scope_enters.store(0);
+    g_scope_leaves.store(0);
+    set_dict_dctx_alloc_scope(&count_enter, &count_leave);
+
+    size_t peak = 0;
+    // a fresh thread, so the accounting is this thread's and not something an earlier
+    // test left cached
+    std::thread t([&] {
+        for (int i = 0; i < 4; i++) {
+            std::string got(body.size(), '\0');
+            Slice g(got);
+            ASSERT_TRUE(codec->decompress(Slice(compressed), &g, dd.value().get()).ok());
+            ASSERT_EQ(body, std::string(g.data, g.size));
+        }
+        peak = dict_dctx_cache_memory_bytes();
+    });
+    t.join();
+
+    set_dict_dctx_alloc_scope(nullptr, nullptr);
+
+    // one context for this dictionary, held while the thread ran
+    ASSERT_GT(peak, before) << "the context was never accounted";
+    ASSERT_GE(peak - before, 1024u) << "a ZSTD_DCtx is tens of KB, not a handful of bytes";
+    // and handed back when the thread exited
+    ASSERT_EQ(before, dict_dctx_cache_memory_bytes()) << "the context was not returned at thread exit";
+    // Exactly two scopes, and the count is what pins them: one around ZSTD_createDCtx for
+    // the single dictionary this thread used, one around ZSTD_freeDCtx when the thread's
+    // cache was destroyed at exit (the other three slots are empty and return before the
+    // scope). "Entered as many times as left" is not enough -- deleting the scope from
+    // either site alone still leaves it paired, at 1/1.
+    ASSERT_EQ(2, g_scope_enters.load()) << "the allocation scope did not wrap both the create and the free";
+    ASSERT_EQ(2, g_scope_leaves.load());
+}
+
+// Everything above proves the cache decodes correctly. None of it proves the cache does
+// its job, or stays inside the bound its memory argument rests on -- both are invisible
+// to an output comparison, and both are exactly what a regression would take away. The
+// byte counter makes them observable: one context is ~94 KB, so counting bytes counts
+// contexts.
+TEST_F(BlockCompressionTest, dict_ctx_cache_hits_and_stays_bounded) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    // eight distinct dictionaries, each with a body compressed against it
+    constexpr int kDicts = 8;
+    struct Arm {
+        std::string sample, body, compressed;
+        std::unique_ptr<compression::ZstdDDict> ddict;
+    };
+    std::vector<Arm> arms(kDicts);
+    for (int i = 0; i < kDicts; i++) {
+        for (int k = 0; k < 300; k++) {
+            arms[i].sample += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " ";
+        }
+        for (int k = 0; k < 600; k++) {
+            arms[i].body += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " payload ";
+        }
+        auto cd = compression::ZstdCDict::create(Slice(arms[i].sample), 3);
+        ASSERT_TRUE(cd.ok());
+        auto dd = compression::ZstdDDict::create(Slice(arms[i].sample));
+        ASSERT_TRUE(dd.ok());
+        arms[i].ddict = std::move(dd.value());
+        arms[i].compressed.resize(codec->max_compressed_len(arms[i].body.size()));
+        Slice out(arms[i].compressed);
+        std::vector<Slice> in{Slice(arms[i].body)};
+        ASSERT_TRUE(codec->compress(in, &out, false, arms[i].body.size(), nullptr, nullptr, cd.value().get()).ok());
+        arms[i].compressed.resize(out.size);
+    }
+
+    auto decode = [&](int i) {
+        std::string got(arms[i].body.size(), '\0');
+        Slice g(got);
+        ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok());
+        ASSERT_EQ(arms[i].body, std::string(g.data, g.size));
+    };
+
+    const size_t before = dict_dctx_cache_memory_bytes();
+    size_t after_first_page = 0;
+    size_t after_one_dict_many_pages = 0;
+    size_t after_cycling_all = 0;
+    size_t after_failure = 0;
+
+    // a fresh thread, so the numbers are this thread's contexts and nobody else's
+    std::thread t([&] {
+        // 1. THE POINT OF THE CACHE: the first page of a dictionary establishes the
+        //    session (one context); the next 49 pages of the SAME dictionary must add
+        //    nothing. If the hit ever degrades, every page re-loads the dictionary --
+        //    correct output, ~30% slower reads, and nothing else would notice. The
+        //    single-context size is measured from the first page alone, so the
+        //    comparison below is between two independent measurements.
+        decode(0);
+        after_first_page = dict_dctx_cache_memory_bytes();
+        for (int p = 1; p < 50; p++) decode(0);
+        after_one_dict_many_pages = dict_dctx_cache_memory_bytes();
+
+        // 2. THE BOUND: cycling through more dictionaries than there are slots must not
+        //    grow without limit. kDictDCtxCacheSize is 4 in the .cpp; the per-thread cost
+        //    quoted in the design rests on this staying true.
+        for (int round = 0; round < 5; round++) {
+            for (int i = 0; i < kDicts; i++) decode(i);
+        }
+        after_cycling_all = dict_dctx_cache_memory_bytes();
+
+        // 3. DISCARD: a page that fails to decode must cost that context its slot, not
+        //    be handed out again. Output equality cannot see this; the counter can.
+        //    Truncate rather than flip a byte: a short frame is always an error, while a
+        //    flipped byte is only usually one -- zstd sets no frame checksum here and a
+        //    raw-content dictionary carries no dictID, so roughly one flip position in six
+        //    decodes "successfully" into wrong bytes, and which ones depends on the level
+        //    and the data.
+        std::string truncated = arms[0].compressed.substr(0, arms[0].compressed.size() / 2);
+        std::string got(arms[0].body.size(), '\0');
+        Slice g(got);
+        ASSERT_FALSE(codec->decompress(Slice(truncated), &g, arms[0].ddict.get()).ok()) << "a half frame decoded";
+        after_failure = dict_dctx_cache_memory_bytes();
+    });
+    t.join();
+
+    const size_t one_ctx = after_first_page - before;
+    ASSERT_GT(one_ctx, 1024u) << "a ZSTD_DCtx is tens of KB";
+    // 49 more pages of the same dictionary added no context: the cache hit
+    ASSERT_EQ(after_first_page, after_one_dict_many_pages)
+            << "pages after the first re-allocated a context: the cache is not hitting";
+    // 8 dictionaries over 5 rounds, still at most the 4 slots
+    ASSERT_LE(after_cycling_all - before, 4 * one_ctx) << "the per-thread context set grew past kDictDCtxCacheSize";
+    // the failed page cost its context its slot
+    ASSERT_LT(after_failure, after_cycling_all) << "a context that failed mid-decompression was kept";
+    // and nothing survives the thread
+    ASSERT_EQ(before, dict_dctx_cache_memory_bytes());
+}
+
+// The whole reason this change exists is that an old BE must be able to read segments a
+// newer one wrote. The other direction is the one that has to be safe by construction: a
+// build WITHOUT this change meets a page compressed against a dictionary, decodes it with
+// no dictionary at all, and must FAIL rather than hand back plausible-looking bytes. The
+// page checksum covers the compressed body, so it passes either way -- the only thing
+// standing between a downgraded cluster and silent wrong answers is that zstd refuses.
+// It does refuse -- measured over 232 pages across two real corpora -- but note zstd does
+// not *promise* to: no frame checksum is set and a raw-content dictionary carries no
+// dictID. What makes this case robust rather than lucky is that the frame's backreferences
+// point into a window the decoder does not have, not a checksum catching it.
+TEST_F(BlockCompressionTest, dict_page_cannot_be_decoded_without_its_dictionary) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int k = 0; k < 400; k++) {
+        sample += "recurring phrase " + std::to_string(k % 40) + " ";
+    }
+    auto cd = compression::ZstdCDict::create(Slice(sample), 3);
+    ASSERT_TRUE(cd.ok());
+
+    int refused = 0;
+    for (int p = 0; p < 32; p++) {
+        std::string body;
+        for (int k = 0; k < 400; k++) {
+            body += "recurring phrase " + std::to_string((k + p) % 40) + " payload " + std::to_string(p) + " ";
+        }
+        std::string compressed(codec->max_compressed_len(body.size()), '\0');
+        Slice out(compressed);
+        std::vector<Slice> in{Slice(body)};
+        ASSERT_TRUE(codec->compress(in, &out, false, body.size(), nullptr, nullptr, cd.value().get()).ok());
+        compressed.resize(out.size);
+
+        // exactly what an old reader does: the two-argument overload, no dictionary
+        std::string got(body.size(), '\0');
+        Slice g(got);
+        Status st = codec->decompress(Slice(compressed), &g);
+        if (!st.ok()) {
+            refused++;
+        } else {
+            // the unacceptable outcome: it "worked" and produced something else
+            ASSERT_EQ(body, std::string(g.data, g.size))
+                    << "page " << p << " decoded without its dictionary and returned WRONG bytes";
+        }
+    }
+    ASSERT_EQ(32, refused) << "a dictionary-compressed page decoded without the dictionary";
 }
 
 } // namespace starrocks

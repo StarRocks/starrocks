@@ -27,6 +27,7 @@ set(COLUMN_TEST_FILES
     global_dict_core_test.cpp
     german_string_test.cpp
     json_column_test.cpp
+    json_merger_test.cpp
     map_column_test.cpp
     mysql_row_buffer_test.cpp
     object_column_core_test.cpp

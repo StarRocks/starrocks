@@ -36,6 +36,8 @@
 
 #include <iostream>
 
+#include "base/compression/block_compression.h"
+#include "base/compression/zstd_dict.h"
 #include "base/testutil/assert.h"
 #include "base/types/decimal12.h"
 #include "base/uid_util.h"
@@ -58,9 +60,12 @@
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/ordinal_page_index.h"
+#include "storage/rowset/page_io.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
@@ -1173,6 +1178,157 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
     EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
+// End-to-end read of a column that carries a compression dictionary.
+//
+// This build has no writer for such a column -- that is the point of splitting the
+// read support out -- so the column file is assembled here the way the writer will:
+// a DICTIONARY_PAGE holding a raw sample taken from the first data page, and every
+// page after it compressed against that sample. Reading it back through
+// ColumnReader is what exercises the dictionary load and the per-page reference,
+// and asserting every value round-trips is what proves they are right.
+TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
+    const std::string fname = strings::Substitute("$0/read_with_dict.data", TEST_DIR);
+    const int kRowsPerPage = 400;
+    const int kPages = 6;
+    const int N = kRowsPerPage * kPages;
+
+    // Rows that share a long scaffolding, so a dictionary taken from the first page
+    // actually helps the ones after it.
+    std::vector<std::string> values(N);
+    for (int i = 0; i < N; i++) {
+        values[i] = strings::Substitute(
+                R"({"role":"assistant","trace":"trace_0001","parts":[{"type":"text","content":"row $0 of a )"
+                R"(replayed conversation whose scaffolding repeats verbatim across every row"}]})",
+                i);
+    }
+
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_OK(get_block_compression_codec(CompressionTypePB::ZSTD, &codec));
+
+    ColumnMetaPB meta;
+    meta.set_column_id(0);
+    meta.set_unique_id(0);
+    meta.set_type(TYPE_VARCHAR);
+    meta.set_length(1024);
+    meta.set_encoding(PLAIN_ENCODING);
+    meta.set_compression(CompressionTypePB::ZSTD);
+    meta.set_compression_level(-1);
+    meta.set_is_nullable(false);
+    meta.set_num_rows(N);
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+
+        // Encode each group of rows into a plain page body, exactly as the writer's
+        // page builder would.
+        PageBuilderOptions page_opts;
+        page_opts.data_page_size = 1024 * 1024; // one page per group, no early flush
+        std::vector<std::string> page_bodies;
+        for (int p = 0; p < kPages; p++) {
+            BinaryPlainPageBuilder builder(page_opts);
+            for (int i = 0; i < kRowsPerPage; i++) {
+                Slice v(values[p * kRowsPerPage + i]);
+                ASSERT_EQ(1u, builder.add(reinterpret_cast<const uint8_t*>(&v), 1));
+            }
+            faststring* body = builder.finish();
+            page_bodies.emplace_back(reinterpret_cast<const char*>(body->data()), body->size());
+        }
+
+        // The dictionary is the first page's encoded values, verbatim -- raw content,
+        // which is why it must never be parsed as a structured dictionary.
+        const std::string& sample = page_bodies.front();
+        auto cdict = compression::ZstdCDict::create(Slice(sample), -1);
+        ASSERT_TRUE(cdict.ok()) << cdict.status();
+
+        PagePointer dict_pp;
+        {
+            PageFooterPB footer;
+            footer.set_type(DICTIONARY_PAGE);
+            footer.set_uncompressed_size(sample.size());
+            footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+            std::vector<Slice> body{Slice(sample)};
+            ASSERT_OK(PageIO::compress_and_write_page(codec, 0.1, wfile.get(), body, footer, &dict_pp));
+        }
+
+        OrdinalIndexWriter ordinal_index;
+        for (int p = 0; p < kPages; p++) {
+            PageFooterPB footer;
+            footer.set_type(DATA_PAGE);
+            footer.set_uncompressed_size(page_bodies[p].size());
+            auto* data_footer = footer.mutable_data_page_footer();
+            data_footer->set_first_ordinal(p * kRowsPerPage);
+            data_footer->set_num_values(kRowsPerPage);
+            data_footer->set_nullmap_size(0);
+            data_footer->set_format_version(2);
+
+            // Every page but the sample is compressed against the dictionary; the
+            // sample page goes out plain, and the reader has to handle both.
+            std::string compressed;
+            std::vector<Slice> body{Slice(page_bodies[p])};
+            if (p == 0) {
+                faststring plain;
+                ASSERT_OK(PageIO::compress_page_body(codec, 0.1, body, &plain));
+                compressed.assign(reinterpret_cast<const char*>(plain.data()), plain.size());
+            } else {
+                compressed.resize(codec->max_compressed_len(page_bodies[p].size()));
+                Slice out(compressed);
+                ASSERT_OK(codec->compress(body, &out, false, page_bodies[p].size(), nullptr, nullptr,
+                                          cdict.value().get()));
+                compressed.resize(out.size);
+                ASSERT_LT(compressed.size(), page_bodies[p].size());
+            }
+            PagePointer data_pp;
+            std::vector<Slice> to_write{compressed.empty() ? body[0] : Slice(compressed)};
+            ASSERT_OK(PageIO::write_page(wfile.get(), to_write, footer, &data_pp));
+            ordinal_index.append_entry(p * kRowsPerPage, data_pp);
+        }
+        ASSERT_OK(ordinal_index.finish(wfile.get(), meta.add_indexes()));
+        dict_pp.to_proto(meta.mutable_zstd_compression_dict_page());
+        ASSERT_OK(wfile->close());
+    }
+
+    // The dictionary page must be recorded, or the read below would be testing
+    // nothing in particular.
+    ASSERT_TRUE(meta.has_zstd_compression_dict_page());
+    ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
+
+    auto segment = create_dummy_segment(fname);
+    ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    iter_opts.read_file = read_file.get();
+    iter_opts.use_page_cache = false;
+    ASSERT_OK(iter->init(iter_opts));
+
+    // Scan: every value has to come back byte for byte, including the plain first
+    // page and the dictionary-compressed ones after it.
+    ASSERT_OK(iter->seek_to_first());
+    auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    size_t remaining = N;
+    while (remaining > 0) {
+        size_t n = std::min<size_t>(128, remaining);
+        ASSERT_OK(iter->next_batch(&n, dst.get()));
+        ASSERT_GT(n, 0u);
+        remaining -= n;
+    }
+    ASSERT_EQ(N, dst->size());
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], dst->get(i).get_slice().to_string()) << "row " << i;
+    }
+
+    // And a seek straight into a dictionary-compressed page, which is the path a
+    // point lookup takes.
+    ASSERT_OK(iter->seek_to_ordinal(kRowsPerPage * 3 + 7));
+    auto one = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
+    size_t one_row = 1;
+    ASSERT_OK(iter->next_batch(&one_row, one.get()));
+    ASSERT_EQ(1, one->size());
+    ASSERT_EQ(values[kRowsPerPage * 3 + 7], one->get(0).get_slice().to_string());
+}
+
 // compression dict column-level compression dictionary: write a PLAIN ZSTD varchar column with
 // use_zstd_compression, then verify (1) the compression-dict page was persisted and
 // (2) every value roundtrips (exercises DDict load on read, the page-0 dict
@@ -1436,255 +1592,6 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_kept_when_it_pays) {
     ASSERT_EQ(PLAIN_ENCODING, dict_meta.encoding());
     EXPECT_TRUE(dict_meta.has_zstd_compression_dict_page());
     EXPECT_LT(with_dict, without_dict) << "with_dict=" << with_dict << " without_dict=" << without_dict;
-}
-
-// ---------------------------------------------------------------------------
-// Benchmark, not a correctness test: compares what the three per-column knobs
-// (ZSTD codec, shared dictionary, page size) actually buy on a real dataset.
-// Disabled by default because it needs an external corpus; run with
-//   ZSTD_BENCH_CORPUS=<file> ./starrocks_dw_test \
-//     --gtest_also_run_disabled_tests --gtest_filter='*zstd_options_benchmark*'
-// Corpus format: repeated [uint32 little-endian length][length bytes].
-// ---------------------------------------------------------------------------
-namespace {
-
-std::vector<std::string> load_bench_corpus(const std::string& path, size_t cap_bytes) {
-    std::vector<std::string> rows;
-    FILE* f = fopen(path.c_str(), "rb");
-    if (f == nullptr) return rows;
-    size_t total = 0;
-    uint32_t len = 0;
-    while (fread(&len, sizeof(len), 1, f) == 1) {
-        std::string v(len, '\0');
-        if (len > 0 && fread(v.data(), 1, len, f) != len) break;
-        total += len;
-        if (total > cap_bytes) break;
-        rows.emplace_back(std::move(v));
-    }
-    fclose(f);
-    return rows;
-}
-
-struct BenchArm {
-    const char* name;
-    CompressionTypePB compression;
-    bool use_dict;
-    uint32_t page_size; // 0 = leave at the default
-};
-
-} // namespace
-
-// Matrix probe: for every (corpus, page size) it writes the column three ways --
-// no dictionary, dictionary forced on, dictionary decided by the trial -- and
-// reports whether the automatic choice matched the better of the two.
-TEST_F(ColumnReaderWriterTest, DISABLED_zstd_dict_auto_matrix) {
-    const char* corpus_env = getenv("ZSTD_BENCH_CORPUS");
-    if (corpus_env == nullptr) {
-        GTEST_SKIP() << "set ZSTD_BENCH_CORPUS";
-    }
-    auto rows = load_bench_corpus(corpus_env, 512UL * 1024 * 1024);
-    ASSERT_FALSE(rows.empty());
-    size_t raw_bytes = 0;
-    std::vector<Slice> slices;
-    slices.reserve(rows.size());
-    for (const auto& r : rows) {
-        raw_bytes += r.size();
-        slices.emplace_back(r);
-    }
-    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-    col->reserve(rows.size());
-    col->append_strings(slices);
-
-    auto write_once = [&](bool use_dict, uint32_t page, double min_gain, const char* tag, uint64_t* out_size,
-                          bool* out_has_dict) {
-        const std::string fname = strings::Substitute("$0/zstd_matrix_$1.data", TEST_DIR, tag);
-        ColumnMetaPB meta;
-        {
-            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-            ColumnWriterOptions writer_opts;
-            writer_opts.page_format = 2;
-            writer_opts.meta = &meta;
-            meta.set_column_id(0);
-            meta.set_unique_id(0);
-            meta.set_type(TYPE_VARCHAR);
-            meta.set_length(1024 * 1024);
-            meta.set_encoding(PLAIN_ENCODING);
-            meta.set_compression(starrocks::ZSTD);
-            meta.set_compression_level(-1);
-            meta.set_is_nullable(true);
-            writer_opts.use_zstd_compression = use_dict;
-            writer_opts.zstd_compression_dict_min_gain = min_gain;
-            if (page > 0) {
-                writer_opts.data_page_size = page;
-            }
-            TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
-            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-            ASSERT_OK(writer->init());
-            ASSERT_OK(writer->append(*col));
-            ASSERT_OK(writer->finish());
-            ASSERT_OK(writer->write_data());
-            ASSERT_OK(writer->write_ordinal_index());
-            ASSERT_OK(wfile->close());
-        }
-        ASSIGN_OR_ABORT(const uint64_t size, _fs->get_file_size(fname));
-        *out_size = size;
-        *out_has_dict = meta.has_zstd_compression_dict_page();
-        (void)_fs->delete_file(fname);
-    };
-
-    fprintf(stderr, "\n%s: %zu rows, %.1f MB, avg %.0f B/row\n", corpus_env, rows.size(), raw_bytes / 1048576.0,
-            static_cast<double>(raw_bytes) / rows.size());
-    fprintf(stderr, "  %-8s %12s %12s %12s %8s %8s %8s\n", "页", "无字典MB", "强制字典MB", "自动MB", "自动选择",
-            "距最优", "判定");
-
-    const uint32_t pages[] = {65536, 262144, 1024 * 1024};
-    for (uint32_t page : pages) {
-        uint64_t nodict = 0;
-        uint64_t forced = 0;
-        uint64_t automatic = 0;
-        bool dummy = false;
-        bool forced_has = false;
-        bool auto_has = false;
-        write_once(false, page, 0.10, "nodict", &nodict, &dummy);
-        // A negative threshold makes the trial keep the dictionary whatever it
-        // measures, which is how we learn what keeping it would have cost.
-        write_once(true, page, -1.0, "forced", &forced, &forced_has);
-        write_once(true, page, 0.10, "auto", &automatic, &auto_has);
-
-        // What matters is the outcome, not which way the flag went: the automatic
-        // choice has to land on the better of the two, within the margin it is
-        // allowed to decline a dictionary for -- a dictionary worth less than that
-        // is deliberately turned down.
-        const uint64_t best = std::min(nodict, forced);
-        const bool ok = automatic <= static_cast<uint64_t>(static_cast<double>(best) * 1.10);
-        fprintf(stderr, "  %-8u %12.2f %12.2f %12.2f %8s %7.2f%% %8s\n", page / 1024, nodict / 1048576.0,
-                forced / 1048576.0, automatic / 1048576.0, auto_has ? "字典" : "无字典",
-                100.0 * (static_cast<double>(automatic) / static_cast<double>(best) - 1.0), ok ? "OK" : "MISMATCH");
-        EXPECT_TRUE(ok) << "page=" << page << " nodict=" << nodict << " forced=" << forced << " auto=" << automatic
-                        << " auto_has_dict=" << auto_has;
-    }
-}
-
-TEST_F(ColumnReaderWriterTest, DISABLED_zstd_options_benchmark) {
-    const char* corpus_env = getenv("ZSTD_BENCH_CORPUS");
-    if (corpus_env == nullptr) {
-        GTEST_SKIP() << "set ZSTD_BENCH_CORPUS to a corpus file";
-    }
-    auto rows = load_bench_corpus(corpus_env, 512UL * 1024 * 1024);
-    ASSERT_FALSE(rows.empty()) << "empty corpus: " << corpus_env;
-
-    size_t raw_bytes = 0;
-    std::vector<Slice> slices;
-    slices.reserve(rows.size());
-    for (const auto& r : rows) {
-        raw_bytes += r.size();
-        slices.emplace_back(r);
-    }
-    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-    col->reserve(rows.size());
-    col->append_strings(slices);
-
-    fprintf(stderr, "\ncorpus %s: %zu rows, %.1f MB, avg %.0f B/row\n\n", corpus_env, rows.size(),
-            raw_bytes / 1048576.0, static_cast<double>(raw_bytes) / rows.size());
-    fprintf(stderr, "  %-34s %10s %8s %10s %12s %10s\n", "配置", "列文件MB", "压缩率", "全扫ms", "点查us/行", "编码");
-
-    const std::vector<BenchArm> arms = {
-            {"LZ4 64KB (今天默认)", starrocks::LZ4_FRAME, false, 0},
-            {"按列 ZSTD, 64KB", starrocks::ZSTD, false, 0},
-            {"按列 ZSTD + 共享字典, 64KB", starrocks::ZSTD, true, 0},
-            {"按列 ZSTD, 256KB 页", starrocks::ZSTD, false, 256 * 1024},
-            {"按列 ZSTD + 字典, 256KB 页", starrocks::ZSTD, true, 256 * 1024},
-            {"按列 ZSTD, 1MB 页", starrocks::ZSTD, false, 1024 * 1024},
-            {"按列 ZSTD + 字典, 1MB 页", starrocks::ZSTD, true, 1024 * 1024},
-    };
-
-    for (const auto& arm : arms) {
-        const std::string fname =
-                strings::Substitute("$0/zstd_bench_$1.data", TEST_DIR, static_cast<int>(&arm - arms.data()));
-        ColumnMetaPB meta;
-        {
-            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-            ColumnWriterOptions writer_opts;
-            writer_opts.page_format = 2;
-            writer_opts.meta = &meta;
-            writer_opts.meta->set_column_id(0);
-            writer_opts.meta->set_unique_id(0);
-            writer_opts.meta->set_type(TYPE_VARCHAR);
-            writer_opts.meta->set_length(1024 * 1024);
-            writer_opts.meta->set_encoding(PLAIN_ENCODING);
-            writer_opts.meta->set_compression(arm.compression);
-            writer_opts.meta->set_compression_level(-1);
-            writer_opts.meta->set_is_nullable(true);
-            writer_opts.use_zstd_compression = arm.use_dict;
-            if (arm.page_size > 0) {
-                writer_opts.data_page_size = arm.page_size;
-            }
-            TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
-            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-            ASSERT_OK(writer->init());
-            ASSERT_OK(writer->append(*col));
-            ASSERT_OK(writer->finish());
-            ASSERT_OK(writer->write_data());
-            ASSERT_OK(writer->write_ordinal_index());
-            ASSERT_OK(wfile->close());
-        }
-        ASSIGN_OR_ABORT(const uint64_t file_size, _fs->get_file_size(fname));
-
-        auto segment = create_dummy_segment(fname);
-        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
-        ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
-        OlapReaderStatistics stats;
-        ColumnIteratorOptions iter_opts;
-        iter_opts.stats = &stats;
-        iter_opts.read_file = read_file.get();
-        iter_opts.use_page_cache = false; // measure decompression, not the cache
-
-        // full scan
-        double scan_ms = 0;
-        {
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-            ASSERT_OK(iter->init(iter_opts));
-            ASSERT_OK(iter->seek_to_first());
-            auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-            auto start = std::chrono::steady_clock::now();
-            size_t remaining = rows.size();
-            while (remaining > 0) {
-                size_t n = std::min<size_t>(4096, remaining);
-                dst->resize(0);
-                ASSERT_OK(iter->next_batch(&n, dst.get()));
-                if (n == 0) break;
-                remaining -= n;
-            }
-            scan_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-        }
-
-        // point lookups: same rows for every arm
-        double point_us = 0;
-        {
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-            ASSERT_OK(iter->init(iter_opts));
-            auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-            const int kQueries = 2000;
-            uint64_t r = 0x9E3779B97F4A7C15ULL;
-            auto start = std::chrono::steady_clock::now();
-            for (int q = 0; q < kQueries; q++) {
-                r ^= r << 13;
-                r ^= r >> 7;
-                r ^= r << 17;
-                ASSERT_OK(iter->seek_to_ordinal(r % rows.size()));
-                size_t n = 1;
-                dst->resize(0);
-                ASSERT_OK(iter->next_batch(&n, dst.get()));
-            }
-            point_us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() /
-                       kQueries;
-        }
-
-        fprintf(stderr, "  %-34s %10.1f %7.2fx %10.0f %12.1f %10s\n", arm.name, file_size / 1048576.0,
-                static_cast<double>(raw_bytes) / file_size, scan_ms, point_us,
-                EncodingTypePB_Name(meta.encoding()).c_str());
-        (void)_fs->delete_file(fname);
-    }
 }
 
 } // namespace starrocks

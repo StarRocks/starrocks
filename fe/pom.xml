@@ -82,7 +82,7 @@ under the License.
         <fluss.version>0.9.1-incubating</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.2-rc3</staros.version>
+        <staros.version>4.2-rc4</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
@@ -97,6 +97,7 @@ under the License.
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <bouncycastle.version>1.84</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
     <profiles>
@@ -308,6 +309,24 @@ under the License.
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
                 <version>5.4.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-reactive</artifactId>
+                <version>${httpcore5.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->

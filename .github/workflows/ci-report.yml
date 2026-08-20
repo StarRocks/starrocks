@@ -288,7 +288,7 @@ jobs:
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         id: setup_java
         if: steps.checkout_pr.outcome == 'success'
         with:

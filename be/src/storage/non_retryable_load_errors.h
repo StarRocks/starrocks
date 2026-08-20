@@ -29,9 +29,11 @@ namespace starrocks {
 //   3. Use the constant at the error source site
 
 inline constexpr std::string_view kPrimaryKeySizeExceedError = "primary key size exceed the limit.";
+inline constexpr std::string_view kSortKeySizeExceedError = "sort key size exceed the limit.";
 
-inline constexpr std::array<std::string_view, 1> kNonRetryableLoadErrors = {
+inline constexpr std::array<std::string_view, 2> kNonRetryableLoadErrors = {
         kPrimaryKeySizeExceedError,
+        kSortKeySizeExceedError,
 };
 
 inline bool is_non_retryable_load_error(std::string_view msg) {

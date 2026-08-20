@@ -61,12 +61,14 @@ ZstdCDict::~ZstdCDict() {
     }
 }
 
-StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, bool trained) {
+StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes) {
     if (dict_bytes.size == 0) {
         return Status::InvalidArgument("cannot build shared ZSTD ddict from empty bytes");
     }
-    const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_auto : ZSTD_dct_rawContent;
-    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type,
+    // Raw content, always: the page holds a verbatim sample of the column's own data, and
+    // ZSTD_dct_rawContent keeps a sample that happens to begin with ZSTD_MAGIC_DICTIONARY
+    // from being misparsed as a structured dictionary.
+    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, ZSTD_dct_rawContent,
                                               ZSTD_defaultCMem);
     if (d == nullptr) {
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
@@ -79,6 +81,10 @@ std::atomic<uint64_t> g_ddict_id_seq{1};
 } // namespace
 
 ZstdDDict::ZstdDDict(ZSTD_DDict* d) : _dict(d), _id(g_ddict_id_seq.fetch_add(1, std::memory_order_relaxed)) {}
+
+size_t ZstdDDict::mem_usage() const {
+    return _dict != nullptr ? ZSTD_sizeof_DDict(_dict) : 0;
+}
 
 ZstdDDict::~ZstdDDict() {
     if (_dict != nullptr) {

@@ -45,15 +45,15 @@
 #include "storage/rowset/page_pointer.h"
 namespace starrocks {
 
-class BlockCompressionCodec;
-class RandomAccessFile;
-class WritableFile;
-struct OlapReaderStatistics;
-
 namespace compression {
 class ZstdCDict;
 class ZstdDDict;
 } // namespace compression
+
+class BlockCompressionCodec;
+class RandomAccessFile;
+class WritableFile;
+struct OlapReaderStatistics;
 
 struct PageReadOptions {
     // block to read page
@@ -71,9 +71,10 @@ struct PageReadOptions {
     bool use_page_cache = true;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
-    // per-column shared decompression dictionary. Null means "no shared
-    // dict" -> decompression path is byte-for-byte unchanged. Index-page reads
-    // and every existing caller leave this null.
+    // Per-column ZSTD dictionary this page may reference, or null. Read side only:
+    // a page whose frame does not reference a dictionary decodes identically whether
+    // or not this is set, which is what makes a column with a mix of dictionary and
+    // plain pages safe to read.
     const compression::ZstdDDict* dict = nullptr;
 
     void sanity_check() const {
@@ -95,9 +96,8 @@ public:
     // Compress `body' using `codec' into `compressed_body'.
     // The size of returned `compressed_body' is 0 when the body is not compressed, this
     // could happen when `codec' is null or space saving is less than `min_space_saving'.
-    // when `cdict' is non-null (and `codec' is ZSTD) the body is compressed
-    // referencing that compression dictionary; existing callers pass null and are
-    // byte-for-byte unchanged.
+    // `cdict` references the per-column ZSTD compression dictionary when the writer has one.
+    // Null -- every caller other than the dictionary write path -- compresses exactly as before.
     static Status compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
                                      const std::vector<Slice>& body, faststring* compressed_body,
                                      const compression::ZstdCDict* cdict = nullptr);

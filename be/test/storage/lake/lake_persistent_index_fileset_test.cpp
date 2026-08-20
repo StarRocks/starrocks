@@ -630,6 +630,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_basic_read_write) {
         ASSERT_EQ(values[i], get_values[i]);
     }
 
+    ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 

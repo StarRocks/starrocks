@@ -59,9 +59,30 @@ size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
 void LakePersistentIndexParallelCompactTask::run() {
     DCHECK(_cb != nullptr);
     Status status = do_run();
+    if (status.is_corruption()) {
+        // Corrupted bytes usually come from the local cache copy of an input sstable.
+        // Drop those cache entries so the next compaction round re-reads from remote
+        // storage, instead of hitting the same bad blocks and failing forever.
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index sst parallel compaction hit corruption, dropping local cache of "
+                     << input_sstable_file_cnt() << " input sstables, tablet_id=" << _metadata->id()
+                     << ", error: " << status;
+        drop_input_sstable_cache();
+    }
     _cb->update_status(status);
     if (status.ok()) {
         _cb->add_result(_output_sstables);
+    }
+}
+
+void LakePersistentIndexParallelCompactTask::drop_input_sstable_cache() {
+    if (_tablet_mgr == nullptr || _metadata == nullptr) {
+        return;
+    }
+    for (const auto& fileset : _input_sstables) {
+        for (const auto& sstable_pb : fileset) {
+            (void)drop_corrupted_sstable_cache(_tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename()));
+        }
     }
 }
 

@@ -78,10 +78,9 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            // ZSTD always uses the compression pool, so the compression-dict path
-            // lives here. Non-null cdict references the per-column dictionary.
-            // (ZstdBlockCompression ignores BlockCompressionOptions, so nothing
-            // is lost by taking the cdict overload.)
+            // ZSTD always uses the compression pool, so the dictionary write path lives here.
+            // A non-null cdict takes the dictionary overload; ZstdBlockCompression ignores
+            // BlockCompressionOptions, so nothing is lost by not passing them.
             if (cdict != nullptr) {
                 RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
                                                 nullptr, cdict));
@@ -272,12 +271,11 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     Slice compressed_body(page_slice->data, body_size);
     Slice decompressed_body(decompressed->data(), decompressed_size);
-    // reference the per-column compression dictionary when present. A no-dict
-    // frame decodes identically whether or not a raw-content DDict is referenced
-    // (I5), so this is safe for raw pages and value-dict pages too.
+    // Reference the per-column dictionary when the page has one. A frame that does
+    // not reference a dictionary decodes the same either way, so this is safe for
+    // plain pages and for value-dictionary pages in the same column.
     if (opts.dict != nullptr) {
-        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict,
-                                               config::enable_zstd_compression_dict_ctx_cache));
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict));
     } else {
         RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
     }

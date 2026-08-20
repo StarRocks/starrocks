@@ -43,6 +43,10 @@ namespace lake {
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
 
+// Drop the local cache copy of `path` so subsequent reads go to remote storage.
+// Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
+Status drop_corrupted_sstable_cache(const std::string& path);
+
 class PersistentIndexSstable {
 public:
     PersistentIndexSstable() = default;
@@ -76,10 +80,21 @@ public:
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
 
+    // Full path of the underlying sstable file. Only valid after a successful init().
+    std::string filename() const { return _rf->filename(); }
+
     size_t memory_usage() const;
 
     // Sample keys from the table for parallel compaction task splitting.
     Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
+    // Sample at most |max_samples| actual data keys taken from [seek_key, stop_key), rather than
+    // index-block separator keys. Separators may be shortened by FindShortestSeparator and are suitable
+    // as opaque seek boundaries, but are not guaranteed to decode as complete primary keys. Tablet split
+    // uses this API because its boundaries must be persisted as PK tuples, and it samples within the
+    // splitting tablet's own range because an SST is shared by every tablet an earlier split produced.
+    Status sample_data_keys(std::vector<std::string>* keys, const Slice& seek_key, const Slice& stop_key,
+                            size_t max_samples) const;
 
     // `_delvec` should only be modified in `init()` via publish version thread
     // which is thread-safe. And after that, it should be immutable.

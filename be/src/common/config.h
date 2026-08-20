@@ -375,6 +375,15 @@ CONF_mBool(enable_full_sort_key_index, "true");
 // go-forward rollback with no data rewrite. Tablet split / range-split compaction are NOT gated by
 // this switch (they consume the full page by presence). Default true.
 CONF_mBool(enable_full_sort_key_index_read, "true");
+
+// Maximum size in bytes of one row's encoded full sort key. Mirrors primary_key_limit_size. A load,
+// Spark push, or schema change that would admit a row with a wider sort key fails with a
+// non-retryable error, which bounds the size of the full sort key index page and the memory it
+// occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a
+// failure there runs after commit and would put the tablet into an error state. The check applies
+// whenever the sort key can be encoded, independently of enable_full_sort_key_index, so that
+// admission and segment writing cannot disagree. A non-positive value disables it.
+CONF_mInt32(sort_key_limit_size, "1024");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -1269,6 +1278,10 @@ CONF_Int32(pipeline_analytic_max_buffer_size, "128");
 CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
+// `window_fun(... ) IGNORE NULLS` can be evaluated in streaming mode with
+// watermark-based eviction of the input buffer instead of materializing the whole partition.
+// Set to false to fall back to the legacy whole-partition materializing behavior.
+CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // only used in DCHECK
@@ -1655,6 +1668,12 @@ CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
+// When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
+// verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with
+// Corruption instead of erasing the wrong primary keys. Del files written before the checksum
+// existed (or by the replication path, which cannot compute it) carry none and are always accepted.
+// Writing the checksum is unconditional; this only controls verification, as an escape hatch.
+CONF_mBool(lake_enable_del_file_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
@@ -2218,7 +2237,7 @@ CONF_mBool(lake_enable_alter_struct, "true");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
-CONF_mBool(enable_vector_index_block_cache, "true");
+CONF_mBool(enable_vector_index_block_cache, "false");
 
 // On a top-level vector index cache miss, let the current query fall back to
 // brute-force search and load the index into the cache in the background.
@@ -2245,6 +2264,11 @@ CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
 // is queried immediately, to skip the first read-back from disk/object storage.
 // Read when a builder is created, so a runtime change applies to later builds only.
 CONF_mBool(enable_vector_index_cache_on_build, "false");
+
+// Physical backend used when building cosine HNSW Flat and IVF indexes. "l2"
+// preserves the historical index format. Quantized HNSW cosine indexes always
+// use "inner_product".
+CONF_String_enum(vector_index_cosine_backend, "l2", "l2,inner_product");
 
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");

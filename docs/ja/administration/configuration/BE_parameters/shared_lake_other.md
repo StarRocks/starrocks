@@ -86,6 +86,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでのクラウドネイティブテーブルコンパクションのためのリーダーのリモート I/O バッファサイズ。デフォルト値は 1MB です。この値を増やすことでコンパクションプロセスを加速できます。
 - 導入バージョン: v3.2.3
 
+### lake_enable_del_file_crc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルの削除ファイル (`.del`) を、トランザクションの publish または主キーインデックスの再構築時に読み戻す際、そのメタデータに記録された CRC32C で検証するかどうか。不一致が検出された場合、誤った主キーを削除する代わりに、破損エラーで操作が失敗します。このチェックサムが導入される前に書き込まれた削除ファイルはチェックサムを持たず、常に受け入れられるため、この項目は旧バージョンで書き込まれたデータには影響しません。チェックサムの書き込みはこの項目では制御されず、この項目は検証のみを制御します。
+- 導入バージョン: v4.2
+
 ### lake_enable_pk_preserve_txn_delete_order
 
 - デフォルト: true
@@ -191,7 +200,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: prepared-physical-split lake スキャン（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）が、シードのページプルーニングがまだ実行中の間に、プルーニングされていない segment 範囲をカバーする追加の coarse-range morsel を発行するかどうか。これにより、リファインされた範囲が確定するまで、本来アイドル状態のドライバーをビジー状態に保ちます。無効にしてもデータが失われることはありません（coarse 範囲は常にリファイン範囲が差し引く対象のスーパーセットです）。早期の並列性を、冗長な coarse スキャンの削減と引き換えにするだけです。
+- 説明: Prepared Physical Split Lake スキャン（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）が、シードのページプルーニングがまだ実行中の間に、プルーニングされていない Segment 範囲をカバーする追加の Coarse-range morsel を発行するかどうか。これにより、リファインされた範囲が確定するまで、本来アイドル状態のドライバーをビジー状態に保ちます。無効にしてもデータが失われることはありません（Coarse Range は常に Refined Range が差し引く対象のスーパーセットです）。早期の並列性を、冗長な Coarse スキャンの削減と引き換えにするだけです。
 - 導入バージョン: v4.2
 
 ### lake_prepared_split_max_splitted_scan_rows
@@ -200,7 +209,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: 行
 - 変更可能: はい
-- 説明: prepared-physical-split lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（split morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、split morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
+- 説明: Prepared Physical Split Lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（Split Morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、Split Morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
 - 導入バージョン: v4.2
 
 ### lake_put_txn_log_timeout_guard_ms
@@ -227,6 +236,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: バイト
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
+
+### lake_vacuum_enable_task_timeout
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Vacuum タスクがリクエストに含まれるタイムアウト (`VacuumRequest.timeout_ms`) に従い、経過した時点で自身を中止するかどうか。`false` に設定すると、FE 呼び出し側がどれだけ待つかに関係なく、Vacuum タスクは常に完了まで実行されます。
 
 ### lake_vacuum_min_batch_delete_size
 

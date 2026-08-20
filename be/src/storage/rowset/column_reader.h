@@ -296,15 +296,11 @@ private:
     [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
-    // compression dict column-level compression dictionary (a ZSTD dictionary) (read side). Copied from
+    // Read side of the per-column ZSTD compression dictionary. Copied from
     // ColumnMetaPB.zstd_compression_dict_page in _init (size 0 when the column has none).
     // The DDict is built once per (segment, column) and then referenced on every
     // data-page decompression.
     PagePointer _zstd_compression_dict_page_pointer;
-    // how to interpret the compression-dict page bytes (ColumnMetaPB
-    // .zstd_compression_dict_trained). false = raw content sample, true = ZDICT-trained
-    // dictionary. Must match what the writer used or decoding is wrong.
-    bool _zstd_compression_dict_trained = false;
     std::shared_ptr<compression::ZstdDDict> _zstd_compression_ddict;
     OnceFlag _zstd_compression_ddict_once;
     uint64_t _total_mem_footprint = 0;

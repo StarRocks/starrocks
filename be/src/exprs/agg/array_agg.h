@@ -515,8 +515,14 @@ public:
 
     // finalize each state->column to a [nullable] array
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        // The null flag of the current row is appended before the array row itself is built, so an
+        // error path may return with `to` half-written: its null column holds one more entry than
+        // its data column. Roll back to the row count observed on entry before appending the
+        // placeholder row, otherwise append_default() would widen the gap instead of closing it.
+        const size_t orig_num_rows = to != nullptr ? to->size() : 0;
         auto defer = DeferOp([&]() {
             if (ctx->has_error() && to != nullptr) {
+                to->resize(orig_num_rows);
                 to->append_default();
             }
         });

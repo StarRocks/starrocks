@@ -1,2 +1,0 @@
--- name: test_checkpoint
-alter system create image;

@@ -116,6 +116,7 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Description**: Metric type (measurement function) of the vector index. Valid values:
   - `l2_distance`: Euclidean distance. The smaller the value, the higher the similarity.
   - `cosine_similarity`: Cosine similarity. The larger the value, the higher the similarity.
+  - `inner_product`: Inner product. The larger the value, the higher the similarity. Unlike cosine similarity, inner product preserves vector magnitude. Use `inner_product` for exact evaluation and `approx_inner_product` for vector-index top-k or range queries.
 
 ##### is_vector_normed
 
@@ -276,18 +277,21 @@ To use vector index in queries, all the following requirements must be met:
     - Function name requirements for `<vector_index_distance_func>`:
       - If `metric_type` is `l2_distance`, the function name must be `approx_l2_distance`.
       - If `metric_type` is `cosine_similarity`, the function name must be `approx_cosine_similarity`.
+      - If `metric_type` is `inner_product`, the function name must be `approx_inner_product`.
     - Parameter requirements for `<vector_index_distance_func>`:
       - One of the column `constant_array` must be a constant `ARRAY<FLOAT>` with dimensions matching the vector index `dim`.
       - The other column `vector_column` must be the column corresponding to the vector index.
   - ORDER direction requirements:
     - If `metric_type` is `l2_distance`, the order must be `ASC`.
     - If `metric_type` is `cosine_similarity`, the order must be `DESC`.
+    - If `metric_type` is `inner_product`, the order must be `DESC`.
   - A `LIMIT N` clause is required.
 - **Predicate Requirements:**
   - All predicates must be `<vector_index_distance_func>` expressions, combined using `AND` and comparison operators (`>` or `<`). The comparison operator direction must align with the `ASC`/`DESC` order. Specifically:
   - Requirement 1:
     - If `metric_type` is `l2_distance`: `col_ref <= constant`.
     - If `metric_type` is `cosine_similarity`: `col_ref >= constant`.
+    - If `metric_type` is `inner_product`: `col_ref >= constant`. The constant can be negative.
     - Here, `col_ref` refers to the result of `<vector_index_distance_func>(vector_column, constant_array)` and can be cast to `FLOAT` or `DOUBLE` types, for example:
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`

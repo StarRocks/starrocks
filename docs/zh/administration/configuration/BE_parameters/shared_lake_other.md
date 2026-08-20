@@ -83,6 +83,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+### lake_enable_del_file_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，在事务 Publish 或主键索引重建过程中读取主键表删除文件（`.del`）时，是否根据其元数据中记录的 CRC32C 进行校验。校验不通过时，该操作会返回文件损坏错误并失败，而不是删除错误的主键。在该校验和引入之前写入的删除文件不带校验和，会被始终接受，因此该配置项不会影响旧版本写入的数据。该配置项不控制校验和的写入，仅控制读取时是否校验。
+- 引入版本：v4.2
+
 ### lake_enable_pk_preserve_txn_delete_order
 
 - 默认值：true
@@ -188,7 +197,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：prepared-physical-split lake 扫描（对应会话变量 `enable_lake_prepared_physical_split_scan`）在 seed 逐页裁剪尚未完成时，是否额外下发一个覆盖未裁剪 segment 范围的 coarse-range morsel，让原本空闲的 driver 先忙起来，直到裁剪后的 refined 范围就绪。关闭它不会丢失数据（coarse 范围始终是 refined 范围从中相减的超集），只是用提前并行换取更少的冗余 coarse 扫描。
+- 描述：Prepared Physical Split Lake 扫描（对应会话变量 `enable_lake_prepared_physical_split_scan`）在 Seed 逐页裁剪尚未完成时，是否额外下发一个覆盖未裁剪 Segment 范围的 Coarse-range morsel，让原本空闲的 Driver 提前开始工作，直到裁剪后的 Refined Rang 就绪。关闭它不会丢失数据（Coarse Range 始终是 Refined Range 从中相减的超集），只是用提前并行换取更少的冗余 Coarse 扫描。
 - 引入版本：v4.2
 
 ### lake_prepared_split_max_splitted_scan_rows
@@ -197,7 +206,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：行
 - 是否动态：是
-- 描述：仅在开启 prepared physical split scan（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 split morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 split morsel 拆得更细（把大 Tablet 切成更多子范围 morsel 以填充原本空闲的 driver），不会更粗。仅在存算分离集群中生效。
+- 描述：仅在开启 Prepared Physical Split Lake 扫描（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 Split Morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 Split Morsel 拆得更细（把大 Tablet 切成更多子范围 Morsel 以填充原本空闲的 Driver），不会更粗。仅在存算分离集群中生效。
 - 引入版本：v4.2
 
 ### lake_put_txn_log_timeout_guard_ms
@@ -224,6 +233,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
+
+### lake_vacuum_enable_task_timeout
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Vacuum 任务是否遵循请求中携带的超时时间（`VacuumRequest.timeout_ms`），并在超时后自行终止。设为 `false` 时，无论 FE 调用方等待多久，Vacuum 任务都会一直运行至完成。
 
 ### lake_vacuum_min_batch_delete_size
 

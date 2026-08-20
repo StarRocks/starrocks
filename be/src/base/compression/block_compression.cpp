@@ -39,6 +39,8 @@
 #endif
 #include <zlib.h>
 
+#include <atomic>
+
 #include "base/coding.h"
 #include "base/compression/compression_context_pool_singletons.h"
 #include "base/compression/compression_headers.h"
@@ -734,7 +736,9 @@ namespace {
 // proportional to dictionary size (2KB and 64KB dictionaries cost the same).
 //
 // So dictionary decompression uses its own small thread-local set of contexts
-// instead of the shared pool. Each entry remembers which dictionary it has
+// instead of the shared pool. The cost is bounded and small: at most
+// kDictDCtxCacheSize contexts (~94KB each, independent of dictionary size) on a
+// thread that has actually decoded such a page, released when the thread exits. Each entry remembers which dictionary it has
 // loaded; consecutive pages of the same column hit it and skip the reload
 // entirely. These contexts never enter the shared pool, so the no-cross-talk
 // invariant is untouched.
@@ -742,6 +746,29 @@ namespace {
 // Keyed by ZstdDDict::id(), never by address: an address can be recycled by a
 // later allocation, and a stale entry would then look like a hit and decode
 // against the wrong (already freed) dictionary.
+//
+// That key is also what makes the entries safe when a segment is evicted while
+// these threads live on. The context keeps a raw ZSTD_DDict* that the eviction
+// just freed, but nothing ever dereferences it: zstd only reads dctx->ddict
+// while decompressing, decompression only happens on a context acquire() just
+// returned, and acquire() returns a cached context only when its dict_id matches
+// -- which a freed dictionary's id never will, because ids are handed out by a
+// monotonic counter and never reused. The stale pointer is overwritten the next
+// time the slot is chosen as victim, and ZSTD_freeDCtx does not touch a
+// dictionary it does not own. So the DDict outlives every *use* by the context,
+// which is what ZSTD_DCtx_refDDict requires.
+namespace {
+// RAII so the installed scope is left even on the error returns below.
+struct DctxAllocScope {
+    DctxAllocScope() {
+        if (detail::g_dict_dctx_scope_enter != nullptr) detail::g_dict_dctx_scope_enter();
+    }
+    ~DctxAllocScope() {
+        if (detail::g_dict_dctx_scope_leave != nullptr) detail::g_dict_dctx_scope_leave();
+    }
+};
+} // namespace
+
 constexpr int kDictDCtxCacheSize = 4; // a scan alternates between a few columns
 
 struct DictDCtxCache {
@@ -754,11 +781,19 @@ struct DictDCtxCache {
 
     ~DictDCtxCache() {
         for (auto& e : entries) {
-            if (e.ctx != nullptr) {
-                ZSTD_freeDCtx(e.ctx);
-                e.ctx = nullptr;
-            }
+            free_ctx(e.ctx);
+            e.ctx = nullptr;
         }
+    }
+
+    // One place for every free, so the byte counter and the tracker attribution cannot
+    // drift apart from the actual contexts.
+    static void free_ctx(ZSTD_DCtx* ctx) {
+        if (ctx == nullptr) return;
+        const size_t bytes = ZSTD_sizeof_DCtx(ctx);
+        DctxAllocScope scope;
+        ZSTD_freeDCtx(ctx);
+        detail::g_dict_dctx_cache_bytes.fetch_sub(bytes, std::memory_order_relaxed);
     }
 
     // Returns a context with `ddict` loaded, or nullptr if one cannot be created.
@@ -772,11 +807,13 @@ struct DictDCtxCache {
         Entry& victim = entries[next_victim];
         next_victim = (next_victim + 1) % kDictDCtxCacheSize;
         if (victim.ctx == nullptr) {
+            DctxAllocScope scope;
             victim.ctx = ZSTD_createDCtx();
             if (victim.ctx == nullptr) {
                 victim.dict_id = 0;
                 return nullptr;
             }
+            detail::g_dict_dctx_cache_bytes.fetch_add(ZSTD_sizeof_DCtx(victim.ctx), std::memory_order_relaxed);
         }
         victim.dict_id = 0;
         if (ZSTD_isError(ZSTD_DCtx_refDDict(victim.ctx, ddict->dict()))) {
@@ -791,7 +828,7 @@ struct DictDCtxCache {
     void discard(ZSTD_DCtx* ctx) {
         for (auto& e : entries) {
             if (e.ctx == ctx) {
-                ZSTD_freeDCtx(e.ctx);
+                free_ctx(e.ctx);
                 e.ctx = nullptr;
                 e.dict_id = 0;
                 return;

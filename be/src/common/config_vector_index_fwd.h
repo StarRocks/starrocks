@@ -31,7 +31,7 @@ CONF_mInt32(vector_index_cache_expire_sec, "900");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
-CONF_mBool(enable_vector_index_block_cache, "true");
+CONF_mBool(enable_vector_index_block_cache, "false");
 
 // On a top-level vector index cache miss, let the current query fall back to
 // brute-force search and load the index into the cache in the background.
@@ -58,6 +58,11 @@ CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
 // is queried immediately, to skip the first read-back from disk/object storage.
 // Read when a builder is created, so a runtime change applies to later builds only.
 CONF_mBool(enable_vector_index_cache_on_build, "false");
+
+// Physical backend used when building cosine HNSW Flat and IVF indexes. "l2"
+// preserves the historical index format. Quantized HNSW cosine indexes always
+// use "inner_product".
+CONF_String_enum(vector_index_cosine_backend, "l2", "l2,inner_product");
 
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");
