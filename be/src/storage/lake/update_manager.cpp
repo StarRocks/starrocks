@@ -1873,7 +1873,19 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
     // several times the cache. Successive publishes also walk different subsets of the same tablet, so
     // the set that has to stay resident for the cache to pay off is the tablet's, not one call's.
     const size_t publish_segment_count = params.container.rssid_to_file().size();
-    size_t segment_mem_estimate = 0;
+    // A Segment's metacache footprint is dominated by one ColumnReader per schema column, so it scales
+    // with the column count rather than the row count. Estimating that structurally, instead of
+    // sampling an opened Segment, is what lets the decision exist before the first insert: a sampled
+    // value can only be read back after the segment it was meant to gate has already been cached, so
+    // the first segment of every call would bypass the gate entirely -- and with a key-sorted load,
+    // where a source segment's keys land in a single base segment, that first segment is the only one
+    // there is and the gate never applies at all.
+    //
+    // Calibrated on a cluster: 200 segments of a 1000-column table occupied ~200MB of metacache, i.e.
+    // ~1KiB per column. Columns of wider types carry more metadata than the INT columns measured
+    // there, so this can under-estimate; this constant is the knob to raise if that ever shows up.
+    constexpr size_t kEstimatedSegmentBytesPerColumn = 1024;
+    const size_t estimated_segment_bytes = params.tablet_schema->num_columns() * kEstimatedSegmentBytesPerColumn;
     auto fetch_values_from_segment =
             [&](const FileInfo& segment_info, uint32_t segment_id, uint32_t segment_id_in_rowset,
                 const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
@@ -1891,7 +1903,7 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         auto* tablet_mgr = params.tablet->tablet_mgr();
         bool use_segment_cache =
                 allow_segment_cache && tablet_mgr != nullptr && config::lake_pk_partial_update_use_segment_cache;
-        if (use_segment_cache && segment_mem_estimate > 0) {
+        if (use_segment_cache) {
             // Take the cache path only while this publish's own base segments can fit in it. A publish
             // reads every base segment holding a row it updates, so once that set exceeds the cache
             // there is nothing to gain: entries are evicted as fast as they are filled, the hit rate
@@ -1902,11 +1914,9 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             // column readers and takes a cache lock. The static open leaves that pointer null and
             // skips the whole accounting path.
             //
-            // The per-segment size comes from the first segment this call reads: a Segment's cost is
-            // dominated by one column reader per schema column, so it is near-uniform within a tablet.
             // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
             // evicts to stay under capacity, so it reports room even while it thrashes.
-            use_segment_cache = publish_segment_count * segment_mem_estimate <= tablet_mgr->metacache()->capacity();
+            use_segment_cache = publish_segment_count * estimated_segment_bytes <= tablet_mgr->metacache()->capacity();
         }
         TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
         if (use_segment_cache) {
@@ -1975,16 +1985,6 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
             if (field->type()->type() == TYPE_CHAR) {
                 ChunkHelper::padding_char_column(tablet_schema, *field, (*columns)[i].get());
             }
-        }
-        // Sampled here rather than right after the open: a Segment's metacache charge keeps growing
-        // after open() as ColumnReader loads each column's indexes and calls update_cache_size(), so a
-        // sample taken before the reads understates what the entry finally costs.
-        //
-        // Only on the cache-eligible arm. mem_usage() walks every column reader, and doing that when
-        // the switch is off would leave the rollback arm doing work the original static-open path
-        // never did -- it has to stay byte-for-byte the old behaviour.
-        if (use_segment_cache && segment_mem_estimate == 0) {
-            segment_mem_estimate = (*segment)->mem_usage();
         }
         return Status::OK();
     };

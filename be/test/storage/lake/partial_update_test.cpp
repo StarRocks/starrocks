@@ -1717,12 +1717,17 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_reads_base_segment_th
 // flushed out with it. Measured on a cluster at 2.2x slower than not caching at all, so publish stops
 // inserting once its own working set no longer fits.
 //
-// Three things this test has to get right, all learned the hard way:
+// The decision has to hold for the *first* segment a call reads, not just later ones. An estimate
+// sampled from an opened Segment can only be read back after that segment is already cached, so the
+// first segment of every call would bypass the gate -- and under a key-sorted load, where a source
+// segment's keys land in one base segment, that first segment is the only one there is and the gate
+// would never apply. Hence the size is derived from the column count instead, and hence this test
+// asserts that a full cache rejects every segment including the first.
+//
+// Two mechanics this test has to get right, both learned the hard way:
 //   - It observes the decision through a sync point, not the resulting cache contents. An undersized
 //     cache drops oversized inserts by itself, so "the segment is not cached" holds with or without
 //     the gate and would make the test unable to fail.
-//   - It needs more than one base segment per measurement: the size estimate is seeded from the first
-//     segment a publish opens, so a single-segment publish never reaches the decision under test.
 //   - The two measurements need independent base segments. A partial update rewrites every row it
 //     touches into one new segment, so measuring twice over the same keys would leave the second
 //     measurement with a single base segment to read.
@@ -1788,13 +1793,13 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_when_wo
     ASSERT_EQ(kRanges / 2, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::all_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
-    // No room: the first segment still seeds the size estimate, and everything after it is skipped.
+    // No room: every segment is skipped, the first one included -- nothing has to be cached before
+    // the gate can decide.
     _tablet_mgr->update_metacache_limit(0);
     fill_decisions.clear();
     write_and_publish(generate_data(kHalfKeys, 1, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 2, fill_decisions.size()) << "expected one decision per base segment read";
-    EXPECT_TRUE(fill_decisions[0]) << "the first segment seeds the estimate";
-    EXPECT_TRUE(std::none_of(fill_decisions.begin() + 1, fill_decisions.end(), [](bool v) { return v; }));
+    EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
     _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
