@@ -45,8 +45,8 @@ import java.util.Set;
 
 /**
  * Single {@code StmtExecutor} &rarr; {@link PreSplitFlow} bridge for Sample-Based
- * Tablet Pre-Split on the {@code INSERT ... SELECT} paths (FILES sources and OLAP
- * table sources). The hook runs pre-plan, outside the planner's
+ * Tablet Pre-Split on the {@code INSERT ... SELECT} paths (FILES, internal OLAP,
+ * and external Iceberg sources). The hook runs pre-plan, outside the planner's
  * {@code PlannerMetaLocker}-scoped read lock, so it cannot deadlock with the
  * reshard daemon's write lock on the same target table.
  *
@@ -54,7 +54,7 @@ import java.util.Set;
  * the statement-shape pre-filters, {@link SelectRelation} extraction, the
  * mutually-exclusive strategy selection, the per-path config gate, the
  * per-session opt-out, and target resolve + authorization. The conservative-skip
- * statement gates live alongside them: the target-partition and load-properties
+ * statement gates live alongside them: the statement-shape and load-properties
  * gates in {@link #passesCommonPreFilters}, and the materialized-view gate in
  * {@link #resolveEligibleTable}. Each {@link InsertPreSplitSource} supplies the
  * source-specific detection + resolve, and the submit flow (plus the
@@ -94,9 +94,32 @@ public final class InsertPreSplitHook {
             if (!passesDynamicOverwritePreFilters(insertStmt, context, overwriteTransactionId)) {
                 return;
             }
-            tryRunEligibleInsert(insertStmt, context, overwriteTransactionId);
+            tryRunEligibleInsert(insertStmt, context, overwriteTransactionId,
+                    PreSplitPartitionScope.unrestricted(), false);
         } catch (Throwable unexpected) {
             LOG.warn("Sample-Based Tablet Pre-Split (dynamic INSERT OVERWRITE) hook failed; "
+                    + "proceeding without pre-split", unexpected);
+        }
+    }
+
+    /**
+     * Runs after a static overwrite job has cloned its source partitions to temporary partitions
+     * and before the INSERT is replanned to write those temporary partitions.
+     */
+    public static void maybeRunStaticOverwritePreSplit(
+            InsertStmt insertStmt, ConnectContext context,
+            List<String> sourcePartitionNames, List<String> temporaryPartitionNames) {
+        try {
+            if (!passesStaticOverwritePreFilters(insertStmt, context)
+                    || sourcePartitionNames == null || sourcePartitionNames.isEmpty()
+                    || temporaryPartitionNames == null || temporaryPartitionNames.isEmpty()) {
+                return;
+            }
+            PreSplitPartitionScope partitionScope =
+                    PreSplitPartitionScope.staticOverwrite(sourcePartitionNames, temporaryPartitionNames);
+            tryRunEligibleInsert(insertStmt, context, -1L, partitionScope, true);
+        } catch (Throwable unexpected) {
+            LOG.warn("Sample-Based Tablet Pre-Split (static INSERT OVERWRITE) hook failed; "
                     + "proceeding without pre-split", unexpected);
         }
     }
@@ -109,11 +132,13 @@ public final class InsertPreSplitHook {
         if (!passesCommonPreFilters(insertStmt, context)) {
             return;
         }
-        tryRunEligibleInsert(insertStmt, context, -1L);
+        tryRunEligibleInsert(insertStmt, context, -1L,
+                PreSplitPartitionScope.fromInsert(insertStmt), false);
     }
 
     private static void tryRunEligibleInsert(
-            InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId)
+            InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId,
+            PreSplitPartitionScope partitionScope, boolean staticOverwrite)
             throws AccessDeniedException {
         SelectRelation selectRelation = extractSelectRelation(insertStmt);
         if (selectRelation == null) {
@@ -150,9 +175,12 @@ public final class InsertPreSplitHook {
         if (overwriteTransactionId > 0) {
             PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
                     prepared, source.loadKind(), context::isKilled, context, overwriteTransactionId);
+        } else if (staticOverwrite) {
+            PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+                    prepared, source.loadKind(), context::isKilled, context, partitionScope);
         } else {
             PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context);
+                    prepared, source.loadKind(), context::isKilled, context, partitionScope);
         }
     }
 
@@ -164,13 +192,16 @@ public final class InsertPreSplitHook {
         if (insertStmt.isExplain() && !ExplainLevel.ANALYZE.equals(insertStmt.getExplainLevel())) {
             return false;
         }
-        if (insertStmt.isOverwrite() && !insertStmt.hasOverwriteJob()) {
+        // Every overwrite variant is handled by InsertOverwriteJobRunner after its target temporary
+        // partitions (and, for dynamic overwrite, transaction) exist. Splitting the normal partition
+        // here would optimize the wrong write target.
+        if (insertStmt.isOverwrite()) {
             return false;
         }
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
             return false;
         }
-        if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
+        if (insertStmt.isStaticKeyPartitionInsert()) {
             return false;
         }
         return !carriesLoadProperties(insertStmt);
@@ -202,6 +233,20 @@ public final class InsertPreSplitHook {
             return false;
         }
         if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
+            return false;
+        }
+        return !carriesLoadProperties(insertStmt);
+    }
+
+    private static boolean passesStaticOverwritePreFilters(InsertStmt insertStmt, ConnectContext context) {
+        if (!insertStmt.isOverwrite() || insertStmt.isDynamicOverwrite() || !insertStmt.hasOverwriteJob()) {
+            return false;
+        }
+        if (insertStmt.isExplain() && !ExplainLevel.ANALYZE.equals(insertStmt.getExplainLevel())) {
+            return false;
+        }
+        if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID
+                || insertStmt.isStaticKeyPartitionInsert()) {
             return false;
         }
         return !carriesLoadProperties(insertStmt);

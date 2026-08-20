@@ -79,14 +79,29 @@ final class PreSplitFlow {
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
                          LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
+        dispatch(database, target, prepared, loadKind, shouldAbort, context,
+                PreSplitPartitionScope.unrestricted());
+    }
+
+    static void dispatch(Database database, OlapTable target, Prepared prepared,
+                         LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context,
+                         PreSplitPartitionScope partitionScope) {
         if (target.getPartitionInfo().isPartitioned()) {
             // Manually list/range-partitioned targets do not support pre-creating partitions
             // from sampled values; skip conservatively, let the load proceed.
             if (!Boolean.TRUE.equals(target.supportedAutomaticPartition())) {
                 return;
             }
-            runMultiPartitionFlow(database, target, prepared, loadKind, shouldAbort, context);
+            runMultiPartitionFlow(database, target, prepared, loadKind, shouldAbort, context, partitionScope);
         } else {
+            // An unpartitioned target owns exactly one partition and the single-partition flow has
+            // nowhere to apply a scope. This hook runs pre-analysis, so an INSERT naming a partition
+            // that does not exist on this table has not been rejected yet -- splitting the sole real
+            // partition here would let a statement that goes on to fail analysis reshape the table.
+            // Skip conservatively; this is the same shape the pre-scope code rejected outright.
+            if (partitionScope.isSpecified()) {
+                return;
+            }
             runSinglePartitionFlow(database, target, prepared, loadKind, shouldAbort);
         }
     }
@@ -114,7 +129,14 @@ final class PreSplitFlow {
 
     static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
                                       LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
-        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context, -1L);
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
+                -1L, PreSplitPartitionScope.unrestricted());
+    }
+
+    static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
+                                      LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context,
+                                      PreSplitPartitionScope partitionScope) {
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context, -1L, partitionScope);
     }
 
     /**
@@ -130,23 +152,41 @@ final class PreSplitFlow {
             return;
         }
         runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
-                overwriteTransactionId);
+                overwriteTransactionId, PreSplitPartitionScope.unrestricted());
+    }
+
+    /** Splits the already-created temporary partitions of a static INSERT OVERWRITE job. */
+    static void runStaticOverwriteFlow(Database database, OlapTable table, Prepared prepared,
+                                       LoadKind loadKind, BooleanSupplier shouldAbort,
+                                       ConnectContext context, PreSplitPartitionScope partitionScope) {
+        if (!table.getPartitionInfo().isPartitioned()
+                || !Boolean.TRUE.equals(table.supportedAutomaticPartition())
+                || !partitionScope.isSpecified() || !partitionScope.isTemporary()) {
+            return;
+        }
+        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
+                -1L, partitionScope);
     }
 
     private static void runMultiPartitionFlow(
             Database database, OlapTable table, Prepared prepared, LoadKind loadKind,
-            BooleanSupplier shouldAbort, ConnectContext context, long overwriteTransactionId) {
+            BooleanSupplier shouldAbort, ConnectContext context, long overwriteTransactionId,
+            PreSplitPartitionScope partitionScope) {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         SampleSet samples = runDataTierSampler(table, prepared, loadKind);
         if (samples == null) {
             return;
         }
+        long sampledInputBytes = samples.getEstimates().totalBytes();
         List<PartitionSamples> groups = overwriteTransactionId > 0
                 ? PartitionSampleGrouper.groupTemporary(
-                        samples, table, context, database.getId(), prepared.estimatedBytes(),
+                        samples, table, context, database.getId(), sampledInputBytes,
                         overwriteTransactionId)
-                : PartitionSampleGrouper.group(
-                        samples, table, context, database.getId(), prepared.estimatedBytes());
+                : partitionScope.isSpecified()
+                        ? PartitionSampleGrouper.groupSpecified(
+                                samples, table, context, database.getId(), sampledInputBytes, partitionScope)
+                        : PartitionSampleGrouper.group(
+                                samples, table, context, database.getId(), sampledInputBytes);
         if (groups.isEmpty()) {
             return;
         }
@@ -154,8 +194,13 @@ final class PreSplitFlow {
                 ? TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
                         database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
                         overwriteTransactionId)
-                : TabletPreSplitCoordinator.submitForPartitionsCombined(
-                        database, table, groups, activeComputeNodeCount, context, prepared.computeResource());
+                : partitionScope.isTemporary()
+                        ? TabletPreSplitCoordinator.submitForExistingTemporaryPartitionsCombined(
+                                database, table, groups, activeComputeNodeCount, context,
+                                prepared.computeResource())
+                        : TabletPreSplitCoordinator.submitForPartitionsCombined(
+                                database, table, groups, activeComputeNodeCount, context,
+                                prepared.computeResource());
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
