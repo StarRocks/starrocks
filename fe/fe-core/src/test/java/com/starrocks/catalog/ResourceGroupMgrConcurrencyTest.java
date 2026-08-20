@@ -78,8 +78,10 @@ public class ResourceGroupMgrConcurrencyTest {
         return (T) f.get(mgr);
     }
 
+    @SuppressWarnings("unchecked")
     private Object getSnapshot() throws Exception {
-        return field("snapshot");
+        AtomicReference<Object> ref = field("snapshot");
+        return ref.get();
     }
 
     @SuppressWarnings("unchecked")
@@ -287,8 +289,12 @@ public class ResourceGroupMgrConcurrencyTest {
         }
         Field snapField = ResourceGroupMgr.class.getDeclaredField("snapshot");
         snapField.setAccessible(true);
-        Class<?> snapClass = snapField.get(mgr).getClass();
-        Constructor<?> snapCtor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class, ResourceGroup.class);
+        @SuppressWarnings("unchecked")
+        AtomicReference<Object> snapRef =
+                (AtomicReference<Object>) snapField.get(mgr);
+        Class<?> snapClass = snapRef.get().getClass();
+        Constructor<?> snapCtor = snapClass.getDeclaredConstructor(
+                Map.class, Map.class, Map.class, ResourceGroup.class);
         snapCtor.setAccessible(true);
 
         int readerCount = 8;
@@ -308,7 +314,7 @@ public class ResourceGroupMgrConcurrencyTest {
                         mgr.chooseResourceGroupByName(null, "rg_conc_0");
                         @SuppressWarnings("unchecked")
                         Map<String, ResourceGroup> snap =
-                                (Map<String, ResourceGroup>) snapField(snapField.get(mgr), "byName");
+                                (Map<String, ResourceGroup>) snapField(snapRef.get(), "byName");
                         for (ResourceGroup rg : snap.values()) {
                             Assertions.assertNotNull(rg.getName());
                         }
@@ -330,7 +336,7 @@ public class ResourceGroupMgrConcurrencyTest {
                     while (!stop.get() && !Thread.currentThread().isInterrupted()) {
                         @SuppressWarnings("unchecked")
                         Map<String, ResourceGroup> current =
-                                (Map<String, ResourceGroup>) snapField(snapField.get(mgr), "byName");
+                                (Map<String, ResourceGroup>) snapField(snapRef.get(), "byName");
                         Map<String, ResourceGroup> copy = new java.util.HashMap<>(current);
                         String key = "rg_transient_" + (counter % 3);
                         if (copy.containsKey(key)) {
@@ -340,7 +346,7 @@ public class ResourceGroupMgrConcurrencyTest {
                         }
                         Object newSnap = snapCtor.newInstance(copy,
                                 Collections.emptyMap(), Collections.emptyMap(), null);
-                        snapField.set(mgr, newSnap);
+                        snapRef.set(newSnap);
                         counter++;
                     }
                 } catch (InterruptedException e) {
