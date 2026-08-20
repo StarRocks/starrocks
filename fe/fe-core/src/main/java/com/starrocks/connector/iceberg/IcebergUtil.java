@@ -76,6 +76,8 @@ public final class IcebergUtil {
                     "content",
                     "partition_spec_id",
                     "added_snapshot_id",
+                    "added_files_count",
+                    "existing_files_count",
                     "deleted_data_files_count");
 
     /**
@@ -100,7 +102,8 @@ public final class IcebergUtil {
     public static boolean isSnapshotAllOnSpec(Snapshot snapshot, FileIO fileIO, int specId) {
         try (CloseableIterable<ManifestFile> manifests = readManifests(snapshot, fileIO)) {
             for (ManifestFile manifest : manifests) {
-                if (manifest.partitionSpecId() != specId) {
+                if (manifest.partitionSpecId() != specId
+                        && (manifest.hasAddedFiles() || manifest.hasExistingFiles())) {
                     return false;
                 }
             }

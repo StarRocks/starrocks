@@ -554,26 +554,82 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
+    public void testIsCurrentSnapshotAllOnCurrentSpecAfterRewriteDataOntoCurrentSpec() {
+        // Append a data file under the original SPEC_B, then evolve the partition spec (drop
+        // "k2") so the default spec id changes.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        int oldSpecId = mockedNativeTableB.spec().specId();
+        mockedNativeTableB.updateSpec().removeField("k2").commit();
+        PartitionSpec newSpec = mockedNativeTableB.spec();
+        Assertions.assertNotEquals(oldSpecId, newSpec.specId());
+
+        // REWRITE DATA onto the current spec. The commit keeps an old-spec manifest containing
+        // only DELETED entries (written with the file's original spec id), which Iceberg scans
+        // ignore because it has no live files.
+        DataFile rewrittenFile = DataFiles.builder(newSpec)
+                .withPath("/path/to/data-b-rewritten.parquet")
+                .withFileSizeInBytes(10)
+                .withRecordCount(2)
+                .build();
+        mockedNativeTableB.newRewrite()
+                .deleteFile(FILE_B_1)
+                .addFile(rewrittenFile)
+                .commit();
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(5)
+                .setSrTableName("tb")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tb")
+                .setFullSchema(new ArrayList<>())
+                .setNativeTable(mockedNativeTableB)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        // Sanity: the snapshot still lists an old-spec manifest, but it holds no live files.
+        List<ManifestFile> manifests = mockedNativeTableB.currentSnapshot()
+                .allManifests(mockedNativeTableB.io());
+        Assertions.assertTrue(manifests.stream().anyMatch(m -> m.partitionSpecId() == oldSpecId));
+        Assertions.assertTrue(manifests.stream()
+                .filter(m -> m.partitionSpecId() == oldSpecId)
+                .noneMatch(m -> m.hasAddedFiles() || m.hasExistingFiles()));
+
+        // Every live data file is on the current spec -> aligned.
+        Assertions.assertTrue(table.isCurrentSnapshotAllOnCurrentSpec());
+    }
+
+    @Test
     public void testIsCurrentSnapshotAllOnCurrentSpecMixedManifestsReturnsFalse() {
-        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {1, 0}, false);
+        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {1, 0},
+                new boolean[] {true, true}, false);
         Assertions.assertFalse(table.isCurrentSnapshotAllOnCurrentSpec());
     }
 
     @Test
     public void testIsCurrentSnapshotAllOnCurrentSpecMultipleManifestsAllMatchReturnsTrue() {
-        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {1, 1, 1}, false);
+        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {1, 1, 1},
+                new boolean[] {true, true, true}, false);
+        Assertions.assertTrue(table.isCurrentSnapshotAllOnCurrentSpec());
+    }
+
+    @Test
+    public void testIsCurrentSnapshotAllOnCurrentSpecDeleteOnlyOldSpecManifestReturnsTrue() {
+        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {1, 0},
+                new boolean[] {true, false}, false);
         Assertions.assertTrue(table.isCurrentSnapshotAllOnCurrentSpec());
     }
 
     @Test
     public void testIsCurrentSnapshotAllOnCurrentSpecFallsBackWhenManifestReadFails() {
-        // snapshot.allManifests() throws -> catch branch returns false (conservative fallback).
-        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {}, true);
+        IcebergTable table = buildIcebergTableWithMockedSnapshot(1, new int[] {},
+                new boolean[] {}, true);
         Assertions.assertFalse(table.isCurrentSnapshotAllOnCurrentSpec());
     }
 
     private static IcebergTable buildIcebergTableWithMockedSnapshot(int currentSpecId,
                                                                     int[] manifestSpecIds,
+                                                                    boolean[] manifestHasLiveFiles,
                                                                     boolean throwOnAllManifests) {
         BaseTable nativeTable = Mockito.mock(BaseTable.class);
         // specs().size() > 1 to enter the check.
@@ -596,9 +652,11 @@ public class IcebergTableTest extends TableTestBase {
                     .thenThrow(new RuntimeException("boom"));
         } else {
             List<ManifestFile> manifests = new ArrayList<>();
-            for (int sid : manifestSpecIds) {
+            for (int i = 0; i < manifestSpecIds.length; i++) {
                 ManifestFile mf = Mockito.mock(ManifestFile.class);
-                Mockito.when(mf.partitionSpecId()).thenReturn(sid);
+                Mockito.when(mf.partitionSpecId()).thenReturn(manifestSpecIds[i]);
+                Mockito.when(mf.hasAddedFiles()).thenReturn(manifestHasLiveFiles[i]);
+                Mockito.when(mf.hasExistingFiles()).thenReturn(false);
                 manifests.add(mf);
             }
             Mockito.when(snapshot.allManifests(Mockito.any())).thenReturn(manifests);
