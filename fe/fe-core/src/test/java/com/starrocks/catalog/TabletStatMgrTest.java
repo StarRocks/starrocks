@@ -64,12 +64,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-<<<<<<< HEAD
-=======
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
->>>>>>> 352aa63aec3... [Enhancement] Split an under-provisioned index early so a new partition reaches write parallelism sooner (#77499)
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
     private static final long TABLE_ID = 2;
@@ -638,8 +635,6 @@ public class TabletStatMgrTest {
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
     }
-<<<<<<< HEAD
-=======
 
     /**
      * Registers a range-distribution LakeTable whose base index holds exactly these tablets, all with a
@@ -785,5 +780,4 @@ public class TabletStatMgrTest {
         assertEquals(0L, runScan(true, 0, 8L << 30),
                 "an unresolved node count keeps the merge floor at 0 and emits no early signal");
     }
->>>>>>> 352aa63aec3... [Enhancement] Split an under-provisioned index early so a new partition reaches write parallelism sooner (#77499)
 }
