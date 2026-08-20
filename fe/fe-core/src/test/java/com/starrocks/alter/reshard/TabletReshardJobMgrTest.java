@@ -40,17 +40,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
-public class TabletReshardJobMgrTest {
-=======
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TabletReshardJobMgrTest {
-    // A JMockit @Mock for a static method must itself be static, so it cannot capture a local of the
-    // enclosing test method; the counters it writes live here instead. Reset before each test.
-    private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
-
     private static class WarnCounterAppender extends AbstractAppender {
         private final AtomicInteger warnCount = new AtomicInteger();
 
@@ -70,17 +63,6 @@ public class TabletReshardJobMgrTest {
         }
     }
 
-    private static void stubCountingNodeCount() {
-        new MockUp<TabletReshardUtils>() {
-            @Mock
-            public static int adaptiveSplitBoundForTable(long tableId) {
-                NODE_COUNT_RESOLUTIONS.incrementAndGet();
-                return TabletReshardUtils.adaptiveSplitBound(8);
-            }
-        };
-    }
-
->>>>>>> 005f98bba0 ([BugFix] Silence expected tablet reshard history lookup warnings (#78059))
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
         private long tableId = 0;
