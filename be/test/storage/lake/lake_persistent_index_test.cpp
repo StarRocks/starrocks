@@ -1678,6 +1678,30 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
         EXPECT_EQ(file_cnt, 4u);          // 1 segment + 3 del files
         EXPECT_EQ(row_cnt, 100 + 3 * 40); // 100 segment rows + 120 tombstone rows
     }
+
+    // Case 7: a transient rebuild-point override can move the scan boundary earlier than the
+    // persisted last-SST watermark without changing that SST's ordering metadata. This is used by
+    // tablet merge when source-local rebuild points project to different positions in the merged
+    // rssid space. The persisted point starts at rssid 10; the override starts at rssid 2.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(1, {100});
+        *metadata.add_rowsets() = make_rowset(2, {100});
+        *metadata.add_rowsets() = make_rowset(10, {150});
+        auto* sst = sstable_meta.add_sstables();
+        sst->set_max_rss_rowid((static_cast<uint64_t>(10) << 32) | 7);
+
+        auto [persisted_files, persisted_rows] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(1u, persisted_files);
+        EXPECT_EQ(150, persisted_rows);
+
+        const uint64_t override_point = static_cast<uint64_t>(2) << 32;
+        auto [override_files, override_rows] =
+                LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta, override_point);
+        EXPECT_EQ(2u, override_files);
+        EXPECT_EQ(250, override_rows);
+    }
 }
 
 // Verify that ingest_sst skips SST files that already exist in _sstable_filesets
@@ -1950,6 +1974,60 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_seri
         EXPECT_EQ(serial_values[i].get_value(), parallel_values[i].get_value())
                 << "parallel vs serial mismatch for key " << keys[i];
     }
+}
+
+TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_rebuild_point_override) {
+    const int64_t base_version = 2;
+    auto metadata = make_varchar_pk_metadata();
+    metadata->set_version(base_version);
+    metadata->set_next_rowset_id(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    std::vector<std::string> keys;
+    append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/3, /*rowset_id=*/1, &keys);
+    ASSERT_EQ(3u, keys.size());
+
+    const std::string sst_filename = "rebuild_point_override_empty.sst";
+    ASSIGN_OR_ABORT(auto writable_file, fs::new_writable_file(_tablet_mgr->sst_location(metadata->id(), sst_filename)));
+    sstable::Options options;
+    sstable::TableBuilder sst_builder(options, writable_file.get());
+    ASSERT_OK(sst_builder.Finish());
+    const uint64_t sst_filesize = sst_builder.FileSize();
+    ASSERT_OK(writable_file->close());
+
+    auto* sst = metadata->mutable_sstable_meta()->add_sstables();
+    sst->set_filename(sst_filename);
+    sst->set_filesize(sst_filesize);
+    sst->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | 2);
+
+    auto load_and_get = [&](std::optional<uint64_t> rebuild_point) {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+        CHECK_OK(index->init(metadata));
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        auto metadata_copy = std::make_shared<TabletMetadata>(*metadata);
+        MetaFileBuilder builder(tablet, metadata_copy);
+        CHECK_OK(index->load_from_lake_tablet(_tablet_mgr.get(), metadata, base_version, &builder, rebuild_point));
+
+        std::vector<Slice> key_slices;
+        key_slices.reserve(keys.size());
+        for (const auto& key : keys) {
+            key_slices.emplace_back(key);
+        }
+        std::vector<IndexValue> values(keys.size());
+        CHECK_OK(index->get(keys.size(), key_slices.data(), values.data()));
+        return values;
+    };
+
+    const auto persisted_values = load_and_get(std::nullopt);
+    EXPECT_EQ(NullIndexValue, persisted_values[0].get_value());
+    EXPECT_EQ(NullIndexValue, persisted_values[1].get_value());
+    EXPECT_EQ(NullIndexValue, persisted_values[2].get_value());
+
+    const uint64_t override_point = static_cast<uint64_t>(1) << 32;
+    const auto override_values = load_and_get(override_point);
+    EXPECT_EQ(NullIndexValue, override_values[0].get_value());
+    EXPECT_EQ(IndexValue((static_cast<uint64_t>(1) << 32) | 1), override_values[1]);
+    EXPECT_EQ(IndexValue((static_cast<uint64_t>(1) << 32) | 2), override_values[2]);
 }
 
 // A del file that did NOT originate from the rebuilt rowset must run get()+filter and drop deletes
