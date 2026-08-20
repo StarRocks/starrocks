@@ -7742,6 +7742,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_filters
             sm->set_size(100);
             sm->set_shared(true);
         }
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
         add_delvec(meta.get(), tablet_id, 1, /*segment_id=*/1, delvec_filename, shared_delvec_data);
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
@@ -7842,6 +7843,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_sparse_
             sm->set_shared(true);
             sm->set_segment_idx(2);
         }
+        stamp_physical_identity_uid(rowset, "sparse_seg_0.dat");
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -7938,6 +7940,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_with_so
             sm->set_size(100);
             sm->set_shared(true);
         }
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -8037,6 +8040,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_tombsto
             sm->set_size(100);
             sm->set_shared(true);
         }
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -8133,6 +8137,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_stacked
             sm->set_size(100);
             sm->set_shared(true);
         }
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -8217,12 +8222,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_tombsto
             sm->set_size(100);
             sm->set_shared(true);
         }
+        stamp_physical_identity_uid(data_rowset, "data_seg.dat");
         // Delete-only rowset id=10 (segments_size==0): owns no PK index entries.
         auto* delete_only_rowset = meta->add_rowsets();
         delete_only_rowset->set_id(10);
         delete_only_rowset->set_version(2);
         delete_only_rowset->set_num_rows(0);
         delete_only_rowset->set_data_size(0);
+        stamp_physical_identity_uid(delete_only_rowset, "delete_only_rowset_10");
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
         sst->set_filesize(legacy_filesize);
@@ -8414,6 +8421,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_for_ran
                 sm->set_size(100);
                 sm->set_shared(true);
             }
+            stamp_physical_identity_uid(rs, fmt::format("rfid_seg_{}.dat", rs_id));
         }
         auto* sst = meta->mutable_sstable_meta()->add_sstables();
         sst->set_filename(legacy_filename);
