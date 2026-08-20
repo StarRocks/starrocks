@@ -253,9 +253,8 @@ TabletScanKeyPruneResult keep_all(const std::vector<OlapScanRange*>& ranges, boo
 TabletScanKeyPruneResult TabletScanKeyPruner::prune_hash(const TabletHashBucketConstraint& constraint,
                                                          const TabletSchema& tablet_schema,
                                                          const std::vector<OlapScanRange*>& ranges) {
-    if (constraint.hash_version != kSupportedHashVersion || constraint.bucket_num <= 0 ||
-        constraint.bucket_id < 0 || constraint.bucket_id >= constraint.bucket_num ||
-        constraint.distribution_key_positions.empty()) {
+    if (constraint.hash_version != kSupportedHashVersion || constraint.bucket_num <= 0 || constraint.bucket_id < 0 ||
+        constraint.bucket_id >= constraint.bucket_num || constraint.distribution_key_positions.empty()) {
         return keep_all(ranges, /*fallback=*/true);
     }
     // Nothing to prune, and an empty input must never be reported as exact_empty: no scan keys means
@@ -277,8 +276,8 @@ TabletScanKeyPruneResult TabletScanKeyPruner::prune_hash(const TabletHashBucketC
     result.ranges.reserve(ranges.size());
     for (OlapScanRange* range : ranges) {
         uint32_t hash = 0;
-        if (range == nullptr || !compute_bucket_hash(tablet_schema, constraint.distribution_key_positions,
-                                                    *range, &hash)) {
+        if (range == nullptr ||
+            !compute_bucket_hash(tablet_schema, constraint.distribution_key_positions, *range, &hash)) {
             // Unroutable range: keep it. Not a tablet-level fallback -- other ranges may still route.
             result.ranges.emplace_back(range);
             continue;

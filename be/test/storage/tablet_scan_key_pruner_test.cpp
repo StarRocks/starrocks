@@ -22,8 +22,8 @@
 
 #include "column/binary_column.h"
 #include "column/field.h"
-#include "column/schema.h"
 #include "column/fixed_length_column.h"
+#include "column/schema.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
@@ -145,8 +145,8 @@ TEST(TabletScanKeyPrunerTest, RoutingAgreesWithLoadPathForVarchar) {
     auto schema = make_schema({{"k1", "VARCHAR"}});
     constexpr int32_t kBucketNum = 96;
 
-    for (const std::string& value : {std::string("DC0027fa3dff407f3e73cf346eKMP"), std::string(""),
-                                     std::string("a"), std::string("zh-Hans")}) {
+    for (const std::string& value :
+         {std::string("DC0027fa3dff407f3e73cf346eKMP"), std::string(""), std::string("a"), std::string("zh-Hans")}) {
         auto expected_bucket = static_cast<int32_t>(load_path_bucket_for_string(value, kBucketNum));
 
         std::vector<std::unique_ptr<OlapScanRange>> owned;
@@ -175,8 +175,7 @@ TEST(TabletScanKeyPrunerTest, KeepsOnlyOwnBucketAcrossManyKeys) {
     }
     ASSERT_GT(expected_kept, 0u);
 
-    auto result =
-            TabletScanKeyPruner::prune_hash(make_constraint({0}, kBucketId, kBucketNum), *schema, borrow(owned));
+    auto result = TabletScanKeyPruner::prune_hash(make_constraint({0}, kBucketId, kBucketNum), *schema, borrow(owned));
     EXPECT_FALSE(result.fallback);
     EXPECT_FALSE(result.exact_empty);
     EXPECT_EQ(expected_kept, result.ranges.size());
@@ -250,7 +249,7 @@ TEST(TabletScanKeyPrunerTest, MultiColumnDistributionKey) {
     std::vector<std::unique_ptr<OlapScanRange>> owned;
     owned.emplace_back(point_range({"5", "abc"}));
     auto result = TabletScanKeyPruner::prune_hash(make_constraint({0, 1}, expected_bucket, kBucketNum), *schema,
-                                                 borrow(owned));
+                                                  borrow(owned));
     EXPECT_FALSE(result.fallback);
     EXPECT_EQ(1, result.ranges.size());
 
@@ -262,8 +261,8 @@ TEST(TabletScanKeyPrunerTest, MultiColumnDistributionKey) {
     prefix->begin_scan_range = OlapTuple(std::vector<std::string>{"5", "abc"});
     prefix->end_scan_range = OlapTuple(std::vector<std::string>{"5", "xyz"});
     partial.emplace_back(std::move(prefix));
-    auto partial_result = TabletScanKeyPruner::prune_hash(make_constraint({0, 1}, expected_bucket, kBucketNum),
-                                                         *schema, borrow(partial));
+    auto partial_result = TabletScanKeyPruner::prune_hash(make_constraint({0, 1}, expected_bucket, kBucketNum), *schema,
+                                                          borrow(partial));
     EXPECT_FALSE(partial_result.fallback);
     EXPECT_EQ(1, partial_result.ranges.size());
     EXPECT_EQ(0, partial_result.pruned);
@@ -351,8 +350,8 @@ namespace {
 Schema int_schema(int num_cols) {
     Schema s;
     for (int i = 0; i < num_cols; i++) {
-        auto f = std::make_shared<Field>(static_cast<ColumnId>(i), "k" + std::to_string(i),
-                                         get_type_info(TYPE_INT), false);
+        auto f = std::make_shared<Field>(static_cast<ColumnId>(i), "k" + std::to_string(i), get_type_info(TYPE_INT),
+                                         false);
         f->set_is_key(true);
         s.append(f);
     }
@@ -371,8 +370,7 @@ SeekTuple int_tuple(const std::vector<int32_t>& vals, int num_cols) {
 // Builds [lo, hi] over `num_cols` columns; an empty vector means unbounded on that side.
 SeekRange int_range(const std::vector<int32_t>& lo, bool inc_lo, const std::vector<int32_t>& hi, bool inc_hi,
                     int num_cols) {
-    SeekRange r(lo.empty() ? SeekTuple() : int_tuple(lo, num_cols),
-                hi.empty() ? SeekTuple() : int_tuple(hi, num_cols));
+    SeekRange r(lo.empty() ? SeekTuple() : int_tuple(lo, num_cols), hi.empty() ? SeekTuple() : int_tuple(hi, num_cols));
     r.set_inclusive_lower(inc_lo);
     r.set_inclusive_upper(inc_hi);
     return r;

@@ -28,7 +28,6 @@
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
-#include "exec/tablet_scan_key_constraint.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
 #include "compute_env/query/fragment_runtime_state.h"
@@ -37,6 +36,7 @@
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "connector/lake/lake_global_late_materialization_context.h"
+#include "exec/tablet_scan_key_constraint.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
@@ -1339,8 +1339,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, segment_init_name);
-    _scan_keys_pruned_by_tablet_range_counter = ADD_CHILD_COUNTER(
-            _runtime_profile, "ScanKeysPrunedByTabletRange", TUnit::UNIT, segment_init_name);
+    _scan_keys_pruned_by_tablet_range_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "ScanKeysPrunedByTabletRange", TUnit::UNIT, segment_init_name);
     _rows_after_sk_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _rows_key_range_counter =
