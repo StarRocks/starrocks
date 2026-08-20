@@ -1807,6 +1807,26 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // at a time on the caller thread (no thread pool) -- the segment-scan analog of load_dels reading
     // one del file at a time.
     const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
+    auto insert_rebuild_batch = [&](RebuildInsertBatch& batch, int64_t rowset_version) -> Status {
+        if (rebuild_rss_rowid_point_override.has_value() && !batch.keys.empty()) {
+            std::vector<IndexValue> existing_values(batch.keys.size(), IndexValue(NullIndexValue));
+            KeyIndexSet key_indexes;
+            for (size_t i = 0; i < batch.keys.size(); ++i) {
+                key_indexes.insert(i);
+            }
+            RETURN_IF_ERROR(get_from_sstables(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
+                                              existing_values.data(), &key_indexes, /*version=*/-1));
+            for (size_t i = 0; i < batch.keys.size(); ++i) {
+                if (existing_values[i].get_value() != NullIndexValue && existing_values[i] != batch.values[i]) {
+                    return Status::AlreadyExist(
+                            fmt::format("merge tail rebuild found duplicate live key, sst_value={} tail_value={}",
+                                        existing_values[i].get_value(), batch.values[i].get_value()));
+                }
+            }
+        }
+        return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()), batch.values.data(),
+                      rowset_version);
+    };
 
     if (use_parallel) {
         // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
@@ -1862,8 +1882,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
                 for (auto& batch : result.batches) {
-                    RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
-                                           batch.values.data(), unit.rowset_version));
+                    RETURN_IF_ERROR(insert_rebuild_batch(batch, unit.rowset_version));
                 }
                 unit_cursor++;
             }
@@ -1889,8 +1908,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 int64_t unit_rows = 0;
                 auto insert_emit = [&](RebuildInsertBatch& batch) -> Status {
                     unit_rows += static_cast<int64_t>(batch.values.size());
-                    return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
-                                  batch.values.data(), unit.rowset_version);
+                    return insert_rebuild_batch(batch, unit.rowset_version);
                 };
                 scan_one_rebuild_unit(unit, ctx, insert_emit);
                 RETURN_IF_ERROR(scan_status);
