@@ -177,9 +177,14 @@ TEST_F(MetaFileTest, test_merge_delvec_files_encrypted) {
     const int64_t tablet_id = 2001;
     const int64_t new_tablet_id = 2002;
     const int64_t txn_id = 5;
+    const int64_t delvec_version = 11;
+    const uint32_t segment_id = 7;
 
     ASSIGN_OR_ABORT(auto pair, KeyCache::instance().create_plain_random_encryption_meta_pair());
-    const std::string content = "encrypted-delvec";
+    DelVector expected_delvec;
+    const uint32_t deleted_rowids[] = {3, 9};
+    expected_delvec.init(delvec_version, deleted_rowids, 2);
+    const std::string content = expected_delvec.save();
     const std::string file_name = "delvec-encrypted";
 
     const std::string file_path = _tablet_manager->delvec_location(tablet_id, file_name);
@@ -207,6 +212,23 @@ TEST_F(MetaFileTest, test_merge_delvec_files_encrypted) {
     EXPECT_EQ(static_cast<int64_t>(content.size()), new_delvec_file.size());
     EXPECT_FALSE(new_delvec_file.encryption_meta().empty());
     EXPECT_FALSE(new_delvec_file.shared());
+
+    TabletMetadata metadata;
+    metadata.set_id(new_tablet_id);
+    metadata.set_version(delvec_version);
+    (*metadata.mutable_delvec_meta()->mutable_version_to_file())[delvec_version] = new_delvec_file;
+    DelvecPagePB page;
+    page.set_version(delvec_version);
+    page.set_offset(offsets[0]);
+    page.set_size(content.size());
+    (*metadata.mutable_delvec_meta()->mutable_delvecs())[segment_id] = page;
+
+    DelVector actual_delvec;
+    LakeIOOptions lake_io_opts;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), metadata, segment_id, false, lake_io_opts, &actual_delvec));
+    ASSERT_NE(nullptr, actual_delvec.roaring());
+    EXPECT_TRUE(actual_delvec.roaring()->contains(3));
+    EXPECT_TRUE(actual_delvec.roaring()->contains(9));
 }
 
 TEST_F(MetaFileTest, test_delvec_rw) {
