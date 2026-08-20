@@ -1151,6 +1151,7 @@ Status read_column_range_from_segment(const std::shared_ptr<Segment>& segment, c
 
 // Per-target rebuild — Steps A-F.
 // Returns the single-entry PB describing the newly written .cols file.
+DEFINE_FAIL_POINT(tablet_merge_after_write_dcg_cols);
 StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
         TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts, int64_t new_tablet_id,
         int64_t new_version, int64_t txn_id, const TabletMetadataPB& new_metadata, uint32_t target_rssid,
@@ -1331,6 +1332,18 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
     uint64_t written_index_size = 0;
     uint64_t written_footer_position = 0;
     RETURN_IF_ERROR(segment_writer->finalize(&written_file_size, &written_index_size, &written_footer_position));
+
+    // The rebuilt .cols segment is now durable but nothing references it yet: the orphan-file window.
+    //
+    // Note the caller does NOT clean this particular file up. merge_dcg_meta appends the rebuilt path
+    // to rebuilt_file_paths only AFTER this function returns OK, so an error injected here returns
+    // before the caller learns the filename and cleanup_on_failure() cannot delete it -- the file is
+    // left for ordinary orphan-file vacuum. That is not a defect to engineer around: producing an
+    // unreferenced file is exactly what this hook exists to let a test observe. It does mean a
+    // garbage-file check run immediately after an armed merge sees this file until vacuum runs.
+    // Contrast tablet_merge_after_write_sstable, whose caller arms its CancelableDefer BEFORE the call
+    // and therefore does delete the file.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_write_dcg_cols);
 
     TEST_SYNC_POINT_CALLBACK("merge_dcg_meta:after_write_cols", const_cast<std::string*>(&new_file_basename));
 
@@ -1764,6 +1777,7 @@ Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(tablet_merge_after_write_delvec);
 Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts,
                      const std::vector<CanonicalGapSpec>& synthesized_gap_specs, int64_t new_version, int64_t txn_id,
                      TabletMetadataPB* new_metadata) {
@@ -1928,6 +1942,10 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         RETURN_IF_ERROR(merge_delvec_files(tablet_manager, unique_delvec_files, new_metadata->id(), txn_id,
                                            &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset));
     }
+
+    // The merged delvec file is written; new_metadata does not point at it yet. Orphan-file window,
+    // same shape as the .cols and sstable hooks.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_write_delvec);
 
     // Build base_offset_by_file_name. Empty for synthesized-only route since
     // there are no source files to reference; merged-state targets always go
@@ -2254,12 +2272,20 @@ StatusOr<LegacyRebuildOutputWriter> open_legacy_rebuild_output(TabletManager* ta
 // DCHECKs has_fileset_id() for any sstable with a range
 // (persistent_index_sstable_fileset.cpp:30-31), and the rebuilt PB carries a
 // real key range from builder.KeyRange().
+DEFINE_FAIL_POINT(tablet_merge_after_write_sstable);
 Status finalize_legacy_rebuild_output(LegacyRebuildOutputWriter& writer, uint64_t max_rss_rowid,
                                       PersistentIndexSstablePB* out_pb) {
     RETURN_IF_ERROR(writer.table_builder->Finish());
     auto [start_key, end_key] = writer.table_builder->KeyRange();
     const uint64_t filesize = writer.table_builder->FileSize();
     RETURN_IF_ERROR(writer.writable_file->close());
+
+    // The rebuilt sstable is durable and out_pb is still empty, so nothing references the file: the
+    // orphan-file window. Unlike the .cols hook, both call sites arm a CancelableDefer that deletes a
+    // non-finalized output BEFORE calling this function and cancel it only after the PB is built, so an
+    // error injected here does delete the file. Armed WITH PAUSE the file stays unreferenced for the
+    // duration of the pause, which is the state a node kill is meant to catch.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_write_sstable);
 
     out_pb->set_filename(writer.filename);
     out_pb->set_filesize(filesize);

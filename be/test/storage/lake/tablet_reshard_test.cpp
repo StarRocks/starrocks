@@ -12460,4 +12460,242 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_before_delete_predicate_range
     EXPECT_OK(run_merge());
 }
 
+// =============================================================================
+// The three merge file-write hooks. Each sits after its file is durable and before any metadata
+// references it -- the orphan-file window. Each fixture must actually reach its own phase, so these
+// reuse the shapes of the existing tests that exercise those phases.
+// =============================================================================
+
+// merge_delvecs writes a merged delvec file. Primary-key only, and skipped entirely when there is no
+// source delvec and no synthesized gap, so both sources carry a delvec here.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t tablet_a = next_id();
+        const int64_t tablet_b = next_id();
+        const int64_t new_tablet = next_id();
+
+        prepare_tablet_dirs(tablet_a);
+        prepare_tablet_dirs(tablet_b);
+        prepare_tablet_dirs(new_tablet);
+
+        auto build = [&](int64_t tablet_id, uint32_t rowset_id, int64_t schema_id, const std::string& delvec_name,
+                         const std::string& delvec_content) {
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(tablet_id);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(rowset_id + 1);
+            set_primary_key_schema(meta.get(), schema_id);
+            add_rowset(meta.get(), rowset_id, 7, 1);
+            add_delvec(meta.get(), tablet_id, base_version, rowset_id, delvec_name, delvec_content);
+            return meta;
+        };
+
+        auto meta_a = build(tablet_a, 10, 1001, "delvec-a", "aaaa");
+        auto meta_b = build(tablet_b, 1, 2002, "delvec-b", "bbbbbb");
+        CHECK_OK(put_tablet_metadata(meta_a));
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.add_old_tablet_ids(tablet_a);
+        merging_tablet.add_old_tablet_ids(tablet_b);
+        merging_tablet.set_new_tablet_id(new_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached after the merged delvec file was written";
+
+    EXPECT_OK(run_merge());
+}
+
+// The .cols rebuild only runs when two DCG entries claim the SAME column id for the same target
+// segment, so this mirrors the two-children-same-column fixture: both children update c1 on one
+// shared base segment over disjoint row windows.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_dcg_cols) {
+    constexpr int kNumRows = 100;
+    constexpr int kBoundary = 50;
+    constexpr uint32_t kSegmentRssid = 1;
+    constexpr int64_t kTxnId = 887;
+
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        auto source_value_of = [](int row) { return row * 10; };
+        const std::string shared_segment_name = "shared_seg.dat";
+        const uint64_t base_segment_size =
+                write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, source_value_of);
+
+        auto child_a_update = [](int row) { return row + 100000; };
+        auto child_b_update = [](int row) { return row + 200000; };
+        const std::string cols_a_name = lake::gen_cols_filename(kTxnId);
+        const std::string cols_b_name = lake::gen_cols_filename(kTxnId + 1);
+        auto a_cell = [&](int row) { return row < kBoundary ? child_a_update(row) : source_value_of(row); };
+        auto b_cell = [&](int row) { return row >= kBoundary ? child_b_update(row) : source_value_of(row); };
+        write_c1_only_cols_file(child_a, cols_a_name, kNumRows, a_cell);
+        write_c1_only_cols_file(child_b, cols_b_name, kNumRows, b_cell);
+
+        auto build_child = [&](int64_t tablet_id, int lower_key, int upper_key, const std::string& cols_filename) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(base_version);
+            metadata->set_next_rowset_id(10);
+            const auto [c0_uid, c1_uid] = set_two_column_pk_schema(metadata.get(), 4001);
+            (void)c0_uid;
+
+            auto* tablet_range = metadata->mutable_range();
+            tablet_range->set_lower_bound_included(true);
+            tablet_range->set_upper_bound_included(false);
+            *tablet_range->mutable_lower_bound() = generate_sort_key(lower_key);
+            *tablet_range->mutable_upper_bound() = generate_sort_key(upper_key);
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(kSegmentRssid);
+            rowset->set_version(1);
+            rowset->set_num_rows(kNumRows);
+            rowset->set_data_size(base_segment_size);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(shared_segment_name);
+                sm->set_size(base_segment_size);
+                sm->set_shared(true);
+            }
+            stamp_physical_identity_uid(rowset, shared_segment_name);
+            *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
+            *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(upper_key);
+            rowset->mutable_range()->set_lower_bound_included(true);
+            rowset->mutable_range()->set_upper_bound_included(false);
+            (*metadata->mutable_rowset_to_schema())[kSegmentRssid] = 4001;
+
+            auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[kSegmentRssid];
+            dcg.add_column_files(cols_filename);
+            dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+            dcg.add_versions(1);
+            dcg.add_shared_files(false);
+            return metadata;
+        };
+
+        auto meta_a = build_child(child_a, 0, kBoundary, cols_a_name);
+        auto meta_b = build_child(child_b, kBoundary, kNumRows, cols_b_name);
+        CHECK_OK(put_tablet_metadata(meta_a));
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.add_old_tablet_ids(child_a);
+        merging_tablet.add_old_tablet_ids(child_b);
+        merging_tablet.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(kTxnId + 2);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_write_dcg_cols", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_write_dcg_cols", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached after the rebuilt .cols segment was written";
+
+    EXPECT_OK(run_merge());
+}
+
+// The sstable rebuild only runs for a legacy-form shared sstable (shared=true, no shared_rssid), so
+// this mirrors the dead-rssid rebuild fixture: both children reference one legacy shared sstable.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_sstable) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        const std::string legacy_filename = "ghost_rssid.sst";
+        const auto legacy_path = _tablet_manager->sst_location(child_a, legacy_filename);
+        const uint64_t legacy_filesize = write_legacy_pk_sstable(legacy_path, {{"k1", /*rssid=*/1, /*rowid=*/0},
+                                                                              {"k2", /*rssid=*/2, /*rowid=*/0},
+                                                                              {"k3", /*rssid=*/3, /*rowid=*/0}});
+
+        auto make_child = [&](int64_t tablet_id, uint32_t live_rowset_id, const std::string& seg_filename) {
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(tablet_id);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(live_rowset_id + 1);
+            set_primary_key_schema(meta.get(), 1001);
+            auto* rowset = meta->add_rowsets();
+            rowset->set_id(live_rowset_id);
+            rowset->set_version(1);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(seg_filename);
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
+            auto* sst = meta->mutable_sstable_meta()->add_sstables();
+            sst->set_filename(legacy_filename);
+            sst->set_filesize(legacy_filesize);
+            sst->set_shared(true);
+            sst->set_max_rss_rowid((static_cast<uint64_t>(3) << 32) | 0);
+            return meta;
+        };
+
+        auto meta_a = make_child(child_a, /*live_rowset_id=*/1, "seg_a.dat");
+        auto meta_b = make_child(child_b, /*live_rowset_id=*/2, "seg_b.dat");
+        CHECK_OK(put_tablet_metadata(meta_a));
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(child_a);
+        merging_info.add_old_tablet_ids(child_b);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_write_sstable", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_write_sstable", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached after the rebuilt sstable was written";
+
+    EXPECT_OK(run_merge());
+}
+
 } // namespace starrocks
