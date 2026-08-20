@@ -1324,6 +1324,74 @@ TEST_F(LakeReplicationMetadataConversionTest, rejects_distinct_encrypted_metadat
     EXPECT_TRUE(result.status().is_corruption()) << result.status();
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, range_shared_aggregate_conflicting_source_declarations_are_corruption) {
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+
+    for (bool private_encrypted_first : {true, false}) {
+        SCOPED_TRACE(fmt::format("private_encrypted_first={}", private_encrypted_first));
+        auto source = make_metadata(private_encrypted_first ? 53041 : 53043, 2, true);
+        auto target = make_metadata(private_encrypted_first ? 53042 : 53044, 1, true);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+        const auto filename = file_name(private_encrypted_first ? 41 : 43, "dat");
+        auto add_segment = [&](bool shared, const std::string& encryption_meta) {
+            auto* rowset = source->add_rowsets();
+            rowset->set_id(source->rowsets_size());
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(filename);
+            segment->set_size(11);
+            segment->set_shared(shared);
+            segment->set_encryption_meta(encryption_meta);
+        };
+        if (private_encrypted_first) {
+            add_segment(false, "private-encrypted-meta");
+            add_segment(true, "");
+        } else {
+            add_segment(true, "");
+            add_segment(false, "private-encrypted-meta");
+        }
+
+        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    }
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, bundled_aggregate_conflicting_source_declarations_are_corruption) {
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+
+    for (bool private_encrypted_first : {true, false}) {
+        SCOPED_TRACE(fmt::format("private_encrypted_first={}", private_encrypted_first));
+        auto source = make_metadata(private_encrypted_first ? 53045 : 53047, 2);
+        auto target = make_metadata(private_encrypted_first ? 53046 : 53048, 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+        const auto filename = file_name(private_encrypted_first ? 45 : 47, "dat");
+        auto add_segment = [&](bool bundled, const std::string& encryption_meta) {
+            auto* rowset = source->add_rowsets();
+            rowset->set_id(source->rowsets_size());
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(filename);
+            segment->set_size(11);
+            if (bundled) {
+                segment->set_bundle_file_offset(0);
+            }
+            segment->set_encryption_meta(encryption_meta);
+        };
+        if (private_encrypted_first) {
+            add_segment(false, "private-encrypted-meta");
+            add_segment(true, "");
+        } else {
+            add_segment(true, "");
+            add_segment(false, "private-encrypted-meta");
+        }
+
+        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    }
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, range_shared_files_remain_shared_after_copy) {
     auto source = make_metadata(53011, 2, true);
     auto target = make_metadata(53012, 1, true);
@@ -3159,7 +3227,7 @@ TEST_F(LakeReplicationRemoteStorageTest, range_siblings_reuse_shared_file_withou
     (void)update_master_info(original_master_info);
 }
 
-TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion__encrypted_slices_before_copy) {
+TEST_F(LakeReplicationRemoteStorageTest, rejects_conflicting_bundled_encryption_metadata_before_copy) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
@@ -3200,7 +3268,7 @@ TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion_
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
     (void)update_master_info(original_master_info);
 
-    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_FALSE(copy_started);
     EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
 }
