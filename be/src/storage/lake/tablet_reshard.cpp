@@ -343,8 +343,9 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     // The identical path's only file write is the PK-index flush above, so this is its only
     // orphan-file window: the flushed sstables exist but no metadata references them yet. Armed
     // WITH PAUSE, a thread parks here holding no data, index or metacache mutex -- the flush released
-    // its sharded PK-index lock before returning -- and the only serialization state it still holds is
-    // this reshard's publish token. Armed ENABLE, the publish fails and the frontend retries.
+    // its sharded PK-index lock before returning -- and the only lake serialization state it still
+    // holds is this reshard's publish token. (libfiu holds its own read lock across the callback; see
+    // fail_point.h.) Armed ENABLE, the publish fails and the frontend retries.
     FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_after_identical_pk_flush);
 
     auto old_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
