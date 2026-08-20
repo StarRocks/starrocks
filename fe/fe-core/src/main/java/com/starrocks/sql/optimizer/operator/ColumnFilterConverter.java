@@ -387,8 +387,11 @@ public class ColumnFilterConverter {
             // Equality is exempt: a = c implies f(a) = f(c) for any f. This is the same condition
             // ListPartitionPruner.deduceExtraConjuncts applies to the LIST-partition rewrite.
             BinaryType binaryType = ((BinaryPredicateOperator) predicate).getBinaryType();
+            // Check the whole rewritten expression, not the CallOperator getCallOperator() digs out
+            // of it: that helper strips the enclosing cast, and a cast is exactly what can break the
+            // order -- cast(bill as bigint) maps '99845' to 99845, which sorts the other way round.
             if (!binaryType.isEqual()
-                    && !OperatorFunctionChecker.onlyContainMonotonicFunctions(callOperator).first) {
+                    && !OperatorFunctionChecker.onlyContainMonotonicFunctions(translate).first) {
                 return predicate;
             }
             ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);

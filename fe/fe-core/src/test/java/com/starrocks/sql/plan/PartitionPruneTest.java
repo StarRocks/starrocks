@@ -419,6 +419,30 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneSkipsNonOrderPreservingCast() throws Exception {
+        // A varchar-to-bigint cast does not preserve the order: '99845' sorts after '998425506019'
+        // as a string while 99845 is far below 998425506019 as a number. Mapping a range predicate
+        // on c1 through that cast would prune the partition holding '99845' and lose the row.
+        // getCallOperator() unwraps the enclosing cast, so the check has to look at the whole
+        // expression, not at the call it digs out.
+        starRocksAssert.withTable("CREATE TABLE t_gen_cast (" +
+                " c1 varchar(64) NOT NULL," +
+                " c2 bigint NULL AS cast(c1 as bigint) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_cast ADD PARTITION p1 VALUES IN ('99845')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_cast ADD PARTITION p2 VALUES IN ('998425506019')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_cast ADD PARTITION p3 VALUES IN ('1234567')");
+
+        starRocksAssert.query("select count(*) from t_gen_cast where c1 > '998425506019' ")
+                .explainContains("partitions=3/3");
+        starRocksAssert.query("select count(*) from t_gen_cast where c1 <= '998425506019' ")
+                .explainContains("partitions=3/3");
+    }
+
+    @Test
     public void testRangeExprPruneSkipsNonMonotonicExpr() throws Exception {
         // The partition expression maps a varchar onto a bigint through substr() and a cast, and neither
         // step preserves the string order: '99845' sorts after '998425506019' while its partition value
