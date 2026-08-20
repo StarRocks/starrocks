@@ -32,4 +32,11 @@ public class CaptureVersionNode extends PlanNode {
         msg.node_type = TPlanNodeType.CAPTURE_VERSION_NODE;
 
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a capture-version operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

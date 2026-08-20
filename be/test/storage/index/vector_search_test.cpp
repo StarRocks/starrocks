@@ -25,6 +25,7 @@
 #endif
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -2412,6 +2413,28 @@ TEST_F(VectorResidualPrefilterTest, cardinality_below_k_short_circuits_search) {
     run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
     EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite cardinality < k";
+}
+
+TEST_F(VectorResidualPrefilterTest, exact_rescan_uses_contiguous_array_read) {
+    int size_reads = 0;
+    int sparse_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("ArrayColumnIterator::next_batch:size", [&](void*) { ++size_reads; });
+    SyncPoint::GetInstance()->SetCallBack("ArrayColumnIterator::next_batch:sparse", [&](void*) { ++sparse_reads; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([] {
+        SyncPoint::GetInstance()->ClearCallBack("ArrayColumnIterator::next_batch:size");
+        SyncPoint::GetInstance()->ClearCallBack("ArrayColumnIterator::next_batch:sparse");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res);
+
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "cardinality short-circuit did not reach exact rescan";
+    EXPECT_EQ(size_reads, 1) << "exact rescan must preserve the array iterator's 64-bit element ordinal";
+    EXPECT_EQ(sparse_reads, 0) << "sparse array reads truncate flattened element ordinals to rowid_t";
 }
 
 TEST_F(VectorResidualPrefilterTest, cardinality_equal_k_short_circuits_search) {

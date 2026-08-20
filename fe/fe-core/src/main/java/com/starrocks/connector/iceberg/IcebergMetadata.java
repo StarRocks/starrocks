@@ -2978,7 +2978,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (isRewrite && extra != null) {
             ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
             ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
-            ((RewriteData) batchWrite).setSnapshotId(nativeTbl.currentSnapshot().snapshotId());
+            // Validate from the snapshot the rewrite planned against, not the one current at
+            // commit time. RewriteFiles checks for row-level deletes added to the files being
+            // replaced over the range (startingSnapshot, current]; passing the commit-time
+            // snapshot makes that range empty, so a DELETE/UPDATE that landed while the rewrite
+            // was running is never seen. Replacing its data files then strands the position
+            // deletes on paths no longer in the table, silently resurrecting deleted rows.
+            Long baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
+            if (baseSnapshotId == null) {
+                Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+                if (currentSnapshot != null) {
+                    baseSnapshotId = currentSnapshot.snapshotId();
+                }
+            }
+            if (baseSnapshotId != null) {
+                ((RewriteData) batchWrite).setSnapshotId(baseSnapshotId);
+            }
         }
 
         // Set audit info for the commit

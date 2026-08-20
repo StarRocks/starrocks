@@ -484,6 +484,8 @@ Parameter:
     - The size of the tablet is **larger** than `tablet_reshard_target_size`. 
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
+  - A tablet is also split without waiting for `tablet_reshard_target_size` if the materialized index it belongs to has fewer tablets than the number of compute nodes in its warehouse -- capped by `tablet_reshard_max_split_count`, so lowering that configuration lowers the tablet count at which this stops -- and the tablet is worth at least two of the target that rule aims at. That target is the size that would give the index one tablet per such slot, floored at `tablet_reshard_min_split_size`, so with its 2 GB default an index below that floor splits once a tablet reaches 4 GB. This allows a newly created partition to reach cluster-wide write parallelism sooner. Specifying `tablet_reshard_target_size` in `PROPERTIES` disables this and applies exactly the target size you requested. To disable it for the whole cluster, set `tablet_reshard_min_split_size` at or above `tablet_reshard_target_size`.
+
   - A tablet will be merged if both the following conditions are met:
     - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).

@@ -769,12 +769,15 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 从 v4.1 起，StarRocks 引入了**基于范围的分布语义**，通过 FE 配置项 `enable_range_distribution` 控制。在存算分离模式下默认启用。启用后，数据会按照键列的取值范围进行有序划分，每个 Tablet 存储一个连续范围内的数据。
 
+从 v4.1 起，StarRocks 引入了**基于范围的分布语义**，通过 FE 配置项 `enable_range_distribution` 控制。在存算分离集群中默认启用。基于范围的分布语义解决了小型租户面向客户的场景中的性能问题，并提供了一种自适应机制来处理数据偏斜。数据会按照键列的取值范围进行有序划分，每个 Tablet 存储一个连续范围内的数据。对于现有表，您可以通过拆分或合并 Tablet 来实现 Tablet 大小的动态管理。在创建采用基于范围的分布语义的表时，支持 Colocate Join。
+
 该分布语义与默认行为的差异如下：
 
 - 如果显式指定了键类型（AGGREGATE KEY / UNIQUE KEY / PRIMARY KEY / DUPLICATE KEY），但未指定 `DISTRIBUTED BY` 子句，则默认采用基于范围的分布。
 - 如果未指定键类型、`DISTRIBUTED BY` 子句以及 `ORDER BY` 子句，则会创建一个采用随机分桶策略的明细表。
 - 如果未指定键类型和 `DISTRIBUTED BY` 子句，但指定了 `ORDER BY` 子句，则会创建一个采用基于范围分布的明细表。在这种情况下，`DUPLICATE KEY` 与 `ORDER BY` 等价，可以互相替代。
 - 如果同时指定了 `DUPLICATE KEY` 和 `ORDER BY`，仅 `ORDER BY` 生效，`DUPLICATE KEY` 会被忽略。
+- 当指定了 `colocate_with` 属性时，除了 Colocation Group 之外，还必须指定 Colocated Column。Colocated Column 必须是排序列的前缀，且默认的 Colocated Column 即为排序列。
 
 #### 优点
 
@@ -803,6 +806,8 @@ DISTRIBUTED BY HASH(site_id,city_code);
 - 如需将其禁用并回退到此前的默认分布方式，请将 FE 配置项 `enable_range_distribution` 设置为 `false`。该配置在存算一体模式下无效。
 
 #### 示例
+
+##### 创建具有基于范围的分布语义的新表
 
 以下示例省略了分区语法。
 
@@ -850,20 +855,56 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
+**Colocate Join 表：**
+
+:::note
+除了 Colocation Group 之外，您还必须在 `colocate_with` 属性中以 `<colocation_group>:<colocated_column>[,<colocated_column>]` 的格式指定 Colocated Column：
+- Colocated Column 必须是排序列的前缀。
+- 同一 Colocation Group 中的表必须具有相同类型的 Colocated Column，且 Colocated Column 的数量和顺序必须一致。
+- 默认的 Colocated Column 即为排序列。
+:::
+
+```SQL
+-- 当指定了 colocate_with 属性时，在同列中具有相同值的数据将被分发到同一组 BE/CN 上。
+CREATE TABLE pk_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id)
+PROPERTIES(
+    "colocate_with" = "colocation_group1:tenant_id,created_time"
+)
+```
+
+##### 通过拆分或合并 Tablet 优化现有表
+
+有关拆分或合并 Tablet 的详细指引，参考 [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size)。
+
+- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- 将表中所有符合条件的 Tablet 合并，目标大小为 2 GB（默认值）。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
 #### 限制
 
 基于范围分布的表不支持以下操作：
 
 | DDL | 原因 |
-|---|---|
-| 不带 `ORDER BY` 子句的 `ALTER TABLE ... ADD ROLLUP ...` | 普通同步 Rollup 依赖 base 表与 Rollup 表 tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`：在存算分离的 Range 分布表上（自 v4.2 起）它会构建带独立排序键的 Rollup，且支持添加多个此类 Rollup（每条 `ALTER TABLE` 语句添加一个）。 |
+| --- | --- |
+| 不包含 `ORDER BY` 子句的 `ALTER TABLE ... ADD ROLLUP ...` | 普通同步 Rollup 依赖基表与 Rollup 表 Tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`：在存算分离集群中的范围分布表上，该语句会构建带独立排序键的 Rollup，且支持添加多个此类 Rollup（每条 `ALTER TABLE` 语句添加一个）。 |
 | `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
-| `ALTER TABLE ... ORDER BY (...)`（修改排序键） | sort key 决定了 tablet 的边界，修改 sort key 会使现有范围 tablet 失效。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
-| `ALTER TABLE ... ADD COLUMN <col> KEY ...` | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，新增的 KEY 列会被自动追加到（隐式推导的）范围排序键中。 |
-| `ALTER TABLE ... DROP COLUMN <col>`，且 `<col>` 是范围排序键的一部分 | 删除排序键列会使已存储的 tablet 范围边界值失效。 |
-| `ALTER TABLE ... MODIFY COLUMN <col> ...`，且 `<col>` 是范围排序键的一部分 | 修改列类型/语义会破坏已存储的 tablet 范围边界值。 |
-| `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（或任意键类型下将值列提升为键列）触发 keyness 翻转 | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，keyness 翻转会改变由键列推导出的范围排序键。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 

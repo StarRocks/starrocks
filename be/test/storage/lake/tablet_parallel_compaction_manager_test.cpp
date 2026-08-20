@@ -133,6 +133,32 @@ TEST_F(TabletParallelCompactionStateTest, test_is_complete) {
     EXPECT_TRUE(_state->is_complete());
 }
 
+// Pins the compaction-policy configs that these tests' expected subtask counts are derived from, and
+// puts the previous values back on destruction. The BE test binary shares one process, so without
+// this the number of rowsets pick_rowsets() returns depends on whatever suite ran earlier: with a
+// leaked max_cumulative_compaction_num_singleton_deltas=10, a 20-rowset tablet yields 2 subtasks
+// instead of 4. The pinned values are the config defaults.
+class CompactionPolicyConfigPin {
+public:
+    CompactionPolicyConfigPin() {
+        config::enable_size_tiered_compaction_strategy = true;
+        config::min_cumulative_compaction_num_singleton_deltas = 5;
+        config::max_cumulative_compaction_num_singleton_deltas = 500;
+    }
+
+    ~CompactionPolicyConfigPin() {
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _max_cumulative_deltas;
+    }
+
+private:
+    // Captured before the constructor body overwrites them.
+    bool _enable_size_tiered = config::enable_size_tiered_compaction_strategy;
+    int64_t _min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+    int64_t _max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+};
+
 class TabletParallelCompactionManagerTest : public TestBase {
 public:
     TabletParallelCompactionManagerTest() : TestBase(kTestDirectory) { clear_and_init_test_dir(); }
@@ -238,6 +264,9 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
     std::unique_ptr<ThreadPool> _thread_pool;
+    // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
+    // the pinned values and no other suite inherits them.
+    CompactionPolicyConfigPin _config_pin;
 };
 
 TEST_F(TabletParallelCompactionManagerTest, test_get_tablet_state_not_exist) {
@@ -2991,6 +3020,9 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
+    // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
+    // the pinned values and no other suite inherits them.
+    CompactionPolicyConfigPin _config_pin;
 };
 
 // Test that a large rowset meeting split criteria is identified

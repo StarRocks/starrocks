@@ -782,7 +782,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 ### レンジベースのバケット分散
 
-v4.1 以降、StarRocks は**レンジベースの分散セマンティクス**をサポートしており、これは FE 設定の `enable_range_distribution` によって制御されます。共有データモードではデフォルトで有効になっています。データはキー列のデータ範囲に従ってシーケンス化され、各タブレットには特定の範囲のデータが含まれます。
+v4.1 以降、StarRocks は**レンジベースの分散セマンティクス**をサポートしており、これは FE 設定の `enable_range_distribution` によって制御されます。共有データクラスタではデフォルトで有効になっています。範囲ベースの分散セマンティクスは、小規模テナントや顧客向けシナリオにおけるパフォーマンスの問題に対処し、データの偏りを処理するための適応型メカニズムを実現します。データはキー列のデータ範囲に従って順序付けられ、各タブレットには特定の範囲のデータが含まれます。既存のテーブルについては、タブレットを分割または統合することで、タブレットサイズの動的な管理を行うことができます。範囲ベースの分散セマンティクスを用いてテーブルを作成する場合、コロケート結合がサポートされます。
 
 この分散セマンティクスは、従来のデフォルト動作と以下の点で異なります：
 
@@ -790,6 +790,7 @@ v4.1 以降、StarRocks は**レンジベースの分散セマンティクス**�
 - キータイプ、`DISTRIBUTED BY`、`ORDER BY` のいずれも指定されていない場合、ランダムバケット方式の Duplicate Key テーブルが作成されます。
 - キータイプと `DISTRIBUTED BY` が指定されていないが、`ORDER BY` が指定されている場合、レンジ分散方式の重複キーテーブルが作成されます。この場合、`DUPLICATE KEY` と `ORDER BY` は同等であり、相互に代替可能です。
 - `DUPLICATE KEY` と `ORDER BY` の両方が指定されている場合、`ORDER BY` のみが有効となり、`DUPLICATE KEY` は無視されます。
+- `colocate_with` プロパティを指定する場合は、コロケーショングループに加えて、コロケーション対象の列も指定する必要があります。コロケーション対象の列は、ソート列のプレフィックスでなければならず、デフォルトのコロケーション対象列はソート列となります。
 
 #### 利点
 
@@ -818,6 +819,8 @@ v4.1 以降、StarRocks は**レンジベースの分散セマンティクス**�
 - 無効にして従来のデフォルト分散に戻すには、FE 設定 `enable_range_distribution` を `false` に設定します。共有なしモードでは効果がありません。
 
 #### 例
+
+##### 範囲ベースの分布セマンティクスを使用した新しいテーブルの作成
 
 以下の例では、パーティション構文を省略しています。
 
@@ -865,20 +868,57 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
+**コロケーション結合を含むテーブル：**
+
+:::note
+コロケーショングループに加えて、`colocate_with` プロパティで、`<colocation_group>:<colocated_column>[,<colocated_column>]` という形式で、コロケーション対象の列を指定する必要があります。
+- コロケーション対象の列は、ソート列のプレフィックスでなければなりません。
+- 同じコロケーショングループ内のテーブルは、コロケーション対象の列の型、数、順序が同一でなければなりません。
+- デフォルトのコロケーション対象の列は、ソート列です。
+:::
+
+```SQL
+-- `colocate_with` プロパティが指定されている場合、
+-- コロケーション対象の列で同じ値を持つデータは、同じ BE/CN のセットに分散されます。
+CREATE TABLE pk_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id)
+PROPERTIES(
+    "colocate_with" = "colocation_group1:tenant_id,created_time"
+)
+```
+
+##### タブレットを分割または統合して、既存のテーブルを最適化する
+
+タブレットの分割および統合に関する詳細な手順については、[ALTER TABLE - Split or merge tablets](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#split-or-merge-tablets) を参照してください。
+
+- 表内にあるすべての条件を満たすタブレットを、10 GB (デフォルト) を目標サイズとして分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- 表内にあるすべての条件を満たすタブレットを、2 GB を目標サイズとして結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
 #### 制限事項
 
 レンジ分散方式のテーブルでは、以下の操作はサポートされていません：
 
 | DDL | 理由 |
-|---|---|
+| --- | --- |
 | `ORDER BY` 句を持たない `ALTER TABLE ... ADD ROLLUP ...` | 普通の同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し行順序が一致していることを前提としますが、レンジ分散ではこれを満たせません。代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。共有データのレンジ分散テーブルでは（v4.2 以降）独立したソートキーを持つ Rollup を作成でき、この種の Rollup は複数追加できます（`ALTER TABLE` 文ごとに 1 つ）。 |
 | `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
-| `ALTER TABLE ... ORDER BY (...)`（ソートキーの変更） | ソートキーが tablet の境界を決定するため、これを変更すると既存のレンジ tablet が無効になります。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
-| `ALTER TABLE ... ADD COLUMN <col> KEY ...` | 集計テーブル / ユニークキーテーブル、または明示的な `ORDER BY` を持たないテーブルでは、新しいキー列が（導出された）レンジソートキーに自動的に追加されます。 |
-| `ALTER TABLE ... DROP COLUMN <col>`（`<col>` がレンジソートキーに含まれる場合） | ソートキー列の削除は、保存されている tablet 境界値を無効化します。 |
-| `ALTER TABLE ... MODIFY COLUMN <col> ...`（`<col>` がレンジソートキーに含まれる場合） | 列の型 / セマンティクスを変更すると、保存されている tablet 境界値が記録された時点の前提が崩れます。 |
-| `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（または任意のキータイプにおける値列のキー昇格）による keyness の反転 | 集計テーブル / ユニークキーテーブル、または明示的な `ORDER BY` を持たないテーブルでは、keyness の反転によりキー列から導出されるレンジソートキーが変化します。 |
 
 Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
 

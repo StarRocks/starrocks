@@ -369,6 +369,33 @@ TEST(QueryContextManagerTest, testReadStats) {
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
+TEST(QueryContextManagerTest, testIntermediateQueryStatisticCarriesReadStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    ctx.incr_read_stats(100, 200);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    EXPECT_EQ(100, intermediate_pb.read_local_cnt());
+    EXPECT_EQ(200, intermediate_pb.read_remote_cnt());
+
+    // The delta has been drained, so a second report carries nothing.
+    auto second_intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, second_intermediate_stats);
+    PQueryStatistics second_intermediate_pb;
+    second_intermediate_stats->to_pb(&second_intermediate_pb);
+    EXPECT_EQ(0, second_intermediate_pb.read_local_cnt());
+    EXPECT_EQ(0, second_intermediate_pb.read_remote_cnt());
+
+    // Totals used by the final-sink path are unaffected by delta consumption.
+    EXPECT_EQ(100, ctx.get_read_local_cnt());
+    EXPECT_EQ(200, ctx.get_read_remote_cnt());
+}
+
 class MockRuntimeFilterQueryLifecycle final : public RuntimeFilterQueryLifecycle {
 public:
     void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,

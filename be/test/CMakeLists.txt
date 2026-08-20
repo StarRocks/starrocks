@@ -306,6 +306,7 @@ SET(DW_TEST_FILES
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
     ./storage/lake/tablet_manager_test.cpp
+    ./storage/lake/cross_publish_context_test.cpp
     ./storage/lake/tablet_range_helper_test.cpp
     ./storage/lake/sst_seek_range_test.cpp
     ./storage/lake/tablet_parallel_compaction_manager_test.cpp
@@ -374,6 +375,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
+    ./storage/rowset/segment_writer_short_key_encode_test.cpp
     ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
@@ -439,6 +441,15 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
+
+# paimon-cpp smoke test, a standalone binary that exists only with
+# --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
+# The paimon include path comes from the imported `paimon` target, so other
+# test sources cannot include paimon headers.
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
+    ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_link_libraries(paimon_cpp_test paimon)
+endif ()
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)

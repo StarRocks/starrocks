@@ -23,10 +23,11 @@ run-name: Repo Sync(${{ inputs.COMMIT_ID }} [${{ inputs.BRANCH }}])
 # internal issue refs/hosts), and the label set is just `sync` + `SHA:<commit>` (NO
 # `cd-sync`). The reverse pipeline / pending scan / merge-kick identify a reverse PR by the
 # `sync` label (on StarRocks only the reverse sync opens `sync`-labeled PRs); the SHA label
-# is for source recovery. The CD PR NUMBER never appears on the SR PR: the head branch /
-# run-name are keyed by the source COMMIT (already public via the SHA label), and the SR
-# PR's URL is commented back onto the CD source PR instead (the linkage lives on the
-# private side only).
+# is for source recovery. The head branch mirrors the forward sync format
+# `<branch>-sync-pr-<CD PR id>` (aligned with CelerData repo-sync.yml) so both directions
+# read consistently — this does put the CD PR number in the (public) SR branch name; the
+# run-name still shows the source COMMIT, and the SR PR's URL is commented back onto the CD
+# source PR (linkage on the private side).
 #
 # Runner pools (mirror of the forward's three): sync-normal = glue (pr-info, both
 # machines), sync-main / sync-branch = one machine each (executor serialization).
@@ -116,8 +117,8 @@ jobs:
 
       - name: Clean Branches
         env:
-          source_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.COMMIT_ID }}
-          destination_branch: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          source_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
         run: |
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
@@ -125,7 +126,7 @@ jobs:
       - name: sync repo to branch
         env:
           source_branch: ${{ inputs.BRANCH }}
-          destination_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.COMMIT_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
         run: |
           source_repo_dir=${source_repo#*/}
@@ -145,7 +146,7 @@ jobs:
         run: |
           git pull
           git checkout ${{ inputs.BRANCH }}
-          pr_branch=${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
           git push -u origin ${pr_branch}
@@ -175,7 +176,7 @@ jobs:
           cd ${{ github.workspace }}/elastic-service
           ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           cd ${{ github.workspace }}
-          git push -u origin ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - name: Create pull request
         id: create_pr
@@ -187,7 +188,7 @@ jobs:
           # pending scan and merge-kick identify a reverse PR by the `sync` label (on
           # StarRocks only the reverse sync opens `sync`-labeled PRs).
           PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
-          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           # Native title (already scrubbed by get_pr_info.py): no "(cd-sync #N)" marker.
           TITLE: "${{ needs.pr-info.outputs.title }}"
           # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
@@ -209,7 +210,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }},pending
-          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
@@ -226,14 +227,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
+          # Always mark sr-synced: it is the provenance the branch-mode reverse sync
+          # reuses. A cherry-pick conflict is resolved on the StarRocks PR side, so it
+          # must NOT withhold the marker — withholding it would wrongly block this fix's
+          # CD backports from reverse-syncing. On conflict, ALSO tag cd-sync-conflict for
+          # visibility (the SR PR still needs manual conflict resolution).
+          LABEL_ARGS=(-f "labels[]=sr-synced")
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' ]]; then
-            MARK="cd-sync-conflict"
-          else
-            MARK="sr-synced"
+            LABEL_ARGS+=(-f "labels[]=cd-sync-conflict")
           fi
           gh api -X POST \
             "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
-            -f "labels[]=${MARK}" || echo "::warning::failed to add ${MARK} to ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
+            "${LABEL_ARGS[@]}" || echo "::warning::failed to label ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
           PR_URL="${{ steps.create_pr.outputs.pr_url }}"
           if [[ -n "${PR_URL}" ]]; then
             gh api -X POST \
@@ -307,8 +312,8 @@ jobs:
 
       - name: Clean Branches
         env:
-          source_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.COMMIT_ID }}
-          destination_branch: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          source_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
         run: |
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
@@ -316,7 +321,7 @@ jobs:
       - name: sync repo to branch
         env:
           source_branch: ${{ inputs.BRANCH }}
-          destination_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.COMMIT_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
         run: |
           source_repo_dir=${source_repo#*/}
@@ -336,7 +341,7 @@ jobs:
         run: |
           git pull
           git checkout ${{ inputs.BRANCH }}
-          pr_branch=${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
           git push -u origin ${pr_branch}
@@ -366,7 +371,7 @@ jobs:
           cd ${{ github.workspace }}/elastic-service
           ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           cd ${{ github.workspace }}
-          git push -u origin ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - name: Create pull request
         id: create_pr
@@ -378,7 +383,7 @@ jobs:
           # pending scan and merge-kick identify a reverse PR by the `sync` label (on
           # StarRocks only the reverse sync opens `sync`-labeled PRs).
           PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
-          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           # Native title (already scrubbed by get_pr_info.py): no "(cd-sync #N)" marker.
           TITLE: "${{ needs.pr-info.outputs.title }}"
           # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
@@ -400,7 +405,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }},pending
-          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.COMMIT_ID }}
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
@@ -417,14 +422,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
+          # Always mark sr-synced: it is the provenance the branch-mode reverse sync
+          # reuses. A cherry-pick conflict is resolved on the StarRocks PR side, so it
+          # must NOT withhold the marker — withholding it would wrongly block this fix's
+          # CD backports from reverse-syncing. On conflict, ALSO tag cd-sync-conflict for
+          # visibility (the SR PR still needs manual conflict resolution).
+          LABEL_ARGS=(-f "labels[]=sr-synced")
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' ]]; then
-            MARK="cd-sync-conflict"
-          else
-            MARK="sr-synced"
+            LABEL_ARGS+=(-f "labels[]=cd-sync-conflict")
           fi
           gh api -X POST \
             "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
-            -f "labels[]=${MARK}" || echo "::warning::failed to add ${MARK} to ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
+            "${LABEL_ARGS[@]}" || echo "::warning::failed to label ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
           PR_URL="${{ steps.create_pr.outputs.pr_url }}"
           if [[ -n "${PR_URL}" ]]; then
             gh api -X POST \

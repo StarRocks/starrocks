@@ -2996,12 +2996,22 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         _context->_read_chunk->reset();
         Chunk* chunk = _context->_read_chunk.get();
-        size_t column_index = 0;
         for (size_t cid = 0; cid < _column_iterators.size(); ++cid) {
             if (_column_iterators[cid] == nullptr) {
                 continue;
             }
-            auto* col = chunk->get_column_raw_ptr_by_index(column_index++);
+            // The read chunk is built from `_context->_read_schema`, which may be reordered
+            // (predicate columns moved to the front by `reorder_schema` for late-materialization
+            // / low-cardinality handling). Its positional order therefore does NOT match the
+            // ascending-cid order of `_column_iterators`. Look up the scratch destination column
+            // by column id so the iterator and its `dst` stay type-aligned; pairing a complex-type
+            // iterator (array/map/struct/json) with a scalar column otherwise reinterprets the
+            // column and crashes inside `get_io_range_vec` (e.g. ArrayColumnIterator reading
+            // `offsets->get_data().back()` on a mistyped column).
+            if (!chunk->is_cid_exist(cid)) {
+                continue;
+            }
+            auto* col = chunk->get_column_raw_ptr_by_id(cid);
             if (!_scan_range.empty()) {
                 RETURN_IF_ERROR(_column_iterators[cid]->seek_to_ordinal(_scan_range.begin()));
             }
@@ -3300,17 +3310,22 @@ Status SegmentIterator::_evaluate_late_materialize_read_other_columns(vector<row
         current_columns.emplace_back(col);
 
         col->resize(0);
+        ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
         {
             SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
             // for dict column, no matter it's global or local
             // we should get its local dict values in predicate evaluation which is same as next_batch
             // because the corresponding predicates are already rewritten by local dictionary
-            ColumnIterator* cur_iter = _context->_column_ids_to_column_iterators[current_column_id];
             cur_iter->reserve_col(chunk_size, col);
             RETURN_IF_ERROR(cur_iter->fetch_values_by_rowid_for_predicate_evaluate(*ordinals, col));
         }
         if (ordinals->size() != col->size()) {
-            return Status::Corruption("_predicate_evaluate_late_materialize col size not equal to ordinal col size");
+            // Name the column and the iterator: which iterator short-read is the whole diagnosis here,
+            // and the message is all a production incident leaves behind.
+            return Status::Corruption(
+                    strings::Substitute("_predicate_evaluate_late_materialize col size not equal to ordinal col size: "
+                                        "column_id=$0 iterator=$1 ordinals=$2 col=$3",
+                                        current_column_id, cur_iter->name(), ordinals->size(), col->size()));
         }
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
 
@@ -3581,11 +3596,13 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     for (auto it = rows.new_iterator(); it.has_more();) {
         Range<> r = it.next(4096);
         MutableColumnPtr col = ChunkFactory::column_from_field(*field);
-        // next_batch reads from the current page and does not seek internally; position first.
         RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
-        SparseRange<> sub;
-        sub.add(r);
-        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(sub, col.get()));
+        // Array row ordinals are rowid_t, but their flattened element ordinals are 64-bit and can
+        // exceed UINT32_MAX. Do not wrap this contiguous row range in SparseRange<rowid_t>: the Array
+        // iterator would truncate the element range before passing it to the element iterator.
+        size_t rows_to_read = r.span_size();
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(&rows_to_read, col.get()));
+        DCHECK_EQ(rows_to_read, r.span_size());
         auto dist = _brute_force_distance_column(col.get());
         const auto& dvals = dist->get_data();
         const uint32_t bn = r.end() - r.begin();
