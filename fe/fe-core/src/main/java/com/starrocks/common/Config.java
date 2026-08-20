@@ -2669,7 +2669,8 @@ public class Config extends ConfigBase {
      * unexpected Throwable. While the worker pauses, no slot request is processed and no slot is
      * allocated, so the pause is added to the pending latency of every queued query.
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "The pause in milliseconds before the slot manager request worker " +
+            "retries its loop after an unexpected error. No slot request is processed while it pauses.")
     public static long slot_manager_error_retry_interval_ms = 100;
 
     @ConfField
