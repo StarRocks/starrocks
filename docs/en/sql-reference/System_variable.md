@@ -197,14 +197,6 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 * **Data type**: String
 * **Scope**: Session
 
-### array_agg_max_size
-
-* **Scope**: Session
-* **Description**: The maximum number of elements that the [array_agg](sql-functions/array-functions/array_agg.md) function can aggregate into a single array. If a group exceeds this limit, the query fails instead of returning an oversized array. `0` or a negative value means no limit.
-* **Default**: 0
-* **Data type**: Long
-* **Introduced in**: v4.2
-
 ### array_low_cardinality_optimize
 
 * **Scope**: Session
@@ -1438,6 +1430,14 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Default**: 33554432 (32 MB). You can raise this value if the client reports "PacketTooBigException".
 * **Unit**: Byte
 * **Data type**: Int
+
+### max_array_size
+
+* **Scope**: Session
+* **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
+* **Default**: 0
+* **Data type**: Long
+* **Introduced in**: v4.2
 
 ### max_parallel_scan_instance_num
 

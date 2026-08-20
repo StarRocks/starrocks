@@ -2824,7 +2824,7 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
     ASSERT_EQ(6, result_data_column.size());
 }
 
-TEST_F(AggregateTest, test_array_agg_max_size) {
+TEST_F(AggregateTest, test_array_agg_max_array_size) {
     const AggregateFunction* agg_function = get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, true);
 
     auto data_column = BinaryColumn::create();
@@ -2857,21 +2857,21 @@ TEST_F(AggregateTest, test_array_agg_max_size) {
     // a group whose size is exactly the limit is still accepted
     {
         std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
-        local_ctx->set_array_agg_max_size(6);
+        local_ctx->set_max_array_size(6);
         aggregate_and_finalize(local_ctx.get());
         ASSERT_FALSE(local_ctx->has_error());
     }
     // nulls count towards the limit, so the 4 non-null values alone do not keep the group under it
     {
         std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
-        local_ctx->set_array_agg_max_size(5);
+        local_ctx->set_max_array_size(5);
         aggregate_and_finalize(local_ctx.get());
         ASSERT_TRUE(local_ctx->has_error());
-        ASSERT_NE(std::string(local_ctx->error_msg()).find("array_agg_max_size"), std::string::npos);
+        ASSERT_NE(std::string(local_ctx->error_msg()).find("max_array_size"), std::string::npos);
     }
 }
 
-TEST_F(AggregateTest, test_array_agg_max_size_distinct) {
+TEST_F(AggregateTest, test_array_agg_max_array_size_distinct) {
     const AggregateFunction* agg_function = get_aggregate_function("array_agg_distinct", TYPE_INT, TYPE_ARRAY, true);
 
     auto data_column = Int32Column::create();
@@ -2896,20 +2896,20 @@ TEST_F(AggregateTest, test_array_agg_max_size_distinct) {
     // duplicates removed by array_agg_distinct do not count towards the limit
     {
         std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
-        local_ctx->set_array_agg_max_size(5);
+        local_ctx->set_max_array_size(5);
         aggregate_and_finalize(local_ctx.get());
         ASSERT_FALSE(local_ctx->has_error());
     }
     {
         std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
-        local_ctx->set_array_agg_max_size(4);
+        local_ctx->set_max_array_size(4);
         aggregate_and_finalize(local_ctx.get());
         ASSERT_TRUE(local_ctx->has_error());
-        ASSERT_NE(std::string(local_ctx->error_msg()).find("array_agg_max_size"), std::string::npos);
+        ASSERT_NE(std::string(local_ctx->error_msg()).find("max_array_size"), std::string::npos);
     }
 }
 
-TEST_F(AggregateTest, test_array_aggV2_max_size) {
+TEST_F(AggregateTest, test_array_aggV2_max_array_size) {
     auto build_context = [](RuntimeState* runtime_state, ssize_t max_size) {
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
                                                  TypeDescriptor::from_logical_type(TYPE_INT)};
@@ -2919,7 +2919,7 @@ TEST_F(AggregateTest, test_array_aggV2_max_size) {
         fn_ctx->set_is_asc_order(std::vector<bool>{false});
         fn_ctx->set_nulls_first(std::vector<bool>{true});
         fn_ctx->set_runtime_state(runtime_state);
-        fn_ctx->set_array_agg_max_size(max_size);
+        fn_ctx->set_max_array_size(max_size);
         return fn_ctx;
     };
 
@@ -2962,11 +2962,11 @@ TEST_F(AggregateTest, test_array_aggV2_max_size) {
         auto fn_ctx = build_context(runtime_state.get(), 3);
         aggregate_and_finalize(fn_ctx.get());
         ASSERT_TRUE(fn_ctx->has_error());
-        ASSERT_NE(std::string(fn_ctx->error_msg()).find("array_agg_max_size"), std::string::npos);
+        ASSERT_NE(std::string(fn_ctx->error_msg()).find("max_array_size"), std::string::npos);
     }
 }
 
-TEST_F(AggregateTest, test_array_aggV2_max_size_distinct) {
+TEST_F(AggregateTest, test_array_aggV2_max_array_size_distinct) {
     auto build_context = [](RuntimeState* runtime_state, ssize_t max_size) {
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
                                                  TypeDescriptor::from_logical_type(TYPE_INT)};
@@ -2977,7 +2977,7 @@ TEST_F(AggregateTest, test_array_aggV2_max_size_distinct) {
         fn_ctx->set_nulls_first(std::vector<bool>{true});
         fn_ctx->set_is_distinct(true);
         fn_ctx->set_runtime_state(runtime_state);
-        fn_ctx->set_array_agg_max_size(max_size);
+        fn_ctx->set_max_array_size(max_size);
         return fn_ctx;
     };
 
@@ -3026,7 +3026,7 @@ TEST_F(AggregateTest, test_array_aggV2_max_size_distinct) {
         auto fn_ctx = build_context(runtime_state.get(), 1);
         aggregate_and_finalize(fn_ctx.get());
         ASSERT_TRUE(fn_ctx->has_error());
-        ASSERT_NE(std::string(fn_ctx->error_msg()).find("array_agg_max_size"), std::string::npos);
+        ASSERT_NE(std::string(fn_ctx->error_msg()).find("max_array_size"), std::string::npos);
     }
 }
 

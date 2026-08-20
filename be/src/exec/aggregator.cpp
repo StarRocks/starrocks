@@ -580,8 +580,8 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         if (state->query_options().__isset.group_concat_max_len) {
             _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
         }
-        if (state->query_options().__isset.array_agg_max_size) {
-            _agg_fn_ctxs[i]->set_array_agg_max_size(state->query_options().array_agg_max_size);
+        if (state->query_options().__isset.max_array_size) {
+            _agg_fn_ctxs[i]->set_max_array_size(state->query_options().max_array_size);
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);

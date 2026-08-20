@@ -162,9 +162,9 @@ public:
     // min value is 4, default is 1024
     void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }
 
-    // Max number of elements array_agg may accumulate into a single array; <= 0 means unlimited.
-    ssize_t get_array_agg_max_size() const { return _array_agg_max_size; }
-    void set_array_agg_max_size(ssize_t size) { _array_agg_max_size = size < 0 ? 0 : size; }
+    // Max number of elements in an array produced by an array function; <= 0 means unlimited.
+    ssize_t get_max_array_size() const { return _max_array_size; }
+    void set_max_array_size(ssize_t size) { _max_array_size = size < 0 ? 0 : size; }
 
     bool error_if_overflow() const;
 
@@ -235,7 +235,7 @@ private:
     std::vector<bool> _nulls_first;
     bool _is_distinct = false;
     ssize_t group_concat_max_len = 1024;
-    ssize_t _array_agg_max_size = 0;
+    ssize_t _max_array_size = 0;
 
     // used for ngram bloom filter to speed up some function
     std::unique_ptr<NgramBloomFilterState> _ngramState;

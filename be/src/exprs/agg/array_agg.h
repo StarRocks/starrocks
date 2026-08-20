@@ -22,6 +22,7 @@
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/array_size_limit.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/mem_pool.h"
@@ -29,19 +30,6 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
-
-inline bool array_agg_exceeds_max_size(FunctionContext* ctx, size_t element_count) {
-    const ssize_t limit = ctx->get_array_agg_max_size();
-    if (LIKELY(limit <= 0 || element_count <= static_cast<size_t>(limit))) {
-        return false;
-    }
-    ctx->set_error(fmt::format("array_agg produced an array exceeding the limit {} set by the session variable "
-                               "array_agg_max_size.",
-                               limit)
-                           .c_str(),
-                   false);
-    return true;
-}
 
 // Primary template: non-string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
@@ -314,7 +302,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        if (UNLIKELY(array_agg_exceeds_max_size(ctx, state_impl.element_count()) || state_impl.check_overflow(ctx))) {
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()) ||
+                     state_impl.check_overflow(ctx))) {
             return;
         }
 
@@ -361,7 +350,7 @@ public:
             }
         });
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        if (UNLIKELY(array_agg_exceeds_max_size(ctx, state_impl.element_count()))) {
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()))) {
             return;
         }
         const auto& data_column = state_impl.get_data_column();
@@ -658,7 +647,7 @@ public:
             index.resize(res_num);
             elem_size = res_num;
         }
-        if (UNLIKELY(array_agg_exceeds_max_size(ctx, elem_size))) {
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", elem_size))) {
             return;
         }
         auto* elements_col = array_col->elements_column_raw_ptr();

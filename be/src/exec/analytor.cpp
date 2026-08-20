@@ -289,8 +289,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             } else {
                 _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
             }
-            if (state->query_options().__isset.array_agg_max_size) {
-                _agg_fn_ctxs[i]->set_array_agg_max_size(state->query_options().array_agg_max_size);
+            if (state->query_options().__isset.max_array_size) {
+                _agg_fn_ctxs[i]->set_max_array_size(state->query_options().max_array_size);
             }
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 

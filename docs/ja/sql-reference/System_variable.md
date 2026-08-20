@@ -196,14 +196,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **データ型**: String
 * **スコープ**: Session
 
-### array_agg_max_size
-
-* **スコープ**: Session
-* **説明**: [array_agg](sql-functions/array-functions/array_agg.md) 関数が 1 つの配列に集約できる要素の最大数です。あるグループがこの上限を超えた場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。
-* **デフォルト**: 0
-* **タイプ**: Long
-* **導入バージョン**: v4.2
-
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session
@@ -1184,6 +1176,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 33554432 (32 MB)。クライアントが "PacketTooBigException" を報告する場合、この値を増やすことができます。
 * **単位**: バイト
 * **データ型**: Int
+
+### max_array_size
+
+* **スコープ**: Session
+* **説明**: 配列関数が生成する配列に含まれる要素の最大数です。関数がこの上限を超える配列を生成した場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。この上限は配列を生成するすべての関数を対象としていますが、現時点では [array_agg](sql-functions/array-functions/array_agg.md) のみがチェックします。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
 
 ### max_pipeline_dop
 
