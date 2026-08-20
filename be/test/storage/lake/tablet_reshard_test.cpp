@@ -65,6 +65,7 @@
 #include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -150,6 +151,37 @@ protected:
         auto* schema = metadata->mutable_schema();
         schema->set_keys_type(PRIMARY_KEYS);
         schema->set_id(schema_id);
+    }
+
+    void set_int_primary_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_id(schema_id);
+        schema->set_num_short_key_columns(1);
+        schema->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        auto* column = schema->add_column();
+        column->set_unique_id(1);
+        column->set_name("c0");
+        column->set_type("INT");
+        column->set_is_key(true);
+        column->set_is_nullable(false);
+    }
+
+    std::string encode_int_primary_key(int32_t value) {
+        TabletMetadataPB metadata;
+        set_int_primary_key_schema(&metadata, 1);
+        auto tablet_schema = TabletSchema::create(metadata.schema());
+        std::vector<ColumnId> pk_columns = {0};
+        auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+        auto chunk = std::make_unique<Chunk>();
+        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        column->append_datum(Datum(value));
+        chunk->append_column(std::move(column), (SlotId)0);
+        MutableColumnPtr encoded;
+        CHECK_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, encoded.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        return down_cast<BinaryColumn*>(encoded.get())->get_slice(0).to_string();
     }
 
     void add_historical_schema(TabletMetadataPB* metadata, int64_t schema_id) {
@@ -7435,6 +7467,103 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_split_inherited_files
     EXPECT_NE(std::make_pair(fid_d.hi(), fid_d.lo()), pos5_fid);
     EXPECT_EQ(pos5_fid, fid_pair(merged->sstable_meta().sstables(6).fileset_id()));
     EXPECT_EQ(pos5_fid, fid_pair(merged->sstable_meta().sstables(7).fileset_id()));
+}
+
+// A numeric rssid is local to one source tablet. Two contiguous tablets can both
+// have rssid 1 while pointing at different physical segments; a legacy shared SST
+// that contains keys from both ranges must route each key through its owning tablet
+// before mapping the rssid into the merged tablet.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_shared_sstable_routes_same_rssid_by_key_range) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string key_a = encode_int_primary_key(10);
+    const std::string key_b = encode_int_primary_key(60);
+    const std::string legacy_filename = "same_rssid_by_range.sst";
+    const uint64_t legacy_filesize =
+            write_legacy_pk_sstable(_tablet_manager->sst_location(child_a, legacy_filename),
+                                    {{key_a, /*rssid=*/1, /*rowid=*/0}, {key_b, /*rssid=*/1, /*rowid=*/0}});
+
+    auto make_child = [&](int64_t tablet_id, int lower, int upper, const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(2);
+        set_int_primary_key_schema(metadata.get(), 1001);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+
+        auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
+        sstable->set_filename(legacy_filename);
+        sstable->set_filesize(legacy_filesize);
+        sstable->set_shared(true);
+        sstable->set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+        return metadata;
+    };
+
+    EXPECT_OK(put_tablet_metadata(make_child(child_a, 0, 50, "left_segment.dat")));
+    EXPECT_OK(put_tablet_metadata(make_child(child_b, 50, 100, "right_segment.dat")));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(2, merged->rowsets_size());
+    EXPECT_EQ("left_segment.dat", merged->rowsets(0).segment_metas(0).filename());
+    EXPECT_EQ("right_segment.dat", merged->rowsets(1).segment_metas(0).filename());
+    EXPECT_EQ(1, merged->rowsets(0).id());
+    EXPECT_EQ(2, merged->rowsets(1).id());
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+
+    const auto& out_sst = merged->sstable_meta().sstables(0);
+    ASSIGN_OR_ABORT(auto sstable, lake::PersistentIndexSstable::new_sstable(
+                                          out_sst, _tablet_manager->sst_location(merged_tablet, out_sst.filename()),
+                                          /*cache=*/nullptr, /*need_filter=*/false, /*delvec=*/nullptr, merged,
+                                          _tablet_manager.get()));
+    sstable::ReadOptions read_options;
+    read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iterator(sstable->new_iterator(read_options));
+    std::map<std::string, uint32_t> actual_rssids;
+    for (iterator->SeekToFirst(); iterator->Valid(); iterator->Next()) {
+        IndexValuesWithVerPB values;
+        ASSERT_TRUE(values.ParseFromArray(iterator->value().data, static_cast<int>(iterator->value().size)));
+        ASSERT_EQ(1, values.values_size());
+        actual_rssids.emplace(iterator->key().to_string(), values.values(0).rssid());
+    }
+    ASSERT_OK(iterator->status());
+    ASSERT_EQ(2, actual_rssids.size());
+    EXPECT_EQ(1, actual_rssids.at(key_a));
+    EXPECT_EQ(2, actual_rssids.at(key_b));
 }
 
 // Reproduces run4 cycle-3 ghost-rssid shape at the metadata level: the legacy
