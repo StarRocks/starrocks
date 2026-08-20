@@ -214,6 +214,8 @@ public:
     void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
         _total_read_local_cnt += read_local_cnt;
         _total_read_remote_cnt += read_remote_cnt;
+        _delta_read_local_cnt += read_local_cnt;
+        _delta_read_remote_cnt += read_remote_cnt;
     }
     void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
         auto it = _node_exec_stats.find(plan_node_id);
@@ -264,6 +266,8 @@ public:
     int64_t get_spill_bytes() { return _total_spill_bytes; }
     int64_t get_read_local_cnt() { return _total_read_local_cnt; }
     int64_t get_read_remote_cnt() { return _total_read_remote_cnt; }
+    int64_t consume_delta_read_local_cnt() { return _delta_read_local_cnt.exchange(0); }
+    int64_t consume_delta_read_remote_cnt() { return _delta_read_remote_cnt.exchange(0); }
     int64_t get_transmitted_bytes() { return _total_transmitted_bytes; }
 
     // Query start time, used to check how long the query has been running
@@ -353,6 +357,8 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    std::atomic<int64_t> _delta_read_local_cnt = 0;
+    std::atomic<int64_t> _delta_read_remote_cnt = 0;
 
     struct ScanStats {
         std::atomic<int64_t> total_scan_rows_num = 0;

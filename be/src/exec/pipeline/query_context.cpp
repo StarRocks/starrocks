@@ -261,6 +261,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
     query_statistic->add_transmitted_bytes(delta_transmitted_bytes);
+    query_statistic->add_read_stats(consume_delta_read_local_cnt(), consume_delta_read_remote_cnt());
     {
         std::lock_guard l(_scan_stats_lock);
         for (const auto& [table_id, scan_stats] : _scan_stats) {
