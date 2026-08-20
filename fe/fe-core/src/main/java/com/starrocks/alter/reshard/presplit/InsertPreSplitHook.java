@@ -130,14 +130,13 @@ public final class InsertPreSplitHook {
             // tier does not care what the refresh query looks like.
             ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
             if (resolvedTable != null && resolvedTable.olapTable() instanceof MaterializedView) {
-                // Establish that the derived tier can carve this view BEFORE the feature flag or the
-                // target resolver get a say. An ordinary async view's full refresh is also an
-                // INSERT OVERWRITE and lands here, and resolving its target first would attribute the
-                // skip to whatever that resolver rejected it for -- typically
-                // MULTIPLE_BASE_INDEX_TABLETS, since a hash-distributed view has many tablets -- while
-                // consulting the flag first would count every such refresh against this feature's own
-                // config gate. Either way the metric would describe a view pre-split was never a
-                // candidate for. It also spares those refreshes a table lock they gain nothing from.
+                // Establish that the derived tier can carve this view BEFORE the feature flag gets a
+                // say: an ordinary async view's full refresh is also an INSERT OVERWRITE and lands
+                // here, and consulting the flag first would count every such refresh against this
+                // feature's own config gate, describing a view pre-split was never a candidate for.
+                // The skip reason itself is the same one resolveEligibleTable would record -- that
+                // resolver has always declined materialized-view targets -- so this only reports it
+                // earlier, and spares those refreshes a table lock they gain nothing from.
                 if (!MaterializedViewRowIdBoundaries.isDerivable(resolvedTable.olapTable())) {
                     PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
                     return;
@@ -475,11 +474,15 @@ public final class InsertPreSplitHook {
             return null;
         }
         OlapTable olapTable = resolvedTable.olapTable();
-        // A materialized view's sort key is its hidden row-id column, which no sampled source can map
-        // back to a column of the refresh query, so the sampled paths must still decline. Record the
-        // reason instead of returning silently, so an operator can tell this apart from the statement
-        // never having been a pre-split candidate. An eligible incremental view is served by the
-        // derived tier, which reaches its target without going through this resolver.
+        // Materialized-view targets have always been declined here; this only records the reason
+        // instead of returning silently, so an operator can tell it apart from the statement never
+        // having been a pre-split candidate. An eligible incremental view is served by the derived
+        // tier, which reaches its target without going through this resolver.
+        //
+        // The exclusion is not one rule: an INCREMENTAL view is keyed by its hidden row-id column,
+        // which no sampled source can map back to a column of the refresh query, so sampling cannot
+        // serve it at all. A PCT view is keyed by ordinary columns and could in principle be sampled
+        // -- it is declined by this pre-existing conservative gate, not by a technical limit.
         if (olapTable instanceof MaterializedView) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
             return null;
