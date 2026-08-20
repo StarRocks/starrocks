@@ -1477,6 +1477,46 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_t
     EXPECT_EQ("target-encryption-meta", (*result)->rowsets(0).segment_metas(0).encryption_meta());
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, mixed_dcg_encryption_metadata_preserves_column_file_positions) {
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+    auto source = make_metadata(53035, 2);
+    auto target = make_metadata(53036, 1);
+
+    const auto new_source_filename = file_name(35, "cols");
+    const auto existing_source_filename = file_name(36, "cols");
+    const auto existing_target_filename = fmt::format("00000000000000ff_{}", existing_source_filename.substr(17));
+    auto& target_dcg = (*target->mutable_dcg_meta()->mutable_dcgs())[1];
+    target_dcg.add_column_files(existing_target_filename);
+    target_dcg.add_shared_files(false);
+    target_dcg.add_encryption_metas("target-existing-dcg-meta");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    auto& source_dcg = (*source->mutable_dcg_meta()->mutable_dcgs())[1];
+    source_dcg.add_column_files(new_source_filename);
+    source_dcg.add_column_files(existing_source_filename);
+    source_dcg.add_shared_files(false);
+    source_dcg.add_shared_files(false);
+    source_dcg.add_encryption_metas("");
+    source_dcg.add_encryption_metas("deliberately-unresolvable-existing-source-meta");
+
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
+                          &source_encryption_metas);
+    ASSERT_OK(result.status());
+    const auto& result_dcg = (*result)->dcg_meta().dcgs().at(1);
+    ASSERT_EQ(result_dcg.column_files_size(), result_dcg.encryption_metas_size());
+    ASSERT_EQ(2, result_dcg.encryption_metas_size());
+    EXPECT_EQ("", result_dcg.encryption_metas(0));
+    EXPECT_EQ("target-existing-dcg-meta", result_dcg.encryption_metas(1));
+    ASSERT_EQ(1, source_encryption_metas.size());
+    EXPECT_EQ("", source_encryption_metas.at(new_source_filename));
+    EXPECT_FALSE(source_encryption_metas.contains(existing_source_filename));
+    ASSERT_EQ(1, filename_map.size());
+    EXPECT_TRUE(filename_map.contains(new_source_filename));
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_metadata) {
     seed_test_encryption_keys();
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);

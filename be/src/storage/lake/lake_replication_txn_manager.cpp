@@ -1236,20 +1236,20 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                 RETURN_IF_ERROR(record_source_encryption_meta(src_dcg_filename, source_encryption_metas[i], is_existed,
                                                               destination_file_shared));
 
-                if (!is_existed) {
-                    if (config::enable_transparent_data_encryption) {
-                        // dcg file doesn't exist, use the newly generated encryption metadata
-                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_dcg_filename];
-                        dcg_ver_pb.add_encryption_metas(pair.second.encryption_meta);
-                    }
-                } else {
+                std::string destination_encryption_meta;
+                if (!is_existed && config::enable_transparent_data_encryption) {
+                    // dcg file doesn't exist, use the newly generated encryption metadata
+                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_dcg_filename];
+                    destination_encryption_meta = pair.second.encryption_meta;
+                } else if (is_existed) {
                     // dcg file already exists, use the existing encryption metadata from target tablet
                     auto uuid = extract_uuid_from(src_dcg_filename);
                     auto it = existed_filename_uuids.find(uuid);
                     if (it != existed_filename_uuids.end()) {
-                        dcg_ver_pb.add_encryption_metas(it->second.encryption_meta);
+                        destination_encryption_meta = it->second.encryption_meta;
                     }
                 }
+                dcg_ver_pb.add_encryption_metas(destination_encryption_meta);
             }
         }
     }
