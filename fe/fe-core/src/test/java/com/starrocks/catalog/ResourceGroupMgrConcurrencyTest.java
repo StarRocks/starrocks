@@ -109,22 +109,9 @@ public class ResourceGroupMgrConcurrencyTest {
             bName.put((String) namesAndGroups[i], rg);
             bId.put(rg.getId(), rg);
         }
-        Class<?> snapClass = null;
-        for (Class<?> c : ResourceGroupMgr.class.getDeclaredClasses()) {
-            if ("ResourceGroupSnapshot".equals(c.getSimpleName())) {
-                snapClass = c;
-                break;
-            }
-        }
-        if (snapClass == null) {
-            throw new IllegalStateException("ResourceGroupSnapshot not found");
-        }
-        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class, ResourceGroup.class);
-        ctor.setAccessible(true);
-        Object snap = ctor.newInstance(bName, bId, Collections.emptyMap(), null);
-        Field f = ResourceGroupMgr.class.getDeclaredField("snapshot");
-        f.setAccessible(true);
-        f.set(mgr, snap);
+        Object snap = ResourceGroupMgr.newSnapshotForTest(
+                bName, bId, Collections.emptyMap(), null);
+        mgr.setSnapshotForTest(snap);
     }
 
     @Test
