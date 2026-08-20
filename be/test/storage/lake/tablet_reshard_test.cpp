@@ -1420,11 +1420,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_delete_predicate_rowset) {
     }
 }
 
-// The load-bearing protected-rssid exception: when a fully-pruned rowset's rssid is
-// referenced by a surviving has_shared_rssid sstable, the delvec page is KEPT (MERGE's
-// modern sstable projection needs it) and the rowset is NOT removed — but the dcg entry
-// (never consulted by sstable projection) is still erased.
-TEST_F(LakeTabletReshardTest, test_tablet_split_protected_rssid_keeps_delvec_blocks_removal) {
+// An inherited SST can contain entries outside a child's tablet range, but those entries
+// are unreachable by that child's PK lookup. The SST reference must not override the
+// range-derived ownership of its data segment and sidecars.
+TEST_F(LakeTabletReshardTest, test_tablet_split_sst_reference_does_not_override_range_ownership) {
     starrocks::TabletMetadata metadata;
     auto tablet_id = next_id();
     metadata.set_id(tablet_id);
@@ -1459,6 +1458,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_protected_rssid_keeps_delvec_blo
 
     add_delvec(&metadata, tablet_id, 1, /*segment_id=*/2, "dv_a.dat", "aa");
     add_dcg_with_columns(&metadata, /*segment_id=*/2, "dcg_a.col", {101}, 1);
+    add_idg_with_key(&metadata, /*segment_id=*/2, "idx_a.idx", /*col_uid=*/101, BITMAP, 1);
     // A surviving modern sstable that projects rssid 2 (rs_a's segment).
     auto* sstable = metadata.mutable_sstable_meta()->add_sstables();
     sstable->set_filename("idx.sst");
@@ -1498,19 +1498,22 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_protected_rssid_keeps_delvec_blo
     }
     ASSERT_NE(nullptr, pruning_child) << "one child must fully prune rs_a";
 
-    // rs_a (id 2) is NOT removed (protected), retained as a 0-segment rowset.
+    // Geometry owns the data: the fully-pruned data-only rowset and every rssid-keyed
+    // sidecar disappear even though the inherited SST PB remains shared.
     bool found_rs_a = false;
     for (const auto& r : pruning_child->rowsets()) {
         if (r.id() == 2) {
             found_rs_a = true;
-            EXPECT_EQ(0, r.segment_metas_size());
+            ADD_FAILURE() << "out-of-range data-only rowset must be removed";
         }
     }
-    EXPECT_TRUE(found_rs_a) << "protected rowset must not be removed";
-    // delvec page for the protected rssid is KEPT; dcg is still erased.
-    EXPECT_TRUE(pruning_child->delvec_meta().delvecs().contains(2))
-            << "protected rssid delvec must be kept for MERGE sstable projection";
-    EXPECT_FALSE(pruning_child->dcg_meta().dcgs().contains(2)) << "dcg is never sstable-referenced -> erased";
+    EXPECT_FALSE(found_rs_a);
+    EXPECT_FALSE(pruning_child->delvec_meta().delvecs().contains(2));
+    EXPECT_FALSE(pruning_child->dcg_meta().dcgs().contains(2));
+    EXPECT_FALSE(pruning_child->idg_meta().idgs().contains(2));
+    ASSERT_EQ(1, pruning_child->sstable_meta().sstables_size());
+    EXPECT_EQ("idx.sst", pruning_child->sstable_meta().sstables(0).filename());
+    EXPECT_TRUE(pruning_child->sstable_meta().sstables(0).shared());
 }
 
 // Regression for the crash discovered during SSB SF100 testing: FE requests
