@@ -1897,6 +1897,27 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        // A MODIFY COLUMN in this same statement can change the type or the keyness of a column the
+        // property still names, and the property survives that untouched. Re-check the nominated
+        // columns against the schema this ALTER is about to install, or the table ends up emitting a
+        // SHOW CREATE TABLE that CREATE TABLE would reject.
+        if (zstdCompressionColumnIds != null) {
+            List<Column> newBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+            if (newBaseSchema != null) {
+                for (Column column : newBaseSchema) {
+                    if (!zstdCompressionColumnIds.contains(column.getColumnId())) {
+                        continue;
+                    }
+                    String rejection = PropertyAnalyzer.zstdCompressionColumnRejection(column);
+                    if (rejection != null) {
+                        throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
+                                + "column: " + rejection + ". Remove it from "
+                                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " first.");
+                    }
+                }
+            }
+        }
+
         // Page sizes travel with the column set: when the property is restated they
         // come from it, and when it is not restated the existing ones stay.
         Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;

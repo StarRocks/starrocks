@@ -1440,6 +1440,100 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
     }
 }
 
+// enable_zstd_compression_dict is documented as a write-side switch that can be turned back off
+// as an operational safety valve, which only holds if data already written with a dictionary stays
+// readable afterwards. The read path decides from the segment (ColumnMetaPB.zstd_compression_dict_page)
+// and never looks at the config; this fails the day someone gates the DDict load on it too.
+TEST_F(ColumnReaderWriterTest, dict_segment_stays_readable_after_switch_is_turned_off) {
+    // Rows of ~150 bytes that share a long preamble: the shape a dictionary is for. The count is
+    // what makes a dictionary reachable -- one page is sampled and the next eight are the trial,
+    // all nine written without it -- so the column has to run well past ten 64KB pages. 6000 rows
+    // is about 14 of them. Every row carries its index, so the encoding stays PLAIN instead of
+    // being speculated into DICT_ENCODING, which would skip the dictionary path entirely.
+    const int N = 6000;
+    const std::string fname = strings::Substitute("$0/zstd_dict_switch_off.data", TEST_DIR);
+
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        strs[i] = strings::Substitute(
+                R"({"role":"assistant","trace":"trace_0001","parts":[{"type":"text","content":"row $0 of a )"
+                R"(replayed conversation whose scaffolding repeats verbatim across every row"}]})",
+                i);
+        slices.emplace_back(strs[i]);
+    }
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    ColumnMetaPB meta;
+    {
+        const bool saved_switch = config::enable_zstd_compression_dict;
+        config::enable_zstd_compression_dict = true;
+        DeferOp restore([&]() { config::enable_zstd_compression_dict = saved_switch; });
+
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        meta.set_column_id(0);
+        meta.set_unique_id(0);
+        meta.set_type(TYPE_VARCHAR);
+        meta.set_length(1024 * 1024);
+        meta.set_encoding(PLAIN_ENCODING);
+        meta.set_compression(starrocks::ZSTD);
+        meta.set_compression_level(-1);
+        meta.set_is_nullable(true);
+        writer_opts.use_zstd_compression = true;
+        // Keep the dictionary whatever the trial measures: this test is about reading it back,
+        // not about the decision, and the corpus should not have to be tuned to force one.
+        writer_opts.zstd_compression_dict_min_gain = -1.0;
+        TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        ASSERT_OK(writer->finish());
+        ASSERT_OK(writer->write_data());
+        ASSERT_OK(writer->write_ordinal_index());
+        ASSERT_OK(wfile->close());
+    }
+
+    // Without this the read below would prove nothing: there would be no dictionary to lose.
+    ASSERT_TRUE(meta.has_zstd_compression_dict_page());
+    ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
+
+    const bool saved_switch = config::enable_zstd_compression_dict;
+    config::enable_zstd_compression_dict = false;
+    DeferOp restore([&]() { config::enable_zstd_compression_dict = saved_switch; });
+
+    auto segment = create_dummy_segment(fname);
+    ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
+    ColumnIteratorOptions iter_opts;
+    OlapReaderStatistics stats;
+    iter_opts.stats = &stats;
+    iter_opts.read_file = read_file.get();
+    ASSERT_OK(iter->init(iter_opts));
+    ASSERT_OK(iter->seek_to_first());
+
+    MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    dst->reserve(N);
+    size_t total = 0;
+    while (total < static_cast<size_t>(N)) {
+        size_t rows = static_cast<size_t>(N) - total;
+        ASSERT_OK(iter->next_batch(&rows, dst.get()));
+        if (rows == 0) break;
+        total += rows;
+    }
+    ASSERT_EQ(static_cast<size_t>(N), dst->size());
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " row " << i;
+    }
+}
+
 // A dictionary that cannot pay for itself must be dropped rather than written.
 // Incompressible values are the clearest case: the dictionary has nothing to
 // offer, and keeping it would cost a page per column per segment plus the work

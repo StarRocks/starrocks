@@ -1113,6 +1113,10 @@ public class PropertyAnalyzer {
     // table-wide or cluster-wide setting.
     // Returns column name -> page size in bytes (0 = leave at the BE default), or
     // null when the property is not present.
+    private static Column findColumnIgnoreCase(List<Column> columns, String name) {
+        return columns.stream().filter(col -> col.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+    }
+
     public static Map<String, Integer> analyzeZstdCompressionColumnPageSizes(Map<String, String> properties,
                                                                              List<Column> columns)
             throws AnalysisException {
@@ -1130,36 +1134,32 @@ public class PropertyAnalyzer {
             String[] zstdCompressionColumnArr = zstdCompressionColumnsStr.split(COMMA_SEPARATOR);
             Set<String> zstdCompressionColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (String zstdCompressionColumnSpec : zstdCompressionColumnSpecs(zstdCompressionColumnArr)) {
+                // A column name may itself contain a colon, so the whole spec is tried as a name
+                // first and only split when there is no such column. Splitting first would take
+                // `v:4096` -- a real column on some tables -- to mean column `v` at a 4KB page.
                 String zstdCompressionColumn = zstdCompressionColumnSpec;
                 int pageSize = 0;
+                Column column = findColumnIgnoreCase(columns, zstdCompressionColumnSpec);
                 int colon = zstdCompressionColumnSpec.lastIndexOf(':');
-                if (colon >= 0) {
-                    zstdCompressionColumn = zstdCompressionColumnSpec.substring(0, colon).trim();
-                    pageSize = analyzeZstdCompressionPageSize(zstdCompressionColumn,
-                            zstdCompressionColumnSpec.substring(colon + 1).trim());
+                if (column == null && colon >= 0) {
+                    String namePart = zstdCompressionColumnSpec.substring(0, colon).trim();
+                    Column withPageSize = findColumnIgnoreCase(columns, namePart);
+                    if (withPageSize != null) {
+                        column = withPageSize;
+                        zstdCompressionColumn = namePart;
+                        pageSize = analyzeZstdCompressionPageSize(namePart,
+                                zstdCompressionColumnSpec.substring(colon + 1).trim());
+                    }
                 }
-                String finalZstdCompressionColumn = zstdCompressionColumn;
-                Column column = columns.stream().filter(col -> col.getName().equalsIgnoreCase(finalZstdCompressionColumn))
-                        .findFirst()
-                        .orElse(null);
                 if (column == null) {
                     throw new AnalysisException(
                             String.format("Invalid zstd compression column '%s': not exists", zstdCompressionColumn));
                 }
 
-                Type type = column.getType();
-
-                // zstd compression columns are only string(char/varchar/string) or json columns
-                if (!type.isStringType() && !type.isJsonType()) {
-                    throw new AnalysisException(String.format(
-                            "Invalid zstd compression column '%s': unsupported type %s, "
-                                    + "only CHAR/VARCHAR/STRING/JSON are supported", zstdCompressionColumn, type));
-                }
-
-                // only value columns can be compressed this way, not key columns.
-                if (column.isKey()) {
+                String rejection = zstdCompressionColumnRejection(column);
+                if (rejection != null) {
                     throw new AnalysisException(
-                            "Zstd compression column only used in value columns. invalid column: " + zstdCompressionColumn);
+                            String.format("Invalid zstd compression column '%s': %s", zstdCompressionColumn, rejection));
                 }
 
                 if (zstdCompressionColumnSet.contains(zstdCompressionColumn)) {
@@ -1174,6 +1174,25 @@ public class PropertyAnalyzer {
         }
 
         return zstdCompressionPageSizes;
+    }
+
+    /**
+     * Why {@code column} may not be nominated in "zstd_compression_columns", or null if it may.
+     * Kept apart from the property text so that an ALTER changing a column's type or its keyness
+     * can re-check a column the property already names: the property survives such an ALTER, and
+     * a table left naming an ineligible column emits a SHOW CREATE TABLE that CREATE TABLE rejects.
+     */
+    public static String zstdCompressionColumnRejection(Column column) {
+        Type type = column.getType();
+        // zstd compression columns are only string(char/varchar/string) or json columns
+        if (!type.isStringType() && !type.isJsonType()) {
+            return String.format("unsupported type %s, only CHAR/VARCHAR/STRING/JSON are supported", type);
+        }
+        // only value columns can be compressed this way, not key columns.
+        if (column.isKey()) {
+            return "only value columns can be compressed this way";
+        }
+        return null;
     }
 
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {

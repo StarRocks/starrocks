@@ -99,5 +99,6 @@ protected:
     // parent would have no effect on a JSON column at all.
     uint32_t _data_page_size = 0;
     uint32_t _zstd_compression_dict_sample_bytes = 0;
+    double _zstd_compression_dict_min_gain = 0;
 };
 } // namespace starrocks

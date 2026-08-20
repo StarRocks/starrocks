@@ -619,6 +619,34 @@ public class ZstdCompressionColumnsTest {
                 table.getZstdCompressionPageSizes());
     }
 
+    @Test
+    public void testModifyColumnToUnsupportedTypeIsRejectedWhileNominated() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_modify_type",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1\""));
+        OlapTable table = getTable("t_cdict_modify_type");
+
+        // The property is not restated by this statement and survives it untouched, so letting the
+        // type change through would leave the table naming a BIGINT column -- a SHOW CREATE TABLE
+        // that CREATE TABLE rejects.
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE " + DB_NAME + ".t_cdict_modify_type MODIFY COLUMN v1 bigint"));
+        Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("can no longer be a zstd compression"),
+                "unexpected message: " + e.getMessage());
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
+
+        // Dropping it from the property first is the way through, and then the type change is fine.
+        starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_modify_type SET (\""
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v2\")");
+        waitForSchemaChangeJob(table);
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_modify_type MODIFY COLUMN v1 bigint");
+        waitForSchemaChangeJob(table);
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getZstdCompressionColumnNames());
+
+        // A type change on a column the property does not name was never affected.
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_modify_type MODIFY COLUMN v3 bigint");
+        waitForSchemaChangeJob(table);
+    }
+
     private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {
         Exception e = Assertions.assertThrows(Exception.class,
                 () -> starRocksAssert.withTable(createTableSql(tableName,

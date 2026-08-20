@@ -66,7 +66,8 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _column_name(opts.field_name),
           _use_zstd_compression(opts.use_zstd_compression),
           _data_page_size(opts.data_page_size),
-          _zstd_compression_dict_sample_bytes(opts.zstd_compression_dict_sample_bytes) {}
+          _zstd_compression_dict_sample_bytes(opts.zstd_compression_dict_sample_bytes),
+          _zstd_compression_dict_min_gain(opts.zstd_compression_dict_min_gain) {}
 
 Status FlatJsonColumnWriter::init() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -249,6 +250,10 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         if (_use_zstd_compression && (is_string_type(_flat_types[i]) || _flat_types[i] == LogicalType::TYPE_JSON)) {
             opts.use_zstd_compression = true;
             opts.zstd_compression_dict_sample_bytes = _zstd_compression_dict_sample_bytes;
+            // A child gets a fresh ColumnWriterOptions, so without this the "is it worth keeping"
+            // threshold silently reverts to the config value while every other dictionary knob is
+            // inherited from the parent.
+            opts.zstd_compression_dict_min_gain = _zstd_compression_dict_min_gain;
         }
         if (_data_page_size > 0) {
             opts.data_page_size = _data_page_size;

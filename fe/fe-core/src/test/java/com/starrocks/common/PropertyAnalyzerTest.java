@@ -192,6 +192,35 @@ public class PropertyAnalyzerTest {
         Assertions.assertTrue(
                 PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(emptyPageSizes, columns).isEmpty());
         Assertions.assertFalse(emptyPageSizes.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+
+        // A column whose own name ends in ":<number>" is resolved as a name before the spec is
+        // split, so it is not read as "column v at a 4KB page".
+        List<Column> colonColumns = Lists.newArrayList(columns);
+        colonColumns.add(new Column("v:4096", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        Map<String, String> colonProperties = Maps.newHashMap();
+        colonProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v:4096");
+        Map<String, Integer> colonPageSizes =
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(colonProperties, colonColumns);
+        Assertions.assertEquals(Sets.newHashSet("v:4096"), colonPageSizes.keySet());
+        Assertions.assertEquals(Integer.valueOf(0), colonPageSizes.get("v:4096"));
+
+        // Without that column, the same text still means "column v at 4KB".
+        Map<String, String> splitProperties = Maps.newHashMap();
+        splitProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v1:4096");
+        Map<String, Integer> splitPageSizes =
+                PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(splitProperties, columns);
+        Assertions.assertEquals(Integer.valueOf(4096), splitPageSizes.get("v1"));
+
+        // And a spec whose prefix is no column at all reports that, rather than complaining about
+        // the size expression.
+        Map<String, String> missingProperties = Maps.newHashMap();
+        missingProperties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "nosuch:notasize");
+        try {
+            PropertyAnalyzer.analyzeZstdCompressionColumns(missingProperties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("not exists"), e.getMessage());
+        }
     }
 
     @Test

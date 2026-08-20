@@ -34,6 +34,7 @@
 
 #include "storage/rowset/column_writer.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 
@@ -79,7 +80,11 @@ namespace starrocks {
 
 ColumnWriterOptions::ColumnWriterOptions()
         : data_page_size(config::data_page_size),
-          zstd_compression_dict_sample_bytes(config::zstd_compression_dict_sample_bytes),
+          // Signed config into an unsigned field: a negative value would wrap to 4G and turn the
+          // cap into "no cap", making the dictionary the whole of the first eligible page -- up to
+          // the 1MB a per-column page size allows, or a single oversized row.
+          zstd_compression_dict_sample_bytes(static_cast<uint32_t>(
+                  std::clamp<int64_t>(config::zstd_compression_dict_sample_bytes, 0, 1024 * 1024))),
           // Clamped, because a negative value would mean "keep the dictionary
           // whatever it measures". Tests reach that on purpose by setting the field
           // directly; an operator should not reach it by mis-typing a config.
@@ -698,17 +703,23 @@ Status ScalarColumnWriter::finish_current_page() {
     }
     // lazily build the per-column compression dictionary from the first eligible
     // page's encoded values, BEFORE compressing this page, so page 0 itself is
-    // dict-compressed. Best-effort: any failure just leaves the column without a
-    // compression dict; it never fails the flush.
+    // dict-compressed. Building it is best-effort: a build failure leaves the column
+    // without a dictionary and the flush goes on. Compressing against one is not --
+    // once a dictionary exists, a failure to compress a page with it, or to write the
+    // dictionary page in write_data(), fails the flush like any other write error.
     if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && !_zstd_compression_dict_abandoned &&
         _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
         _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
+        _opts.zstd_compression_dict_sample_bytes > 0 &&
         encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
-        // The first data page of a compression-dict column must be format v2 so that even an
-        // all-null first page has non-empty encoded_values (null rows go into
-        // the page builder), guaranteeing no no-dict frame precedes the dict
-        // page (format v2 puts null rows into the page builder, so even an
-        // all-null first page has non-empty encoded values).
+        // The first data page is always format v2 -- the format only drops to v1 when the
+        // PREVIOUS page was mostly nulls -- so even an all-null first page arrives here with
+        // non-empty encoded values to sample, because v2 puts null rows into the page builder.
+        // This says nothing about frames: the sampling page and every trial page after it are
+        // written without the dictionary, so a dictionary-compressed page is always preceded by
+        // plain ones. That is safe for its own reason, which nodict_frame_decodes_under_ddict
+        // pins: a no-dict frame decodes identically whether or not a raw-content dictionary is
+        // referenced.
         DCHECK(_first_rowid != 0 || _curr_page_format == 2);
         size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.zstd_compression_dict_sample_bytes);
         _zstd_compression_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
@@ -725,7 +736,11 @@ Status ScalarColumnWriter::finish_current_page() {
             // whether the dictionary is worth keeping.
             _sampling_page = true;
         } else {
-            _zstd_compression_dict_sample.clear(); // degrade: this column gets no compression dict
+            // Degrade for the whole column, not just this page: retrying on every later page
+            // would rebuild a dictionary that just failed and would count the fallback once per
+            // page, where the metric is documented as once per column per segment.
+            _zstd_compression_dict_sample.clear();
+            _zstd_compression_dict_abandoned = true;
             StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
         }
     }

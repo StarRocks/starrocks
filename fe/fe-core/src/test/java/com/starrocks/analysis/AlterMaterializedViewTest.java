@@ -15,7 +15,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
@@ -27,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
@@ -106,6 +109,29 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.ddl("alter materialized view mv2 rename mv1;");
         mv1 = starRocksAssert.getMv("test", "mv1");
         Assertions.assertEquals(taskDefinition, mv1.getTaskDefinition());
+    }
+
+    @Test
+    public void testZstdCompressionColumnsAreEchoedInMvDdl() throws Exception {
+        // ALTER TABLE <mv> SET ("zstd_compression_columns" = ...) is accepted and rewrites the
+        // view's tablets, so the DDL has to carry the property: anything that recreates the view
+        // from this string would otherwise drop the setting without a word. Which columns may be
+        // nominated is PropertyAnalyzer's business and is covered there; what is pinned here is
+        // that a set on the view reaches its DDL, next to bloom_filter_columns.
+        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+        Assertions.assertFalse(mv.getMaterializedViewDdlStmt(false)
+                .contains(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+        try {
+            Column column = mv.getColumn("count_c2");
+            Assertions.assertNotNull(column);
+            mv.setZstdCompressionColumns(Sets.newHashSet(column.getColumnId()),
+                    ImmutableMap.of(column.getColumnId(), 262144));
+            String ddl = mv.getMaterializedViewDdlStmt(false);
+            Assertions.assertTrue(ddl.contains("\"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                    + "\" = \"count_c2:262144\""), ddl);
+        } finally {
+            mv.setZstdCompressionColumns(null, null);
+        }
     }
 
     @Test

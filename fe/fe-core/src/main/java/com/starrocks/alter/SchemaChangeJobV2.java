@@ -790,7 +790,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxMetaId);
                     if (originSchemaTColumns == null) {
                         originSchemaTColumns = tbl.getSchemaByIndexMetaId(originIdxMetaId).stream()
-                                .map(Column::toThrift)
+                                .map(column -> {
+                                    TColumn tColumn = column.toThrift();
+                                    // BE rebuilds the base schema from these and diffs it against the new
+                                    // one to choose between hard-linking the existing files and rewriting
+                                    // them. Without the per-column ZSTD fields the base always reads as
+                                    // "no ZSTD", so every later schema change on such a table pays a full
+                                    // rewrite that changes no encoding. Only those fields are filled in
+                                    // here: is_bloom_filter_column and has_bitmap_index have the same
+                                    // problem on this path and predate this feature.
+                                    column.setIndexFlag(tColumn, List.of(), null,
+                                            tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes());
+                                    return tColumn;
+                                })
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(originIdxMetaId, originSchemaTColumns);
                     }

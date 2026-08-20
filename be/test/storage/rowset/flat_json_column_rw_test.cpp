@@ -2809,11 +2809,11 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     ASSERT_OK(fs->delete_file(file_name + "_complex_types"));
 }
 
-// compression dict regression guard: a flat-JSON column written with ZSTD + use_zstd_compression
-// must actually build a compression dictionary. This pins the fix for the bug where a
-// fresh child ColumnMetaPB carried compression_level=0, making
-// get_block_compression_codec(ZSTD, 0) == nullptr so the compression dict sampling gate (which
-// requires a non-null codec) never fired for JSON columns.
+// What this pins: use_zstd_compression on a JSON column reaches the flat sub-columns, so one of
+// them actually builds a compression dictionary. (It does NOT pin the child metas inheriting
+// compression_level: get_block_compression_codec falls back to a default ZSTD instance for an
+// out-of-range level rather than returning null, so that line could be removed and this test
+// would still pass.)
 TEST_F(FlatJsonColumnRWTest, testZstdCompressionOnFlatJson) {
     auto fs = std::make_shared<MemoryFileSystem>();
     ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
@@ -2822,8 +2822,11 @@ TEST_F(FlatJsonColumnRWTest, testZstdCompressionOnFlatJson) {
 
     // Rows with a stable extractable "role" and a large per-row "content" string
     // (~2KB) so whichever sub-column (or the remain blob) holds it is a PLAIN
-    // string past the compression-dict sample gate.
-    const int N = 300;
+    // string past the compression-dict sample gate. The row count is what makes the
+    // dictionary reachable at all: one page is sampled and the next eight are the trial,
+    // all nine written without it, so the column has to run well past ten 64KB pages --
+    // 900 x ~2KB is about 27 of them, rather than the ten a smaller corpus would land on.
+    const int N = 900;
     auto write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
     for (int i = 0; i < N; i++) {
@@ -2840,6 +2843,11 @@ TEST_F(FlatJsonColumnRWTest, testZstdCompressionOnFlatJson) {
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
     writer_opts.use_zstd_compression = true; // enable compression dict
+    // Whether a dictionary pays on this corpus is not what this test is about, and the answer
+    // moves with the filler; the decision itself is covered by the
+    // zstd_compression_dict_{dropped,kept}_when_it_*pay* cases. A negative threshold keeps it
+    // regardless -- and asserts, in passing, that the parent's threshold reaches the children.
+    writer_opts.zstd_compression_dict_min_gain = -1.0;
 
     TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
     {
