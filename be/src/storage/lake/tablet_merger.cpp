@@ -2281,6 +2281,24 @@ void delete_partial_legacy_rebuild_output(LegacyRebuildOutputWriter& writer) {
     }
 }
 
+StatusOr<DelVectorPtr> load_merged_del_vector(TabletManager* tablet_manager, const TabletMetadataPB& new_metadata,
+                                              uint32_t final_rssid, std::unordered_map<uint32_t, DelVectorPtr>* cache) {
+    auto cached_entry = cache->find(final_rssid);
+    if (cached_entry != cache->end()) return cached_entry->second;
+    const auto& delvecs_by_rssid = new_metadata.delvec_meta().delvecs();
+    auto delvec_page_entry = delvecs_by_rssid.find(final_rssid);
+    if (delvec_page_entry == delvecs_by_rssid.end() || delvec_page_entry->second.size() == 0) {
+        cache->emplace(final_rssid, DelVectorPtr{});
+        return DelVectorPtr{};
+    }
+    DelVectorPtr del_vector = std::make_shared<DelVector>();
+    LakeIOOptions lake_io_options{.fill_data_cache = false, .skip_disk_cache = false};
+    RETURN_IF_ERROR(lake::get_del_vec(tablet_manager, new_metadata, delvec_page_entry->second,
+                                      /*fill_cache=*/false, lake_io_options, del_vector.get()));
+    cache->emplace(final_rssid, del_vector);
+    return del_vector;
+}
+
 StatusOr<bool> remap_legacy_entry_or_drop(const Slice& entry_key, IndexValuesWithVerPB* values_pb,
                                           int32_t source_rssid_offset, const LegacySstableSourceRoutes& routes,
                                           const std::vector<size_t>& old_tablet_indexes,
@@ -2471,24 +2489,12 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
     // cache in place and pollute the sst read-error metric).
     bool delvec_load_failed = false;
     auto load_del_vector = [&](uint32_t final_rssid) -> StatusOr<DelVectorPtr> {
-        auto cached_entry = del_vector_cache.find(final_rssid);
-        if (cached_entry != del_vector_cache.end()) return cached_entry->second;
-        const auto& delvecs_by_rssid = new_metadata.delvec_meta().delvecs();
-        auto delvec_page_entry = delvecs_by_rssid.find(final_rssid);
-        if (delvec_page_entry == delvecs_by_rssid.end() || delvec_page_entry->second.size() == 0) {
-            del_vector_cache.emplace(final_rssid, DelVectorPtr{});
-            return DelVectorPtr{};
-        }
-        DelVectorPtr del_vector = std::make_shared<DelVector>();
-        LakeIOOptions lake_io_options{.fill_data_cache = false, .skip_disk_cache = false};
-        if (auto load_status = lake::get_del_vec(tablet_manager, new_metadata, delvec_page_entry->second,
-                                                 /*fill_cache=*/false, lake_io_options, del_vector.get());
-            !load_status.ok()) {
+        auto del_vector_or =
+                load_merged_del_vector(tablet_manager, new_metadata, final_rssid, &del_vector_cache);
+        if (!del_vector_or.ok()) {
             delvec_load_failed = true;
-            return load_status;
         }
-        del_vector_cache.emplace(final_rssid, del_vector);
-        return del_vector;
+        return del_vector_or;
     };
 
     uint64_t kept_entry_count = 0;
@@ -2562,24 +2568,6 @@ Status validate_non_shared_legacy_sstable_form(const PersistentIndexSstablePB& s
         return Status::Corruption("non-shared sstable has delvec but no shared_rssid");
     }
     return Status::OK();
-}
-
-StatusOr<DelVectorPtr> load_merged_del_vector(TabletManager* tablet_manager, const TabletMetadataPB& new_metadata,
-                                              uint32_t final_rssid, std::unordered_map<uint32_t, DelVectorPtr>* cache) {
-    auto cached_entry = cache->find(final_rssid);
-    if (cached_entry != cache->end()) return cached_entry->second;
-    const auto& delvecs_by_rssid = new_metadata.delvec_meta().delvecs();
-    auto delvec_page_entry = delvecs_by_rssid.find(final_rssid);
-    if (delvec_page_entry == delvecs_by_rssid.end() || delvec_page_entry->second.size() == 0) {
-        cache->emplace(final_rssid, DelVectorPtr{});
-        return DelVectorPtr{};
-    }
-    DelVectorPtr del_vector = std::make_shared<DelVector>();
-    LakeIOOptions lake_io_options{.fill_data_cache = false, .skip_disk_cache = false};
-    RETURN_IF_ERROR(lake::get_del_vec(tablet_manager, new_metadata, delvec_page_entry->second,
-                                      /*fill_cache=*/false, lake_io_options, del_vector.get()));
-    cache->emplace(final_rssid, del_vector);
-    return del_vector;
 }
 
 // Rebuild a non-shared legacy sstable (shared=false, !has_shared_rssid)
@@ -3178,37 +3166,24 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         std::unordered_map<uint32_t, DelVectorPtr> ctx_merged_del_vector_cache;
 
         for (const auto& sst : ctx.metadata()->sstable_meta().sstables()) {
-            // Every split child inherits the same shared-rssid SST, but a child-local
-            // compaction may remove the referenced segment from only some siblings.
-            // Select the projection after seeing every occurrence instead of making
-            // the first filename occurrence authoritative.
-            if (sst.shared() && sst.has_shared_rssid()) {
-                auto [group_iter, inserted] = shared_rssid_sstable_group_by_filename.emplace(
-                        sst.filename(), shared_rssid_sstable_groups.size());
+            // A child-local compaction can change which sibling owns a shared SST's
+            // referenced segments. Collect every filename occurrence before either
+            // legacy rebuild or modern owner selection.
+            if (sst.shared()) {
+                const bool is_modern = sst.has_shared_rssid();
+                auto& groups = is_modern ? shared_rssid_sstable_groups : shared_legacy_sstable_groups;
+                auto& group_by_filename =
+                        is_modern ? shared_rssid_sstable_group_by_filename : shared_legacy_sstable_group_by_filename;
+                auto [group_iter, inserted] = group_by_filename.emplace(sst.filename(), groups.size());
                 if (inserted) {
                     SharedSstableGroup group;
                     group.source_pb.CopyFrom(sst);
-                    shared_rssid_sstable_groups.emplace_back(std::move(group));
-                } else if (!shared_sstable_metadata_matches(shared_rssid_sstable_groups[group_iter->second].source_pb,
-                                                            sst)) {
-                    return Status::Corruption("Shared-rssid sstable metadata mismatch for same filename");
+                    groups.emplace_back(std::move(group));
+                } else if (!shared_sstable_metadata_matches(groups[group_iter->second].source_pb, sst)) {
+                    return Status::Corruption(is_modern ? "Shared-rssid sstable metadata mismatch for same filename"
+                                                        : "Shared legacy sstable metadata mismatch for same filename");
                 }
-                shared_rssid_sstable_groups[group_iter->second].old_tablet_indexes.push_back(old_tablet_index);
-                continue;
-            }
-
-            if (sst.shared() && !sst.has_shared_rssid()) {
-                auto [group_iter, inserted] = shared_legacy_sstable_group_by_filename.emplace(
-                        sst.filename(), shared_legacy_sstable_groups.size());
-                if (inserted) {
-                    SharedSstableGroup group;
-                    group.source_pb.CopyFrom(sst);
-                    shared_legacy_sstable_groups.emplace_back(std::move(group));
-                } else if (!shared_sstable_metadata_matches(shared_legacy_sstable_groups[group_iter->second].source_pb,
-                                                            sst)) {
-                    return Status::Corruption("Shared legacy sstable metadata mismatch for same filename");
-                }
-                shared_legacy_sstable_groups[group_iter->second].old_tablet_indexes.push_back(old_tablet_index);
+                groups[group_iter->second].old_tablet_indexes.push_back(old_tablet_index);
                 continue;
             }
 

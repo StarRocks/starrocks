@@ -8695,7 +8695,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_for_ran
         sst->set_filesize(legacy_filesize);
         sst->set_shared(true);
         sst->set_max_rss_rowid((static_cast<uint64_t>(2) << 32) | 0);
-        // Set has_range but NOT has_fileset_id → C2' fail.
+        // Source metadata intentionally has a range but no fileset_id.
         sst->mutable_range()->set_start_key("a");
         sst->mutable_range()->set_end_key("z");
         // sst->mutable_fileset_id() is intentionally unset.
@@ -8721,7 +8721,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_sstable_rebuild_for_ran
     auto merged = tablet_metadatas.at(merged_tablet);
     ASSERT_EQ(1, merged->sstable_meta().sstables_size());
     const auto& out_sst = merged->sstable_meta().sstables(0);
-    EXPECT_NE(legacy_filename, out_sst.filename()) << "C2' fail → fallback rebuild";
+    EXPECT_NE(legacy_filename, out_sst.filename()) << "legacy shared SSTs are rebuilt";
     EXPECT_FALSE(out_sst.shared());
     EXPECT_TRUE(out_sst.has_fileset_id()) << "rebuild always assigns a fresh fileset_id";
 }
@@ -9980,17 +9980,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_drops_below
     EXPECT_EQ(0, merged->sstable_meta().sstables_size()) << "the SST contains only a below-floor dead entry";
 }
 
-// TODO(round-3 follow-up): test_tablet_merging_legacy_sstable_rebuild_filters_outside_tablet_range
-// This test would set up real INT-typed PK columns + tablet ranges with
-// PrimaryKeyEncoder-encoded sstable keys to verify the rebuild's tablet-range
-// Seek/stop filter (TabletRangeHelper::create_sst_seek_range_from). The filter
-// is wired in rebuild_legacy_shared_sstable; verifying its behavior end-to-end
-// requires PK encoding scaffolding that's not currently in this fixture. The
-// existing tests above all use set_primary_key_schema (no columns), which makes
-// merged_range bound-less, so the range filter degenerates to an unbounded
-// scan — the filter code path is exercised but its filtering behavior on a
-// bounded range is not directly asserted yet. Track for follow-up once the
-// fixture grows a helper for PK-encoded test sstables.
+// TODO: add a bounded partial-merge regression using encode_int_primary_key()
+// to verify the legacy rebuild's outer seek/stop filter drops keys outside the
+// merged tablet range.
 
 // Stacked merge: parent's legacy sstable already has a non-zero rssid_offset
 // (from a prior merge). Merging this parent as ctx[N>=1] with an additional
