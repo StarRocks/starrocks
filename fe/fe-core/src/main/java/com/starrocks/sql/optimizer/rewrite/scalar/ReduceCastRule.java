@@ -85,7 +85,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                     && operator.getType().equals(operator.getChild(0).getType())) {
                 return inheritVarcharLengthAfterReduceCast(operator);
             }
-        } else if (operator.getType().matchesType(operator.getChild(0).getType())) {
+        } else if (operator.getType().matchesType(operator.getChild(0).getType())
+                && !isTruncatingCharCast(operator.getType(), operator.getChild(0).getType())) {
             return inheritVarcharLengthAfterReduceCast(operator);
         }
 
@@ -168,6 +169,23 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         Type childCompatibleType = TypeManager.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = TypeManager.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != InvalidType.INVALID && parentCompatibleType != InvalidType.INVALID;
+    }
+
+    // A cast to a bounded CHAR(N) truncates its input to the first N characters (MySQL semantics),
+    // so it is not a no-op and must not be reduced away.
+    //
+    // The source type's declared length is deliberately not consulted: it is not an upper bound on
+    // the runtime value. A cast to VARCHAR(N) does not enforce N (string-to-string cast returns the
+    // input column unchanged), so CAST(CAST(x AS VARCHAR(10)) AS CHAR(10)) carries a value that may
+    // exceed 10 characters even though the source type says otherwise. Deciding which producers do
+    // honour their declared length would be an open-ended audit, so every bounded CHAR(N) cast over
+    // a string source is kept and the truncation is left to constant folding or the BE.
+    private static boolean isTruncatingCharCast(Type target, Type source) {
+        if (!target.isChar() || !source.isStringType()) {
+            return false;
+        }
+        // A wildcard CHAR (no declared length) does not truncate, so that cast is still a no-op.
+        return ((ScalarType) target).getLength() >= 0;
     }
 
     private ScalarOperator inheritVarcharLengthAfterReduceCast(CastOperator operator) {

@@ -676,6 +676,113 @@ TEST_F(VectorizedCastExprTest, intCastString) {
     }
 }
 
+TEST_F(VectorizedCastExprTest, bigintCastCharTruncate) {
+    expr_node.child_type = TPrimitiveType::BIGINT;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.type.types[0].scalar_type.__set_len(10);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 4, (int64_t)1775580223839LL);
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("1775580223"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastCharTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.type.types[0].scalar_type.__set_len(5);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastVarcharNoTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    expr_node.type.types[0].scalar_type.__set_len(5);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello world"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastWildcardCharNoTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.type.types[0].scalar_type.__set_len(-1); // wildcard CHAR: no truncation
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello world"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, charTruncateHandlesInvalidUtf8WithoutOverrun) {
+    // Truncating invalid UTF-8 / raw VARBINARY bytes to CHAR(N) must not read past the slice end.
+    // 0xE4 advertises a 3-byte UTF-8 char, but only 2 bytes are present.
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.type.types[0].scalar_type.__set_len(1);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string bytes = "\xE4\xB8";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 2, Slice(bytes));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(2, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        // Clamped to the slice end: never longer than the available bytes.
+        ASSERT_LE(v->get_slice(j).size, bytes.size());
+    }
+}
+
 TEST_F(VectorizedCastExprTest, booleanCastString) {
     expr_node.child_type = TPrimitiveType::BOOLEAN;
     expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);

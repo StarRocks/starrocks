@@ -15,9 +15,12 @@
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +28,32 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 
 public class ConstantOperatorTest {
+    @Test
+    public void testCastToCharTruncatesToLength() {
+        // POST-1335 / QuickSight: CAST(1775580223839 AS CHAR(10)) -> "1775580223" (first 10 chars).
+        ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
+        ConstantOperator asChar10 = bigint.castTo(new CharType(10)).get();
+        Assertions.assertEquals("1775580223", asChar10.getVarchar());
+        Assertions.assertEquals(10, asChar10.getVarchar().length());
+
+        // Chained: CAST(CAST(1775580223839 AS CHAR(10)) AS DECIMAL) -> 1775580223.
+        ConstantOperator asDecimal = asChar10.castTo(DecimalType.DEFAULT_DECIMAL128).get();
+        Assertions.assertEquals(1775580223L, asDecimal.getDecimal().longValue());
+
+        // String source truncates too.
+        Assertions.assertEquals("hello",
+                ConstantOperator.createVarchar("hello world").castTo(new CharType(5)).get().getVarchar());
+    }
+
+    @Test
+    public void testCastToVarcharAndWildcardCharDoNotTruncate() {
+        ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
+        // VARCHAR(N) is not truncated.
+        Assertions.assertEquals("1775580223839", bigint.castTo(new VarcharType(10)).get().getVarchar());
+        // Wildcard CHAR (no length, len == -1) is not truncated.
+        Assertions.assertEquals("1775580223839", bigint.castTo(CharType.CHAR).get().getVarchar());
+    }
+
     @Test
     public void testCastToDateValid() throws Exception {
         String[][] testCases = {
