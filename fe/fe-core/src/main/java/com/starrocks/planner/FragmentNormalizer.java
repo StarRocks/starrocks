@@ -698,6 +698,19 @@ public class FragmentNormalizer {
         }
     }
 
+    // Whether any PlanNode of the subtree rooted at `node` still retains one of the given runtime
+    // filters as a probe. The recursion stops at an ExchangeNode's children, which live in another
+    // fragment, and a local runtime filter cannot reach them anyway.
+    private boolean probesAnyFilterOfSameFragment(PlanNode node, Set<Integer> filterIds) {
+        if (node.getFragment() != fragment) {
+            return false;
+        }
+        if (node.getProbeRuntimeFilters().stream().anyMatch(rf -> filterIds.contains(rf.getFilterId()))) {
+            return true;
+        }
+        return node.getChildren().stream().anyMatch(child -> probesAnyFilterOfSameFragment(child, filterIds));
+    }
+
     public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
                                                     Set<PlanFragmentId> visitedMultiCastFragments) {
         if (root.getChildren().isEmpty()) {
@@ -802,19 +815,40 @@ public class FragmentNormalizer {
             return false;
         }
 
-        // Not cacheable if an AggregationNode of the leftmost path builds runtime filters itself
-        // (AGG_IN_FILTER/TOPN_FILTER). Such a filter probes the OlapScanNode that feeds the cache
-        // interpolation point, so the per-tablet results that get populated only contain the rows that
-        // survived it. Its content is decided at run time -- it depends on which tablets this instance
-        // happened to scan, in which order, and which of them were served from the cache -- so unlike a
-        // JoinNode's runtime filter, whose build side is packed into the digest together with the data
-        // versions of its OlapScanNodes, there is nothing here that could be packed into the cache key.
-        // A populated entry would therefore not be a function of the cache key, and would produce wrong
-        // results as soon as it is read back by a query that needs the rows the filter dropped.
-        boolean aggBuildsRuntimeFilters = leftNodesTopDown.stream()
-                .filter(node -> node instanceof AggregationNode)
-                .anyMatch(node -> !((AggregationNode) node).getBuildRuntimeFilters().isEmpty());
-        if (aggBuildsRuntimeFilters) {
+        // Not cacheable if a node of the leftmost path builds a runtime filter of its own. Such a filter
+        // probes the OlapScanNode that feeds the cache interpolation point, so the per-tablet results
+        // that get populated only contain the rows that survived it. Its content is decided at run time
+        // -- it depends on which tablets this instance happened to scan, in which order, and which of
+        // them were served from the cache -- so unlike a JoinNode's runtime filter, whose build side is
+        // packed into the digest together with the data versions of its OlapScanNodes, there is nothing
+        // here that could be packed into the cache key. A populated entry would therefore not be a
+        // function of the cache key, and would produce wrong results as soon as it is read back by a
+        // query that needs the rows the filter dropped.
+        // Both of the nodes that can build such a filter have to be checked, because the two are
+        // mutually exclusive and depend on whether PushDownTopNToPreAggRule fired:
+        //   - AggregationNode builds an AGG_IN_FILTER when it carries a LIMIT of its own, and a
+        //     TOPN_FILTER when the rule attached the TopN to it (SortNode.perPipeline is then true and
+        //     the SortNode builds nothing);
+        //   - SortNode builds the TOPN_FILTER in every other shape, e.g. `group by k order by k limit n`
+        //     over a table distributed by k, which is planned as a one-phase aggregation that the rule's
+        //     TopN->Agg(GLOBAL)->Agg(LOCAL) pattern cannot match.
+        // Neither is visible to the alien-GRF check below: both are onlyLocal/non-remote filters.
+        // Only a filter that actually probes inside the cached subtree matters, though. When a JoinNode
+        // sits between the builder and the cache point, the filter may land entirely on the other input
+        // -- `... join r on l.k = r.k order by r.v limit n` builds a TOPN_FILTER on r.v that only r's
+        // scan can probe. That one cannot change a single row the cache point produces, so rejecting it
+        // would give up the cache for nothing.
+        // The targets are read off the probe nodes rather than off RuntimeFilterDescription's
+        // nodeIdToProbeExpr, because that map is only ever added to: a probe dropped afterwards -- by
+        // removeDictMappingProbeRuntimeFilters for a DictMappingExpr probe, or by computeLocalRfWaitingSet
+        // when global runtime filters are off -- leaves its node id behind and would read as an active
+        // probe here. A PlanNode's retained probe list is what the BE actually applies.
+        Set<Integer> localFilterIds = leftNodesTopDown.stream()
+                .filter(node -> node instanceof RuntimeFilterBuildNode && !(node instanceof JoinNode))
+                .flatMap(node -> ((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().stream())
+                .map(RuntimeFilterDescription::getFilterId)
+                .collect(Collectors.toSet());
+        if (!localFilterIds.isEmpty() && probesAnyFilterOfSameFragment(firstAggNode, localFilterIds)) {
             return false;
         }
 
