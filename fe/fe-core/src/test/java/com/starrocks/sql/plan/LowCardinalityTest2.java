@@ -3143,6 +3143,53 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testUnionSameChildColumnPartiallyMergeable() throws Exception {
+        // C_USER feeds BOTH union output positions:
+        //   position 0: C_USER / C_DEPT     -> both have a dictionary, the merge succeeds
+        //   position 1: C_USER / CAST(int)  -> the cast has no dictionary, the merge fails
+        // The failed position forces C_USER to be decoded before the union, so position 0 must not
+        // stay dictionary encoded either - otherwise the left branch feeds a VARCHAR into an INT
+        // dict-code slot and the BE aborts in FixedLengthColumnBase<int>::append.
+        // Both sides of every position use the same type on purpose: any type mismatch makes the
+        // planner wrap the children in casts, which gives each position its own column ref.
+        String sql = """
+                  SELECT * FROM (
+                    SELECT C_USER a, C_USER b FROM low_card_t1
+                    UNION ALL
+                    SELECT C_DEPT, CAST(cpc AS VARCHAR(50)) FROM low_card_t1
+                  ) t
+                  """;
+        String plan = getVerboseExplain(sql);
+        // Neither position is dictionary encoded, and both branches feed the union strings.
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [24, VARCHAR(50), true] | [25, VARCHAR(50), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: c_user, VARCHAR(50), true] | [2: c_user, VARCHAR(50), true]\n" +
+                "  |      [14: c_dept, VARCHAR(50), true] | [23: cast, VARCHAR(50), true]", plan);
+    }
+
+    @Test
+    public void testUnionSameChildColumnFullyMergeable() throws Exception {
+        // Same shape as testUnionSameChildColumnPartiallyMergeable, except that every position can
+        // merge its dictionaries. Giving up on a position must not spread when nothing failed.
+        String sql = """
+                  SELECT * FROM (
+                    SELECT C_USER a, C_USER b FROM low_card_t1
+                    UNION ALL
+                    SELECT C_DEPT, C_PAR FROM low_card_t1
+                  ) t
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [28, INT, true] | [29, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: c_user, INT, true] | [25: c_user, INT, true]\n" +
+                "  |      [26: c_dept, INT, true] | [27: c_par, INT, true]", plan);
+    }
+
+    @Test
     public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
         String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
         String plan = getFragmentPlan(sql);

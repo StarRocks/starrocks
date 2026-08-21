@@ -811,6 +811,32 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return visitPhysicalSetOperation(optExpression, context);
     }
 
+    /*
+     * Merge the dictionaries of the columns every UNION ALL branch contributes to one output
+     * position, and return the column whose dictionary the position ends up encoded with: one of
+     * the child columns, or the output column itself when the position is all constants and a
+     * dictionary was generated for it. Returns null when the position cannot be encoded at all.
+     */
+    private ColumnRefOperator mergeUnionDictionaries(List<ColumnRefOperator> childColumns,
+                                                     ColumnRefOperator outputColumn,
+                                                     ColumnRefSet encodableColumns) {
+        boolean isCandidate = childColumns.stream().allMatch(
+                c -> encodableColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
+        if (!isCandidate) {
+            return null;
+        }
+        Integer merged = unionDictionaryManager.mergeDictionaries(
+                childColumns.stream().map(ColumnRefOperator::getId).toList(), outputColumn.getId());
+        if (merged == null) {
+            return null;
+        }
+        final int mergedId = merged;
+        if (mergedId == outputColumn.getId()) {
+            return outputColumn;
+        }
+        return childColumns.stream().filter(c -> c.getId() == mergedId).findAny().orElseThrow();
+    }
+
     private DecodeInfo visitPhysicalSetOperation(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.empty();
@@ -821,32 +847,47 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             Preconditions.checkState(!(dist instanceof HashDistributionSpec));
             DecodeInfo result = DecodeInfo.create();
             result.inputStringColumns.union(context.outputStringColumns);
-            for (int i = 0; i < setOp.getOutputColumnRefOp().size(); ++i) {
-                final int finalI = i;
-                List<ColumnRefOperator> childColumns = setOp.getChildOutputColumns().stream()
-                        .map(l -> l.get(finalI)).toList();
-                List<Integer> childColumnIds = childColumns.stream().map(ColumnRefOperator::getId).toList();
-                boolean isCandidate = childColumns.stream().allMatch(
-                        c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
-                ColumnRefOperator outputColumn = setOp.getOutputColumnRefOp().get(i);
-                Integer mergedId;
-                if (isCandidate && (mergedId =
-                        unionDictionaryManager.mergeDictionaries(childColumnIds, outputColumn.getId())) != null) {
-                    childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
-                        result.usedStringColumns.union(c);
-                        expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
-                    });
-                    if (mergedId == outputColumn.getId()) {
-                        setDefineExpr(outputColumn, outputColumn, 1);
-                    } else {
-                        setDefineExpr(outputColumn, childColumns.stream()
-                                .filter(c -> c.getId() == mergedId).findAny().orElseThrow(), 1);
+            List<ColumnRefOperator> outputColumns = setOp.getOutputColumnRefOp();
+            // childColumns.get(i) holds the column every branch contributes to output position i
+            List<List<ColumnRefOperator>> childColumns = IntStream.range(0, outputColumns.size())
+                    .mapToObj(i -> setOp.getChildOutputColumns().stream().map(l -> l.get(i)).toList())
+                    .toList();
+            // the column whose dictionary output position i is encoded with,
+            // null when the position cannot be dictionary encoded
+            List<ColumnRefOperator> useChildColumns = IntStream.range(0, outputColumns.size())
+                    .mapToObj(i -> mergeUnionDictionaries(childColumns.get(i), outputColumns.get(i),
+                            context.outputStringColumns))
+                    .collect(Collectors.toCollection(Lists::newArrayList));
+
+            // A child column that has to be decoded for one output position cannot stay encoded for
+            // another one: the same column ref would then reach the union as a string on one branch
+            // and as a dictionary code on another. Give up on every position sharing a column with a
+            // position we already gave up on, until the set of decoded columns stops growing.
+            int decodedColumns;
+            do {
+                decodedColumns = result.decodeStringColumns.size();
+                for (int i = 0; i < outputColumns.size(); ++i) {
+                    if (useChildColumns.get(i) != null
+                            && childColumns.get(i).stream().noneMatch(result.decodeStringColumns::contains)) {
+                        continue;
                     }
-                    result.outputStringColumns.union(outputColumn);
-                } else {
-                    childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
+                    useChildColumns.set(i, null);
+                    childColumns.get(i).stream().filter(c -> context.outputStringColumns.contains(c))
                             .forEach(result.decodeStringColumns::union);
                 }
+            } while (decodedColumns != result.decodeStringColumns.size());
+
+            for (int i = 0; i < outputColumns.size(); ++i) {
+                if (useChildColumns.get(i) == null) {
+                    continue;
+                }
+                childColumns.get(i).stream().map(ColumnRefOperator::getId)
+                        .filter(context.outputStringColumns::contains).forEach(c -> {
+                            result.usedStringColumns.union(c);
+                            expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
+                        });
+                setDefineExpr(outputColumns.get(i), useChildColumns.get(i), 1);
+                result.outputStringColumns.union(outputColumns.get(i));
             }
             result.inputStringColumns.except(result.decodeStringColumns);
             return result;
