@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
@@ -349,6 +350,29 @@ public class Utils {
         return computeNode;
     }
 
+    /**
+     * Whether this aggregate request publishes an UNSHARE compaction -- the publish that retires a
+     * split's parent view, and therefore the one that must not be handed parent metadata to build.
+     *
+     * <p>The marker comes from the persisted transaction attachment rather than the scheduler's
+     * in-memory job map, so it stays correct when a committed UNSHARE transaction is published by a new
+     * FE leader.
+     *
+     * <p>Read across every batch already in the request, not only the one being added. One request can
+     * be filled twice ({@code PublishVersionDaemon#aggregatePublishWithCarryForward}), both batches
+     * share a single {@code parentTabletPublishInfos} list, and the carry-forward batch carries
+     * synthetic {@code TXN_EMPTY} infos that do not repeat the marker -- so a per-batch answer would let
+     * the second batch re-attach the parent view the first one correctly withheld.
+     */
+    @VisibleForTesting
+    static boolean publishesUnshareCompaction(List<TxnInfoPB> txnInfos, List<PublishVersionRequest> publishReqs) {
+        return Optional.ofNullable(txnInfos).orElseGet(List::<TxnInfoPB>of).stream()
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()))
+                || Optional.ofNullable(publishReqs).orElseGet(List::<PublishVersionRequest>of).stream()
+                .flatMap(req -> Optional.ofNullable(req.getTxnInfos()).orElseGet(List::<TxnInfoPB>of).stream())
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
+    }
+
     public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                                            long baseVersion, long newVersion,
                                                            Map<ComputeNode, List<Long>> nodeToTablets,
@@ -414,11 +438,7 @@ public class Utils {
         request.setComputeNodes(computeNodes);
         request.setPublishReqs(publishReqs);
 
-        // This marker comes from the persisted transaction attachment rather than the scheduler's
-        // in-memory job map. It therefore remains correct when a committed UNSHARE transaction is
-        // published by a new FE leader.
-        boolean unsharePublish = txnInfos.stream()
-                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
+        boolean unsharePublish = publishesUnshareCompaction(txnInfos, publishReqs);
         // Cheapest question first: building publishedTabletIds walks every tablet in the batch, and on a
         // cluster with no split in flight there is nothing for it to answer. Finished jobs linger in the
         // job map for three days and would otherwise make every publish pay for them.
