@@ -38,14 +38,19 @@ public class TransactionGraph {
 
     static class Node {
         long txnId;
+        // position in add (commit) order. Each table's writer chain is ordered by seq, not by
+        // txnId: txn ids are assigned at begin time but nodes are added at commit time, and
+        // txns may commit out of txn id order.
+        long seq;
         List<Long> writeTableIds;
         // transactions this txn depends
         Set<Node> ins;
         // transactions depending on this txn
         Set<Node> outs;
 
-        Node(long txnId, List<Long> writeTableIds) {
+        Node(long txnId, long seq, List<Long> writeTableIds) {
             this.txnId = txnId;
+            this.seq = seq;
             this.writeTableIds = writeTableIds;
         }
 
@@ -92,6 +97,8 @@ public class TransactionGraph {
     // tableid -> txnId that lastly write this table
     private Map<Long, Node> lastTableWriter = new HashMap<>();
 
+    private long nextSeq = 0;
+
     public TransactionGraph() {
     }
 
@@ -104,7 +111,7 @@ public class TransactionGraph {
             LOG.warn("add an already exist txn:{}", txnId);
             return;
         }
-        Node node = new Node(txnId, writeTableIds);
+        Node node = new Node(txnId, nextSeq++, writeTableIds);
         for (long tableId : writeTableIds) {
             Node previous = lastTableWriter.put(tableId, node);
             if (previous != null) {
@@ -125,28 +132,80 @@ public class TransactionGraph {
             return;
         }
         if (node.ins != null && !node.ins.isEmpty()) {
-            LOG.warn("remove txn " + txnId + " with dependency: " + node.ins + " this may happen during FE upgrading");
-            for (Node dep : node.ins) {
-                dep.outs.remove(node);
-            }
+            // Happens when publish readiness is not decided by this graph, e.g. single
+            // (partition-version based) publish finishing a txn before its predecessors,
+            // or during FE upgrading.
+            LOG.warn("remove txn {} with dependency: {}", txnId, node.ins);
         }
         nodes.remove(txnId);
         nodesWithoutIns.remove(node);
+
+        // Removing a node in the middle of a table's writer chain must not lose ordering:
+        // splice the chain by linking the immediate predecessor to the immediate successor
+        // of every table this node writes, and let lastTableWriter fall back to the
+        // predecessor so a later add() of the same table still picks up the dependency.
+        // Only same-table edges are added; cross-table shortcuts would break the walk in
+        // getTxnsWithTxnDependencyBatch(), which assumes a single-table node has at most
+        // one out edge, pointing to the next writer of that table.
         for (long tableId : node.writeTableIds) {
-            Node holder = lastTableWriter.get(tableId);
-            if (holder == node) {
-                lastTableWriter.remove(tableId);
+            Node prev = latestWriterAmong(node.ins, tableId);
+            Node next = earliestWriterAmong(node.outs, tableId);
+            if (prev != null && next != null) {
+                prev.addOuts(next);
+                next.addIns(prev);
+            }
+            if (lastTableWriter.get(tableId) == node) {
+                if (prev != null) {
+                    lastTableWriter.put(tableId, prev);
+                } else {
+                    lastTableWriter.remove(tableId);
+                }
             }
         }
-        if (node.outs == null) {
-            return;
-        }
-        for (Node next : node.outs) {
-            next.ins.remove(node);
-            if (next.ins.isEmpty()) {
-                nodesWithoutIns.add(next);
+
+        if (node.ins != null) {
+            for (Node in : node.ins) {
+                in.outs.remove(node);
             }
         }
+        if (node.outs != null) {
+            for (Node out : node.outs) {
+                out.ins.remove(node);
+                if (out.ins.isEmpty()) {
+                    nodesWithoutIns.add(out);
+                }
+            }
+        }
+    }
+
+    // Among candidates, the writer of tableId added to the graph last. When called with the
+    // ins of a node writing tableId, this is that node's immediate predecessor on tableId's
+    // writer chain: every writer of tableId in the ins lies on the chain before the node,
+    // and the chain is ordered by seq.
+    private static Node latestWriterAmong(Set<Node> candidates, long tableId) {
+        Node result = null;
+        if (candidates != null) {
+            for (Node n : candidates) {
+                if (n.writeTableIds.contains(tableId) && (result == null || n.seq > result.seq)) {
+                    result = n;
+                }
+            }
+        }
+        return result;
+    }
+
+    // Symmetric to latestWriterAmong: with the outs of a node writing tableId, the writer of
+    // tableId added first is that node's immediate successor on tableId's writer chain.
+    private static Node earliestWriterAmong(Set<Node> candidates, long tableId) {
+        Node result = null;
+        if (candidates != null) {
+            for (Node n : candidates) {
+                if (n.writeTableIds.contains(tableId) && (result == null || n.seq < result.seq)) {
+                    result = n;
+                }
+            }
+        }
+        return result;
     }
 
     public List<Long> getTxnsWithoutDependency() {
