@@ -3413,4 +3413,29 @@ public class LowCardinalityTest2 extends PlanTestBase {
             Config.push_down_non_grouped_aggregate_below_union = prevConfig;
         }
     }
+
+    @Test
+    void testPredicateOnlyDictDecodeWithProjection() throws Exception {
+        String sql = """
+              WITH T1 AS ( SELECT C_USER, C_DEPT FROM low_card_t1) [MATERIALIZED]
+              SELECT C_DEPT FROM T1 WHERE C_USER = "str"
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    16: DictDefine(14: c_user, [<place-holder>])\n" +
+                "    17: DictDefine(15: c_dept, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 17> : <string id 13>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  17 <-> [17: c_dept, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:SELECT\n" +
+                "  |  predicates: DictDecode(16: c_user, [<place-holder> = 'str'])\n" +
+                "  |  cardinality: 1", plan);
+    }
 }
