@@ -56,6 +56,7 @@
 #include "testutil/sync_point.h"
 #include "util/crc32c.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
 namespace {
@@ -2150,6 +2151,22 @@ StatusOr<bool> remap_legacy_entry_or_drop(IndexValuesWithVerPB* values_pb, int32
     return true;
 }
 
+// Corrupted bytes on the sstable-rebuild read path usually come from the local
+// cache copy of the source sstable (the same failure mode as PK index
+// compaction). Drop that cache entry before propagating the error, so a retried
+// tablet merge scheduled onto this node re-reads from remote storage instead of
+// hitting the same bad blocks forever.
+Status drop_source_sstable_cache_on_corruption(TabletManager* tablet_manager, int64_t source_tablet_id,
+                                               const PersistentIndexSstablePB& src_pb, const Status& st) {
+    if (st.is_corruption()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "tablet merge sstable rebuild hit corruption, dropping local cache of " << src_pb.filename()
+                     << ", source tablet_id=" << source_tablet_id << ", error: " << st;
+        (void)drop_corrupted_sstable_cache(tablet_manager->sst_location(source_tablet_id, src_pb.filename()));
+    }
+    return st;
+}
+
 // Rebuilds an ancestor-inherited shared PK sstable (shared=true,
 // !has_shared_rssid) by reading every entry, remapping stored rssids to the
 // merged tablet's final rssid space via merge_contexts, applying the merged
@@ -2260,6 +2277,11 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
     // a one-shot bulk merge scan doesn't pollute long-lived block / delvec
     // caches; the local cache here already deduplicates per-rssid loads.
     std::unordered_map<uint32_t, DelVectorPtr> del_vector_cache;
+    // Set when the merged delvec fails to load: a strict-CRC delvec mismatch also
+    // surfaces as Corruption, and that must not be attributed to the source sstable
+    // (its cache is innocent; dropping it would leave the actually-corrupt delvec
+    // cache in place and pollute the sst read-error metric).
+    bool delvec_load_failed = false;
     auto load_del_vector = [&](uint32_t final_rssid) -> StatusOr<DelVectorPtr> {
         auto cached_entry = del_vector_cache.find(final_rssid);
         if (cached_entry != del_vector_cache.end()) return cached_entry->second;
@@ -2271,8 +2293,12 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
         }
         DelVectorPtr del_vector = std::make_shared<DelVector>();
         LakeIOOptions lake_io_options{.fill_data_cache = false, .skip_disk_cache = false};
-        RETURN_IF_ERROR(lake::get_del_vec(tablet_manager, new_metadata, delvec_page_entry->second,
-                                          /*fill_cache=*/false, lake_io_options, del_vector.get()));
+        if (auto load_status = lake::get_del_vec(tablet_manager, new_metadata, delvec_page_entry->second,
+                                                 /*fill_cache=*/false, lake_io_options, del_vector.get());
+            !load_status.ok()) {
+            delvec_load_failed = true;
+            return load_status;
+        }
         del_vector_cache.emplace(final_rssid, del_vector);
         return del_vector;
     };
@@ -2287,13 +2313,29 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
         const Slice entry_raw_value = source_iterator->value();
         IndexValuesWithVerPB values_pb;
         if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
-            return Status::InternalError("Failed to parse legacy sstable value during rebuild");
+            // These bytes come straight out of the source sstable's data block, so a
+            // parse failure means the persisted content is corrupted.
+            return drop_source_sstable_cache_on_corruption(
+                    tablet_manager, src_metadata->id(), src_pb,
+                    Status::Corruption("Failed to parse legacy sstable value during rebuild"));
         }
-        // (2) + (3) per-entry remap and delvec filter, packed into one helper.
-        ASSIGN_OR_RETURN(bool keep_entry,
-                         remap_legacy_entry_or_drop(&values_pb, source_rssid_offset, rssid_lookup_maps.data_rssid_map,
-                                                    load_del_vector));
-        if (!keep_entry) {
+        // (2) + (3) per-entry remap and delvec filter, packed into one helper. A
+        // Corruption from it (stored rssid out of range after the offset shift) is
+        // decoded from the source data block's bytes, so it gets the same
+        // drop-source-cache treatment as a block-level read failure; other error
+        // kinds (e.g. delvec load failures) pass through the helper untouched.
+        auto keep_entry_or = remap_legacy_entry_or_drop(&values_pb, source_rssid_offset,
+                                                        rssid_lookup_maps.data_rssid_map, load_del_vector);
+        if (!keep_entry_or.ok()) {
+            if (delvec_load_failed) {
+                // The failure came from loading the merged delvec, not from the source
+                // sstable's bytes; propagate it untouched.
+                return keep_entry_or.status();
+            }
+            return drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb,
+                                                           keep_entry_or.status());
+        }
+        if (!keep_entry_or.value()) {
             ++dropped_entry_count;
             continue;
         }
@@ -2302,7 +2344,8 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
         RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
         ++kept_entry_count;
     }
-    RETURN_IF_ERROR(source_iterator->status());
+    RETURN_IF_ERROR(drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb,
+                                                            source_iterator->status()));
 
     if (dropped_entry_count > 0) {
         g_tablet_merge_legacy_sstable_rebuild_dropped_entries << static_cast<int64_t>(dropped_entry_count);
@@ -2372,7 +2415,8 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
     std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
     source_iterator->SeekToFirst();
     if (!source_iterator->Valid()) {
-        RETURN_IF_ERROR(source_iterator->status());
+        RETURN_IF_ERROR(drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb,
+                                                                source_iterator->status()));
         // Zero-entry sstable: leave out_pb empty, caller drops it.
         return Status::OK();
     }
@@ -2399,7 +2443,11 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         const Slice entry_raw_value = source_iterator->value();
         IndexValuesWithVerPB values_pb;
         if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
-            return Status::InternalError("Failed to parse non-shared sstable value during rebuild");
+            // These bytes come straight out of the source sstable's data block, so a
+            // parse failure means the persisted content is corrupted.
+            return drop_source_sstable_cache_on_corruption(
+                    tablet_manager, src_metadata->id(), src_pb,
+                    Status::Corruption("Failed to parse non-shared sstable value during rebuild"));
         }
         for (auto& index_value_ref : *values_pb.mutable_values()) {
             auto* index_value = &index_value_ref;
@@ -2407,9 +2455,15 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
             const int64_t lifted_rssid =
                     static_cast<int64_t>(index_value->rssid()) + static_cast<int64_t>(source_rssid_offset);
             if (lifted_rssid < 0 || lifted_rssid > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
-                return Status::Corruption(fmt::format(
-                        "non-shared rebuild: lifted rssid out of uint32 range: stored={} src_offset={} lifted={}",
-                        index_value->rssid(), source_rssid_offset, lifted_rssid));
+                // The stored rssid was decoded from the source data block's bytes, so an
+                // impossible value means corrupted content -- drop the source cache like
+                // any other read corruption.
+                return drop_source_sstable_cache_on_corruption(
+                        tablet_manager, src_metadata->id(), src_pb,
+                        Status::Corruption(fmt::format(
+                                "non-shared rebuild: lifted rssid out of uint32 range: stored={} src_offset={} "
+                                "lifted={}",
+                                index_value->rssid(), source_rssid_offset, lifted_rssid)));
             }
             ASSIGN_OR_RETURN(uint32_t final_rssid, ctx.map_rssid(static_cast<uint32_t>(lifted_rssid)));
             index_value->set_rssid(final_rssid);
@@ -2419,7 +2473,8 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
         ++kept_entry_count;
     }
-    RETURN_IF_ERROR(source_iterator->status());
+    RETURN_IF_ERROR(drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb,
+                                                            source_iterator->status()));
 
     if (kept_entry_count == 0) {
         // Defensive: SeekToFirst returned Valid() above, so this should
