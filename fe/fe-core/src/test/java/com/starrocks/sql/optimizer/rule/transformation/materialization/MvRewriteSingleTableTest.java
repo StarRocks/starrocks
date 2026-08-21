@@ -276,4 +276,56 @@ public class MvRewriteSingleTableTest extends MVTestBase {
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }
+
+    @Test
+    public void testSingleTableSPGGroupByAndPredicatePrune() throws Exception {
+        {
+            // Test case 1: MV with group-by covers query group-by + predicate columns
+            createAndRefreshMv("create materialized view agg_mv_1 distributed by hash(empid)" +
+                    " as select empid, deptno, sum(salary) as total_salary from emps" +
+                    " where deptno > 10 group by empid, deptno");
+            String query = "select empid, sum(salary) from emps where deptno > 20 group by empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "agg_mv_1");
+            dropMv("test", "agg_mv_1");
+        }
+        {
+            // Test case 2: MV group-by does NOT cover query group-by + predicate columns (should be pruned)
+            createAndRefreshMv("create materialized view agg_mv_2 distributed by hash(empid)" +
+                    " as select empid, sum(salary) as total_salary from emps" +
+                    " where empid > 10 group by empid");
+            String query = "select empid, sum(salary) from emps where deptno > 20 group by empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "agg_mv_2");
+            dropMv("test", "agg_mv_2");
+        }
+        {
+            // Test case 3: MV predicate columns not covered by query predicate (should be pruned)
+            createAndRefreshMv("create materialized view agg_mv_3 distributed by hash(empid)" +
+                    " as select empid, deptno, sum(salary) as total_salary from emps" +
+                    " where deptno > 10 and empid > 5 group by empid, deptno");
+            String query = "select empid, sum(salary) from emps where deptno > 20 group by empid, deptno";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "agg_mv_3");
+            dropMv("test", "agg_mv_3");
+        }
+        {
+            // Test case 4: Detail MV (no aggregation) should pass group-by coverage check
+            createAndRefreshMv("create materialized view detail_mv_1 distributed by hash(empid)" +
+                    " as select empid, deptno, name, salary from emps where deptno > 10");
+            String query = "select empid, sum(salary) from emps where deptno > 20 group by empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "detail_mv_1");
+            dropMv("test", "detail_mv_1");
+        }
+        {
+            // Test case 5: MV scan column coverage check
+            createAndRefreshMv("create materialized view partial_col_mv distributed by hash(empid)" +
+                    " as select empid, deptno from emps where deptno > 10");
+            String query = "select empid, name from emps where deptno > 20";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "partial_col_mv");
+            dropMv("test", "partial_col_mv");
+        }
+    }
 }
