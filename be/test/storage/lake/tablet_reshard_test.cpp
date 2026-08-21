@@ -8267,6 +8267,98 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_shared_sstable_routes_s
     EXPECT_EQ(2, actual_rssids.at(key_b));
 }
 
+// A child may compact its persistent index after split and replace the
+// inherited legacy shared SST with a private SST. The physical legacy file
+// still contains that child's key range, so filename occurrences select the
+// file to open but must not limit the source-tablet routing ranges.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_shared_sstable_routes_sibling_without_filename) {
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_source_flush(
+            [&] { set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE); });
+
+    const int64_t base_version = 1;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string key_a = encode_int_primary_key(10);
+    const std::string key_b = encode_int_primary_key(60);
+    const std::string legacy_filename = "sst_free_sibling_legacy.sst";
+    const std::string replacement_filename = "sst_free_sibling_replacement.sst";
+    const uint64_t legacy_filesize =
+            write_legacy_pk_sstable(_tablet_manager->sst_location(child_a, legacy_filename),
+                                    {{key_a, /*rssid=*/1, /*rowid=*/0}, {key_b, /*rssid=*/1, /*rowid=*/0}});
+    const uint64_t replacement_filesize =
+            write_versioned_pk_sstable(_tablet_manager->sst_location(child_b, replacement_filename),
+                                       {{key_b, /*version=*/2, /*rssid=*/1, /*rowid=*/1}});
+
+    auto make_child = [&](int64_t tablet_id, int lower, int upper, const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(2);
+        set_int_primary_key_schema(metadata.get(), 1001);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+        return metadata;
+    };
+
+    auto child_a_metadata = make_child(child_a, /*lower=*/0, /*upper=*/50, "sst_free_sibling_left.dat");
+    auto* legacy_sst = child_a_metadata->mutable_sstable_meta()->add_sstables();
+    legacy_sst->set_filename(legacy_filename);
+    legacy_sst->set_filesize(legacy_filesize);
+    legacy_sst->set_shared(true);
+    legacy_sst->set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+
+    auto child_b_metadata = make_child(child_b, /*lower=*/50, /*upper=*/100, "sst_free_sibling_right.dat");
+    auto* replacement_sst = child_b_metadata->mutable_sstable_meta()->add_sstables();
+    replacement_sst->set_filename(replacement_filename);
+    replacement_sst->set_filesize(replacement_filesize);
+    replacement_sst->set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+
+    ASSERT_OK(put_tablet_metadata(child_a_metadata));
+    ASSERT_OK(put_tablet_metadata(child_b_metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, base_version + 1,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    const auto& merged = tablet_metadatas.at(merged_tablet);
+    auto index = std::make_unique<lake::LakePersistentIndex>(_tablet_manager.get(), merged_tablet);
+    ASSERT_OK(index->init(merged));
+    Slice keys[] = {Slice(key_a), Slice(key_b)};
+    IndexValue values[2];
+    ASSERT_OK(index->get(/*n=*/2, keys, values));
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(1) << 32), values[0]);
+    EXPECT_EQ(IndexValue((static_cast<uint64_t>(2) << 32) | 1), values[1]);
+}
+
 // A data entry inside the merged tablet's outer range but outside every
 // contributing source tablet range has no unambiguous source RSSID namespace.
 // It must fail the legacy shared-SST rebuild instead of being treated like a
