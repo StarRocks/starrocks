@@ -264,15 +264,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在备份或恢复特定数据库时，是否启用异步物化视图的 BACKUP 和 RESTORE。如果此项设置为 `false`，StarRocks 将跳过备份异步物化视图。
 - 引入版本: v3.2.0
 
-### `enable_batch_insert_histogram_statistics`
-
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 为多列收集直方图时，是否批量插入直方图统计信息。此参数同时适用于 StarRocks 表和外部表。如果设置为 `false`，StarRocks 将按列分别插入直方图统计信息。
-- 引入版本: -
-
 ### `enable_collect_full_statistic`
 
 - 默认值: true

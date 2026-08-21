@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,14 +50,15 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                 "hive0", db, table, Lists.newArrayList(columnName), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-        VelocityContext context = Deencapsulation.invoke(job, "buildBaseContext", db, table, columnName);
+        VelocityContext context = HistogramStatisticsUtils.buildBaseContext(
+                db, table, job.getCatalogName(), columnName);
         assertSqlLiteralRoundTrips(columnName, (String) context.get("columnNameStr"));
     }
 
     @Test
     public void testBatchInsertCombinesMultipleColumnTypes() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
 
             fixture.collect();
 
@@ -75,7 +75,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     @Test
     public void testBatchInsertPreservesNullForEmptyBuckets() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.returnEmptyV2Histogram();
 
             fixture.collect();
@@ -94,7 +94,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     @Test
     public void testBatchInsertCalculatesMcvsAndHistogramsForMultipleColumnTypes() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
 
             fixture.collect();
 
@@ -129,7 +129,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             String expectedV7HistogramSql = """
                     SELECT cast(7 as INT), 'v7',
                     concat('[["Infinity","Infinity",',
-                        cast(greatest(0, count(`v7`) - 10) as varchar),
+                        cast(cast(greatest(0, count(`v7`) - 10) as bigint) as varchar),
                         ',0]]')
                     FROM `hive0`.`test`.`t0_stats`
                     """;
@@ -137,13 +137,20 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                     Lists.newArrayList(
                             expectedV2McvSql, expectedV2HistogramSql, expectedV7McvSql, expectedV7HistogramSql),
                     fixture.statisticsQueries());
+
+            // v7 is a char-family column: a placeholder bucket, so no histogram() aggregate and no sort.
+            String v7HistogramQuery = fixture.statisticsQueries().get(3).toLowerCase();
+            Assertions.assertFalse(v7HistogramQuery.contains("histogram(`column_key`"), v7HistogramQuery);
+            Assertions.assertFalse(v7HistogramQuery.contains("order by"), v7HistogramQuery);
+            Assertions.assertFalse(v7HistogramQuery.contains("is not null"), v7HistogramQuery);
+            Assertions.assertFalse(v7HistogramQuery.contains("sample("), v7HistogramQuery);
         }
     }
 
     @Test
     public void testBatchInsertFlushesRowsAtBufferLimit() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(1);
+            fixture.withBufferSize(1);
 
             fixture.collect();
 
@@ -165,7 +172,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     @Test
     public void testBatchInsertCleansInsertedColumns() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
 
             fixture.collect();
 
@@ -177,7 +184,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     @Test
     public void testBatchInsertCleansInsertedColumnsAfterFailure() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.failOnSecondColumn();
 
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
@@ -192,7 +199,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     @Test
     public void testBatchInsertFlushesCompletedRowsBeforeInvalidHistogramResult() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.returnNoSecondColumnHistogramResults();
 
             Exception exception = Assertions.assertThrows(Exception.class, fixture::collect);
@@ -209,21 +216,9 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     }
 
     @Test
-    public void testUsesLegacyInsertWhenBatchDisabled() throws Exception {
-        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.disableBatch();
-
-            fixture.collect();
-
-            Assertions.assertTrue(fixture.batchInsertSql().isEmpty());
-            Assertions.assertEquals(2, fixture.legacyInsertCount(), "one legacy INSERT per column");
-        }
-    }
-
-    @Test
     public void testBatchInsertCreatesFreshStatementForRetry() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
 
             fixture.collect();
 
@@ -247,8 +242,6 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         private final List<StatementBase> batchInsertStatements = new ArrayList<>();
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
         private final List<String> batchInsertSql = new ArrayList<>();
-        private final List<String> legacyInsertSql = new ArrayList<>();
-        private final boolean originalEnableBatch = Config.enable_batch_insert_histogram_statistics;
         private final long originalBufferSize = Config.histogram_batch_insert_buffer_size;
 
         private ExternalHistogramBatchFixture(ConnectContext context) {
@@ -308,21 +301,11 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                     retryBatchInsertStatements.add(statementSupplier.get());
                     batchInsertSql.add(statement.getOrigStmt().getOrigStmt());
                 }
-
-                @Mock
-                public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
-                    legacyInsertSql.add(sql);
-                }
             };
         }
 
-        private void enableBatch(long bufferSize) {
-            Config.enable_batch_insert_histogram_statistics = true;
+        private void withBufferSize(long bufferSize) {
             Config.histogram_batch_insert_buffer_size = bufferSize;
-        }
-
-        private void disableBatch() {
-            Config.enable_batch_insert_histogram_statistics = false;
         }
 
         private void failOnSecondColumn() {
@@ -361,10 +344,6 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             return statisticsQueries;
         }
 
-        private int legacyInsertCount() {
-            return legacyInsertSql.size();
-        }
-
         private StatementBase firstBatchInsertStatement() {
             return batchInsertStatements.get(0);
         }
@@ -375,7 +354,6 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
 
         @Override
         public void close() {
-            Config.enable_batch_insert_histogram_statistics = originalEnableBatch;
             Config.histogram_batch_insert_buffer_size = originalBufferSize;
         }
     }

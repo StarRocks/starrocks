@@ -235,17 +235,10 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
-            sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
-            String plan = getFragmentPlan(sql);
-            assertCContains(plan, "AGGREGATE (update finalize)\n" +
-                    "  |  output: histogram");
-
             String querySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildQueryHistogram",
                     db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
-            plan = getFragmentPlan(querySql);
+            String plan = getFragmentPlan(querySql);
             assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
         }
@@ -272,43 +265,18 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
-            sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
-            String plan = getFragmentPlan(sql);
-            assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
-                    "  |  output: histogram");
-
             String querySql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildQueryHistogram",
                     db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
-            plan = getFragmentPlan(querySql);
+            String plan = getFragmentPlan(querySql);
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
         }
     }
 
-    @Test
-    public void testExternalHistogramSkipsBucketQueryForStringColumns() throws Exception {
-        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(connectContext, "hive0", "tpch", "region");
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
-
-        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
-                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
-
-        String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
-                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
-
-        Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
-                "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
-        Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
-        Assertions.assertFalse(sql.contains("histogram("), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("is not null"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("sample("), sql);
-    }
+    // The external placeholder-bucket SQL for char-family columns is asserted end-to-end in
+    // ExternalHistogramStatisticsCollectJobTest#testBatchInsertCalculatesMcvsAndHistogramsForMultipleColumnTypes,
+    // which drives collect() rather than a private builder.
 
     @Test
     public void testEscapeFullSQL() throws Exception {
