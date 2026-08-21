@@ -34,6 +34,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -749,6 +751,11 @@ public class Utils {
 
     public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
                                                            Operator inputOp, Operator childOp) {
+        // 0. Safety: prevent functions that crash in multi-stage (must run before any hint/override logic).
+        if (cannotGenerateMultiStageAggregate(inputOp)) {
+            return false;
+        }
+
         // 1. check if must generate multi stage aggregate.
         if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
             return true;
@@ -792,6 +799,35 @@ public class Utils {
                 if (tablet != null) {
                     return tablet.getFuzzyRowCount() > maxTabletRows;
                 }
+            }
+        }
+        return false;
+    }
+
+    public static boolean cannotGenerateMultiStageAggregate(Operator inputOp) {
+        Map<ColumnRefOperator, CallOperator> aggs = Maps.newHashMap();
+        List<ColumnRefOperator> groupingKeys = Lists.newArrayList();
+
+        if (OperatorType.LOGICAL_AGGR.equals(inputOp.getOpType())) {
+            LogicalAggregationOperator aggOp = (LogicalAggregationOperator) inputOp;
+            aggs = aggOp.getAggregations();
+            groupingKeys = aggOp.getGroupingKeys();
+        } else if (OperatorType.PHYSICAL_HASH_AGG.equals(inputOp.getOpType())) {
+            PhysicalHashAggregateOperator aggOp = (PhysicalHashAggregateOperator) inputOp;
+            aggs = aggOp.getAggregations();
+            groupingKeys = aggOp.getGroupBys();
+        }
+
+        for (CallOperator callOperator : aggs.values()) {
+            String fnName = callOperator.getFnName();
+            if (FunctionSet.HISTOGRAM.equalsIgnoreCase(fnName) ||
+                    FunctionSet.HISTOGRAM_HLL_NDV.equalsIgnoreCase(fnName)) {
+                if (!groupingKeys.isEmpty()) {
+                    throw new StarRocksPlannerException(
+                            fnName + "() does not support GROUP BY",
+                            ErrorType.USER_ERROR);
+                }
+                return true;
             }
         }
         return false;
