@@ -614,7 +614,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of source tablets one split job may take when the split drags a full UNSHARE rewrite behind it. It bounds how much data a single UNSHARE compaction rewrites, and therefore how long that compaction holds the partition's only compaction slot away from size-tiered compaction. The largest tablets are chosen first. Values less than or equal to `0` mean the compute-node count of the warehouse.
+- Description: The maximum number of source tablets one split job may **split** when the split drags a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note that this bounds the split fan-out, not the rewrite itself: every untouched sibling still becomes an identical tablet in the replacement index, and the UNSHARE compaction is partition-wide, so those are rewritten as well. Values less than or equal to `0` mean the compute-node count of the warehouse.
 - Introduced in: -
 
 ### `tablet_reshard_orderby_split_interval_second`

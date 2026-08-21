@@ -614,7 +614,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 当分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可处理的源 Tablet 数量。用于限制单次 UNSHARE Compaction 重写的数据量，从而限制它占用该分区唯一 Compaction 槽位、阻塞 Size-tiered Compaction 的时长。优先选择最大的 Tablet。取值小于或等于 `0` 时表示使用该 Warehouse 的计算节点数量。
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可**分裂**的源 Tablet 数量。优先选择最大的 Tablet。注意该值限制的是分裂扇出而非重写量：未被分裂的兄弟 Tablet 仍会在新索引中成为 Identical Tablet，而 UNSHARE Compaction 是分区级的，因此这些 Tablet 同样会被重写。取值小于或等于 `0` 时表示使用该 Warehouse 的计算节点数量。
 - 引入版本: -
 
 ### `tablet_reshard_orderby_split_interval_second`

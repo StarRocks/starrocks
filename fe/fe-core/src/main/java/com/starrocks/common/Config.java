@@ -4864,10 +4864,11 @@ public class Config extends ConfigBase {
             + "clamped by tablet_reshard_max_split_count. Values <= 1 disable this extra clamp.")
     public static int tablet_reshard_orderby_max_split_count = 2;
 
-    @ConfField(mutable = true, comment = "Max number of source tablets one split job may take when the split drags "
-            + "a full UNSHARE rewrite behind it. Bounds how much data a single UNSHARE compaction rewrites, and so "
-            + "how long it holds the partition's only compaction slot away from size-tiered compaction. The largest "
-            + "tablets are chosen first. Values <= 0 mean the warehouse's compute-node count.")
+    @ConfField(mutable = true, comment = "Max number of source tablets one split job may SPLIT when the split drags "
+            + "a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note this bounds the split "
+            + "fan-out, not the rewrite: every untouched sibling still becomes an IdenticalTablet in the replacement "
+            + "index and the UNSHARE compaction is partition-wide, so it rewrites those too. Values <= 0 mean the "
+            + "warehouse's compute-node count.")
     public static int tablet_reshard_orderby_max_split_tablets_per_job = 0;
 
     @ConfField(mutable = true, comment = "Quiet period, in seconds, after the previous tablet reshard job on a table "
