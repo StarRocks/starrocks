@@ -65,21 +65,9 @@ k1	int	YES	true	None
 k2	int	YES	false	None	
 v1	varchar(65533)	YES	false	None	
 -- !result
-show create table olap_table;
+function: assert_query_not_contains("show create table olap_table;", "_tablet_id_")
 -- result:
-olap_table	CREATE TABLE `olap_table` (
-  `k1` int(11) NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `v1` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+None
 -- !result
 [UC]select a._tablet_id_ as tablet_id_a, b._tablet_id_ as tablet_id_b, a.k1, a.k2, b.k2 as k2_b
 from olap_table a

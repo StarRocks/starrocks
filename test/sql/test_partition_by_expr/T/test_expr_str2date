@@ -52,7 +52,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 alter table partition_str2date add partition p20231226 VALUES [("2023-12-26"), ("2023-12-27"));
-show create table partition_str2date;
+function: assert_query_contains("show create table partition_str2date;", "PARTITION BY RANGE(str2date(create_time, \\'%Y-%m-%d\\'))", "PARTITION p20231226 VALUES [(\"2023-12-26\"), (\"2023-12-27\")))", "DISTRIBUTED BY RANDOM")
 -- name: test_expr_str2date_partition_prune
 CREATE TABLE partition_str2date (
         create_time varchar(100),

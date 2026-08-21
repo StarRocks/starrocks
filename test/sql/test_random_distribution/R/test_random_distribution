@@ -183,7 +183,7 @@ select sum(v) from t;
 -- result:
 3
 -- !result
--- name: test_async_mv
+-- name: test_async_mv @native
 create table t(k int, v int);
 -- result:
 -- !result

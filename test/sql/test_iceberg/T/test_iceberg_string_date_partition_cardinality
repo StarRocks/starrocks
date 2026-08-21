@@ -1,5 +1,5 @@
 -- name: test_iceberg_string_date_partition_cardinality
--- description: PR2 — a STRING date partition column compared with a temporal value coerces to
+-- description: PR2 -- a STRING date partition column compared with a temporal value coerces to
 -- CAST(c2 AS DATETIME) = <ts>. On the manifest-level cardinality path (Path C, column stats off),
 -- the old code pushed the cast to Iceberg's string-domain manifest evaluator, which pruned every
 -- manifest and returned rowCount=1 (a severe under-estimate that produces bad CBO/join plans).
@@ -37,8 +37,13 @@ set enable_query_trigger_analyze = false;
 -- (with known internal stats it would return those instead, bypassing the manifest path entirely).
 -- Safe here: query-trigger-analyze is off above, and a fresh external table has no analyze job, so
 -- nothing repopulates them. This is table-scoped; do NOT disable the global enable_statistic_collect
--- FE config in a shared SQLTester run — it would leak into concurrent cases.
-drop stats t_card;
+-- FE config in a shared SQLTester run -- it would leak into concurrent cases.
+-- DROP STATS resolves _statistics_ through the session's current catalog, so it has to run
+-- from default_catalog: issued from an external catalog it fails with
+-- "Unknown database '_statistics_'". `use <catalog>.<db>` restores both afterwards.
+set catalog default_catalog;
+drop stats ice_cat_${uuid0}.ice_db_${uuid0}.t_card;
+use ice_cat_${uuid0}.ice_db_${uuid0};
 
 -- cast/interval form: pre-PR2 this collapsed to cardinality=1; PR2 keeps the 2020-06-14 manifest (17 rows).
 function: assert_explain_costs_contains("select * from t_card where c2 = cast('2020-06-15' as date) - interval 1 day", "cardinality=17")

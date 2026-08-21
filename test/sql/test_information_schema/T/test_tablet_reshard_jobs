@@ -1,2 +1,5 @@
 -- name: test_tablet_reshard_jobs
-SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs;
+-- Scope the scan to this case's own database. tablet_reshard_jobs is cluster-wide, and in
+-- shared-data mode tables default to range distribution, so concurrent cases leave FINISHED
+-- SPLIT_TABLET jobs behind and an unscoped scan is not deterministic.
+SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database();

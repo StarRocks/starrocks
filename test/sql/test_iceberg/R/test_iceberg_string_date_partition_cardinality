@@ -35,7 +35,13 @@ set disable_table_stats_from_metadata_for_single_table = false;
 set enable_query_trigger_analyze = false;
 -- result:
 -- !result
-drop stats t_card;
+set catalog default_catalog;
+-- result:
+-- !result
+drop stats ice_cat_${uuid0}.ice_db_${uuid0}.t_card;
+-- result:
+-- !result
+use ice_cat_${uuid0}.ice_db_${uuid0};
 -- result:
 -- !result
 function: assert_explain_costs_contains("select * from t_card where c2 = cast('2020-06-15' as date) - interval 1 day", "cardinality=17")

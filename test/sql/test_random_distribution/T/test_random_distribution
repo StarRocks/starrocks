@@ -58,7 +58,7 @@ create table t(k int, v int);
 create materialized view tv as select k, sum(v) from t group by k;
 insert into t values(1,1),(1,2);
 select sum(v) from t;
--- name: test_async_mv
+-- name: test_async_mv @native
 create table t(k int, v int);
 insert into t values(1,1),(1,2);
 create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;

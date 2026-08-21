@@ -43,7 +43,7 @@ order by _tablet_id_;
 desc olap_table;
 
 -- Test 7: Virtual column should not appear in SHOW CREATE TABLE
-show create table olap_table;
+function: assert_query_not_contains("show create table olap_table;", "_tablet_id_")
 
 -- Test 8: Virtual column with JOIN
 [UC]select a._tablet_id_ as tablet_id_a, b._tablet_id_ as tablet_id_b, a.k1, a.k2, b.k2 as k2_b
