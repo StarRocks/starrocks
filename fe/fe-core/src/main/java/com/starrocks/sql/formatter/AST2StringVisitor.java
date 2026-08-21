@@ -548,8 +548,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         sqlBuilder.append(visit(queryRelation));
 
         if (queryRelation.hasOrderByClause()) {
-            List<OrderByElement> sortClause = queryRelation.getOrderBy();
-            sqlBuilder.append(" ORDER BY ").append(visitAstList(sortClause)).append(" ");
+            sqlBuilder.append(" ORDER BY ").append(visitOrderByClause(queryRelation)).append(" ");
         }
 
         // Limit clause.
@@ -1521,8 +1520,13 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     @Override
     public String visitOrderByElement(OrderByElement node, Void context) {
+        return renderOrderByElement(node, visit(node.getExpr()));
+    }
+
+    /** Same rendering, but with the sort expression already turned into text by the caller. */
+    protected String renderOrderByElement(OrderByElement node, String renderedExpr) {
         StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(visit(node.getExpr()));
+        strBuilder.append(renderedExpr);
         strBuilder.append(node.getIsAsc() ? " ASC" : " DESC");
 
         // When ASC and NULLS FIRST or DESC and NULLS LAST, we do not print NULLS FIRST/LAST
@@ -1616,6 +1620,38 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     private String visitAstList(List<? extends ParseNode> contexts) {
         return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
+    }
+
+    /**
+     * Renders ORDER BY, restoring an ordinal where the analyzer replaced one.
+     *
+     * <p>SelectAnalyzer rewrites {@code ORDER BY <n>} to the n-th output expression -- it stores that very
+     * object, "index can ensure no ambiguous". Printing the expression back is not always legal: it is
+     * checked against {@code verifyNoSubQuery} before the substitution, not after, so a select item that
+     * contains a subquery produces an ORDER BY the analyzer then rejects on the way back in. Emitting the
+     * ordinal again is the exact inverse of the substitution, and an ordinal is always legal here.
+     */
+    protected String visitOrderByClause(QueryRelation queryRelation) {
+        List<Expr> outputExpressions = queryRelation instanceof SelectRelation
+                ? ((SelectRelation) queryRelation).getOutputExpression() : null;
+        List<String> rendered = new ArrayList<>();
+        for (OrderByElement element : queryRelation.getOrderBy()) {
+            rendered.add(renderOrderByElement(element, renderSortExpr(element.getExpr(), outputExpressions)));
+        }
+        return Joiner.on(", ").join(rendered);
+    }
+
+    private String renderSortExpr(Expr sortExpr, List<Expr> outputExpressions) {
+        if (outputExpressions != null) {
+            for (int i = 0; i < outputExpressions.size(); i++) {
+                // Identity, not equality: only the analyzer's ordinal substitution aliases the two,
+                // an explicitly written expression parses into a distinct object.
+                if (outputExpressions.get(i) == sortExpr) {
+                    return String.valueOf(i + 1);
+                }
+            }
+        }
+        return visit(sortExpr);
     }
 
     protected String printWithParentheses(ParseNode node) {
