@@ -49,6 +49,8 @@ public:
 
     Status finish(SegmentPB* segment = nullptr) override;
 
+    StatusOr<std::unique_ptr<TabletWriter>> clone() const override;
+
     RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
 protected:

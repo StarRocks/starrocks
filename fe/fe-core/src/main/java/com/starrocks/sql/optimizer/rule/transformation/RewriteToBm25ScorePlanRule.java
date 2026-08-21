@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.IndexDef;
@@ -130,7 +131,11 @@ public class RewriteToBm25ScorePlanRule extends TransformationRule {
         // as the whole filter: a post-scan predicate would drop rows after the top-k
         // and could shrink the result below the limit. Otherwise the BE scores every
         // matched row and the TopN above applies the limit.
-        if (!ordering.isAscending() && scanOp.getPredicate() instanceof MatchExprOperator) {
+        // PK visibility is enforced by delvec outside Tantivy. If top-k were
+        // pushed into Tantivy, deleted documents could consume the limit and
+        // leave fewer than N visible rows after delvec filtering.
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS && !ordering.isAscending() &&
+                scanOp.getPredicate() instanceof MatchExprOperator) {
             newScanOp.setBm25ScoreLimit(topNOp.getLimit() + Math.max(0L, topNOp.getOffset()));
         }
 

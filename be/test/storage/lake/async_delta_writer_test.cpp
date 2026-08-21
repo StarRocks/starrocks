@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <thread>
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -663,6 +664,78 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
     delta_writer->close();
 }
 
+TEST_F(LakeAsyncDeltaWriterTest, test_cancel_running_block_merger) {
+    static const int kChunkSize = 128;
+    auto chunk = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto old_write_buffer_size = config::write_buffer_size;
+    auto old_parallel_merge = config::enable_load_spill_parallel_merge;
+    auto old_max_merge_bytes = config::load_spill_max_merge_bytes;
+    config::write_buffer_size = 1;
+    config::enable_load_spill_parallel_merge = true;
+    config::load_spill_max_merge_bytes = 1;
+    DeferOp restore_config([&]() {
+        config::write_buffer_size = old_write_buffer_size;
+        config::enable_load_spill_parallel_merge = old_parallel_merge;
+        config::load_spill_max_merge_bytes = old_max_merge_bytes;
+    });
+
+    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    CountDownLatch flush_latch(3);
+    for (int i = 0; i < 3; i++) {
+        delta_writer->write(&chunk, indexes.data(), indexes.size(), [](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            flush_latch.count_down();
+        });
+    }
+    flush_latch.wait();
+
+    CountDownLatch merge_started(1);
+    CountDownLatch resume_merge(1);
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments:process", [&](void*) {
+        merge_started.count_down();
+        resume_merge.wait();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_points([]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    Status finish_status;
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> result) {
+        finish_status = result.status();
+        finish_latch.count_down();
+    });
+    merge_started.wait();
+    delta_writer->cancel(Status::Cancelled("cancel running spill merge"));
+    resume_merge.count_down();
+    finish_latch.wait();
+
+    ASSERT_TRUE(finish_status.is_cancelled()) << finish_status;
+    ASSERT_TRUE(finish_status.message().find("cancel running spill merge") != std::string::npos);
+    delta_writer->close();
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     do_block_merger(true);
 }
@@ -787,6 +860,220 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush_after_finish) {
 
     // close
     delta_writer->close();
+}
+
+// Test that cancel() with a non-OK status causes subsequent write to fail
+TEST_F(LakeAsyncDeltaWriterTest, test_cancel) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // First write should succeed
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Cancel the writer
+    delta_writer->cancel(Status::Cancelled("transaction aborted"));
+
+    // Subsequent write should fail with cancel status
+    CountDownLatch write_after_cancel_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_TRUE(st.is_cancelled()) << st;
+        ASSERT_TRUE(st.message().find("transaction aborted") != std::string::npos);
+        write_after_cancel_latch.count_down();
+    });
+    write_after_cancel_latch.wait();
+
+    // close
+    delta_writer->close();
+}
+
+// Test that cancel() causes subsequent finish() to fail with cancelled status.
+TEST_F(LakeAsyncDeltaWriterTest, test_finish_after_cancel) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    delta_writer->cancel(Status::Cancelled("txn aborted before finish"));
+
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+        ASSERT_TRUE(res.status().message().find("txn aborted before finish") != std::string::npos);
+        finish_latch.count_down();
+    });
+    finish_latch.wait();
+
+    delta_writer->close();
+}
+
+// Test that cancel() with OK status is a no-op
+TEST_F(LakeAsyncDeltaWriterTest, test_cancel_with_ok_status) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Cancel with OK status should be a no-op
+    delta_writer->cancel(Status::OK());
+
+    // Write should still succeed
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Finish should succeed
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.status();
+        finish_latch.count_down();
+    });
+    finish_latch.wait();
+
+    // close
+    delta_writer->close();
+}
+
+// Test that multiple cancel() calls only use the first error status
+TEST_F(LakeAsyncDeltaWriterTest, test_multiple_cancel) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // First cancel with a specific status
+    delta_writer->cancel(Status::Cancelled("first cancel"));
+
+    // Second cancel with a different status should be ignored
+    delta_writer->cancel(Status::InternalError("second cancel"));
+
+    // Write should fail with the first cancel status
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_TRUE(st.is_cancelled()) << st;
+        ASSERT_TRUE(st.message().find("first cancel") != std::string::npos);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // close
+    delta_writer->close();
+}
+
+// Test that cancel() and close() can be called concurrently without crashing
+TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_cancel_and_close) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write some data first
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Call cancel() and close() concurrently - should not crash or deadlock
+    auto t1 = std::thread([&]() { delta_writer->cancel(Status::Cancelled("concurrent cancel")); });
+    auto t2 = std::thread([&]() { delta_writer->close(); });
+    t1.join();
+    t2.join();
 }
 
 } // namespace starrocks::lake

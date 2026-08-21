@@ -16,6 +16,8 @@
 
 #include <boost/algorithm/string/case_conv.hpp>
 
+#include "storage/tablet_schema.h"
+
 namespace starrocks {
 
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index) {
@@ -37,6 +39,19 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
     }
 }
 
+bool has_tantivy_index(const TabletSchema& tablet_schema) {
+    for (const auto& index : *tablet_schema.indexes()) {
+        if (index.index_type() != GIN) {
+            continue;
+        }
+        auto imp_type = get_inverted_imp_type(index);
+        if (imp_type.ok() && imp_type.value() == InvertedImplementType::TANTIVY) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type) {
     switch (parser_type) {
     case InvertedIndexParserType::PARSER_NONE:
@@ -49,6 +64,10 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_CHINESE;
     case InvertedIndexParserType::PARSER_JIEBA:
         return INVERTED_INDEX_PARSER_JIEBA;
+    case InvertedIndexParserType::PARSER_IK:
+        return INVERTED_INDEX_PARSER_IK;
+    case InvertedIndexParserType::PARSER_NGRAM:
+        return INVERTED_INDEX_PARSER_NGRAM;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }
@@ -66,6 +85,10 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
         return InvertedIndexParserType::PARSER_CHINESE;
     } else if (lower_value == INVERTED_INDEX_PARSER_JIEBA) {
         return InvertedIndexParserType::PARSER_JIEBA;
+    } else if (lower_value == INVERTED_INDEX_PARSER_IK) {
+        return InvertedIndexParserType::PARSER_IK;
+    } else if (lower_value == INVERTED_INDEX_PARSER_NGRAM) {
+        return InvertedIndexParserType::PARSER_NGRAM;
     }
 
     return InvertedIndexParserType::PARSER_UNKNOWN;
@@ -78,6 +101,35 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
         }
     }
     return INVERTED_INDEX_PARSER_NONE;
+}
+
+std::string get_parser_mode_string_from_properties(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_PARSER_MODE_KEY); it != properties.end()) {
+        return boost::algorithm::to_lower_copy(it->second);
+    }
+    return INVERTED_INDEX_PARSER_MAX_WORD;
+}
+
+StatusOr<std::string> get_tantivy_ngram_tokenizer_name(const std::map<std::string, std::string>& properties) {
+    const auto min_it = properties.find(INVERTED_INDEX_MIN_GRAM_KEY);
+    const auto max_it = properties.find(INVERTED_INDEX_MAX_GRAM_KEY);
+    if (min_it == properties.end() || max_it == properties.end()) {
+        return Status::InvalidArgument("tantivy ngram parser requires both min_gram and max_gram");
+    }
+
+    try {
+        const int min_gram = std::stoi(min_it->second);
+        const int max_gram = std::stoi(max_it->second);
+        if (min_gram <= 0 || max_gram <= 0) {
+            return Status::InvalidArgument("tantivy ngram min_gram and max_gram must be greater than zero");
+        }
+        if (min_gram > max_gram) {
+            return Status::InvalidArgument("tantivy ngram min_gram must not be greater than max_gram");
+        }
+        return "ngram:" + std::to_string(min_gram) + ":" + std::to_string(max_gram);
+    } catch (const std::exception&) {
+        return Status::InvalidArgument("tantivy ngram min_gram and max_gram must be positive integers");
+    }
 }
 
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties) {

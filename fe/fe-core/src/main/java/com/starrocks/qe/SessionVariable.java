@@ -337,6 +337,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_prune_column_after_index_filter";
 
     public static final String ENABLE_GIN_FILTER = "enable_gin_filter";
+    public static final String USE_TANTIVY_TOKENIZE = "use_tantivy_tokenize";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -1505,6 +1506,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_GIN_FILTER)
     private boolean enableGinFilter = true;
+
+    @VariableMgr.VarAttr(name = USE_TANTIVY_TOKENIZE)
+    private boolean useTantivyTokenize = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -3592,6 +3596,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableGinFilter;
     }
 
+    public boolean isUseTantivyTokenize() {
+        return useTantivyTokenize;
+    }
+
+    public void setUseTantivyTokenize(boolean useTantivyTokenize) {
+        this.useTantivyTokenize = useTantivyTokenize;
+    }
+
     public boolean isJoinLateMaterialization() {
         return joinLateMaterialization;
     }
@@ -5409,6 +5421,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_parquet_reader_page_index(enableParquetReaderPageIndex);
         tResult.setColumn_view_concat_rows_limit(columnViewConcatRowsLimit);
         tResult.setColumn_view_concat_bytes_limit(columnViewConcatRowsLimit);
+        tResult.setUse_tantivy_tokenize(useTantivyTokenize);
         return tResult;
     }
 

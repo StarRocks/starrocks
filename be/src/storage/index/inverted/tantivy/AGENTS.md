@@ -207,7 +207,8 @@ C++ files in this module must include the standard Apache 2.0 license header.
 
 | DDL `parser=` | Rust tokenizer constant | Algorithm |
 |---|---|---|
-| `english` / `standard` | `TOKENIZER_ENGLISH` | English word splitting + lowercase + stopwords |
+| `english` | `TOKENIZER_ENGLISH` | English word splitting + lowercase + stopwords |
+| `standard` | `TOKENIZER_STANDARD` | CLucene-compatible grammar + lowercase + stopwords |
 | `chinese` | `TOKENIZER_CJK` | CJK bigram (Lucene-style overlapping bigrams) |
 | `jieba` | `TOKENIZER_JIEBA` | jieba-rs dictionary segmentation |
 | `none` | `TOKENIZER_RAW` | No tokenization (entire input as one token) |

@@ -21,6 +21,7 @@
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset.h"
@@ -778,22 +779,30 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // after BE restart, we will ignore the colum v1
     auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);
     auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);
-    DeferOp clean_temp_files([&] { (void)FileSystem::Default()->delete_file(dest_path); });
+    auto src_index_path = IndexDescriptor::compound_index_file_path_from_segment(src_path);
+    auto dest_index_path = IndexDescriptor::compound_index_file_path_from_segment(dest_path);
+    DeferOp clean_temp_files([&] {
+        (void)FileSystem::Default()->delete_file(dest_path);
+        (void)FileSystem::Default()->delete_file(dest_index_path);
+    });
     int64_t t_rewrite_start = MonotonicMillis();
     // TODO(cbl): non-cloud-native mode currently doesn't support encryption,
     // so encryption meta support in segment file rewrite is not supported here
+    SegmentFileMark segment_file_mark{rowset->rowset_path(), rowset->rowset_id().to_string()};
     if (txn_meta.has_auto_increment_partial_update_column_id() &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+        MutableColumns* partial_update_columns =
+                _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr;
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment(
                 src_path, dest_path, _tablet_schema, _auto_increment_partial_update_states[segment_id], read_column_ids,
-                _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));
+                partial_update_columns, segment_file_mark));
     } else if (_partial_update_states.size() != 0) {
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo src{.path = src_path};
         FileInfo dest{.path = dest_path};
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(src, &dest, _tablet_schema, read_column_ids,
                                                                 _partial_update_states[segment_id].write_columns,
-                                                                segment_id, partial_rowset_footer));
+                                                                segment_id, partial_rowset_footer, segment_file_mark));
     }
     int64_t t_rewrite_end = MonotonicMillis();
 
@@ -801,6 +810,13 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // the subsequent apply process. And the segment will be treated as a full segment, so we must reload
     // segment[segment_id] of partial rowset
     if (FileSystem::Default()->path_exists(dest_path).ok()) {
+        if (FileSystem::Default()->path_exists(dest_index_path).ok()) {
+            auto delete_status = FileSystem::Default()->delete_file(src_index_path);
+            if (!delete_status.ok() && !delete_status.is_not_found()) {
+                return delete_status;
+            }
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(dest_index_path, src_index_path));
+        }
         RETURN_IF_ERROR(FileSystem::Default()->rename_file(dest_path, src_path));
         RETURN_IF_ERROR(rowset->reload_segment_with_schema(segment_id, _tablet_schema));
     }

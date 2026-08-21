@@ -294,7 +294,7 @@ void LoadChannel::cancel(const std::string& reason) {
     });
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
-        it.second->cancel();
+        it.second->cancel(reason);
     }
     print_cancel_msg = !_cancelled.load(std::memory_order_acquire);
     _cancelled.store(true, std::memory_order_release);

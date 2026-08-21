@@ -80,6 +80,10 @@ struct SegmentWriterOptions {
     SegmentFileMark segment_file_mark;
     std::string encryption_meta;
     bool is_compaction = false;
+    // When true, Tantivy GIN indexes are not produced inline. Row-mode PK
+    // partial update uses this so the final-row rebuilder is the only writer
+    // of the compound .idx file.
+    bool skip_tantivy_index = false;
     // Lake-mode identifiers used to isolate per-transaction tantivy temp dirs.
     // 0 means "not set" — callers in the shared-nothing path can leave them at default.
     int64_t tablet_id = 0;
@@ -156,6 +160,8 @@ public:
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
 
 private:
+    Status _finalize_compound_indexes();
+    void _cleanup_compound_index_temp_dirs() noexcept;
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
@@ -183,9 +189,9 @@ private:
 
     DictColumnsValidMap _global_dict_columns_valid_info;
 
-    // Compound index entries collected during finalize_columns from writers
-    // that support finish_compound (e.g. tantivy). Packed into a single .idx
-    // file after all column writers have finished.
+    // Compound index entries collected across every finalize_columns call.
+    // Vertical writers finalize one column group at a time, so packing must be
+    // deferred until finalize_footer after all groups have finished.
     std::vector<CompoundIndexEntry> _compound_entries;
 };
 

@@ -313,10 +313,19 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
 
+    auto* match_rhs_function =
+            expr->get_num_children() == 2 && expr->get_child(1)->node_type() == TExprNodeType::FUNCTION_CALL
+                    ? down_cast<VectorizedFunctionCallExpr*>(expr->get_child(1))
+                    : nullptr;
+    bool has_tokenize_rhs =
+            match_rhs_function != nullptr && boost::iequals(match_rhs_function->get_function_desc()->name, "tokenize");
+
     // check if satisfy vaild MATCH format
-    vaild_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
-                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
-                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
+    vaild_match =
+            vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
+            expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+            (expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL ||
+             (has_tokenize_rhs && (expr->op() == TExprOpcode::MATCH_ANY || expr->op() == TExprOpcode::MATCH_ALL)));
 
     vaild_pred = iterator->is_untokenized() ? (vaild_like || vaild_match) : vaild_match;
 
@@ -328,21 +337,50 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         return Status::NotSupported(ss.str());
     }
 
-    auto* like_target = dynamic_cast<VectorizedLiteral*>(expr->get_child(1));
-    DCHECK(like_target != nullptr);
-    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
-    Slice padded_value(literal_col->get(0).get_slice());
-    // MATCH a empty string should always return empty set.
-    if (padded_value.empty()) {
-        *row_bitmap -= *row_bitmap;
-        return Status::OK();
-    }
-    std::string str_v = padded_value.to_string();
+    Slice padded_value;
+    ColumnPtr literal_column;
+    TokenizedQueryValue tokenized_query;
+    bool is_tokenized_query = false;
+    std::string str_v;
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
+
+    if (has_tokenize_rhs) {
+        ASSIGN_OR_RETURN(auto tokens_column, _expr_ctxs[0]->evaluate(match_rhs_function, nullptr));
+        Datum tokens = tokens_column->get(0);
+        if (tokens.is_null()) {
+            row_bitmap->clear();
+            return Status::OK();
+        }
+        for (const auto& token : tokens.get_array()) {
+            if (!token.is_null() && !token.get_slice().empty()) {
+                tokenized_query.terms.emplace_back(token.get_slice().to_string());
+            }
+        }
+        if (tokenized_query.terms.empty()) {
+            row_bitmap->clear();
+            return Status::OK();
+        }
+        is_tokenized_query = true;
+        query_type = expr->op() == TExprOpcode::MATCH_ANY ? InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY
+                                                          : InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY;
+    } else {
+        auto* like_target = dynamic_cast<VectorizedLiteral*>(expr->get_child(1));
+        DCHECK(like_target != nullptr);
+        ASSIGN_OR_RETURN(literal_column, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
+        padded_value = literal_column->get(0).get_slice();
+        // MATCH an empty string should always return an empty set.
+        if (padded_value.empty()) {
+            row_bitmap->clear();
+            return Status::OK();
+        }
+        str_v = padded_value.to_string();
+    }
     bool has_wildcard = str_v.find('*') != std::string::npos || str_v.find('%') != std::string::npos;
 
     // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
-    if (vaild_match && expr->op() == TExprOpcode::MATCH_ANY) {
+    if (is_tokenized_query) {
+        // query_type was selected above; the terms must not be analyzed again.
+    } else if (vaild_match && expr->op() == TExprOpcode::MATCH_ANY) {
         query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
     } else if (vaild_match && expr->op() == TExprOpcode::MATCH_ALL) {
         query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
@@ -368,12 +406,18 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &phrase_value, query_type, &roaring));
     } else if (row_to_score != nullptr && !with_not &&
                (query_type == InvertedIndexQueryType::MATCH_ANY_QUERY ||
-                query_type == InvertedIndexQueryType::MATCH_ALL_QUERY)) {
+                query_type == InvertedIndexQueryType::MATCH_ALL_QUERY ||
+                query_type == InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY ||
+                query_type == InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY)) {
         // BM25 score() path: capture per-row scores alongside the match bitmap.
-        RETURN_IF_ERROR(iterator->read_from_inverted_index_scored(column_name, &padded_value, query_type, &roaring,
+        const void* query_value = is_tokenized_query ? static_cast<const void*>(&tokenized_query)
+                                                     : static_cast<const void*>(&padded_value);
+        RETURN_IF_ERROR(iterator->read_from_inverted_index_scored(column_name, query_value, query_type, &roaring,
                                                                   row_to_score));
     } else {
-        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+        const void* query_value = is_tokenized_query ? static_cast<const void*>(&tokenized_query)
+                                                     : static_cast<const void*>(&padded_value);
+        RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, query_value, query_type, &roaring));
     }
     if (with_not) {
         *row_bitmap -= roaring;

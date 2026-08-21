@@ -51,6 +51,7 @@
 #include "runtime/exec_env.h"
 #include "storage/index/compound_index_file_writer.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/options.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
@@ -76,7 +77,9 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
     CHECK_NOTNULL(_wfile.get());
 }
 
-SegmentWriter::~SegmentWriter() = default;
+SegmentWriter::~SegmentWriter() {
+    _cleanup_compound_index_temp_dirs();
+}
 
 const std::string& SegmentWriter::segment_path() const {
     return _wfile->filename();
@@ -181,8 +184,14 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_bitmap_index = column.has_bitmap_index();
         opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
-
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index && _opts.skip_tantivy_index) {
+            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(opts.tablet_index.at(GIN)));
+            if (imp_type == InvertedImplementType::TANTIVY) {
+                opts.need_inverted_index = false;
+            }
+        }
+
         if (opts.need_inverted_index) {
             std::string index_dir;
             if (!_opts.segment_file_mark.rowset_path_prefix.empty()) {
@@ -352,29 +361,6 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _column_writers.clear();
     _column_indexes.clear();
 
-    if (!_compound_entries.empty()) {
-        std::string bin_path;
-        if (!_opts.segment_file_mark.rowset_path_prefix.empty()) {
-            bin_path = IndexDescriptor::compound_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
-                                                                 _opts.segment_file_mark.rowset_id, _segment_id);
-        } else {
-            // Lake mode: derive .idx path from the segment .dat path.
-            bin_path = IndexDescriptor::compound_index_file_path_from_segment(_wfile->filename());
-        }
-        ASSIGN_OR_RETURN(auto bin_wfile, fs::new_writable_file(bin_path));
-        RETURN_IF_ERROR(CompoundIndexFileWriter::pack(_compound_entries, bin_wfile.get()));
-        RETURN_IF_ERROR(bin_wfile->close());
-
-        // Clean up temp directories created by compound-output writers (e.g. tantivy).
-        for (const auto& entry : _compound_entries) {
-            if (entry.files.empty()) continue;
-            std::filesystem::path parent = std::filesystem::path(entry.files[0].local_path).parent_path();
-            std::error_code ec;
-            std::filesystem::remove_all(parent, ec);
-        }
-        _compound_entries.clear();
-    }
-
     if (_has_key) {
         uint64_t index_offset = _wfile->size();
         RETURN_IF_ERROR(_write_short_key_index());
@@ -385,12 +371,61 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 }
 
 Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position) {
+    RETURN_IF_ERROR(_finalize_compound_indexes());
     if (footer_position != nullptr) {
         *footer_position = _wfile->size();
     }
     RETURN_IF_ERROR(_write_footer());
     *segment_file_size = _wfile->size();
     return _wfile->close();
+}
+
+Status SegmentWriter::_finalize_compound_indexes() {
+    if (_compound_entries.empty()) {
+        return Status::OK();
+    }
+
+    std::string bin_path;
+    if (!_opts.segment_file_mark.rowset_path_prefix.empty()) {
+        bin_path = IndexDescriptor::compound_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                             _opts.segment_file_mark.rowset_id, _segment_id);
+    } else {
+        // Lake mode: derive .idx path from the segment .dat path.
+        bin_path = IndexDescriptor::compound_index_file_path_from_segment(_wfile->filename());
+    }
+
+    ASSIGN_OR_RETURN(auto bin_fs, FileSystem::CreateSharedFromString(bin_path));
+    WritableFileOptions write_options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto bin_wfile, bin_fs->new_writable_file(write_options, bin_path));
+    auto pack_status = CompoundIndexFileWriter::pack(_compound_entries, bin_wfile.get());
+    if (!pack_status.ok()) {
+        (void)bin_wfile->close();
+        (void)bin_fs->delete_file(bin_path);
+        return pack_status;
+    }
+    auto close_status = bin_wfile->close();
+    if (!close_status.ok()) {
+        (void)bin_fs->delete_file(bin_path);
+        return close_status;
+    }
+
+    _cleanup_compound_index_temp_dirs();
+    _compound_entries.clear();
+    return Status::OK();
+}
+
+void SegmentWriter::_cleanup_compound_index_temp_dirs() noexcept {
+    for (const auto& entry : _compound_entries) {
+        if (entry.files.empty()) {
+            continue;
+        }
+        std::filesystem::path parent = std::filesystem::path(entry.files[0].local_path).parent_path();
+        std::error_code ec;
+        std::filesystem::remove_all(parent, ec);
+        if (ec) {
+            LOG(WARNING) << "failed to clean compound index temp dir " << parent << ": " << ec.message();
+        }
+    }
 }
 
 Status SegmentWriter::_write_short_key_index() {

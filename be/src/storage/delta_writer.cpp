@@ -21,6 +21,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -257,6 +258,17 @@ Status DeltaWriter::_init() {
             return Status::InternalError("bad column_with_row schema, no __row column");
         }
         real_num_columns -= 1;
+    }
+
+    const bool is_column_mode = _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+                                _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE;
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < real_num_columns &&
+        is_column_mode && has_tantivy_index(*_tablet_schema)) {
+        auto st = Status::NotSupported(
+                "Tantivy inverted index on Primary Key table does not support column-mode partial update; "
+                "use row mode instead");
+        _set_state(kAborted, st);
+        return st;
     }
 
     // maybe partial update, change to partial tablet schema

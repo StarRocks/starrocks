@@ -50,11 +50,12 @@ Slop range: `[0, INT_MAX/2]`. Out-of-range values throw
 ```
 CLUCENE   -- existing (shared-nothing only in shared-data mode)
 BUILTIN   -- existing (default for shared-data when imp_lib unspecified)
-TANTIVY   -- NEW (Phase 1: DUPLICATE_KEYS only)
+TANTIVY   -- supports DUPLICATE_KEYS and PRIMARY_KEYS
 ```
 
 ```sql
--- Create a tantivy-backed GIN index on a duplicate-keys table:
+-- Create a tantivy-backed GIN index on a duplicate-keys table.
+-- PRIMARY KEY tables use the same index syntax.
 CREATE TABLE t (
   id BIGINT NOT NULL,
   body VARCHAR(500) NOT NULL,
@@ -75,7 +76,8 @@ PROPERTIES ("replication_num" = "1");
 | `imp_lib = clucene` in shared-data mode | Rejected (existing) |
 | `imp_lib = tantivy` in shared-data mode | Allowed |
 | `imp_lib` unspecified in shared-data mode | Defaults to `BUILTIN` (unchanged from prior) |
-| `imp_lib = tantivy` on non-DUP_KEYS table | **Rejected** (Phase 1 limit) |
+| `imp_lib = tantivy` on DUP_KEYS or PRIMARY_KEYS table | Allowed |
+| `imp_lib = tantivy` on other table models | Rejected |
 | `dict_gram_num` set with `imp_lib = tantivy` | Rejected (existing rule: only builtin) |
 | `support_phrase` / `support_bm25` set with non-tantivy | Rejected |
 

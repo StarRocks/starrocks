@@ -350,6 +350,24 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
         ASSERT_FALSE(bitmap.contains(3));
     }
 
+    // Pretokenized terms are consumed verbatim, without running the index analyzer again.
+    {
+        TokenizedQueryValue query{{"hello", "world"}};
+        roaring::Roaring bitmap;
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY, &bitmap));
+        ASSERT_EQ(3, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+        ASSERT_TRUE(bitmap.contains(1));
+        ASSERT_TRUE(bitmap.contains(2));
+    }
+    {
+        TokenizedQueryValue query{{"hello", "world"}};
+        roaring::Roaring bitmap;
+        ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY, &bitmap));
+        ASSERT_EQ(1, bitmap.cardinality());
+        ASSERT_TRUE(bitmap.contains(0));
+    }
+
     delete iter;
 }
 
