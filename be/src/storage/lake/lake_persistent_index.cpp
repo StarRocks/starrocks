@@ -764,7 +764,8 @@ Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
         TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
         const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables) {
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables,
+        bool count_open_corruption_metric) {
     sstable::ReadOptions read_options;
     // No need to cache input sst's blocks.
     read_options.fill_cache = false;
@@ -782,7 +783,7 @@ Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()), nullptr,
-                                 false /* need filter */, nullptr, metadata, tablet_mgr));
+                                 false /* need filter */, nullptr, metadata, tablet_mgr, count_open_corruption_metric));
         PersistentIndexSstablePtr merging_sstable = std::move(sstable);
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
@@ -860,13 +861,11 @@ Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(Tablet
         overlay_watermark = std::max(overlay_watermark, input.max_rss_rowid());
     }
 
-    auto drop_input_cache_on_corruption = [&](const Status& st, bool increment_metric) {
+    auto drop_input_cache_on_corruption = [&](const Status& st) {
         if (!st.is_corruption()) {
             return;
         }
-        if (increment_metric) {
-            StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        }
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
         LOG(WARNING) << "PK index tablet-merge overlay hit corruption, dropping local cache of " << inputs.size()
                      << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
         for (const auto& input : inputs) {
@@ -878,23 +877,22 @@ Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(Tablet
     std::unique_ptr<sstable::Iterator> merging_iter;
     bool contain_shared_sstables = false;
     auto prepare_st = prepare_merging_iterator_for_sstables(tablet_mgr, input_metadata, inputs, &opened_inputs,
-                                                            &merging_iter, &contain_shared_sstables);
+                                                            &merging_iter, &contain_shared_sstables,
+                                                            false /* overlay owns its corruption metric */);
     if (!prepare_st.ok()) {
-        // PersistentIndexSstable::init already increments the read-error metric once
-        // when opening the failing input returns Corruption.
-        drop_input_cache_on_corruption(prepare_st, false);
+        drop_input_cache_on_corruption(prepare_st);
         return prepare_st;
     }
     if (!merging_iter->Valid()) {
         auto st = merging_iter->status();
-        drop_input_cache_on_corruption(st, true);
+        drop_input_cache_on_corruption(st);
         return st;
     }
 
     auto outputs_or = merge_sstables(std::move(merging_iter), false, tablet_mgr, input_metadata,
                                      contain_shared_sstables, KeyValueMergerOutputMode::kDuplicateKeysOnly, true);
     if (!outputs_or.ok()) {
-        drop_input_cache_on_corruption(outputs_or.status(), true);
+        drop_input_cache_on_corruption(outputs_or.status());
         return outputs_or.status();
     }
     if (outputs_or->empty()) {
