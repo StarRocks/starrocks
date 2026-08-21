@@ -48,9 +48,9 @@ public:
         // Use a per-test unique sub-directory so cases do not collide when run in parallel and
         // failed runs do not poison subsequent ones.
         std::error_code ec;
-        std::filesystem::path tmp = std::filesystem::temp_directory_path(ec) /
-                                    ("clucene_match_phrase_ut_" + std::to_string(::getpid()) + "_" +
-                                     std::to_string(++_counter));
+        std::filesystem::path tmp =
+                std::filesystem::temp_directory_path(ec) /
+                ("clucene_match_phrase_ut_" + std::to_string(::getpid()) + "_" + std::to_string(++_counter));
         std::filesystem::remove_all(tmp, ec); // clean leftovers if any
         std::filesystem::create_directories(tmp);
         _index_dir = tmp.string();
@@ -254,10 +254,10 @@ TEST_F(CLuceneMatchPhraseTest, match_phrase_multi_token_hits_only_when_adjacent_
     write_index(
             {
                     "the quick brown fox jumps over the lazy dog", // row 0: contains "quick brown"
-                    "the brown quick fox",                          // row 1: order reversed
-                    "the quick green brown fox",                    // row 2: word in between
-                    "no animals here",                              // row 3: unrelated
-                    "another quick brown story",                    // row 4: contains "quick brown"
+                    "the brown quick fox",                         // row 1: order reversed
+                    "the quick green brown fox",                   // row 2: word in between
+                    "no animals here",                             // row 3: unrelated
+                    "another quick brown story",                   // row 4: contains "quick brown"
             },
             idx);
     auto reader = make_reader(InvertedIndexParserType::PARSER_ENGLISH, /*support_phrase_override=*/true);
