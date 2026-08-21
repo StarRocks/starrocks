@@ -804,6 +804,16 @@ public class DesensitizedSQLBuilder {
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 String partition = partitionInfo.toSql(olapTable, null);
                 int startIdx = partition.indexOf("(");
+                if (startIdx < 0) {
+                    // Automatic partition without parens: PARTITION BY `col1`, `col2`
+                    String prefix = "PARTITION BY ";
+                    String colsString = partition.substring(prefix.length());
+                    String[] cols = colsString.split(", ");
+                    String desensitizeCols = Arrays.stream(cols)
+                            .map(e -> desensitizeValue(StringUtils.lowerCase(e.substring(1, e.length() - 1))))
+                            .collect(Collectors.joining(", "));
+                    return "\n" + prefix + desensitizeCols;
+                }
                 int endIdx = partition.indexOf(")");
                 String colsString = partition.substring(startIdx + 1, endIdx);
                 String[] cols = colsString.split(", ");
