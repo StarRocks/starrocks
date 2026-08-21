@@ -671,6 +671,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 Range 分布的增量物化视图（incremental materialized view）刷新启用基于采样的 Tablet 预分裂。这类物化视图以一个隐藏的 row-id 列作为键，其取值域是预先已知的，因此边界由推导得出而非采样得出，完全不读取数据。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.2.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - 默认值: 300
@@ -737,7 +746,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
+1. 将四个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` 和 `enable_tablet_pre_split_for_mv_refresh`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

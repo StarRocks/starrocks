@@ -1,5 +1,13 @@
 -- name: test_tablet_reshard_jobs
+<<<<<<< HEAD
 -- Scope the scan to this case's own database. tablet_reshard_jobs is cluster-wide, and in
 -- shared-data mode tables default to range distribution, so concurrent cases leave FINISHED
 -- SPLIT_TABLET jobs behind and an unscoped scan is not deterministic.
 SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database();
+=======
+-- The view is cluster-global: any reshard anywhere -- another case splitting a tablet, or the
+-- background split/merge daemon -- lands a row here, so recording an unfiltered row set asserts
+-- something this case does not own. Scope it to an impossible job id: the view is still scanned and
+-- its columns still projected, which is what this smoke test is for.
+SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs WHERE JOB_ID < 0;
+>>>>>>> b9a25f230e8... [Enhancement] Pre-split the target partition of an incremental MV refresh (#78041)

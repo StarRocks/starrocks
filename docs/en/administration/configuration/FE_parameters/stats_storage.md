@@ -671,6 +671,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP or external Iceberg table. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
 - Introduced in: v4.1.0
 
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for the refresh of a range-distributed incremental materialized view. Such a view is keyed by a hidden row-id column whose value domain is known in advance, so its boundaries are derived rather than sampled and no data is read. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.2.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - Default: 300
@@ -737,7 +746,7 @@ This topic introduces the following types of FE configurations:
 
 To disable the feature safely before a downgrade or during a production rollback:
 
-1. Set all three pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, and `enable_tablet_pre_split_for_insert_from_table`. New loads will skip pre-split immediately.
+1. Set all four pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, `enable_tablet_pre_split_for_insert_from_table`, and `enable_tablet_pre_split_for_mv_refresh`. New loads will skip pre-split immediately.
 2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
 3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
 
