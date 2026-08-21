@@ -46,6 +46,11 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+>>>>>>> 524a94bb33 ([Enhancement] Collect the scan conjunct lists the dict rewriter already rewrites (#77772))
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -1195,13 +1200,51 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Check if the column is an extended string column, if so, it can be used for global dict optimization.
+     */
+    private boolean checkExtendedColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        if (!sessionVariable.isEnableJSONV2DictOpt()) {
+            return false;
+        }
+        String colId = scan.getColRefToColumnMetaMap().get(column).getColumnId().getId();
+        for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
+            if (path.isExtended() &&
+                    path.getLinearPath().equals(colId) &&
+                    path.getType() == TAccessPathType.ROOT &&
+                    path.getValueType().isStringType()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void addScanConjuncts(List<ScalarOperator> predicates, ScanOperatorPredicates scanPredicates) {
+        predicates.addAll(scanPredicates.getNoEvalPartitionConjuncts());
+        predicates.addAll(scanPredicates.getNonPartitionConjuncts());
+        predicates.addAll(scanPredicates.getMinMaxConjuncts());
+    }
+
+>>>>>>> 524a94bb33 ([Enhancement] Collect the scan conjunct lists the dict rewriter already rewrites (#77772))
     private void collectPredicate(Operator operator, DecodeInfo info) {
-        if (operator.getPredicate() == null) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        if (operator.getPredicate() != null) {
+            predicates.add(operator.getPredicate());
+        }
+        if (operator instanceof PhysicalHiveScanOperator hiveScan) {
+            addScanConjuncts(predicates, hiveScan.getScanOperatorPredicates());
+        } else if (operator instanceof PhysicalIcebergScanOperator icebergScan) {
+            addScanConjuncts(predicates, icebergScan.getScanOperatorPredicates());
+        }
+        if (predicates.isEmpty()) {
             return;
         }
         DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(info.outputStringColumns,
                 structManager);
-        dictExpressionCollector.collect(operator.getPredicate());
+        predicates.forEach(dictExpressionCollector::collect);
 
         info.outputStringColumns.getStream().forEach(c -> {
             List<ScalarOperator> expressions = dictExpressionCollector.getDictExpressions(c);
