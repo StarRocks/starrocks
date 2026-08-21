@@ -15,7 +15,7 @@ This function is equivalent to [str_to_date](./str_to_date.md) but has a differe
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE str2date(VARCHAR str, VARCHAR format);
 ```
 

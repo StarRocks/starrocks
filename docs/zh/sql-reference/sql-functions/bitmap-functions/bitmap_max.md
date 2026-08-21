@@ -11,7 +11,7 @@ description: "获取 Bitmap 中的最大值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 bitmap_max(bitmap)
 ```
 

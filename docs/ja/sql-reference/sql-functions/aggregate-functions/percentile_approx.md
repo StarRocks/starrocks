@@ -13,7 +13,7 @@ p 指定されたパーセンタイルの加重近似値を返します。ここ
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE PERCENTILE_APPROX(expr, DOUBLE|ARRAY<DOUBLE> p[, DOUBLE compression])
 ```
 

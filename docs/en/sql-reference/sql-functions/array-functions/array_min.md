@@ -11,7 +11,7 @@ Obtains the minimum value of all data in an ARRAY and return this result.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_min(array(type))
 ```
 

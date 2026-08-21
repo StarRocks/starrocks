@@ -11,7 +11,7 @@ description: "ARRAY_LENGTH関数は配列内の要素数を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT array_length(any_array)
 ```
 

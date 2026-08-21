@@ -13,7 +13,7 @@ v2.5 では、指定された時間を時間間隔の終わりに変換するこ
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 ```
 

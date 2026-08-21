@@ -13,7 +13,7 @@ description: "16進数でエンコードされた文字列をもとの文字列�
 
 ## 構文
 
-```Haskell
+```plaintext
 hex_decode_string(str);
 ```
 

@@ -11,7 +11,7 @@ Converts a geometric figure to WKT (Well Known Text) format.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR ST_AsText(GEOMETRY geo)
 ```
 

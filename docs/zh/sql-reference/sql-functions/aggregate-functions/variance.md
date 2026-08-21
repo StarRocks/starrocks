@@ -11,7 +11,7 @@ description: "返回表达式的总体方差，支持作为窗口函数使用。
 
 ## 语法
 
-```Haskell
+```plaintext
 VARIANCE(expr)
 ```
 

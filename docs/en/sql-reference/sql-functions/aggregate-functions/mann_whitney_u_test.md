@@ -9,7 +9,7 @@ description: "mann_whitney_u_test performs the Mann-Whitney rank test on samples
 
 ## Syntax
 
-```Haskell
+```plaintext
 MANN_WHITNEY_U_TEST (sample_data, sample_treatment[, alternative[, continuity_correction]])
 ```
 

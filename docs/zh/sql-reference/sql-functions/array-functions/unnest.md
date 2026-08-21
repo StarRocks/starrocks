@@ -17,7 +17,7 @@ UNNEST 是一种表函数 (table function)，用于将一个数组展开成多�
 
 ## 语法
 
-```Haskell
+```plaintext
 unnest(array0[, array1 ...])
 ```
 

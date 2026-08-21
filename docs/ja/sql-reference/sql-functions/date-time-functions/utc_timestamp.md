@@ -9,7 +9,7 @@ description: "現在のUTC日付と時刻を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME UTC_TIMESTAMP()
 ```
 

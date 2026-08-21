@@ -20,7 +20,7 @@ datediff と [date_diff](./date_diff.md) の違いは、date_diff が `unit` パ
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 

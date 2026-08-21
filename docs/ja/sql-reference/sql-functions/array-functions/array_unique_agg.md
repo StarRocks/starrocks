@@ -11,7 +11,7 @@ ARRAY 列の異なる値 (`NULL` を含む) を集約し、1 つの行にまと�
 
 ## 構文
 
-```Haskell
+```plaintext
 ARRAY_UNIQUE_AGG(col)
 ```
 

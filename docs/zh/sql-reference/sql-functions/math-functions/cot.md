@@ -11,7 +11,7 @@ description: "返回以弧度表示的角度x的余切值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 COT(x);
 ```
 

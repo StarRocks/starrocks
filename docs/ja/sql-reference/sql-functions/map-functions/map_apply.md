@@ -9,7 +9,7 @@ description: "元のMapのキーと値にLambda式を適用し、新しいMapを
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_apply(lambda_func, any_map)
 ```
 

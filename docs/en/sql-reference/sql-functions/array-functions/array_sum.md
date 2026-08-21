@@ -13,7 +13,7 @@ From StarRocks 2.5, array_sum() can take a lambda expression as an argument. How
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_sum(array(type))
 array_sum(lambda_function, arr1,arr2...) = array_sum(array_map(lambda_function, arr1,arr2...))
 ```

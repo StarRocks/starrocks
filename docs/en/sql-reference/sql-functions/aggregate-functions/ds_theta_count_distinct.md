@@ -13,7 +13,7 @@ The relative error is 3.125% (95% confidence). For more information, see the [re
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT ds_theta_count_distinct(expr)
 ```
 

@@ -9,7 +9,7 @@ description: "指定された長さに達するまで文字列の左側にパッ
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR lpad(VARCHAR str, INT len[, VARCHAR pad])
 ```
 

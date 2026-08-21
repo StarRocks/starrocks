@@ -9,7 +9,7 @@ description: "現在のデータベースの名前を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 database()
 ```
 

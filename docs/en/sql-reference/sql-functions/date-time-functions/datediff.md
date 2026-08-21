@@ -22,7 +22,7 @@ The difference between datediff and [date_diff](./date_diff.md) lies in that dat
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 

@@ -9,7 +9,7 @@ description: "STD関数は式の標準偏差を返し、v2.5.10以降はウィ�
 
 ## Syntax
 
-```Haskell
+```plaintext
 STD(expr)
 ```
 

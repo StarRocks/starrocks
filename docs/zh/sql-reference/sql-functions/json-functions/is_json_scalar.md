@@ -12,7 +12,7 @@ description: "返回JSON值是否为标量（不是对象或数组）。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN is_json_scalar(JSON)
 ```
 

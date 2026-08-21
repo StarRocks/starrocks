@@ -11,7 +11,7 @@ description: "将整数转换为二进制表示。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BIN(x);
 ```
 

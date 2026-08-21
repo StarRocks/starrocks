@@ -11,7 +11,7 @@ description: "计算两个参数的乘积。"
 
 ## 语法
 
-```Haskell
+```plaintext
 MULTIPLY(arg1, arg2);
 ```
 

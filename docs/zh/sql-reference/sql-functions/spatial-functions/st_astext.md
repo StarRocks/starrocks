@@ -11,7 +11,7 @@ description: "将几何图形转换为 WKT（Well Known Text）格式。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_AsText(geo)
 ```
 

@@ -19,7 +19,7 @@ description: "判断数组中的所有元素是否都匹配给定的谓词条件
 
 ## 语法
 
-```Haskell
+```plaintext
 all_match(lambda_function, arr1, arr2...)
 ```
 

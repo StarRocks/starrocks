@@ -13,7 +13,7 @@ This function is useful for testing and debugging query execution behavior. For 
 
 ## Syntax
 
-```Haskell
+```plaintext
 materialize(x);
 ```
 

@@ -11,7 +11,7 @@ This function returns the length of a string. For multi-byte characters, it retu
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT char_length(VARCHAR str)
 ```
 
