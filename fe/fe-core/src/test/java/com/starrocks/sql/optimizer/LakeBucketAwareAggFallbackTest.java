@@ -94,8 +94,8 @@ public class LakeBucketAwareAggFallbackTest {
     @Test
     public void keepWhenPredicatePinsGroupingColumn() {
         // Statistics keep the table-level NDV (partition predicates are stripped before scan
-        // stats estimation), but the equality predicate deterministically pins the grouping
-        // column to one value -> tiny aggregation, keep the one-stage plan.
+        // stats estimation), but the equality predicate pins the grouping column to one value.
+        // The aggregation is tiny, so the one-stage plan stays.
         HashDistributionDesc groupByBucketColOnly = new HashDistributionDesc(
                 List.of(new DistributionCol(1, true)), HashDistributionDesc.SourceType.SHUFFLE_AGG);
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,

@@ -2216,11 +2216,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LAKE_BUCKET_ASSIGN_MODE)
     private String lakeBucketAssignMode = SessionVariableConstants.BALANCE;
 
-    // Adaptive fallback for bucket-aware execution on lake: when the estimated number of
-    // Iceberg buckets surviving partition/predicate pruning is below this ratio multiplied
-    // by the number of alive workers, a shuffle-requiring aggregation stops claiming the
-    // bucket distribution and the planner falls back to a shuffle (multi-stage) aggregation.
-    // <= 0 disables the fallback.
+    // Minimum buckets per alive worker for bucket-aware aggregation on lake tables. If pruning
+    // is estimated to leave fewer buckets than this ratio * workers, the scan does not claim
+    // the bucket distribution and the planner builds a normal shuffle (multi-stage) aggregation
+    // instead. <= 0 disables the fallback.
     @VarAttr(name = LAKE_BUCKET_AWARE_MIN_BUCKETS_PER_WORKER)
     private double lakeBucketAwareMinBucketsPerWorker = 1.0;
 

@@ -36,14 +36,14 @@ import java.util.OptionalDouble;
 import java.util.OptionalLong;
 
 /**
- * Decides whether an Iceberg scan should refuse to advertise its bucket distribution for a
- * shuffle-aggregation requirement because too few buckets survive pruning to feed the cluster.
+ * Decides whether an Iceberg scan should stop advertising its bucket distribution for a
+ * shuffle-aggregation requirement because pruning leaves too few buckets.
  * <p>
- * Bucket-aware execution derives the scan's distribution purely from table metadata, so a
- * predicate that prunes to a handful of buckets (e.g. an equality filter on the bucket source
- * column) silently caps the one-stage aggregation's parallelism at the number of surviving
- * buckets. When that number is small relative to the cluster and the aggregation output is
- * non-trivial, a shuffle (multi-stage) aggregation is preferable.
+ * Bucket-aware execution derives the scan's distribution from table metadata alone. A predicate
+ * that prunes to a few buckets (for example an equality filter on the bucket source column) caps
+ * the one-stage aggregation's parallelism at the number of surviving buckets. When that number
+ * is small relative to the cluster and the aggregation produces many groups, a shuffle
+ * (multi-stage) aggregation is faster.
  * <p>
  * See OutputPropertyDeriver#visitPhysicalIcebergScan.
  */
@@ -72,9 +72,8 @@ public final class LakeBucketAwareAggFallback {
         if (survivingBuckets >= minBucketsPerWorker * aliveWorkerNum) {
             return false;
         }
-        // Few buckets survive: the one-stage plan caps aggregation parallelism at survivingBuckets
-        // serial streams. Keep it only when the aggregation output is small enough that those
-        // streams stay cheap; with unknown grouping statistics assume the worst.
+        // Few buckets survive, so the one-stage plan runs at most survivingBuckets parallel
+        // streams. Keep it only if the group count is known and fits the cluster's total DOP.
         int totalDop = aliveWorkerNum * Math.max(1, effectiveDop);
         OptionalDouble groupCount = estimateGroupCount(requiredDesc, colRefToColumnMetaMap, scanPredicate, statistics);
         return groupCount.isEmpty() || groupCount.getAsDouble() > totalDop;
@@ -141,10 +140,10 @@ public final class LakeBucketAwareAggFallback {
     }
 
     // Group count of the required (group-by) columns; empty (treated as high) when a column has
-    // neither a known statistic nor a deterministic predicate bound. Predicates on partition
-    // columns are stripped before scan-statistics estimation (StatisticsCalculator
-    // #removePartitionPredicate), so an equality on the bucket source column does not reduce its
-    // NDV in the scan statistics — re-apply the deterministic bound here.
+    // neither a known statistic nor a deterministic predicate bound. StatisticsCalculator
+    // #removePartitionPredicate strips partition-column predicates before scan-statistics
+    // estimation, so an equality on the bucket source column does not reduce its NDV there.
+    // Re-apply the deterministic bound here.
     private static OptionalDouble estimateGroupCount(HashDistributionDesc requiredDesc,
                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                                      ScalarOperator scanPredicate,
