@@ -2039,16 +2039,12 @@ struct LegacySstableSourceRoutes {
 };
 
 StatusOr<LegacySstableSourceRoutes> build_legacy_sstable_source_routes(
-        const std::vector<TabletMergeContext>& merge_contexts, const std::vector<size_t>& old_tablet_indexes,
-        const TabletSchemaCSPtr& tablet_schema) {
+        const std::vector<TabletMergeContext>& merge_contexts, const TabletSchemaCSPtr& tablet_schema) {
     LegacySstableSourceRoutes result;
-    result.routes.reserve(old_tablet_indexes.size());
+    result.routes.reserve(merge_contexts.size());
     bool any_has_range = false;
     bool all_have_range = true;
-    for (size_t old_tablet_index : old_tablet_indexes) {
-        if (old_tablet_index >= merge_contexts.size()) {
-            return Status::InternalError("legacy SST source route has an invalid old tablet index");
-        }
+    for (size_t old_tablet_index = 0; old_tablet_index < merge_contexts.size(); ++old_tablet_index) {
         const auto& metadata = merge_contexts[old_tablet_index].metadata();
         LegacySstableSourceRoute route;
         route.old_tablet_index = old_tablet_index;
@@ -2453,8 +2449,12 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
     source_read_options.fill_cache = false;
     std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
     auto merged_tablet_schema = TabletSchema::create(new_metadata.schema());
-    ASSIGN_OR_RETURN(auto source_routes,
-                     build_legacy_sstable_source_routes(merge_contexts, old_tablet_indexes, merged_tablet_schema));
+    // Filename occurrences select and validate the physical SST, but they are
+    // not an ownership boundary: a split sibling may already have compacted
+    // the inherited filename away while the physical file still contains its
+    // key range. Route ranged entries through every merge input so that such a
+    // sibling's replacement rowsets can resolve the stored rssid.
+    ASSIGN_OR_RETURN(auto source_routes, build_legacy_sstable_source_routes(merge_contexts, merged_tablet_schema));
     ASSIGN_OR_RETURN(auto seek_range,
                      TabletRangeHelper::create_sst_seek_range_from(new_metadata.range(), merged_tablet_schema));
     if (seek_range.seek_key.empty()) {
