@@ -1142,6 +1142,98 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_clips_deletes_to_tablet_range) {
     EXPECT_EQ(n - kRangeUpperExclusive, read_rows(tablet_id, 3));
 }
 
+// Cross publish hands a SPLIT child the parent's whole op_write, its siblings' rows included, and
+// SegmentPKChunkRef::owned marks which of them are this child's. Both things the child feeds the
+// primary index -- the upsert, and the lookup that turns into its delvec -- have to be restricted to
+// those rows.
+//
+// The lookup side is what corrupts data: the parent view ORs the children's delvecs, so a row some
+// sibling looked up and marked deleted here vanishes from the parent view even though its owner kept
+// it. The upsert side leaves the child claiming keys outside its range, which later reads clip away
+// but which still shadow the real owner's entries in an inherited sstable.
+//
+// A real SPLIT is out of reach here, so the two things create_if_needed keys on are staged directly:
+// a tablet range covering the lower half of the keys, and an op_write whose segments are marked
+// shared. Both publishes are cross publishes of the same key set, which makes the second one's delete
+// count a direct read-out of what the first one actually indexed.
+TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_indexes_only_the_rows_this_child_owns) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    // Tablet owns (-inf, n/2); the upper half belongs to a sibling.
+    const int kOwnedRows = n / 2;
+
+    // Range distribution requires the order-preserving big-endian PK encoding; create_sst_seek_range_from
+    // rejects anything else, and the selector declines to build without it.
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto* range_pb = _tablet_metadata->mutable_range();
+    {
+        DatumVariant upper(get_type_info(LogicalType::TYPE_INT), Datum(kOwnedRows));
+        VariantTuple tuple;
+        tuple.append(upper);
+        tuple.to_proto(range_pb->mutable_upper_bound());
+        range_pb->set_upper_bound_included(false);
+    }
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+
+    auto cross_publish_all_keys = [&](int64_t version) {
+        auto chunk = make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // What convert_txn_log_for_splitting leaves behind: the segments stay the parent's and every
+        // child publishes the same ones, so each has to select its own rows out of them.
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+
+    // The two publishes run the two sides of parallel_upsert, which select identically but reach the
+    // index by different overloads -- inline with the DeletesMap, or through a slot the context owns.
+    {
+        ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
+        cross_publish_all_keys(2);
+    }
+    {
+        ConfigResetGuard<bool> parallel(&config::enable_pk_index_parallel_execution, true);
+        cross_publish_all_keys(3);
+    }
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    // v3 overwrites exactly the keys v2 put in the index. Unselected, v2 indexes all n and v3 finds
+    // all n, so this would be n.
+    EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(kOwnedRows, read_rows(tablet_id, 3));
+}
+
 // Spill path regression (kevincai review on #75366): when a single op-aware merge task emits more than one
 // upsert chunk (merged upsert rows > config::vector_chunk_size), write_one_merged_chunk must not corrupt
 // the reused merge chunk's schema. The old clone_empty_with_schema + remove_column_by_index shared then
