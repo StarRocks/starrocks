@@ -31,6 +31,7 @@
 #include "column/raw_data_visitor.h"
 #include "column/runtime_type_traits.h"
 #include "column/serde/column_array_serde.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
@@ -484,6 +485,28 @@ TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_no_duplicates_writes_n
     ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
 
     EXPECT_EQ(before, metadata->SerializeAsString());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_open_io_error_still_counts_once) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 10, IndexValue(1)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 20, IndexValue(2)}}, 200));
+    const std::string before = metadata->SerializeAsString();
+    const auto read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error",
+                                         [](void* arg) { *static_cast<Status*>(arg) = Status::IOError("injected"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::init:table_open_error");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto st = LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get());
+
+    ASSERT_TRUE(st.is_io_error()) << st;
+    EXPECT_EQ(before, metadata->SerializeAsString());
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
 TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_filters_shared_duplicates_outside_tablet_range) {
@@ -1301,6 +1324,92 @@ static void corrupt_index_block_type_byte(const std::string& path) {
     ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
     ASSERT_OK(wf->append(Slice(content)));
     ASSERT_OK(wf->close());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_open_corruption_counts_once_and_is_atomic) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 10, IndexValue(1)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 20, IndexValue(2)}}, 200));
+    corrupt_index_block_type_byte(
+            _tablet_mgr->sst_location(metadata->id(), metadata->sstable_meta().sstables(0).filename()));
+    const std::string before = metadata->SerializeAsString();
+    const auto read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    const bool old_clear_cache = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    DeferOp restore_clear_cache([&]() { config::lake_clear_corrupted_cache_data = old_clear_cache; });
+    int drop_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_count; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto st = LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get());
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    EXPECT_EQ(before, metadata->SerializeAsString());
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    // One eager drop attempt by PersistentIndexSstable::init, then the overlay
+    // drops both exact inputs as a set.
+    EXPECT_EQ(3, drop_count);
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_delvec_corruption_counts_once_and_is_atomic) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    metadata->set_version(2);
+    constexpr uint32_t deleted_rssid = 2;
+    constexpr uint32_t deleted_rowid = 5;
+    ASSERT_NE(nullptr,
+              append_overlay_input(
+                      metadata.get(),
+                      {{"duplicate", 10, IndexValue((static_cast<uint64_t>(deleted_rssid) << 32) | deleted_rowid)}},
+                      100));
+    ASSERT_NE(nullptr,
+              append_overlay_input(metadata.get(),
+                                   {{"duplicate", 20, IndexValue((static_cast<uint64_t>(3) << 32) | 6)}}, 200));
+
+    DelVector delvec;
+    delvec.set_empty();
+    std::shared_ptr<DelVector> new_delvec;
+    delvec.add_dels_as_new_version({deleted_rowid}, metadata->version(), &new_delvec);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    builder.append_delvec(new_delvec, deleted_rssid);
+    ASSERT_OK(builder.finalize(next_id()));
+    auto page = metadata->delvec_meta().delvecs().find(deleted_rssid);
+    ASSERT_TRUE(page != metadata->delvec_meta().delvecs().end());
+    auto* corrupt_page = metadata->mutable_sstable_meta()->mutable_sstables(0)->mutable_delvec();
+    corrupt_page->CopyFrom(page->second);
+    corrupt_page->set_crc32c(corrupt_page->crc32c() + 1);
+    corrupt_page->set_crc32c_gen_version(corrupt_page->version());
+
+    const std::string before = metadata->SerializeAsString();
+    const auto read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    const bool old_clear_cache = config::lake_clear_corrupted_cache_data;
+    const bool old_strict_crc = config::enable_strict_delvec_crc_check;
+    config::lake_clear_corrupted_cache_data = true;
+    config::enable_strict_delvec_crc_check = true;
+    DeferOp restore_config([&]() {
+        config::lake_clear_corrupted_cache_data = old_clear_cache;
+        config::enable_strict_delvec_crc_check = old_strict_crc;
+    });
+    int drop_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_count; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto st = LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get());
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    EXPECT_EQ(before, metadata->SerializeAsString());
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_EQ(2, drop_count);
 }
 
 // Same corruption scenario as above, but hit while OPENING an input sstable in the
