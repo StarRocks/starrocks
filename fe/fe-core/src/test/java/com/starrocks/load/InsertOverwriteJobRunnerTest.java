@@ -163,10 +163,16 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, executor);
 
         try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            hook.when(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(insertStmt, context, 42L))
+                    .thenReturn(9911L);
+
             runner.preSplitDynamicOverwriteTempPartitions();
 
             hook.verify(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
                     insertStmt, context, 42L));
+            // Kept for doCommit: the hook's await is fail-safe, so the job it admitted can still be
+            // holding TABLET_RESHARD by the time this overwrite has to commit under it.
+            Assertions.assertEquals(9911L, runner.getPreSplitReshardJobId());
         }
     }
 

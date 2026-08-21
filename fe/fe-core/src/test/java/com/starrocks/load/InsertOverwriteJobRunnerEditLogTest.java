@@ -15,6 +15,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -60,6 +61,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -227,6 +229,104 @@ public class InsertOverwriteJobRunnerEditLogTest {
         Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
     }
 
+    /**
+     * A reshard this overwrite's own pre-split submitted is a dependency the load created for itself:
+     * the pre-split hook is fail-safe and returns once
+     * {@code tablet_pre_split_post_submit_wait_seconds} expires whether or not the job finished, and
+     * the write that follows plans against the still-unsplit layout. Giving up on it here would
+     * discard a completed write for nothing, so the commit keeps waiting for that job past the load's
+     * own budget.
+     */
+    @Test
+    public void testDoCommitWaitsForItsOwnPreSplitReshardPastTheBudget() throws Exception {
+        InsertOverwriteJob job = new InsertOverwriteJob(2105L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        // Started two hours ago with a one-second budget: the generic wait has nothing left to give.
+        ConnectContext context = contextWithBudget(1);
+        context.setStartTime(Instant.now().minus(Duration.ofHours(2)));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, null);
+
+        long reshardJobId = GlobalStateMgr.getCurrentState().getNextId();
+        AtomicBoolean reshardJobDone = new AtomicBoolean(false);
+        registerReshardJob(reshardJobId, reshardJobDone);
+        runner.setPreSplitReshardJobId(reshardJobId);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        Thread finisher = new Thread(() -> {
+            try {
+                Thread.sleep(1200);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            reshardJobDone.set(true);
+            Locker locker = new Locker();
+            Assertions.assertTrue(locker.lockTableAndCheckDbExist(db, table.getId(), LockType.WRITE));
+            try {
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            }
+        }, "own-reshard-finisher");
+        finisher.start();
+        try {
+            long startMs = System.currentTimeMillis();
+            runner.doCommit();
+            Assertions.assertTrue(System.currentTimeMillis() - startMs >= 1000,
+                    "the commit must have waited for its own reshard job, not returned immediately");
+        } finally {
+            finisher.join();
+            GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs().remove(reshardJobId);
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+
+        Partition replaced = table.getPartition(TABLE_NAME);
+        Assertions.assertNotNull(replaced);
+        Assertions.assertEquals(tempPartitionId, replaced.getId());
+        Assertions.assertFalse(table.existTempPartitions());
+    }
+
+    /**
+     * The own-reshard wait is bounded by the same knob that bounds the pre-split wait, so a wedged
+     * reshard job cannot pin the session: once that window expires the commit fails with exactly the
+     * pre-existing error.
+     */
+    @Test
+    public void testDoCommitGivesUpOnItsOwnPreSplitReshardAfterTheExtraWindow() {
+        InsertOverwriteJob job = new InsertOverwriteJob(2106L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        ConnectContext context = contextWithBudget(1);
+        context.setStartTime(Instant.now().minus(Duration.ofHours(2)));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, null);
+
+        long reshardJobId = GlobalStateMgr.getCurrentState().getNextId();
+        registerReshardJob(reshardJobId, new AtomicBoolean(false));
+        runner.setPreSplitReshardJobId(reshardJobId);
+
+        long oldPostSubmitWaitSeconds = Config.tablet_pre_split_post_submit_wait_seconds;
+        Config.tablet_pre_split_post_submit_wait_seconds = 1L;
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        try {
+            long startMs = System.currentTimeMillis();
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::doCommit);
+            long elapsedMs = System.currentTimeMillis() - startMs;
+            assertTableStateFailure(ex);
+            Assertions.assertTrue(elapsedMs >= 900, "the extra window must be honoured, waited " + elapsedMs + "ms");
+            Assertions.assertTrue(elapsedMs < 5000, "the extra window must be bounded, waited " + elapsedMs + "ms");
+        } finally {
+            Config.tablet_pre_split_post_submit_wait_seconds = oldPostSubmitWaitSeconds;
+            GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs().remove(reshardJobId);
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
+    }
+
     @Test
     public void testDoCommitGivesUpOnReshardingTableWhenTheStatementIsCancelled() {
         // A cancelled statement must not keep the request alive for the rest of its budget. By this
@@ -260,6 +360,18 @@ public class InsertOverwriteJobRunnerEditLogTest {
             table.setState(OlapTable.OlapTableState.NORMAL);
         }
         Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
+    }
+
+    /**
+     * Registers a reshard job under {@code reshardJobId} whose terminal state is driven by
+     * {@code done}, so a test thread can finish it without stubbing a mock the waiting thread is
+     * calling concurrently.
+     */
+    private static void registerReshardJob(long reshardJobId, AtomicBoolean done) {
+        TabletReshardJob reshardJob = mock(TabletReshardJob.class);
+        when(reshardJob.isDone()).thenAnswer(invocation -> done.get());
+        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs()
+                .put(reshardJobId, reshardJob);
     }
 
     /** A context whose remaining budget is {@code timeoutSeconds} from now. */

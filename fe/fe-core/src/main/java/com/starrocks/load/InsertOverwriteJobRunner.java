@@ -14,10 +14,13 @@
 
 package com.starrocks.load;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.TabletReshardJob;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
@@ -32,6 +35,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -120,6 +124,13 @@ public class InsertOverwriteJobRunner {
     // without sampling reads no data, so it has no sample to learn the input size from and takes it
     // from here.
     private final Estimates outputEstimates;
+
+    // The reshard job this job's own dynamic-overwrite pre-split admitted, or NO_RESHARD_JOB when it
+    // admitted none. This is the one TABLET_RESHARD state the overwrite created itself, so the commit
+    // wait treats it differently from a foreign reshard -- see lockForCommitWaitingOutReshard.
+    // Deliberately not persisted and not replayed: the pre-split hook only ever runs on the leader
+    // that plans the load, and after a leader switch there is no session left to wait.
+    private long preSplitReshardJobId = InsertPreSplitHook.NO_RESHARD_JOB;
 
     // execution stat
     private long createPartitionElapse;
@@ -229,8 +240,29 @@ public class InsertOverwriteJobRunner {
 
     void preSplitDynamicOverwriteTempPartitions() {
         if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
-            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(insertStmt, context, job.getTxnId());
+            preSplitReshardJobId =
+                    InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(insertStmt, context, job.getTxnId());
+            if (ownPreSplitReshardIsRunning()) {
+                // The hook's await is fail-safe and returns after tablet_pre_split_post_submit_wait_seconds
+                // whether or not the job finished, so the write below plans against the still-unsplit
+                // layout and this statement gains nothing from the pre-split it paid for. Say so, because
+                // the follow-on cost is visible to the user: the commit has to wait this job out.
+                LOG.warn("insert overwrite job {} starts writing while its own pre-split reshard job {} is "
+                                + "still running; this load will not benefit from the pre-split and its commit "
+                                + "will wait for that job to finish",
+                        job.getJobId(), preSplitReshardJobId);
+            }
         }
+    }
+
+    @VisibleForTesting
+    long getPreSplitReshardJobId() {
+        return preSplitReshardJobId;
+    }
+
+    @VisibleForTesting
+    void setPreSplitReshardJobId(long reshardJobId) {
+        preSplitReshardJobId = reshardJobId;
     }
 
     void preSplitStaticOverwriteTempPartitions() {
@@ -740,7 +772,17 @@ public class InsertOverwriteJobRunner {
      * schema or index metadata this job's temporary partitions and already-built insert plan were
      * derived from, so committing after it finished could target a layout that no longer matches —
      * those return immediately and the caller's own state check fails the commit, exactly as before.
-     * So does a reshard that outlasts the load's remaining budget.
+     * So does a foreign reshard that outlasts the load's remaining budget.
+     *
+     * <p>A reshard this job's own dynamic-overwrite pre-split admitted is not foreign, and gets a
+     * second window of {@code tablet_pre_split_post_submit_wait_seconds} measured from here, on top of
+     * whatever is left of the load's budget. The hook that admitted it is fail-safe: it returns once
+     * that same knob expires whether or not the job finished, and the write that follows then plans
+     * against the still-unsplit layout — so proceeding early bought the load nothing and left it
+     * holding a table state only that job can release. Giving up here would discard a completed write
+     * over a dependency the load created for itself, which is precisely the failure the fail-safe
+     * fallback exists to avoid, so wait for that job to reach a terminal state instead. The second
+     * window is what keeps a wedged reshard job from pinning the session indefinitely.
      *
      * <p>The state is only ever read under the WRITE lock — {@code OlapTable.state} is a plain field,
      * not volatile — and the table is re-resolved by id on every attempt so a concurrent drop cannot
@@ -756,13 +798,15 @@ public class InsertOverwriteJobRunner {
      * successful load) when this deadline expires, the commit fails after its data was written. Before
      * this wait existed that case failed immediately instead, so waiting is strictly better.
      *
-     * <p>Dynamic overwrite is not immune to that window either, despite registering its transaction in
-     * the job's cleanup-exclusion set: that exclusion is revoked as soon as its pre-split wait returns
+     * <p>Dynamic overwrite reaches that window too, despite registering its transaction in the job's
+     * cleanup-exclusion set: that exclusion is revoked as soon as its pre-split wait returns
      * ({@code PreSplitFlow}), because it is only sound while the transaction is known not to be writing.
      * Excluding a transaction that is writing would let CLEANING unregister the resharding tablets
-     * underneath it. So the exclusion set cannot close this window for any route by construction —
-     * closing it properly means scoping the reshard state to the partition being resharded, so an
-     * overwrite's commit does not depend on a table-wide state at all. That is a separate fix.
+     * underneath it. So the exclusion set cannot close the window for any route by construction; for
+     * the dynamic-overwrite route the own-reshard wait above covers it instead, since the job holding
+     * the state is the one that is waiting for this very transaction. Closing it for a foreign reshard
+     * means scoping the reshard state to the partition being resharded, so an overwrite's commit does
+     * not depend on a table-wide state at all. That is a separate fix.
      */
     private void lockForCommitWaitingOutReshard(Database db, Locker locker) {
         // The load's REMAINING budget, not a fresh timeout: planning and writing already spent part of
@@ -779,6 +823,11 @@ public class InsertOverwriteJobRunner {
         Instant deadline = context == null
                 ? Instant.EPOCH
                 : context.getStartTimeInstant().plusSeconds(context.getExecTimeout());
+        // The extra window granted to this job's own pre-split reshard, measured from now because the
+        // load's own budget may already be spent by the time we get here.
+        Instant ownReshardDeadline = preSplitReshardJobId == InsertPreSplitHook.NO_RESHARD_JOB
+                ? Instant.EPOCH
+                : Instant.now().plusSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
         while (true) {
             if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
                 throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
@@ -791,7 +840,8 @@ public class InsertOverwriteJobRunner {
                 throw resolveFailure;
             }
             if (state != OlapTable.OlapTableState.TABLET_RESHARD
-                    || !Instant.now().isBefore(deadline)
+                    || (!Instant.now().isBefore(deadline)
+                            && !(Instant.now().isBefore(ownReshardDeadline) && ownPreSplitReshardIsRunning()))
                     || (context != null && context.isStatementCancelled())) {
                 return;
             }
@@ -808,6 +858,24 @@ public class InsertOverwriteJobRunner {
                 return;
             }
         }
+    }
+
+    /**
+     * Whether the reshard job this job's own pre-split admitted still exists and has not reached a
+     * terminal state. A job is only dropped from {@code TabletReshardJobMgr} after it finished, so an
+     * absent job -- like an absent manager on the replay / test paths -- reads as "nothing of ours is
+     * running" and leaves the generic budget-bounded wait in charge.
+     */
+    private boolean ownPreSplitReshardIsRunning() {
+        if (preSplitReshardJobId == InsertPreSplitHook.NO_RESHARD_JOB) {
+            return false;
+        }
+        TabletReshardJobMgr reshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        if (reshardJobMgr == null) {
+            return false;
+        }
+        TabletReshardJob reshardJob = reshardJobMgr.getTabletReshardJob(preSplitReshardJobId);
+        return reshardJob != null && !reshardJob.isDone();
     }
 
     protected void doCommit() {

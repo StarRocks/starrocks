@@ -759,8 +759,15 @@ public class InsertPreSplitHookTableTest {
                 MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
             when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
             when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            flow.when(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                            any(Database.class), any(OlapTable.class), any(PreSplitFlow.Prepared.class),
+                            any(), any(), any(ConnectContext.class), anyLong()))
+                    .thenReturn(9911L);
 
-            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+            // The admitted job's id has to reach the caller: this is the one hook whose caller then
+            // commits under the TABLET_RESHARD state that job holds.
+            Assertions.assertEquals(9911L, InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                    fixture.insertStmt, fixture.context, 42L));
 
             flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
                     any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
@@ -889,8 +896,11 @@ public class InsertPreSplitHookTableTest {
                 MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
             stubs.accept(fixture.insertStmt);
 
-            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
-                    fixture.insertStmt, fixture.context, overwriteTransactionId);
+            // A gate that declines must also report no reshard job, or the caller's commit would wait
+            // out a foreign reshard believing it was its own.
+            Assertions.assertEquals(InsertPreSplitHook.NO_RESHARD_JOB,
+                    InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                            fixture.insertStmt, fixture.context, overwriteTransactionId));
 
             flow.verifyNoInteractions();
         }
