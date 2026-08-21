@@ -49,6 +49,11 @@ Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` 从 v4.2 版本起支持读取，且不受表类型或 Compaction 状态的限制，Native Reader 和 JNI Reader 均可读取 `VARIANT` 列。
+:::
 
 ## 集成准备
 

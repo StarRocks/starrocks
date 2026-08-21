@@ -17,6 +17,8 @@ import com.starrocks.jni.connector.SelectedFields;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 public class TestColumnType {
 
     @Test
@@ -91,6 +93,41 @@ public class TestColumnType {
             Assertions.assertEquals(c2.getChildTypes().size(), 1);
             Assertions.assertEquals(c2.getChildTypes().get(0).getTypeValue(), ColumnType.TypeValue.STRING);
         }
+    }
+
+    @Test
+    public void parseVariantType() {
+        ColumnType type = new ColumnType("v", "variant");
+        Assertions.assertEquals(ColumnType.TypeValue.VARIANT, type.getTypeValue());
+        Assertions.assertTrue(type.isVariant());
+        Assertions.assertEquals(Arrays.asList("metadata", "value"), type.getChildNames());
+        Assertions.assertEquals(ColumnType.TypeValue.BINARY, type.getChildTypes().get(0).getTypeValue());
+        Assertions.assertEquals(ColumnType.TypeValue.BINARY, type.getChildTypes().get(1).getTypeValue());
+        Assertions.assertEquals(Arrays.asList(0, 1), type.getFieldIndex());
+        // variant column meta: [null] + 2 binary children, each [null | offset | data] => 1 + 3 + 3
+        Assertions.assertEquals(7, type.computeColumnSize());
+        Assertions.assertEquals("variant", type.getTypeValueString());
+    }
+
+    @Test
+    public void parseNestedVariantType() {
+        // Guards the trailing-token parser trait: a variant child's fixed metadata/value children
+        // must parse correctly even when a sibling field follows it in the enclosing struct.
+        String s = "struct<v:variant,i:int>";
+        ColumnType t = new ColumnType("s", s);
+        Assertions.assertEquals(ColumnType.TypeValue.STRUCT, t.getTypeValue());
+        Assertions.assertEquals(2, t.getChildTypes().size());
+        Assertions.assertEquals(Arrays.asList("v", "i"), t.getChildNames());
+
+        ColumnType v = t.getChildTypes().get(0);
+        Assertions.assertEquals(ColumnType.TypeValue.VARIANT, v.getTypeValue());
+        Assertions.assertTrue(v.isVariant());
+        Assertions.assertEquals(Arrays.asList("metadata", "value"), v.getChildNames());
+        Assertions.assertEquals(ColumnType.TypeValue.BINARY, v.getChildTypes().get(0).getTypeValue());
+        Assertions.assertEquals(ColumnType.TypeValue.BINARY, v.getChildTypes().get(1).getTypeValue());
+
+        ColumnType i = t.getChildTypes().get(1);
+        Assertions.assertEquals(ColumnType.TypeValue.INT, i.getTypeValue());
     }
 
     @Test

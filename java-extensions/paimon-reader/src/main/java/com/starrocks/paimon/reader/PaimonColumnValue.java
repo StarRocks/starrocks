@@ -21,11 +21,14 @@ import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.variant.Variant;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.VariantType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.math.BigDecimal;
@@ -110,6 +113,10 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
+        if (dataType instanceof VariantType) {
+            unpackVariant(structFieldIndex, values);
+            return;
+        }
         InternalRow array = (InternalRow) fieldData;
         List<DataField> fields = ((RowType) dataType).getFields();
         for (int i = 0; i < structFieldIndex.size(); i++) {
@@ -123,6 +130,21 @@ public class PaimonColumnValue implements ColumnValue {
                 }
             }
             values.add(cv);
+        }
+    }
+
+    // Field order fixed by jni-connector ColumnType "variant": index 0 = metadata, index 1 = value.
+    private void unpackVariant(List<Integer> structFieldIndex, List<ColumnValue> values) {
+        Variant variant = (Variant) fieldData;
+        for (Integer idx : structFieldIndex) {
+            if (idx == null || idx < 0 || idx > 1) {
+                throw new IllegalStateException(
+                        "Invalid variant fieldIndex " + idx + ": a variant column must only be unpacked with " +
+                                "field indexes 0 (metadata) or 1 (value), per the jni-connector ColumnType " +
+                                "\"variant\" layout.");
+            }
+            byte[] bytes = (idx == 0) ? variant.metadata() : variant.value();
+            values.add(new PaimonColumnValue(bytes, DataTypes.BYTES(), timeZone));
         }
     }
 

@@ -22,6 +22,7 @@
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "fmt/core.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
@@ -29,6 +30,7 @@
 #include "runtime/java/jvm_helper.h"
 #include "runtime/java/native_method_helper.h"
 #include "runtime/runtime_state.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 
@@ -283,6 +285,63 @@ Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
+Status JniScanner::_append_variant_data(const FillColumnArgs& args) {
+    DCHECK(args.slot_type.type == LogicalType::TYPE_VARIANT);
+    // Wire layout matches struct<metadata:binary, value:binary>; field order is a fixed
+    // protocol shared with jni-connector ColumnType "variant".
+    TypeDescriptor binary_type = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    MutableColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    MutableColumnPtr value_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+
+    // Unlike an ordinary struct's fields, the variant's metadata/value children are a fixed
+    // protocol pair and must never be pruned/UNKNOWN on the jni-connector side: _fill_column
+    // treats a null chunk-meta pointer for a child as "field not selected" and silently
+    // append_default()s it, which would desync metadata_bin/value_bin below from the actual
+    // encoded bytes instead of failing loudly.
+    std::string metadata_name = args.slot_name + ".metadata";
+    FillColumnArgs metadata_args = {.num_rows = args.num_rows,
+                                    .slot_name = metadata_name,
+                                    .slot_type = binary_type,
+                                    .nulls = nullptr,
+                                    .column = metadata_col.get(),
+                                    .must_nullable = true};
+    RETURN_IF_ERROR(_fill_column(&metadata_args));
+
+    std::string value_name = args.slot_name + ".value";
+    FillColumnArgs value_args = {.num_rows = args.num_rows,
+                                 .slot_name = value_name,
+                                 .slot_type = binary_type,
+                                 .nulls = nullptr,
+                                 .column = value_col.get(),
+                                 .must_nullable = true};
+    RETURN_IF_ERROR(_fill_column(&value_args));
+
+    auto* variant_column = down_cast<VariantColumn*>(args.column);
+    // args.column must be a fresh, empty chunk column: we append() below without indexing by row,
+    // so any pre-existing rows would desync this column from its siblings in the chunk.
+    DCHECK_EQ(0, variant_column->size());
+    const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
+    const auto* value_nullable = down_cast<const NullableColumn*>(value_col.get());
+    const auto* metadata_bin = down_cast<const BinaryColumn*>(metadata_nullable->data_column_raw_ptr());
+    const auto* value_bin = down_cast<const BinaryColumn*>(value_nullable->data_column_raw_ptr());
+
+    for (size_t i = 0; i < args.num_rows; i++) {
+        bool is_null =
+                (args.nulls != nullptr && args.nulls[i]) || metadata_nullable->is_null(i) || value_nullable->is_null(i);
+        if (is_null) {
+            variant_column->append(VariantRowValue::from_null());
+            continue;
+        }
+        Slice metadata = metadata_bin->get_slice(i);
+        Slice value = value_bin->get_slice(i);
+        // Decode failures (malformed encoding, oversized value) must fail the query, not become NULL.
+        ASSIGN_OR_RETURN(VariantRowValue row, VariantRowValue::create(std::string_view(metadata.data, metadata.size),
+                                                                      std::string_view(value.data, value.size)));
+        variant_column->append(row);
+    }
+    return Status::OK();
+}
+
 Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     FillColumnArgs& args = *pargs;
     if (args.must_nullable && !args.column->is_nullable()) {
@@ -354,6 +413,8 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         RETURN_IF_ERROR((_append_map_data(args)));
     } else if (column_type == LogicalType::TYPE_STRUCT) {
         RETURN_IF_ERROR((_append_struct_data(args)));
+    } else if (column_type == LogicalType::TYPE_VARIANT) {
+        RETURN_IF_ERROR((_append_variant_data(args)));
     } else {
         return Status::InternalError(fmt::format("Type {} is not supported for off-heap table scanner", column_type));
     }
