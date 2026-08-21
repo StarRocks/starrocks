@@ -66,6 +66,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimizeOption scanOptimizeOption;
     protected TvrVersionRange tvrVersionRange;
+    // Original scan predicate retained only for MV rewrite when CASE simplification changes it.
+    protected ScalarOperator predicateForMvRewrite;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -125,6 +127,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Map<Column, ColumnRefOperator> getColumnMetaToColRefMap() {
         return columnMetaToColRefMap;
+    }
+
+    public boolean hasPredicateForMvRewrite() {
+        return predicateForMvRewrite != null;
+    }
+
+    public ScalarOperator getPredicateForMvRewrite() {
+        return hasPredicateForMvRewrite() ? predicateForMvRewrite : predicate;
     }
 
     private Optional<Map<String, ColumnRefOperator>> cachedColumnNameToColRefMap = Optional.empty();
@@ -262,6 +272,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
             builder.tvrVersionRange = scanOperator.tvrVersionRange;
+            builder.predicateForMvRewrite = scanOperator.predicateForMvRewrite;
             return (B) this;
         }
 
@@ -298,6 +309,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         public B setTable(Table table) {
             builder.table = table;
+            return (B) this;
+        }
+
+        public B setPredicateForMvRewrite(ScalarOperator predicateForMvRewrite) {
+            builder.predicateForMvRewrite = predicateForMvRewrite;
             return (B) this;
         }
 
