@@ -230,6 +230,13 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
      * gives that backlog a chance to drain. Finished jobs stay in {@code tabletReshardJobs} for
      * tablet_reshard_history_job_keep_max_ms, so the previous finish time is read straight off them --
      * no extra state to keep in sync, and it survives a leader switch.
+     *
+     * <p>That retention is therefore a lower bound on the interval this can enforce: configure
+     * tablet_reshard_orderby_split_interval_second beyond tablet_reshard_history_job_keep_max_ms (180s
+     * against 3 days by default) and the finished job is evicted before the period ends, leaving no
+     * timestamp and admitting the next split early. The failure is a shorter wait, never inconsistent
+     * metadata. Closing it means persisting a per-table completion timestamp -- journaled, replayed and
+     * garbage-collected on drop -- which is only worth it if the interval ever grows toward retention.
      */
     private boolean reshardQuietPeriodElapsed(long tableId) {
         int waitSeconds = Config.tablet_reshard_orderby_split_interval_second;
