@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -1387,13 +1388,28 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return false;
     }
 
+    private static void addScanConjuncts(List<ScalarOperator> predicates, ScanOperatorPredicates scanPredicates) {
+        predicates.addAll(scanPredicates.getNoEvalPartitionConjuncts());
+        predicates.addAll(scanPredicates.getNonPartitionConjuncts());
+        predicates.addAll(scanPredicates.getMinMaxConjuncts());
+    }
+
     private void collectPredicate(Operator operator, DecodeInfo info) {
-        if (operator.getPredicate() == null) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        if (operator.getPredicate() != null) {
+            predicates.add(operator.getPredicate());
+        }
+        if (operator instanceof PhysicalHiveScanOperator hiveScan) {
+            addScanConjuncts(predicates, hiveScan.getScanOperatorPredicates());
+        } else if (operator instanceof PhysicalIcebergScanOperator icebergScan) {
+            addScanConjuncts(predicates, icebergScan.getScanOperatorPredicates());
+        }
+        if (predicates.isEmpty()) {
             return;
         }
         DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(info.outputStringColumns,
                 structManager);
-        dictExpressionCollector.collect(operator.getPredicate());
+        predicates.forEach(dictExpressionCollector::collect);
 
         info.outputStringColumns.getStream().forEach(c -> {
             List<ScalarOperator> expressions = dictExpressionCollector.getDictExpressions(c);
