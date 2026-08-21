@@ -428,8 +428,17 @@ message BuiltinInvertedIndexPB {
         DOCS_AND_FREQS = 1;
     }
     optional BitmapIndexPB bitmap_index = 1;
+<<<<<<< HEAD
     optional IndexOptions index_options = 2 [default = DOCS];
     // present iff index_options == DOCS_AND_FREQS
     optional PostingIndexPB posting = 3;
     optional NormsPB norms = 4;
+=======
+    // Tags 2-4 are occupied by downstream distributions and already persisted
+    // in downstream segment metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    optional int32 placeholder_2 = 2;
+    optional bytes placeholder_3 = 3;
+    optional bytes placeholder_4 = 4;
+>>>>>>> 49dd85ab3c0... [Enhancement] Add placeholders for tags occupied by downstream distributions (EncryptionKeyTypePB 21-23, TabletMetadataPB 50-51, BuiltinInvertedIndexPB 2-4) (#76714)
 }
