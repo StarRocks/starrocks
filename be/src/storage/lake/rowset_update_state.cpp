@@ -36,6 +36,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
+#include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
@@ -495,13 +496,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    // Segments count as "there is something to rewrite" alongside num_rows. On a split cross
-    // publish that count is apportioned per sibling, so a row-mode partial update whose segments
-    // hold this tablet's rows can still arrive with num_rows == 0; returning on the count alone
-    // would leave the partial segment (only the updated columns) attached without its unmodified
-    // columns rewritten in.
+    // Whether there is anything to rewrite is exactly "does this rowset hold rows", so ask the shared
+    // predicate rather than either count on its own. The rowset counter is apportioned per sibling on
+    // a split cross publish, so a row-mode partial update whose segments hold this tablet's rows can
+    // arrive with num_rows == 0; returning on it alone would leave the partial segment (only the
+    // updated columns) attached without its unmodified columns rewritten in. Merely counting segments
+    // is not enough either: a DELETE-only write is also a "partial update" (its write schema is just
+    // the primary key columns) and it emits one segment per flush that is empty by construction --
+    // the segment exists only to reserve the del file's op_offset. Rewriting those is pointless IO,
+    // and fatal once ORDER BY puts value columns into a primary key table's sort key, because the
+    // rewrite writes the unmodified (value-only) column set and SegmentWriter::init then demands the
+    // whole sort key be present in it.
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
-        (rowset_meta.num_rows() == 0 && rowset_meta.segment_metas_size() == 0)) {
+        !rowset_holds_rows(rowset_meta)) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
