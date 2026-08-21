@@ -7494,7 +7494,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_row
 // merge_sstables() must sort by the SAME signed semantics commit() uses; if
 // it sorts unsigned the merged metadata that previously satisfied commit()
 // would itself begin failing.
-TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comparison) {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_sign_bit_sstable_watermark) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
     const int64_t child_a = next_id();
@@ -7575,25 +7575,154 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comp
 
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
-                                              txn_info, false, tablet_metadatas, tablet_ranges));
+    const std::string source_a_before = meta_a->SerializeAsString();
+    const std::string source_b_before = meta_b->SerializeAsString();
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges);
 
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ(source_a_before, meta_a->SerializeAsString());
+    EXPECT_EQ(source_b_before, meta_b->SerializeAsString());
+    EXPECT_EQ(tablet_metadatas.end(), tablet_metadatas.find(merged_tablet));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_exhausted_live_rowset_domain_without_sst) {
+    const int64_t base_version = 1;
+    const int64_t source_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(source_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(source_tablet);
+    source->set_version(base_version);
+    source->set_next_rowset_id(std::numeric_limits<int32_t>::max());
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(std::numeric_limits<int32_t>::max());
+    rowset->set_version(base_version);
+    rowset->set_num_rows(1);
+    rowset->set_data_size(1);
+    rowset->add_segment_metas()->set_filename("last_live_segment.dat");
+    const std::string source_before = source->SerializeAsString();
+    ASSERT_OK(put_tablet_metadata(source));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(source_tablet);
+    merging_info.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
+                                                  base_version + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ(source_before, source->SerializeAsString());
+    EXPECT_EQ(tablet_metadatas.end(), tablet_metadatas.find(merged_tablet));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_exhausted_single_sst_domain) {
+    const int64_t base_version = 1;
+    const int64_t source_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(source_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(source_tablet);
+    source->set_version(base_version);
+    source->set_next_rowset_id(2);
+    set_primary_key_schema(source.get(), 1001);
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_version(base_version);
+    rowset->set_num_rows(1);
+    rowset->set_data_size(1);
+    rowset->add_segment_metas()->set_filename("live_segment.dat");
+    auto* sst = source->mutable_sstable_meta()->add_sstables();
+    sst->set_filename("signed_limit.sst");
+    sst->set_max_rss_rowid(std::numeric_limits<int64_t>::max());
+    materialize_tombstone_sstables(source.get());
+    const std::string source_before = source->SerializeAsString();
+    ASSERT_OK(put_tablet_metadata(source));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(source_tablet);
+    merging_info.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
+                                                  base_version + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ(source_before, source->SerializeAsString());
+    EXPECT_EQ(tablet_metadatas.end(), tablet_metadatas.find(merged_tablet));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_writable) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_flush_failpoint(
+            [&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+
+    const int64_t base_version = 1;
+    const int64_t merged_version = 2;
+    const int64_t source_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(source_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    const uint64_t source_segment_size =
+            write_two_column_segment(source_tablet, "near_boundary_source.dat", 1, [](int) { return 100; });
+    auto source = make_single_segment_pk_tablet(source_tablet, base_version, "near_boundary_source.dat",
+                                                source_segment_size, 1);
+    source->mutable_rowsets(0)->set_id(std::numeric_limits<int32_t>::max() - 1);
+    source->set_next_rowset_id(std::numeric_limits<int32_t>::max());
+    ASSERT_OK(put_tablet_metadata(source));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(source_tablet);
+    merging_info.set_new_tablet_id(merged_tablet);
+    TxnInfoPB merge_txn;
+    merge_txn.set_txn_id(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, merged_version,
+                                              merge_txn, false, tablet_metadatas, tablet_ranges));
     auto merged = tablet_metadatas.at(merged_tablet);
-    ASSERT_EQ(2, merged->sstable_meta().sstables_size());
+    ASSERT_EQ(std::numeric_limits<int32_t>::max(), merged->next_rowset_id());
 
-    // Signed-int64 non-decreasing across the merged sstables — matching the
-    // invariant LakePersistentIndex::commit() enforces.
-    int64_t prev_max = std::numeric_limits<int64_t>::min();
-    for (const auto& sst : merged->sstable_meta().sstables()) {
-        const int64_t cur = static_cast<int64_t>(sst.max_rss_rowid());
-        EXPECT_LE(prev_max, cur) << "post-merge sstables must be in non-decreasing int64 max_rss_rowid order";
-        prev_max = cur;
-    }
-    // a_high's encoded max_rss_rowid is "negative" int64, so signed sort puts
-    // it first; b_low (positive int64) comes second. A naive uint64 sort
-    // would swap them and break commit().
-    EXPECT_EQ("a_high.sst", merged->sstable_meta().sstables(0).filename());
-    EXPECT_EQ("b_low.sst", merged->sstable_meta().sstables(1).filename());
+    const uint64_t write_segment_size =
+            write_two_column_segment(merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
+    TxnLogPB write_log;
+    write_log.set_tablet_id(merged_tablet);
+    write_log.set_txn_id(2);
+    auto* write_rowset = write_log.mutable_op_write()->mutable_rowset();
+    write_rowset->set_num_rows(1);
+    write_rowset->set_data_size(write_segment_size);
+    auto* write_segment = write_rowset->add_segment_metas();
+    write_segment->set_filename("near_boundary_write.dat");
+    write_segment->set_size(write_segment_size);
+    write_segment->set_num_rows(1);
+    ASSERT_OK(_tablet_manager->put_txn_log(write_log));
+
+    TxnInfoPB write_txn;
+    write_txn.set_txn_id(2);
+    write_txn.set_txn_type(TXN_NORMAL);
+    write_txn.set_commit_time(1);
+    auto published =
+            lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(merged_tablet), merged_version,
+                                  merged_version + 1, std::span<const TxnInfoPB>(&write_txn, 1), false);
+    ASSERT_OK(published.status());
+    ASSERT_FALSE(published.value()->sstable_meta().sstables().empty());
+    EXPECT_LE(published.value()->sstable_meta().sstables().rbegin()->max_rss_rowid(),
+              static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 }
 
 // Same-fileset_id sstables must remain contiguous in the merged metadata even
