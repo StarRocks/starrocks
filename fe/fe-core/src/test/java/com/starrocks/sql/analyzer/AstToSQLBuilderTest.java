@@ -381,14 +381,22 @@ public class AstToSQLBuilderTest {
                         "CREATE TEMPORARY TABLE `t2` AS SELECT `v1`\nFROM `t0`"},
                 {"CREATE TABLE t3 PRIMARY KEY (c1) DISTRIBUTED BY HASH(c1) AS SELECT v1 AS c1 FROM t0",
                         "CREATE TABLE `t3` PRIMARY KEY(`c1`) DISTRIBUTED BY HASH(c1) AS SELECT `v1` AS `c1`\nFROM `t0`"},
+                // Automatic partitioning: the LIST keyword must not appear, or the output re-parses
+                // as explicit list partitioning (a different table).
                 {"CREATE TABLE t4 PARTITION BY (dt) AS SELECT dt, v1 FROM t0",
-                        "CREATE TABLE `t4` PARTITION BY LIST(`dt`) AS SELECT `dt`, `v1`\nFROM `t0`"},
+                        "CREATE TABLE `t4` PARTITION BY (`dt`) AS SELECT `dt`, `v1`\nFROM `t0`"},
+                // An explicit LIST clause is folded into a RangePartitionDesc by AstBuilder#visitPartitionDesc
+                // (the LIST/RANGE branch), dropping the list definitions, so the deparse reflects that AST.
+                {"CREATE TABLE t4 PARTITION BY LIST(dt) (PARTITION p1 VALUES IN ('2021-01-01')) " +
+                        "DISTRIBUTED BY HASH(dt) AS SELECT dt FROM t0",
+                        "CREATE TABLE `t4` PARTITION BY RANGE(`dt`) () DISTRIBUTED BY HASH(dt) AS SELECT `dt`\nFROM `t0`"},
                 {"CREATE TABLE t4 PARTITION BY date_trunc('day', dt) AS SELECT dt, v1 FROM t0",
                         "CREATE TABLE `t4` PARTITION BY date_trunc('day', `dt`) AS SELECT `dt`, `v1`\nFROM `t0`"},
+                // The grammar requires parentheses after RANGE(cols), so an empty pair is kept.
                 {"CREATE TABLE t4 PARTITION BY RANGE(dt) " +
                         "(START ('2021-01-01') END ('2021-01-10') EVERY (INTERVAL 1 DAY)) " +
                         "DISTRIBUTED BY HASH(dt) AS SELECT dt FROM t0",
-                        "CREATE TABLE `t4` PARTITION BY RANGE(`dt`) DISTRIBUTED BY HASH(dt) AS SELECT `dt`\nFROM `t0`"},
+                        "CREATE TABLE `t4` PARTITION BY RANGE(`dt`) () DISTRIBUTED BY HASH(dt) AS SELECT `dt`\nFROM `t0`"},
                 {"CREATE TABLE t5 ORDER BY (v1) AS SELECT v1, v2 FROM t0",
                         "CREATE TABLE `t5` ORDER BY (`v1`) AS SELECT `v1`, `v2`\nFROM `t0`"},
                 {"CREATE TABLE t7 (c1, c2, INDEX idx1 (c1) USING BITMAP) AS SELECT v1, v2 FROM t0",
@@ -403,9 +411,13 @@ public class AstToSQLBuilderTest {
         };
         for (String[] c : cases) {
             StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
-            Assertions.assertEquals(c[1], AstToSQLBuilder.toSQL(stmt), c[0]);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
             // Regression: the fallback path used to hand out the visitor's empty string as-is.
             Assertions.assertEquals(c[1], AstToSQLBuilder.toSQLOrDefault(stmt, c[0]), c[0]);
+            // The deparsed form must stay legal SQL even where partition definitions are omitted.
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT),
+                    c[0]);
         }
     }
 

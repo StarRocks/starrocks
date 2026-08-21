@@ -1177,13 +1177,21 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 return "PARTITION BY (" + partitionItems + ")";
             }
             if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(listPartitionDesc.getPartitionColNames())) {
+                // The LIST keyword is what separates explicit list partitioning from automatic
+                // partitioning (AstBuilder sets autoPartitionTable only when LIST is absent), so
+                // emitting it for an automatic-partition table would deparse to a different table.
+                if (listPartitionDesc.isAutoPartitionTable()) {
+                    return "PARTITION BY (" + joinBackQuoted(listPartitionDesc.getPartitionColNames()) + ")";
+                }
                 return "PARTITION BY LIST(" + joinBackQuoted(listPartitionDesc.getPartitionColNames()) + ")";
             }
         }
         if (partitionDesc instanceof RangePartitionDesc) {
             RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
             if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(rangePartitionDesc.getPartitionColNames())) {
-                return "PARTITION BY RANGE(" + joinBackQuoted(rangePartitionDesc.getPartitionColNames()) + ")";
+                // The grammar requires parentheses after RANGE(cols); keep an empty pair so the
+                // output stays parseable while the partition definitions are omitted.
+                return "PARTITION BY RANGE(" + joinBackQuoted(rangePartitionDesc.getPartitionColNames()) + ") ()";
             }
         }
         return null;
