@@ -72,7 +72,17 @@ struct LakeIOOptions {
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
     bool fill_metadata_cache = false;
+    // Keep the loaded Segment objects alive on the Rowset instance and reuse them on the next
+    // segments() call. Vertical compaction reads the same rowsets once per column group; without
+    // this, every pass reloads and reparses every segment whenever the metadata cache cannot hold
+    // them all, which is CPU-bound and proportional to the column count.
+    bool hold_segments = false;
     bool use_page_cache = false;
+    // Compaction direct-read mode: route every coalesce-enabled column of a segment through one
+    // shared SharedBufferedInputStream and register all their IO ranges in a single batch, so
+    // adjacent column regions merge into few large object-storage reads. Only meaningful together
+    // with skip_disk_cache; per-column read amplification is what it removes.
+    bool coalesce_across_columns = false;
     bool cache_file_only = false; // only used for CACHE SELECT
     // Callback to warmup SST files, invoked at most once per tablet during CACHE SELECT.
     // Protected by sst_warmup_done (CAS guard) to ensure single execution across segments.

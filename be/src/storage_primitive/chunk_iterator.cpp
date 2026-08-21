@@ -31,6 +31,10 @@ public:
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
 
+    // Not timed: the prefetch runs on an IO worker concurrently with other children, so adding its
+    // wait to the scan counter would double-count overlapped time.
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override { return _iter->prefetch(budget); }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_iter->init_encoded_schema(dict_maps));

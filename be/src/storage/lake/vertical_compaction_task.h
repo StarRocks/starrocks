@@ -58,9 +58,19 @@ private:
     // group (group 0), appended after the sort-key columns. Empty value groups are dropped. This lets
     // the eager SST writer, which only sees the key group, read the PK columns.
     void move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const;
+
+    // One read stream is opened per (segment, column), so the buffer has to match how much of a
+    // column lives in one segment; see CompactionUtils::get_read_buffer_size.
+    int64_t read_buffer_size() const;
+
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;
+    // Set after the second column-group pass when its remote-read volume shows the data cache is
+    // not retaining the working set; later passes then read object storage directly with
+    // cross-column IO coalescing. Never set on warm or adequate caches (their second pass reads
+    // ~zero remote bytes), so cache-served compactions keep the exact current behavior.
+    bool _bypass_data_cache = false;
 };
 
 } // namespace starrocks::lake

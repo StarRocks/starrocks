@@ -308,6 +308,17 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
+    // With hold_segments, feed the held segments through the prepared-segments path so the
+    // per-pass segment loading in do_read() is skipped as well; segments() memoizes, so the
+    // first caller pays the load once. The prepared path indexes segments by metadata position,
+    // which only matches the loaded order in the regular full-rowset mode -- partial compaction
+    // and segment-range reads keep the original loading path.
+    if (options.lake_io_opts.hold_segments && !partial_segments_compaction() && _segment_range_end == 0) {
+        ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
+        if (held.size() == static_cast<size_t>(num_segments())) {
+            return do_read(schema, options, ReadContext{.prepared_segments = &held});
+        }
+    }
     return do_read(schema, options, ReadContext{});
 }
 
@@ -374,8 +385,17 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
     segment_options->dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
         segment_options->is_primary_keys = true;
-        segment_options->delvec_loader = std::make_shared<LakeDelvecLoader>(
-                _tablet_mgr, nullptr, segment_options->lake_io_opts.fill_data_cache, segment_options->lake_io_opts);
+        std::shared_ptr<CompactionDelvecHolder> delvec_holder;
+        if (segment_options->lake_io_opts.hold_segments) {
+            std::lock_guard<std::mutex> l(_held_segments_mutex);
+            if (_held_delvecs == nullptr) {
+                _held_delvecs = std::make_shared<CompactionDelvecHolder>();
+            }
+            delvec_holder = _held_delvecs;
+        }
+        segment_options->delvec_loader =
+                std::make_shared<LakeDelvecLoader>(_tablet_mgr, nullptr, segment_options->lake_io_opts.fill_data_cache,
+                                                   segment_options->lake_io_opts, nullptr, std::move(delvec_holder));
         segment_options->dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     }
     // The Index Delta Group (ADD INDEX fast-path) sidecar applies to ALL lake
@@ -809,6 +829,12 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
+    if (lake_io_opts.hold_segments) {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (!_held_segments.empty()) {
+            return _held_segments;
+        }
+    }
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = lake_io_opts;
@@ -817,6 +843,12 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     segments.reserve(loaded.size());
     for (auto& ls : loaded) {
         segments.emplace_back(std::move(ls.segment));
+    }
+    if (lake_io_opts.hold_segments) {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (_held_segments.empty()) {
+            _held_segments = segments;
+        }
     }
     return segments;
 }
