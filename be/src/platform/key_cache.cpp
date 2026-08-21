@@ -445,12 +445,12 @@ void KeyCache::install_metrics(MetricRegistry* metrics) {
 }
 
 Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,
-                                          std::vector<std::unique_ptr<EncryptionKey>>& owned_keys,
-                                          bool cache_last_key) {
+                                          std::vector<std::unique_ptr<EncryptionKey>>& owned_keys, bool cache_last_key,
+                                          bool cache_intermediate_keys) {
     int nkey = metaPb.key_hierarchy_size();
     int i = nkey - 1;
     for (; i >= 0; i--) {
-        bool use_cache = (i != nkey - 1) || cache_last_key;
+        bool use_cache = cache_intermediate_keys && ((i != nkey - 1) || cache_last_key);
         if (use_cache) {
             auto& keyPb = metaPb.key_hierarchy(i);
             auto key = get_key(get_identifier_from_pb(keyPb));
@@ -461,8 +461,12 @@ Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::v
         }
         ASSIGN_OR_RETURN(owned_keys[i], EncryptionKey::create_from_pb(metaPb.key_hierarchy(i)));
         keys[i] = owned_keys[i].get();
-        if (use_cache && keys[i]->is_decrypted() && keys[i]->has_id()) {
-            add_key(owned_keys[i]);
+        if (cache_intermediate_keys) {
+            if (use_cache && keys[i]->is_decrypted() && keys[i]->has_id()) {
+                add_key(owned_keys[i]);
+                break;
+            }
+        } else if (i == 0 && keys[i]->is_decrypted()) {
             break;
         }
     }
@@ -472,7 +476,7 @@ Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::v
         RETURN_IF_ERROR_WITH_WARN(keys[i]->decrypt(owned_keys[i + 1].get()),
                                   fmt::format("decrypt key {} using key {}", i + 1, i));
         DCHECK(keys[i + 1]->is_decrypted()) << "key should be decrypted";
-        if (keys[i + 1]->has_id()) {
+        if (cache_intermediate_keys && keys[i + 1]->has_id()) {
             add_key(owned_keys[i + 1]);
         }
     }
@@ -487,7 +491,7 @@ StatusOr<FileEncryptionPair> KeyCache::create_encryption_meta_pair(const std::st
     RETURN_IF_UNLIKELY(nkey == 0, Status::Corruption("no key in encryption_meta"););
     std::vector<const EncryptionKey*> keys(nkey);
     std::vector<std::unique_ptr<EncryptionKey>> owned_keys(nkey);
-    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, true));
+    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, true, true));
     auto parent_key = keys[nkey - 1];
     FileEncryptionPair ret;
     ASSIGN_OR_RETURN(auto key, parent_key->generate_key());
@@ -540,6 +544,15 @@ StatusOr<FileEncryptionPair> KeyCache::create_plain_random_encryption_meta_pair(
 }
 
 StatusOr<FileEncryptionInfo> KeyCache::unwrap_encryption_meta(const std::string& encryption_meta) {
+    return _unwrap_encryption_meta(encryption_meta, true);
+}
+
+StatusOr<FileEncryptionInfo> KeyCache::unwrap_encryption_meta_without_cache(const std::string& encryption_meta) {
+    return _unwrap_encryption_meta(encryption_meta, false);
+}
+
+StatusOr<FileEncryptionInfo> KeyCache::_unwrap_encryption_meta(const std::string& encryption_meta,
+                                                               bool cache_intermediate_keys) {
     EncryptionMetaPB meta_pb;
     RETURN_IF_UNLIKELY(!meta_pb.ParseFromArray(encryption_meta.data(), encryption_meta.size()),
                        Status::InternalError("deserialize EncryptionMetaPB failed"));
@@ -553,7 +566,7 @@ StatusOr<FileEncryptionInfo> KeyCache::unwrap_encryption_meta(const std::string&
     }
     std::vector<const EncryptionKey*> keys(nkey);
     std::vector<std::unique_ptr<EncryptionKey>> owned_keys(nkey);
-    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, false));
+    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, false, cache_intermediate_keys));
     auto key = keys[keys.size() - 1];
     FileEncryptionInfo ret;
     ret.algorithm = key->algorithm();
@@ -593,7 +606,7 @@ Status KeyCache::refresh_keys(const std::string& key_meta) {
     RETURN_IF_UNLIKELY(nkey == 0, Status::Corruption("no key in encryption_meta"););
     std::vector<const EncryptionKey*> keys(nkey);
     std::vector<std::unique_ptr<EncryptionKey>> owned_keys(nkey);
-    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, true));
+    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, true, true));
     if (size_before != size()) {
         LOG(INFO) << "refresh keys, num keys before: " << size_before << " after:" << size();
     }
