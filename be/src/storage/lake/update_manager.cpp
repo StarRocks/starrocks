@@ -608,7 +608,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                          current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
-    }     // end batch loop
+    } // end batch loop
     if (async_compact_cb) {
         TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
         RETURN_IF_ERROR(async_compact_cb->wait_for());
@@ -1373,6 +1373,16 @@ struct ChunkCondMergeResult {
     // Chunk-local indices of new rows that LOST their condition comparison
     // (old row wins); these must be deleted from the current segment.
     std::vector<uint32_t> new_loser_local_ids;
+    // Absolute source-segment rowids of the rows kept in `pk_column`, in its order. Empty on an
+    // ordinary publish, where the chunk keeps every row and rowid == chunk_physical_rowid_offset + k.
+    // A cross-published SPLIT child drops its siblings' rows from `pk_column` before anything looks
+    // at them, which renumbers what survives, so the mapping has to be carried explicitly.
+    std::vector<uint32_t> owned_rowids;
+
+    // Where chunk-local index `local` lives in the source segment.
+    uint32_t absolute_rowid(uint32_t local) const {
+        return owned_rowids.empty() ? chunk_physical_rowid_offset + local : owned_rowids[local];
+    }
 };
 
 } // namespace
@@ -1387,6 +1397,16 @@ static Status process_single_chunk_update_with_condition_no_sst(
         const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index, ChunkCondMergeResult* result) {
     TRACE_COUNTER_INCREMENT("process_condition_update_count", 1);
     ASSIGN_OR_RETURN(result->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
+    if (!current.owned.empty()) {
+        // A cross-published child receives its siblings' rows too. Drop them here, before the index
+        // lookup below: a sibling's key resolves against sstables this child inherited, so the lookup
+        // can return a location in a rowset the split pruned away -- get_column_values would then fail
+        // the publish on an unknown rssid. And a "loser" verdict on such a row would be appended to
+        // this child's delvec, which the parent view ORs, erasing a row its owner decided to keep.
+        // Read the rowids off the mask BEFORE filtering: filtering renumbers the survivors.
+        result->owned_rowids = owned_rowids_of(current);
+        result->pk_column->filter(current.owned);
+    }
     const auto chunk_size = result->pk_column->size();
     if (chunk_size == 0) {
         return Status::OK();
@@ -1418,7 +1438,7 @@ static Status process_single_chunk_update_with_condition_no_sst(
     std::vector<uint32_t> rowids;
     rowids.reserve(chunk_size);
     for (size_t j = 0; j < chunk_size; ++j) {
-        rowids.push_back(current.physical_rowid_offset + static_cast<uint32_t>(j));
+        rowids.push_back(result->absolute_rowid(static_cast<uint32_t>(j)));
     }
     new_rowids_by_rssid[rowset_id + upsert_idx] = std::move(rowids);
     // only support condition update on single column
@@ -1585,11 +1605,10 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
             std::vector<uint32_t> winner_rowids;
             winner_local_indices.reserve(total_winners);
             winner_rowids.reserve(total_winners);
-            const uint32_t segment_base = result->chunk_physical_rowid_offset;
             for (const auto& range : result->winner_ranges) {
                 for (uint32_t i = range.first; i < range.second; ++i) {
                     winner_local_indices.push_back(i);
-                    winner_rowids.push_back(segment_base + i);
+                    winner_rowids.push_back(result->absolute_rowid(i));
                 }
             }
             auto winner_pk_column = result->pk_column->clone_empty();
@@ -1614,13 +1633,34 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         // Persist the active-memtable batch built up by the parallel upserts.
         RETURN_IF_ERROR(index.flush_memtable());
     } else {
-        // Serial fallback: rowid_start = chunk_physical_rowid_offset for each winner range.
         for (const auto& result : chunk_results) {
             DCHECK(result->pk_column != nullptr);
-            for (const auto& range : result->winner_ranges) {
-                RETURN_IF_ERROR(index.upsert(rssid, result->chunk_physical_rowid_offset, *result->pk_column,
-                                             range.first, range.second, new_deletes));
+            if (result->owned_rowids.empty()) {
+                // Serial fallback: rowid_start = chunk_physical_rowid_offset for each winner range.
+                for (const auto& range : result->winner_ranges) {
+                    RETURN_IF_ERROR(index.upsert(rssid, result->chunk_physical_rowid_offset, *result->pk_column,
+                                                 range.first, range.second, new_deletes));
+                }
+                continue;
             }
+            // A cross-published child's surviving rows were renumbered by the filter, so the range
+            // overload's rowid_start + index no longer names the right row. Compact the winners and
+            // upsert them by their real rowids instead.
+            std::vector<uint32_t> winner_local_indices;
+            std::vector<uint32_t> winner_rowids;
+            for (const auto& range : result->winner_ranges) {
+                for (uint32_t i = range.first; i < range.second; ++i) {
+                    winner_local_indices.push_back(i);
+                    winner_rowids.push_back(result->absolute_rowid(i));
+                }
+            }
+            if (winner_rowids.empty()) {
+                continue;
+            }
+            auto winner_pk_column = result->pk_column->clone_empty();
+            winner_pk_column->append_selective(*result->pk_column, winner_local_indices.data(), 0,
+                                               winner_local_indices.size());
+            RETURN_IF_ERROR(index.upsert_rows(rssid, winner_rowids, std::move(winner_pk_column), new_deletes));
         }
     }
 
@@ -1634,7 +1674,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         auto& seg_deletes = (*new_deletes)[rssid];
         seg_deletes.reserve(seg_deletes.size() + result->new_loser_local_ids.size());
         for (uint32_t local : result->new_loser_local_ids) {
-            seg_deletes.push_back(result->chunk_physical_rowid_offset + local);
+            seg_deletes.push_back(result->absolute_rowid(local));
         }
     }
     return Status::OK();
