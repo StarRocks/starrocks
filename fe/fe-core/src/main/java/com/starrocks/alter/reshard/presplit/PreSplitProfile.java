@@ -209,19 +209,22 @@ public final class PreSplitProfile {
         if (sampleSet == null) {
             return;
         }
+        currentProfile(profile -> profile.sampleRows.add(sampleSet.getTuples().size()));
+        if (sampleSet.getEstimates() != null) {
+            recordEstimatedInputBytes(sampleSet.getEstimates().totalBytes());
+        }
+    }
+
+    /** Records an estimate even when the selected source tier does not materialize sampled rows. */
+    static void recordEstimatedInputBytes(long estimatedBytes) {
         currentProfile(profile -> {
-            profile.sampleRows.add(sampleSet.getTuples().size());
-            if (sampleSet.getEstimates() != null) {
-                AttemptState attempt = ACTIVE_ATTEMPT.get();
-                if (attempt != null && attempt.profile == profile) {
-                    attempt.estimatedInputBytes.accumulateAndGet(
-                            sampleSet.getEstimates().totalBytes(), Math::max);
-                } else {
-                    // Preserve the old best-effort behavior for package-local diagnostic callers
-                    // that record a sample without an explicit attempt scope.
-                    profile.estimatedInputBytes.accumulateAndGet(
-                            sampleSet.getEstimates().totalBytes(), Math::max);
-                }
+            long nonNegativeBytes = Math.max(0L, estimatedBytes);
+            AttemptState attempt = ACTIVE_ATTEMPT.get();
+            if (attempt != null && attempt.profile == profile) {
+                attempt.estimatedInputBytes.accumulateAndGet(nonNegativeBytes, Math::max);
+            } else {
+                // Preserve best-effort diagnostics for package-local callers without an attempt scope.
+                profile.estimatedInputBytes.accumulateAndGet(nonNegativeBytes, Math::max);
             }
         });
     }

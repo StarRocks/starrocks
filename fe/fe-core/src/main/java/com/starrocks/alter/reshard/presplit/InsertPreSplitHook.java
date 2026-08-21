@@ -189,9 +189,12 @@ public final class InsertPreSplitHook {
         if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
             return;
         }
-        PreSplitFlow.runStaticOverwriteMaterializedViewFlow(
-                resolvedTable.database(), resolvedTable.olapTable(), partitionScope, estimates,
-                context.getCurrentComputeResource(), context::isStatementCancelled);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, LoadKind.MV_REFRESH)) {
+            PreSplitProfile.recordTable(resolvedTable.olapTable().getName());
+            PreSplitFlow.runStaticOverwriteMaterializedViewFlow(
+                    resolvedTable.database(), resolvedTable.olapTable(), partitionScope, estimates,
+                    context.getCurrentComputeResource(), context::isStatementCancelled);
+        }
     }
 
     private static void tryRunPreSplit(StatementBase parsedStmt, ConnectContext context)

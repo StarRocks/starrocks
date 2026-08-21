@@ -102,12 +102,14 @@ public class PreSplitProfileTest {
 
         try (PreSplitProfile.Scope ignored =
                      PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+            PreSplitProfile.recordEstimatedInputBytes(10L);
             PreSplitProfile.recordSample(sampleWithEstimatedBytes(10L));
             PreSplitProfile.recordSample(sampleWithEstimatedBytes(10L));
             PreSplitProfile.recordSample(sampleWithEstimatedBytes(8L));
         }
         try (PreSplitProfile.Scope ignored =
                      PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+            PreSplitProfile.recordEstimatedInputBytes(20L);
             PreSplitProfile.recordSample(sampleWithEstimatedBytes(20L));
             PreSplitProfile.recordSample(sampleWithEstimatedBytes(15L));
         }

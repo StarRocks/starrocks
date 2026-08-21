@@ -232,6 +232,7 @@ final class PreSplitFlow {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
             return;
         }
+        PreSplitProfile.recordTargetPartitions(1L);
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         DerivedBoundarySource boundarySource =
                 MaterializedViewRowIdBoundaries.sourceFor(table, estimates, activeComputeNodeCount);

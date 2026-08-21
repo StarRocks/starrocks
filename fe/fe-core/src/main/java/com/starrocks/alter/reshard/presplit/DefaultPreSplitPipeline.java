@@ -326,11 +326,14 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * carving the remaining indexes on a derivation the source already declined.
      */
     private Optional<PreparedReshardJob> preSubmitDerived(int activeComputeNodeCount) throws StarRocksException {
+        PreSplitProfile.recordSourceTier(TIER_LABEL_DERIVED_TIER);
+        PreSplitProfile.recordEstimatedInputBytes(fileTotalBytes);
         int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
                 new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
             for (IndexPreSplitTarget indexTarget : indexTargets) {
                 DerivedBoundarySource.Result derived = derivedBoundarySource.plan(indexTarget, requestedTabletCount);
                 if (derived.skipReason() != null) {
@@ -341,6 +344,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                 }
                 List<Tuple> boundaries = derived.boundaries().getBoundaries();
                 validateDerivedBoundaries(boundaries, indexTarget.sortKey());
+                PreSplitProfile.recordBoundariesPlanned(boundaries.size());
                 List<TabletRange> ranges = buildTabletRanges(boundaries);
                 if (oldTabletIdToRanges.isEmpty()) {
                     // first index that produced cuts -> record load-level tier/boundary metrics once
@@ -515,6 +519,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         // planning separately. Keeping a scope around this combined interface would double-count
         // the fetch and incorrectly attribute planning work to SourceSamplingTime.
         BoundaryPlannerResult result = metaTierSampler.tryPlan(request, requestedTabletCount);
+        // Unlike the data tier, a successful footer-only plan has no SampleSet through which to
+        // expose the estimate that sized this attempt.
+        PreSplitProfile.recordEstimatedInputBytes(fileTotalBytes);
         checkDeadline(deadline);
         return new TierOutcome(result, TIER_LABEL_META_TIER);
     }
