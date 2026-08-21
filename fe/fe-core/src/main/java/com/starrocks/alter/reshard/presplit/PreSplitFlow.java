@@ -69,6 +69,9 @@ final class PreSplitFlow {
 
     private static final Logger LOG = LogManager.getLogger(PreSplitFlow.class);
 
+    /** No reshard job was admitted, so there is nothing for the caller to wait for later. */
+    static final long NO_RESHARD_JOB = -1L;
+
     // Target total number of weighted (min,max) endpoint pairs the meta-tier multi-partition sampler
     // emits, apportioned across row groups by row count so the boundary planner's row-quantiles
     // reflect row DENSITY (not row-group count). Kept in the same order of magnitude as the data-tier
@@ -162,16 +165,21 @@ final class PreSplitFlow {
     /**
      * Samples a dynamic overwrite before its write starts, pre-creates the predicted
      * transaction-scoped temporary partitions, and splits those temporary partitions.
+     *
+     * @return the id of the reshard job this flow admitted, or {@link #NO_RESHARD_JOB} when it
+     *         admitted none. Unlike every other hook, the dynamic-overwrite caller has to commit
+     *         under the table state that job holds, so it keeps the id to tell its own reshard apart
+     *         from a foreign one — see {@code InsertOverwriteJobRunner#lockForCommitWaitingOutReshard}.
      */
-    static void runDynamicOverwriteFlow(Database database, OlapTable table, Prepared prepared,
+    static long runDynamicOverwriteFlow(Database database, OlapTable table, Prepared prepared,
                                         LoadKind loadKind, BooleanSupplier shouldAbort,
                                         ConnectContext context, long overwriteTransactionId) {
         if (!table.getPartitionInfo().isPartitioned()
                 || !Boolean.TRUE.equals(table.supportedAutomaticPartition())
                 || overwriteTransactionId <= 0) {
-            return;
+            return NO_RESHARD_JOB;
         }
-        runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
+        return runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
                 overwriteTransactionId, PreSplitPartitionScope.unrestricted());
     }
 
@@ -277,7 +285,8 @@ final class PreSplitFlow {
         }
     }
 
-    private static void runMultiPartitionFlow(
+    /** @return the admitted reshard job's id, or {@link #NO_RESHARD_JOB} when nothing was submitted. */
+    private static long runMultiPartitionFlow(
             Database database, OlapTable table, Prepared prepared, LoadKind loadKind,
             BooleanSupplier shouldAbort, ConnectContext context, long overwriteTransactionId,
             PreSplitPartitionScope partitionScope) {
@@ -293,7 +302,7 @@ final class PreSplitFlow {
             samples = runDataTierSampler(table, prepared, loadKind);
         }
         if (samples == null) {
-            return;
+            return NO_RESHARD_JOB;
         }
         // The authoritative secondary index-id set the sampler projected. The grouper drops any
         // partition whose currently-resolved rollup set differs, and the coordinator re-checks the
@@ -312,7 +321,7 @@ final class PreSplitFlow {
                                 samples, table, context, database.getId(), sampledInputBytes,
                                 sampledSecondaryIndexMetaIds);
         if (groups.isEmpty()) {
-            return;
+            return NO_RESHARD_JOB;
         }
         PreSplitOutcome outcome = overwriteTransactionId > 0
                 ? TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
@@ -340,7 +349,9 @@ final class PreSplitFlow {
                 // every other in-flight transaction.
                 submittedCombined.combinedJob().clearCleanupExcludedTransactionIds();
             }
+            return submittedCombined.combinedJob().getJobId();
         }
+        return NO_RESHARD_JOB;
     }
 
     static SampleSet runDataTierSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
