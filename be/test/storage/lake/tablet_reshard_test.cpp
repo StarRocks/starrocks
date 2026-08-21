@@ -48,6 +48,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/transactions.h"
@@ -7484,16 +7485,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_row
     EXPECT_EQ("a_tombstone.sst", merged->sstable_meta().sstables(1).filename());
 }
 
-// LakePersistentIndex::commit() (lake_persistent_index.cpp:880-881) implicitly
-// converts max_rss_rowid (uint64) to int64_t and does a signed `>` comparison.
-// For an sstable whose encoded (rssid<<32|rowid) sets the high bit — for
-// example a delete-only memtable at rowset_id >= 2^31 (persistent_index_memtable.cpp
-// line 110/131 sets max_rss_rowid = (rowset_id<<32)|UINT32_MAX), or the
-// boundary case where a fresh ingest_sst lands at rssid >= 2^31 — unsigned
-// ordering is the reverse of signed ordering against any low-rssid sibling.
-// merge_sstables() must sort by the SAME signed semantics commit() uses; if
-// it sorts unsigned the merged metadata that previously satisfied commit()
-// would itself begin failing.
+// LakePersistentIndex::commit() interprets max_rss_rowid through signed int64
+// monotonic ordering, while other merge paths use unsigned RSSID arithmetic.
+// An encoded watermark with bit 63 set therefore has incompatible ordering
+// semantics and is outside the supported merge allocation domain. Merges must
+// fail closed instead of attempting to sort such a cross-sign input.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_sign_bit_sstable_watermark) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -7505,13 +7501,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_sign_bit_sstable_water
     prepare_tablet_dirs(child_b);
     prepare_tablet_dirs(merged_tablet);
 
-    // child_a contributes one sstable whose encoded max_rss_rowid sets bit 63
-    // — i.e. the projected high word is >= 2^31, which interprets as a negative
-    // int64 and a very large uint64. The rowset metadata itself uses small ids
-    // so that compute_rssid_offset for child_b stays within int32 range; what
-    // exercises the signed-comparison sort is the sstable's max_rss_rowid value
-    // alone (child_a is processed first, so its ctx.rssid_offset is 0 and the
-    // projected high passes through unchanged).
+    // child_a contributes one deliberately unsupported SST watermark whose
+    // encoded max_rss_rowid sets bit 63. The rowsets stay small so this fixture
+    // isolates rejection of the source SST domain rather than offset overflow.
     auto meta_a = std::make_shared<TabletMetadataPB>();
     meta_a->set_id(child_a);
     meta_a->set_version(base_version);
@@ -7530,10 +7522,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_sign_bit_sstable_water
     auto* sst_a_high = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a_high->set_filename("a_high.sst");
     sst_a_high->set_filesize(256);
-    // (rssid<<32|low) with rssid >= 2^31 sets bit 63, so as int64_t this is
-    // a large negative number — int64 less than any positive sibling. high =
-    // 2^31 still fits in uint32 (uint32 max = 2^32-1), so the projection check
-    // `new_high > uint32::max` does not trip.
+    // (rssid<<32|low) with rssid >= 2^31 sets bit 63. This must be rejected
+    // before source SST I/O or projection, rather than reordered against b_low.
     sst_a_high->set_max_rss_rowid((static_cast<uint64_t>(1) << 63) | 100);
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
@@ -7584,6 +7574,37 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_sign_bit_sstable_water
     EXPECT_EQ(source_a_before, meta_a->SerializeAsString());
     EXPECT_EQ(source_b_before, meta_b->SerializeAsString());
     EXPECT_EQ(tablet_metadatas.end(), tablet_metadatas.find(merged_tablet));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_rejects_sign_bit_source_watermark) {
+    const int64_t source_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(source_tablet);
+    source->set_version(1);
+    source->set_next_rowset_id(2);
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_version(1);
+    rowset->set_num_rows(1);
+    rowset->set_data_size(1);
+    rowset->add_segment_metas()->set_filename("skip_source_segment.dat");
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    auto* sst = source->mutable_sstable_meta()->add_sstables();
+    sst->set_filename("skip_sign_bit.sst");
+    sst->set_max_rss_rowid(static_cast<uint64_t>(1) << 63);
+    const std::string source_before = source->SerializeAsString();
+
+    MergingTabletInfoPB merging_info;
+    merging_info.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    std::vector<TabletMetadataPtr> sources = {source};
+    auto merged = lake::merge_tablet(_tablet_manager.get(), sources, merging_info, /*new_version=*/2, txn_info,
+                                     /*skip_sstable_merge=*/true);
+
+    EXPECT_TRUE(merged.status().is_invalid_argument()) << merged.status();
+    EXPECT_EQ(source_before, source->SerializeAsString());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_exhausted_live_rowset_domain_without_sst) {
