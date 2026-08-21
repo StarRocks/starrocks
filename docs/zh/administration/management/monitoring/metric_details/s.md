@@ -82,6 +82,13 @@ description: "Alphabetical s"
 - 单位: -
 - 描述: `/proc/net/snmp` 返回的指标。
 
+## `starrocks_be_build_info`
+
+- 单位：-
+- 类型：瞬时值
+- 标签：`version`、`commit_hash`
+- 描述：BE 节点的构建信息。指标值恒为 `1`。
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - 单位: 字节
@@ -350,6 +357,13 @@ description: "Alphabetical s"
 - 类型：累积
 - 标签：`type`（`add_column`、`drop_column` 或 `modify_column`）、`is_leader`
 - 描述：ALTER TABLE 列操作的次数，按类型统计。一条语句可以包含多个操作——例如 `ADD COLUMN a, DROP COLUMN b`——每个操作按其类型分别计数。重命名、调整列顺序以及仅修改注释不计入。仅由 Leader FE 上报（`is_leader="true"`）。
+
+## `starrocks_fe_build_info`
+
+- 单位：-
+- 类型：瞬时值
+- 标签：`version`、`commit_hash`
+- 描述：FE 节点的构建信息。指标值恒为 `1`。
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
