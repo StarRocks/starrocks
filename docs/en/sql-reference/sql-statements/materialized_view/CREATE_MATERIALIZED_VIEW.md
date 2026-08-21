@@ -200,7 +200,7 @@ Comment on the materialized view. Note that `COMMENT` must be placed after `mv_n
 
 **distribution_desc** (optional)
 
-The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` is enabled, omitting this parameter selects range distribution. Otherwise, a materialized view whose `refresh_mode` is not `INCREMENTAL` uses random bucketing, and StarRocks automatically sets the number of buckets. Materialized views whose `refresh_mode` is `INCREMENTAL` follow different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
+The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` is enabled, omitting this parameter selects range distribution. Otherwise, a materialized view that is not maintained incrementally uses random bucketing, and StarRocks automatically sets the number of buckets. A materialized view that is maintained incrementally -- `refresh_mode` `INCREMENTAL`, or `AUTO` where the definition supports it -- follows different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
 
 > **NOTE**
 >
@@ -408,6 +408,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
   - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
+  - `AUTO`: Refreshes incrementally whenever possible. A base table change for which no incremental plan can be built -- dropping or truncating a partition, `INSERT OVERWRITE` -- falls back to a `PCT` refresh for that run, and the following run returns to incremental refresh. A change the backend refuses once the refresh is already running, namely a row-level `DELETE` on a `DUPLICATE KEY` or `AGGREGATE KEY` base, is past the point where the fallback can take over and inactivates the view exactly as under `INCREMENTAL`; on a `PRIMARY KEY` base with change data capture the delete is maintained incrementally and no fallback is needed. If the definition does not support incremental refresh at all, the materialized view is created as a `PCT` one.
 
 <MVWarehouse />
 
@@ -467,13 +468,12 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
 StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`, valid values: `pct`, `incremental`). Please note the following usage guidance:
 
 - There are restrictions when adjusting `refresh_mode`:
-  - You cannot change legacy materialized views (for example, those of type `PCT`) to use `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
-  - When modifying a materialized view from `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
-- Materialized views with `refresh_mode` set to `INCREMENTAL` do not support specifying partition refresh. An exception is thrown if you attempt a partition refresh.
+  - You cannot change a materialized view from one refresh mode to another, in any direction. To do so, you must rebuild the materialized view. Setting the mode a view already has is accepted and does nothing.
+- Materialized views whose `refresh_mode` is `INCREMENTAL` or `AUTO` do not support specifying partition refresh, nor `FORCE` refresh. An exception is thrown if you attempt either. This reads the configured mode, so it applies even to an `AUTO` view that was created as `PCT` because its definition does not support incremental refresh.
 
 #### Distribution
 
-Materialized views whose `refresh_mode` is `INCREMENTAL` follow these distribution rules:
+Materialized views maintained incrementally -- `refresh_mode` `INCREMENTAL`, or `AUTO` where the definition supports it -- follow these distribution rules:
 
 - If you omit `distribution_desc`, StarRocks uses range distribution only in shared-data mode when `enable_range_distribution` is enabled. In all other cases, StarRocks falls back to hash distribution over all target key columns.
 - Range distribution has no user-facing `DISTRIBUTED BY RANGE` syntax and cannot be specified explicitly.
@@ -481,7 +481,7 @@ Materialized views whose `refresh_mode` is `INCREMENTAL` follow these distributi
 
 #### Sort Key
 
-A materialized view whose `refresh_mode` is `INCREMENTAL` is a Primary Key table keyed by an internal row-id column, so `ORDER BY` defines a sort key of its own instead of becoming part of the primary key.
+A materialized view maintained incrementally -- `refresh_mode` `INCREMENTAL`, or `AUTO` where the definition supports it -- is a Primary Key table keyed by an internal row-id column, so `ORDER BY` defines a sort key of its own instead of becoming part of the primary key.
 
 - On a hash- or random-distributed materialized view, the sort key is the `ORDER BY` columns.
 - On a range-distributed materialized view, `ORDER BY` is not supported: the sort key defines the tablet boundaries and must equal the primary key, which is a column you cannot name. Add `DISTRIBUTED BY HASH(...)` if you need a sort key.
@@ -489,7 +489,7 @@ A materialized view whose `refresh_mode` is `INCREMENTAL` is a Primary Key table
 
 #### Supported Incremental Operators
 
-Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed, the refresh of materialized views whose `refresh_mode` is set to `INCREMENTAL` will fail.
+Incremental refresh supports only append-only operations on base tables. Under `INCREMENTAL`, an unsupported operation such as `UPDATE`, `MERGE` or `OVERWRITE` fails the refresh. Under `AUTO`, one for which no incremental plan can be built falls back to a `PCT` refresh for that run instead; see the `refresh_mode` description above for where that fallback stops.
 
 The following operators are currently supported for incremental refresh:
 

@@ -301,8 +301,9 @@ public class ConfigBase {
                 }
                 break;
             case "default_mv_refresh_mode":
-                // Must accept exactly what PropertyAnalyzer#analyzeRefreshMode accepts for the
-                // refresh_mode property: AUTO is implemented but deliberately not selectable.
+                // AUTO is a valid refresh_mode property but not a valid default: the create path
+                // (IVMAnalyzer#getRefreshMode) hardcodes PCT when the property is absent and never
+                // consults this setting, so accepting AUTO here would silently do nothing.
                 if (!confVal.equalsIgnoreCase("PCT") && !confVal.equalsIgnoreCase("INCREMENTAL")) {
                     throw new InvalidConfException("'default_mv_refresh_mode' must be one of PCT or INCREMENTAL. "
                             + "Current value: " + confVal);

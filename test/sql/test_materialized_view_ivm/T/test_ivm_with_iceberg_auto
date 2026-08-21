@@ -30,6 +30,10 @@ use db_${uuid0};
 
 set enable_materialized_view_rewrite = false;
 
+-- print_hit_materialized_view is False throughout: query rewrite over a materialized view
+-- whose refresh_mode is INCREMENTAL or AUTO is rejected outright. The calls stay as a guard
+-- against that rejection silently going away.
+
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
 properties

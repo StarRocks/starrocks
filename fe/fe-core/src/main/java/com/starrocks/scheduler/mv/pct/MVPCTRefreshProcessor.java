@@ -153,6 +153,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             if (refreshScope == null || refreshScope.isEmpty()) {
                 // An empty refresh scope means base tables were checked and the MV is already fresh.
                 confirmFreshness();
+                promoteFrozenTvrDeltaOnSkip();
                 // A partition-scoped request only proves its own range is fresh -- the same rule
                 // MVVersionManager applies before advancing LAST_FRESHNESS_CONFIRMED_AT.
                 return ProcessExecPlan.skipped(mvRefreshParams.isCompleteRefresh()
@@ -445,6 +446,19 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                         ctxAfter.getTempTvrOwnerStartTaskRunId(), startTaskRunId);
             }
         }
+    }
+
+    /**
+     * Promote the TVR delta the hybrid fallback froze before this run: skipping proves the MV already
+     * matches its base tables at that snapshot. Leaving the baseline behind makes the next incremental
+     * attempt re-derive the same rejected delta and fall back again -- forever, if the base goes quiet.
+     */
+    private void promoteFrozenTvrDeltaOnSkip() {
+        MaterializedView.AsyncRefreshContext ctx = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (!ownsPinningState(ctx, getStartTaskRunId()) || ctx.getTempBaseTableInfoTvrDeltaMap().isEmpty()) {
+            return;
+        }
+        updateVersionMeta(null, null, null);
     }
 
     // True when the pinning slot is either unowned or owned by the current job — safe to mutate.

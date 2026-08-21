@@ -60,6 +60,8 @@ SELECT COUNT(*) AS diff FROM (
 SELECT COUNT(*) AS diff_reverse FROM (
     SELECT k, SUM(v) FROM base_empty GROUP BY k EXCEPT SELECT k, s FROM mv_empty
 ) t;
+-- The bootstrap run finds an empty base and skips, but still leaves a usable baseline, so the
+-- first load refreshes incrementally: PCT never reaches SUCCESS for this view.
 SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
 FROM information_schema.task_runs
 WHERE (EXTRA_MESSAGE LIKE '%mv_empty%' OR DEFINITION LIKE '%mv_empty%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0

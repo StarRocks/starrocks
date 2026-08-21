@@ -198,7 +198,7 @@ AS
 
 **distribution_desc**（选填）
 
-异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下启用 `enable_range_distribution` 时，省略该参数会选择 Range 分布。否则，`refresh_mode` 非 `INCREMENTAL` 的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。`refresh_mode` 为 `INCREMENTAL` 的物化视图使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
+异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下启用 `enable_range_distribution` 时，省略该参数会选择 Range 分布。否则，非以增量方式维护的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。以增量方式维护的物化视图（`refresh_mode` 为 `INCREMENTAL`，或定义支持增量刷新的 `AUTO`）使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
 
 :::info
 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
@@ -405,6 +405,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   - `PCT`：（默认）对于分区物化视图，当基表数据发生变化时，仅刷新受影响的分区，保证该分区的数据一致性。对于非分区物化视图，基表任何数据变化都会触发全量刷新。
   - `INCREMENTAL`：仅允许进行增量刷新。如果根据定义物化视图不支持增量刷新，或遇到无法增量处理的数据，则创建或刷新的操作会失败。
+  - `AUTO`：尽可能进行增量刷新。当基表发生无法构建增量计划的变更（DROP PARTITION、TRUNCATE PARTITION、`INSERT OVERWRITE`）时，该次刷新回退为 `PCT` 刷新，下一次刷新自动恢复为增量刷新。而在刷新已经开始之后才被 BE 拒绝的变更——即 `DUPLICATE KEY` 或 `AGGREGATE KEY` 基表上的行级 `DELETE`——已越过回退可以接管的时点，与 `INCREMENTAL` 一样会使物化视图失效；`PRIMARY KEY` 基表开启变更数据捕获后，行删可以被增量维护，无需回退。如果根据定义物化视图完全不支持增量刷新，则该物化视图会被创建为 `PCT` 物化视图。
 
 <MVWarehouse />
 
@@ -458,13 +459,12 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`，有效值为 `pct`、`incremental`）决定的默认刷新模式。请注意以下使用说明：
 
 - 调整 `refresh_mode` 时存在以下限制：
-  - 不能将传统物化视图（即类型为 `PCT` 的视图）更改为 `INCREMENTAL` 刷新模式。如需更改，必须重建该物化视图。
-  - 当将物化视图从 `INCREMENTAL` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
-- `refresh_mode` 为 `INCREMENTAL` 的物化视图不支持指定分区刷新。`INCREMENTAL` 类型的物化视图，如果尝试指定分区刷新，会抛出异常。
+  - 不能将物化视图从一种刷新模式改为另一种，任何方向都不行。如需更改，必须重建该物化视图。把模式设为它当前已有的值是允许的，且不产生任何效果。
+- `refresh_mode` 为 `INCREMENTAL` 或 `AUTO` 的物化视图不支持指定分区刷新，也不支持 `FORCE` 刷新，尝试时会抛出异常。该限制读取的是配置值，因此即使 `AUTO` 的视图因定义不支持增量刷新而被建成 `PCT`，限制依然生效。
 
 #### 分布方式
 
-`refresh_mode` 为 `INCREMENTAL` 的物化视图遵循以下分布规则：
+以增量方式维护的物化视图（`refresh_mode` 为 `INCREMENTAL`，或定义支持增量刷新的 `AUTO`）遵循以下分布规则：
 
 - 如果省略 `distribution_desc`，仅当处于存算分离模式且 `enable_range_distribution` 已启用时，StarRocks 才使用 Range 分布。其他情况下，StarRocks 回退到基于目标表全部 Key 列的哈希分布。
 - Range 分布没有用户可指定的 `DISTRIBUTED BY RANGE` 语法，无法显式指定。
@@ -472,7 +472,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 
 #### 排序键
 
-`refresh_mode` 为 `INCREMENTAL` 的物化视图是以内部 Row ID 列为主键的主键表，因此 `ORDER BY` 定义的是独立的排序键，不会成为主键的一部分。
+以增量方式维护的物化视图（`refresh_mode` 为 `INCREMENTAL`，或定义支持增量刷新的 `AUTO`）是以内部 Row ID 列为主键的主键表，因此 `ORDER BY` 定义的是独立的排序键，不会成为主键的一部分。
 
 - 对于哈希分布或随机分布的物化视图，排序键即 `ORDER BY` 指定的列。
 - 对于 Range 分布的物化视图，**不支持 `ORDER BY`**：排序键决定 Tablet 的区间边界，必须与主键相同，而该主键列无法由用户指定。如需排序键，请显式指定 `DISTRIBUTED BY HASH(...)`。
@@ -480,7 +480,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 
 #### 支持的增量算子
 
-增量刷新仅支持基表的追加（append-only）操作。如果在基表上执行了不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`），当 `refresh_mode` 设置为 `INCREMENTAL` 时，物化视图刷新将失败。
+增量刷新仅支持基表的追加（append-only）操作。在 `INCREMENTAL` 下，基表上不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`）会使刷新失败。在 `AUTO` 下，其中无法构建增量计划的那些会改为让该次刷新回退为 `PCT`；回退在哪里失效见上文 `refresh_mode` 的说明。
 
 当前支持以下增量刷新操作符：
 

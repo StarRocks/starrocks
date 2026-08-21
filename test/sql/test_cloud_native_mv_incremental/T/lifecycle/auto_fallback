@@ -1,0 +1,225 @@
+-- refresh_mode = AUTO: a base change that cannot be maintained incrementally falls back to a
+-- PCT refresh for that run, the view stays active, and the next run is incremental again.
+-- Each case asserts the refreshMode of every run, so the whole sequence is pinned.
+-- FINISH_TIME has one-second resolution and these refreshes are back to back, so QUERY_ID
+-- (a UUIDv7, ordered by creation to the millisecond) breaks the tie.
+
+-- name: test_ivm_auto_drop_partition_recovers @cloud
+CREATE TABLE ad_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ad_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+CREATE MATERIALIZED VIEW mv_ad
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM ad_base GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ad';
+-- first refresh has no prior TVR baseline, so PCT builds one
+[UC]REFRESH MATERIALIZED VIEW mv_ad WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- append-only, so incremental
+INSERT INTO ad_base VALUES ('2026-08-02',2,5);
+[UC]REFRESH MATERIALIZED VIEW mv_ad WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- dropping a base partition cannot be maintained incrementally: fall back, stay active
+ALTER TABLE ad_base DROP PARTITION p20260801;
+[UC]REFRESH MATERIALIZED VIEW mv_ad WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ad';
+-- and the next append-only change is incremental again
+INSERT INTO ad_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_ad WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT dt, k, v FROM mv_ad ORDER BY dt, k;
+SELECT dt, k, sum(v) FROM ad_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_auto_truncate_partition_recovers @cloud
+CREATE TABLE at_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO at_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+CREATE MATERIALIZED VIEW mv_at
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM at_base GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_at';
+[UC]REFRESH MATERIALIZED VIEW mv_at WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+TRUNCATE TABLE at_base PARTITION p20260801;
+[UC]REFRESH MATERIALIZED VIEW mv_at WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_at';
+INSERT INTO at_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_at WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT dt, k, v FROM mv_at ORDER BY dt, k;
+SELECT dt, k, sum(v) FROM at_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_auto_insert_overwrite_recovers @cloud
+CREATE TABLE ao_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ao_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_ao
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM ao_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ao';
+[UC]REFRESH MATERIALIZED VIEW mv_ao WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+INSERT OVERWRITE ao_base VALUES (1,111),(9,99);
+[UC]REFRESH MATERIALIZED VIEW mv_ao WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ao';
+INSERT INTO ao_base VALUES (5,50);
+[UC]REFRESH MATERIALIZED VIEW mv_ao WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT k, v FROM mv_ao ORDER BY k;
+SELECT k, v FROM ao_base ORDER BY k;
+
+-- name: test_ivm_auto_does_not_absorb_row_delete @cloud
+-- The fallback only covers a plan that cannot be built. A row-level DELETE on a DUPLICATE KEY
+-- table plans fine and is refused by the backend while the plan runs, which is past the point
+-- where AUTO can switch to PCT, so the view is inactivated exactly as an INCREMENTAL one is.
+-- AGGREGATE KEY behaves the same; PRIMARY KEY does not, see the two cases below.
+CREATE TABLE de_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO de_base VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_de
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM de_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
+[UC]REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+DELETE FROM de_base WHERE k = 1;
+[UC]REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS backend_rejected
+FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+
+-- name: test_ivm_incremental_rejects_what_auto_absorbs @cloud
+-- The DROP PARTITION that test_ivm_auto_drop_partition_recovers refreshes through, against an
+-- INCREMENTAL view: no fallback, so the view is inactivated. This is the difference between
+-- the two modes.
+CREATE TABLE st_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO st_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+CREATE MATERIALIZED VIEW mv_st
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM st_base GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_st WITH SYNC MODE;
+INSERT INTO st_base VALUES ('2026-08-02',2,5);
+REFRESH MATERIALIZED VIEW mv_st WITH SYNC MODE;
+ALTER TABLE st_base DROP PARTITION p20260801;
+[UC]REFRESH MATERIALIZED VIEW mv_st WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_st';
+
+-- name: test_ivm_auto_mode_is_fixed_at_creation @cloud
+-- refresh_mode cannot be altered to a different mode; the recovery path is drop and re-create.
+-- Setting the mode it already has is accepted and does nothing.
+CREATE TABLE al_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO al_base VALUES (1,10);
+CREATE MATERIALIZED VIEW mv_al
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM al_base;
+SELECT REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_al';
+ALTER MATERIALIZED VIEW mv_al SET ('refresh_mode' = 'incremental');
+ALTER MATERIALIZED VIEW mv_al SET ('refresh_mode' = 'pct');
+ALTER MATERIALIZED VIEW mv_al SET ('refresh_mode' = 'auto');
+SELECT REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_al';
+
+-- name: test_ivm_auto_degrades_to_pct @cloud
+-- A query with no incremental plan is built as a plain PCT view. REFRESH_MODE reports the
+-- configured mode, so it still reads AUTO; the absent __ROW_ID__ column and the accepted
+-- FORCE refresh are what show the view is really PCT.
+CREATE TABLE dg_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO dg_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_dg
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, row_number() over (order by v) AS rn FROM dg_base;
+SELECT REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_dg';
+SELECT COUNT(*) AS row_id_columns FROM information_schema.columns
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_dg' AND COLUMN_NAME LIKE '%ROW_ID%';
+REFRESH MATERIALIZED VIEW mv_dg WITH SYNC MODE;
+SELECT k, rn FROM mv_dg ORDER BY k;
+
+-- name: test_ivm_auto_agg_row_delete_not_absorbed_either @cloud
+-- Same as the DUPLICATE KEY case: the refusal comes from the backend, so AUTO cannot step in.
+CREATE TABLE ag_base (k INT, v BIGINT SUM) AGGREGATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ag_base VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_ag
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, SUM(v) AS v FROM ag_base GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+DELETE FROM ag_base WHERE k = 1;
+[UC]REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
+
+-- name: test_ivm_auto_pk_row_delete_stays_incremental @cloud
+-- A PRIMARY KEY base table with change data capture emits the delete, so there is nothing for
+-- AUTO to fall back from: the refresh stays incremental and the view tracks the base exactly.
+CREATE TABLE pk_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO pk_base VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_pk
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM pk_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pk';
+[UC]REFRESH MATERIALIZED VIEW mv_pk WITH SYNC MODE;
+DELETE FROM pk_base WHERE k = 1;
+[UC]REFRESH MATERIALIZED VIEW mv_pk WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pk';
+SELECT k, v FROM mv_pk ORDER BY k;
+SELECT k, v FROM pk_base ORDER BY k;
+
+-- name: test_ivm_auto_pk_drop_partition_recovers @cloud
+-- The fallback is not tied to a key type: a PRIMARY KEY base falls back and recovers too.
+CREATE TABLE pd_base (dt date NOT NULL, k int NOT NULL, v bigint) PRIMARY KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO pd_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+CREATE MATERIALIZED VIEW mv_pd
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, v FROM pd_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pd';
+[UC]REFRESH MATERIALIZED VIEW mv_pd WITH SYNC MODE;
+ALTER TABLE pd_base DROP PARTITION p20260801;
+[UC]REFRESH MATERIALIZED VIEW mv_pd WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pd';
+INSERT INTO pd_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_pd WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT dt, k, v FROM mv_pd ORDER BY dt, k;
+SELECT dt, k, v FROM pd_base ORDER BY dt, k;
+

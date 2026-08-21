@@ -54,16 +54,16 @@ public class AlterMaterializedViewTest extends MVTestBase {
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
         Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
 
-        // alter auto -> incremental: rejected (cross-mode ALTER not supported)
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"incremental\")";
+        // any cross-mode ALTER is rejected; the recovery path is drop-and-recreate
+        for (String target : new String[] {"incremental", "pct"}) {
+            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"" + target + "\")";
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
-        // alter auto -> auto: rejected (AUTO is hidden from users at the analyzer level)
+        // same-mode ALTER is a no-op success
         {
             String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, true);
+            alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
         }
     }
@@ -100,15 +100,9 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
-        // alter incremental -> auto: rejected (AUTO is hidden from users)
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-            alterMaterializedView(alterStmt, true);
-            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
-        }
-        // alter incremental -> pct: rejected (cross-mode ALTER not supported)
-        {
-            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"pct\")";
+        // any cross-mode ALTER is rejected, AUTO included
+        for (String target : new String[] {"auto", "pct"}) {
+            String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"" + target + "\")";
             alterMaterializedView(alterStmt, true);
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
         }
@@ -215,25 +209,30 @@ public class AlterMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-    public void testCreateMVWithAutoRefreshModeRejected() throws Exception {
-        String ddl = "CREATE MATERIALIZED VIEW `auto_rejected_mv` REFRESH DEFERRED MANUAL " +
+    public void testCreateMVWithAutoRefreshMode() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW `auto_mode_mv` REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\"refresh_mode\" = \"auto\") " +
                 "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        Exception ex = Assertions.assertThrows(Exception.class,
-                () -> starRocksAssert.withMaterializedView(ddl));
-        Assertions.assertTrue(ex.getMessage().contains("refresh_mode"),
-                "expected refresh_mode error, got: " + ex.getMessage());
+        starRocksAssert.withMaterializedView(ddl);
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "auto_mode_mv");
+            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+            Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getRefreshMode());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.auto_mode_mv");
+        }
     }
 
     @Test
-    public void testAlterMVRefreshModeToAutoRejected() throws Exception {
-        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
-        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
-
-        String alterStmt = "alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")";
-        alterMaterializedView(alterStmt, true);
-        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+    public void testCreateMVWithUnknownRefreshModeRejected() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW `unknown_mode_mv` REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\"refresh_mode\" = \"turbo\") " +
+                "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        Exception ex = Assertions.assertThrows(Exception.class,
+                () -> starRocksAssert.withMaterializedView(ddl));
+        Assertions.assertTrue(ex.getMessage().contains("Only AUTO, INCREMENTAL, PCT are supported"),
+                "expected refresh_mode error, got: " + ex.getMessage());
     }
 
     @Test

@@ -342,10 +342,44 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     }
 
     @Test
+    public void testAutoRefreshModeRejectsPartitionAndForceRefresh() throws Exception {
+        // AUTO may fall back to PCT at refresh time but is still an incrementally maintained
+        // view, so it keeps INCREMENTAL's restrictions on how a refresh can be asked for.
+        starRocksAssert.withMaterializedView("create materialized view test.mv_auto_refresh_forms\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\"refresh_mode\" = \"pct\")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "mv_auto_refresh_forms");
+            mv.getTableProperty().setMvRefreshMode("auto");
+            mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "auto");
+
+            Exception partitionRefresh = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms "
+                            + "PARTITION START('2022-02-03') END ('2022-02-25');", connectContext));
+            Assertions.assertTrue(partitionRefresh.getMessage().contains(
+                            "Partition refresh is not supported for materialized views with refresh_mode=AUTO."),
+                    "expected partition refresh rejection, got: " + partitionRefresh.getMessage());
+
+            Exception forceRefresh = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(
+                            "REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms FORCE;", connectContext));
+            Assertions.assertTrue(forceRefresh.getMessage().contains(
+                            "FORCE refresh is not supported for materialized views with refresh_mode=AUTO."),
+                    "expected FORCE rejection, got: " + forceRefresh.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_auto_refresh_forms");
+        }
+    }
+
+    @Test
     public void testIncrementalRefreshModeRejectsForceRefresh() throws Exception {
-        // Create a MV with PCT mode (no Iceberg required), then flip the persisted refresh_mode
-        // to "incremental" so the FORCE-rejection branch in the analyzer fires. This isolates the
-        // analyzer check from the IVM eligibility constraints of the CREATE path.
+        // Create a MV with PCT mode (no Iceberg required), then flip it to "incremental" so the
+        // FORCE-rejection branch in the analyzer fires. This isolates the analyzer check from the
+        // IVM eligibility constraints of the CREATE path.
         starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_force_refresh\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +

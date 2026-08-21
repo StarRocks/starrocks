@@ -40,7 +40,7 @@ description: "materialized_viewsはすべてのマテリアライズドビュー
 | LAST_REFRESH_JOB_ID                  | 最新のリフレッシュタスクのジョブ ID。                        |
 | LAST_REFRESH_TIME                    | ベーステーブルの更新がマテリアライズドビューに反映されている最新の時間。 |
 | WAREHOUSE                            | 非同期マテリアライズドビューがリフレッシュタスクに使用するウェアハウスの名前。ストレージ・コンピュート一体型モードの場合、または同期 (rollup) マテリアライズドビューの場合は空です。 |
-| REFRESH_MODE                         | 非同期マテリアライズドビューに設定されたリフレッシュモード。有効な値: `PCT` (パーティション変更追跡。変更されたパーティションのみをリフレッシュ)、`INCREMENTAL` (インクリメンタルビューメンテナンス)。同期マテリアライズドビューの場合は空です。 |
+| REFRESH_MODE                         | 非同期マテリアライズドビューに設定されたリフレッシュモード。有効な値: `PCT` (パーティション変更追跡。変更されたパーティションのみをリフレッシュ)、`INCREMENTAL` (インクリメンタルビューメンテナンス)、`AUTO` (可能な限りインクリメンタル。増分プランを構築できない変更が発生した場合は `PCT` にフォールバック)。同期マテリアライズドビューの場合は空です。 |
 | REFRESH_TRIGGER                      | リフレッシュがトリガーされる方法。有効な値: `NONE` (同期マテリアライズドビュー)、`MANUAL` (REFRESH MATERIALIZED VIEW 経由のみ)、`SCHEDULED` (EVERY 間隔による定期実行)、`ON_BASE_TABLE_CHANGE` (ベーステーブルのロードまたは変更時に自動実行)。 |
 | REFRESH_POLICY                       | 人間が読めるリフレッシュポリシー。有効な値: `NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`、または `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` のようなスケジュール (`START` 句は開始時刻が定義されている場合にのみ含まれます)。 |
 | RESOURCE_GROUP                       | マテリアライズドビューのリフレッシュタスクに使用されるリソースグループ (マテリアライズドビューの `resource_group` プロパティから)。設定されていない場合は `default_mv_wg` がデフォルトです。 |

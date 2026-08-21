@@ -154,7 +154,6 @@ ORDER BY 1, 2;
 -- result:
 INCREMENTAL	SUCCESS
 PCT	SKIPPED
-PCT	SUCCESS
 -- !result
 -- name: test_ivm_no_change_skipped @cloud
 CREATE TABLE base_noop (

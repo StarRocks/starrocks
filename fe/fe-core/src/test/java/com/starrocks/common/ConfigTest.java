@@ -414,7 +414,7 @@ public class ConfigTest {
                 Assertions.assertNotNull(MaterializedView.RefreshMode.valueOf(valid.toUpperCase(Locale.ROOT)));
             }
 
-            // AUTO parses as an enum constant but is not selectable, matching the refresh_mode property.
+            // AUTO is a valid refresh_mode property but not a valid default; see ConfigBase.
             for (String invalid : List.of("auto", "AUTO", "incrementall", "hybrid", "", " ")) {
                 Config.setMutableConfig("default_mv_refresh_mode", "pct", false, "");
                 Assertions.assertThrows(DdlException.class, () ->
