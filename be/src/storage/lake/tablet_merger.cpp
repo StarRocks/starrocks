@@ -2357,16 +2357,16 @@ StatusOr<bool> remap_legacy_entry_or_drop(const Slice& entry_key, IndexValuesWit
     return values_pb->values_size() > 0;
 }
 
-// Corrupted bytes on the sstable-rebuild read path usually come from the local
-// cache copy of the source sstable (the same failure mode as PK index
-// compaction). Drop that cache entry before propagating the error, so a retried
-// tablet merge scheduled onto this node re-reads from remote storage instead of
-// hitting the same bad blocks forever.
+// Corrupted bytes on a source-sstable read path usually come from its local
+// cache copy (the same failure mode as PK index compaction). Drop that cache
+// entry before propagating the error, so a retried tablet merge scheduled onto
+// this node re-reads from remote storage instead of hitting the same bad blocks
+// forever.
 Status drop_source_sstable_cache_on_corruption(TabletManager* tablet_manager, int64_t source_tablet_id,
                                                const PersistentIndexSstablePB& src_pb, const Status& st) {
     if (st.is_corruption()) {
         StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        LOG(WARNING) << "tablet merge sstable rebuild hit corruption, dropping local cache of " << src_pb.filename()
+        LOG(WARNING) << "tablet merge source sstable read hit corruption, dropping local cache of " << src_pb.filename()
                      << ", source tablet_id=" << source_tablet_id << ", error: " << st;
         (void)drop_corrupted_sstable_cache(tablet_manager->sst_location(source_tablet_id, src_pb.filename()));
     }
@@ -2774,27 +2774,31 @@ StatusOr<SharedRssidSstableContents> classify_shared_rssid_sstable_contents(Tabl
     read_options.fill_cache = false;
     std::unique_ptr<sstable::Iterator> iterator(source_sstable->new_iterator(read_options));
     iterator->SeekToFirst();
+    auto handle_source_error = [&](const Status& status) {
+        return drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb, status);
+    };
 
     std::optional<SharedRssidSstableContents> contents;
     for (; iterator->Valid(); iterator->Next()) {
         IndexValuesWithVerPB values_pb;
         const Slice value = iterator->value();
         if (!values_pb.ParseFromArray(value.data, static_cast<int>(value.size)) || values_pb.values_size() == 0) {
-            return Status::Corruption(fmt::format("Shared sstable {} has an invalid index value", src_pb.filename()));
+            return handle_source_error(
+                    Status::Corruption(fmt::format("Shared sstable {} has an invalid index value", src_pb.filename())));
         }
         for (const auto& index_value : values_pb.values()) {
             const auto current = is_index_tombstone(index_value) ? SharedRssidSstableContents::kTombstone
                                                                  : SharedRssidSstableContents::kData;
             if (contents.has_value() && *contents != current) {
-                return Status::Corruption(
-                        fmt::format("Shared sstable {} mixes data and tombstone entries", src_pb.filename()));
+                return handle_source_error(Status::Corruption(
+                        fmt::format("Shared sstable {} mixes data and tombstone entries", src_pb.filename())));
             }
             contents = current;
         }
     }
-    RETURN_IF_ERROR(iterator->status());
+    RETURN_IF_ERROR(handle_source_error(iterator->status()));
     if (!contents.has_value()) {
-        return Status::Corruption(fmt::format("Shared sstable {} is empty", src_pb.filename()));
+        return handle_source_error(Status::Corruption(fmt::format("Shared sstable {} is empty", src_pb.filename())));
     }
     return *contents;
 }
@@ -2973,22 +2977,26 @@ StatusOr<bool> non_shared_legacy_sstable_needs_rebuild(TabletManager* tablet_man
     read_options.fill_cache = false;
     std::unique_ptr<sstable::Iterator> iterator(source_sstable->new_iterator(read_options));
     iterator->SeekToFirst();
+    auto handle_source_error = [&](const Status& status) {
+        return drop_source_sstable_cache_on_corruption(tablet_manager, ctx.metadata()->id(), src_pb, status);
+    };
 
     for (; iterator->Valid(); iterator->Next()) {
         IndexValuesWithVerPB values_pb;
         const Slice raw_value = iterator->value();
         if (!values_pb.ParseFromArray(raw_value.data, static_cast<int>(raw_value.size))) {
-            return Status::Corruption("Failed to parse non-shared sstable value during owner validation");
+            return handle_source_error(
+                    Status::Corruption("Failed to parse non-shared sstable value during owner validation"));
         }
         for (const auto& index_value : values_pb.values()) {
             if (is_index_tombstone(index_value)) continue;
             const int64_t lifted_rssid =
                     static_cast<int64_t>(index_value.rssid()) + static_cast<int64_t>(src_pb.rssid_offset());
             if (lifted_rssid < 0 || lifted_rssid > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
-                return Status::Corruption(fmt::format(
+                return handle_source_error(Status::Corruption(fmt::format(
                         "non-shared owner validation: lifted rssid out of uint32 range: stored={} src_offset={} "
                         "lifted={}",
-                        index_value.rssid(), src_pb.rssid_offset(), lifted_rssid));
+                        index_value.rssid(), src_pb.rssid_offset(), lifted_rssid)));
             }
             const auto source_rssid = static_cast<uint32_t>(lifted_rssid);
             if (!source_live_rssids.contains(source_rssid)) return true;
@@ -3000,7 +3008,7 @@ StatusOr<bool> non_shared_legacy_sstable_needs_rebuild(TabletManager* tablet_man
             }
         }
     }
-    RETURN_IF_ERROR(iterator->status());
+    RETURN_IF_ERROR(handle_source_error(iterator->status()));
     return false;
 }
 
