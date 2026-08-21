@@ -822,11 +822,6 @@ public class Utils {
             String fnName = callOperator.getFnName();
             if (FunctionSet.HISTOGRAM.equalsIgnoreCase(fnName) ||
                     FunctionSet.HISTOGRAM_HLL_NDV.equalsIgnoreCase(fnName)) {
-                if (callOperator.isDistinct()) {
-                    throw new StarRocksPlannerException(
-                            fnName + "() does not support DISTINCT",
-                            ErrorType.USER_ERROR);
-                }
                 if (!groupingKeys.isEmpty()) {
                     throw new StarRocksPlannerException(
                             fnName + "() does not support GROUP BY",
