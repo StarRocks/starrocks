@@ -27,6 +27,7 @@ import org.mockito.MockedStatic;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -116,6 +117,15 @@ public class TabletReshardOrderBySplitBoundsTest {
         }
     }
 
+    private static SplitTabletJobFactory.SplitCandidate candidate(Tablet tablet) {
+        return new SplitTabletJobFactory.SplitCandidate(1000L, null, tablet, 2);
+    }
+
+    private static List<Long> electedIds(List<SplitTabletJobFactory.SplitCandidate> candidates, int budget) {
+        return SplitTabletJobFactory.electLargestWithinBudget(candidates, budget).stream()
+                .map(c -> c.oldTabletId).collect(Collectors.toList());
+    }
+
     @Test
     public void testLargestTabletsSelectedFirst() {
         Tablet small = mock(Tablet.class);
@@ -128,15 +138,41 @@ public class TabletReshardOrderBySplitBoundsTest {
         when(mid.getDataSize(true)).thenReturn(50L);
         when(mid.getId()).thenReturn(3L);
 
-        List<Tablet> ordered = SplitTabletJobFactory.largestFirst(List.of(small, big, mid));
-        Assertions.assertEquals(List.of(big, mid, small), ordered,
+        List<SplitTabletJobFactory.SplitCandidate> candidates =
+                List.of(candidate(small), candidate(big), candidate(mid));
+        Assertions.assertEquals(List.of(2L, 3L), electedIds(candidates, 2),
                 "a capped job must spend its budget on the tablets that most need splitting");
+        Assertions.assertEquals(List.of(1L, 2L, 3L), electedIds(candidates, 3),
+                "a budget that covers every candidate must take them all");
+    }
+
+    /**
+     * The budget is job-wide but the candidates used to be ordered only within one index, so a small
+     * tablet in the partition the traversal reached first could crowd out a much larger one in a later
+     * partition -- the opposite of the largest-first rule the budget exists to serve.
+     */
+    @Test
+    public void testBudgetIsSpentAcrossPartitionsNotWithinTheFirstOne() {
+        Tablet smallInFirstPartition = mock(Tablet.class);
+        when(smallInFirstPartition.getDataSize(true)).thenReturn(1L);
+        when(smallInFirstPartition.getId()).thenReturn(11L);
+        Tablet bigInSecondPartition = mock(Tablet.class);
+        when(bigInSecondPartition.getDataSize(true)).thenReturn(100L);
+        when(bigInSecondPartition.getId()).thenReturn(22L);
+
+        List<SplitTabletJobFactory.SplitCandidate> candidates = List.of(
+                new SplitTabletJobFactory.SplitCandidate(1000L, null, smallInFirstPartition, 2),
+                new SplitTabletJobFactory.SplitCandidate(2000L, null, bigInSecondPartition, 2));
+
+        Assertions.assertEquals(List.of(22L), electedIds(candidates, 1),
+                "the largest tablet wins the budget wherever it lives");
     }
 
     /**
      * TabletStatMgr rewrites LakeTablet.dataSize from its own thread without the table lock. A
      * comparator that re-read it mid-sort would stop being transitive, and TimSort answers a
-     * non-transitive comparator by throwing rather than by returning a slightly-off order.
+     * non-transitive comparator by throwing rather than by returning a slightly-off order. So a
+     * candidate reads its size exactly once, when it is planned.
      */
     @Test
     public void testTabletSizesAreReadOnceSoASizeUpdateCannotBreakTheSort() {
@@ -148,8 +184,8 @@ public class TabletReshardOrderBySplitBoundsTest {
             long id = i + 1;
             long sizeAtEntry = tabletCount - i;
             long sizeAfterTheUpdate = i;
-            // The first read sees the size the job is entitled to sort on; every later read sees a
-            // stat update that has since inverted the order, the way a concurrent update would.
+            // The first read sees the size planning is entitled to act on; every later read sees a stat
+            // update that has since inverted the order, the way a concurrent update would.
             AtomicLong reads = new AtomicLong();
             Tablet tablet = mock(Tablet.class);
             when(tablet.getId()).thenReturn(id);
@@ -157,10 +193,14 @@ public class TabletReshardOrderBySplitBoundsTest {
                     invocation -> reads.getAndIncrement() == 0 ? sizeAtEntry : sizeAfterTheUpdate);
             tablets.add(tablet);
         }
+        List<SplitTabletJobFactory.SplitCandidate> candidates =
+                tablets.stream().map(TabletReshardOrderBySplitBoundsTest::candidate).collect(Collectors.toList());
 
-        List<Tablet> ordered = SplitTabletJobFactory.largestFirst(tablets);
+        List<Long> elected = electedIds(candidates, tabletCount / 2);
 
-        Assertions.assertEquals(tablets, ordered,
+        Assertions.assertEquals(
+                tablets.subList(0, tabletCount / 2).stream().map(Tablet::getId).collect(Collectors.toList()),
+                elected,
                 "the order must follow the sizes as they read at entry, not as they drift mid-sort");
         for (Tablet tablet : tablets) {
             verify(tablet, times(1)).getDataSize(true);
