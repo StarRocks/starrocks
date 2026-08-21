@@ -343,3 +343,5 @@ select array_contains(arr, 'Hunan'), array_contains_all(arr, ['Henan', 'Tibet'])
        array_position(arr, 'Macao'), array_remove(arr, 'Henan') from cte;
 
 select  array_contains(a1, NULL), array_contains_all(a1, array_slice(a1, 1, 2)), array_contains_seq(a1, array_slice(a1, 1, 2)) from s1 order by v1 limit 2;
+
+with cte as (select a1, a2 from s1) [materialized] select a1 from cte where a2[1] = 'JX' order by a1 limit 2;
