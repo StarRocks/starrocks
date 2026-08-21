@@ -19,6 +19,7 @@ import com.starrocks.common.Range;
 
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Utility methods for range distribution colocate operations.
@@ -183,6 +184,99 @@ public class ColocateRangeUtils {
         Range<Tuple> expanded = expandToFullSortKey(
                 ranges.get(idx).getRange(), sortKeyColumns, colocateColumnCount);
         return expanded.contains(tabletRange);
+    }
+
+    /**
+     * Expands every colocate range to the full sort key, positionally matching {@code ranges}.
+     * {@link Classifier} uses it to expand once per index; a caller that needs the expanded topology
+     * itself (rather than a classification) can call it directly.
+     */
+    public static List<Range<Tuple>> expandColocateRanges(List<ColocateRange> ranges,
+                                                          List<Column> sortKeyColumns,
+                                                          int colocateColumnCount) {
+        List<Range<Tuple>> expandedRanges = new ArrayList<>(ranges.size());
+        for (ColocateRange colocateRange : ranges) {
+            expandedRanges.add(expandToFullSortKey(
+                    colocateRange.getRange(), sortKeyColumns, colocateColumnCount));
+        }
+        return expandedRanges;
+    }
+
+    /**
+     * Binds a colocate group's ranges to ONE materialized index's sort key, so a tablet of that index
+     * can be classified without the caller having to keep the pieces consistent by hand.
+     *
+     * <p>Exists because the classification needs three things that must agree — the ranges, those same
+     * ranges expanded to the full sort key, and the colocate column count — and only the caller knows
+     * which index's sort key is the right one. A rollup or MV can have a shorter sort key than the base
+     * index, and expanding against the wrong one silently misclassifies every tablet of that index
+     * rather than failing. Holding the three together makes that mistake unrepresentable, and expanding
+     * once per index keeps it off the per-tablet path.
+     */
+    public static final class Classifier {
+        private final List<ColocateRange> ranges;
+        private final List<Range<Tuple>> expandedRanges;
+        private final int colocateColumnCount;
+
+        private Classifier(List<ColocateRange> ranges, List<Range<Tuple>> expandedRanges,
+                           int colocateColumnCount) {
+            this.ranges = ranges;
+            this.expandedRanges = expandedRanges;
+            this.colocateColumnCount = colocateColumnCount;
+        }
+
+        /**
+         * @param ranges the colocate group's ranges; {@code null} or empty means the table has no
+         *               usable range topology, and this returns {@code null} so the caller skips
+         *               classification entirely
+         * @param sortKeyColumns the sort key of the index whose tablets will be classified
+         */
+        @Nullable
+        public static Classifier of(@Nullable List<ColocateRange> ranges, List<Column> sortKeyColumns,
+                                    int colocateColumnCount) {
+            // Empty is not the same as "covers everything": a registered group whose range record has
+            // not been replayed yet reports an empty list, and classifying against it would call every
+            // tablet uncontained. Treat it as not-colocate, exactly like a table with no group.
+            if (ranges == null || ranges.isEmpty()) {
+                return null;
+            }
+            return new Classifier(ranges,
+                    expandColocateRanges(ranges, sortKeyColumns, colocateColumnCount), colocateColumnCount);
+        }
+
+        /**
+         * Index of the {@link ColocateRange} that FULLY contains {@code tabletRange}, or {@code -1}
+         * when none does: a null range, a colocate prefix no range covers, or a range that already
+         * spans a boundary.
+         *
+         * <p>Same containment rule as {@link #isContainedInOwningColocateRange} and the scan-time guard
+         * in {@code RangeColocateScanDispatch}, so a caller deciding what may be merged agrees with the
+         * guard deciding what may be dispatched. The two are kept in step by an equivalence case in
+         * {@code ColocateRangeUtilsTest} rather than by expressing one in terms of the other, which
+         * would either change the zero-column behavior below or expand every range where
+         * {@code isContainedInOwningColocateRange} expands only the matched one.
+         */
+        public int indexOf(@Nullable Range<Tuple> tabletRange) {
+            if (tabletRange == null) {
+                return -1;
+            }
+            // colocateColumnCount == 0 must keep the prefix null (indexOf maps null to the first
+            // range); extractColocatePrefix requires a positive count.
+            Tuple lowerPrefix = colocateColumnCount > 0
+                    ? extractColocatePrefix(tabletRange, colocateColumnCount)
+                    : null;
+            int idx = ColocateRangeMgr.indexOf(ranges, lowerPrefix);
+            if (idx < 0) {
+                return -1;
+            }
+            return expandedRanges.get(idx).contains(tabletRange) ? idx : -1;
+        }
+
+        /** As {@link #indexOf(Range)}; a tablet with no {@link TabletRange} classifies as {@code -1}. */
+        public int indexOf(Tablet tablet) {
+            TabletRange tabletRange = tablet.getRange();
+            return indexOf(tabletRange == null ? null : tabletRange.getRange());
+        }
     }
 
     /**
