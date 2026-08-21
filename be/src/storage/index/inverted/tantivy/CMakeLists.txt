@@ -39,6 +39,89 @@ set(TANTIVY_BINDING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tantivy-binding)
 set(TANTIVY_CARGO_TARGET_DIR ${TANTIVY_BINDING_DIR}/target)
 set(TANTIVY_BINDING_LIB ${TANTIVY_CARGO_TARGET_DIR}/release/libtantivy_binding.a)
 set(TANTIVY_BINDING_HEADER ${TANTIVY_BINDING_DIR}/include/tantivy_binding.h)
+set(TANTIVY_IK_PATCH
+    ${CMAKE_CURRENT_SOURCE_DIR}/patches/ik-rs-0.7.0-starrocks-home.patch)
+
+# ik-rs 0.7 loads ik.yml and its dictionaries from CARGO_MANIFEST_DIR at
+# runtime. That directory belongs to the build image and is not present after
+# starrocks_be is copied to another host. Locate the locked crate in Cargo's
+# registry, create an isolated patched copy, and make it resolve resources from
+# $STARROCKS_HOME/lib/tantivy-packages instead. Never modify the shared Cargo
+# cache. Prefer CARGO_HOME when the build environment provides it; otherwise
+# derive Cargo's home from the cargo executable location.
+find_program(TANTIVY_CARGO_EXECUTABLE cargo REQUIRED)
+if (DEFINED ENV{CARGO_HOME} AND NOT "$ENV{CARGO_HOME}" STREQUAL "")
+    set(TANTIVY_CARGO_HOME $ENV{CARGO_HOME})
+else()
+    get_filename_component(TANTIVY_CARGO_BIN_DIR ${TANTIVY_CARGO_EXECUTABLE} DIRECTORY)
+    get_filename_component(TANTIVY_CARGO_HOME ${TANTIVY_CARGO_BIN_DIR} DIRECTORY)
+endif()
+file(GLOB TANTIVY_IK_SOURCE_CANDIDATES
+    LIST_DIRECTORIES true
+    ${TANTIVY_CARGO_HOME}/registry/src/*/ik-rs-0.7.0)
+list(SORT TANTIVY_IK_SOURCE_CANDIDATES)
+list(LENGTH TANTIVY_IK_SOURCE_CANDIDATES TANTIVY_IK_SOURCE_COUNT)
+if (TANTIVY_IK_SOURCE_COUNT EQUAL 0)
+    message(FATAL_ERROR
+        "ik-rs 0.7.0 is missing from ${TANTIVY_CARGO_HOME}/registry/src. "
+        "The build image must provide the locked Cargo dependency cache.")
+endif()
+list(GET TANTIVY_IK_SOURCE_CANDIDATES 0 TANTIVY_IK_SOURCE_DIR)
+foreach (TANTIVY_IK_REQUIRED_PATH
+         ik.yml
+         dict/main2012.dic
+         dict/quantifier.dic
+         dict/stopword.dic
+         dict/ext_dict/ext.dic
+         dict/ext_stop_word/stop.dic
+         LICENSE)
+    if (NOT EXISTS ${TANTIVY_IK_SOURCE_DIR}/${TANTIVY_IK_REQUIRED_PATH})
+        message(FATAL_ERROR
+            "Required ik-rs runtime resource is missing: "
+            "${TANTIVY_IK_SOURCE_DIR}/${TANTIVY_IK_REQUIRED_PATH}")
+    endif()
+endforeach()
+
+set(TANTIVY_IK_PATCHED_DIR
+    ${TANTIVY_CARGO_TARGET_DIR}/patched-deps/ik-rs-0.7.0)
+file(REMOVE_RECURSE ${TANTIVY_IK_PATCHED_DIR})
+file(MAKE_DIRECTORY ${TANTIVY_IK_PATCHED_DIR})
+file(COPY ${TANTIVY_IK_SOURCE_DIR}/ DESTINATION ${TANTIVY_IK_PATCHED_DIR})
+execute_process(
+    COMMAND patch -p1 --input ${TANTIVY_IK_PATCH}
+    WORKING_DIRECTORY ${TANTIVY_IK_PATCHED_DIR}
+    RESULT_VARIABLE TANTIVY_IK_PATCH_RESULT
+    OUTPUT_VARIABLE TANTIVY_IK_PATCH_OUTPUT
+    ERROR_VARIABLE TANTIVY_IK_PATCH_ERROR)
+if (NOT TANTIVY_IK_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "Failed to patch ik-rs 0.7.0: ${TANTIVY_IK_PATCH_OUTPUT} "
+        "${TANTIVY_IK_PATCH_ERROR}")
+endif()
+set(TANTIVY_IK_CARGO_PATCH_CONFIG
+    "patch.crates-io.ik-rs.path=\"${TANTIVY_IK_PATCHED_DIR}\"")
+
+# Stage the runtime resources in be/output as part of every BE/UT build. This
+# target intentionally refreshes the directory on every build so an
+# independently cleaned be/output never leaves a stale or incomplete bundle.
+set(TANTIVY_IK_OUTPUT_DIR ${OUTPUT_DIR}/lib/tantivy-packages)
+file(GLOB_RECURSE TANTIVY_IK_RESOURCE_FILES
+    CONFIGURE_DEPENDS
+    ${TANTIVY_IK_SOURCE_DIR}/ik.yml
+    ${TANTIVY_IK_SOURCE_DIR}/dict/*
+    ${TANTIVY_IK_SOURCE_DIR}/LICENSE)
+add_custom_target(stage_tantivy_ik_resources ALL
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${TANTIVY_IK_OUTPUT_DIR}/dict
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${TANTIVY_IK_OUTPUT_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy ${TANTIVY_IK_SOURCE_DIR}/ik.yml
+            ${TANTIVY_IK_OUTPUT_DIR}/ik.yml
+    COMMAND ${CMAKE_COMMAND} -E copy ${TANTIVY_IK_SOURCE_DIR}/LICENSE
+            ${TANTIVY_IK_OUTPUT_DIR}/LICENSE
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${TANTIVY_IK_SOURCE_DIR}/dict
+            ${TANTIVY_IK_OUTPUT_DIR}/dict
+    DEPENDS ${TANTIVY_IK_RESOURCE_FILES}
+    COMMENT "Staging Tantivy IK runtime resources"
+    VERBATIM)
 
 # Track every Rust source / build input so the build system re-runs cargo
 # whenever any of them change. CONFIGURE_DEPENDS makes the glob re-evaluate
@@ -46,6 +129,7 @@ set(TANTIVY_BINDING_HEADER ${TANTIVY_BINDING_DIR}/include/tantivy_binding.h)
 # re-run. Cargo handles its own incremental compilation on top of this.
 file(GLOB_RECURSE TANTIVY_BINDING_SOURCES
     CONFIGURE_DEPENDS
+    ${TANTIVY_BINDING_DIR}/.cargo/config.toml
     ${TANTIVY_BINDING_DIR}/Cargo.toml
     ${TANTIVY_BINDING_DIR}/Cargo.lock
     ${TANTIVY_BINDING_DIR}/build.rs
@@ -60,8 +144,10 @@ file(GLOB_RECURSE TANTIVY_BINDING_SOURCES
 # of skipping cargo even when sources had changed).
 add_custom_command(
     OUTPUT ${TANTIVY_BINDING_LIB} ${TANTIVY_BINDING_HEADER}
-    COMMAND cargo build --release --frozen --manifest-path ${TANTIVY_BINDING_DIR}/Cargo.toml
-    DEPENDS ${TANTIVY_BINDING_SOURCES}
+    COMMAND cargo build --release --frozen
+            --config ${TANTIVY_IK_CARGO_PATCH_CONFIG}
+            --manifest-path ${TANTIVY_BINDING_DIR}/Cargo.toml
+    DEPENDS ${TANTIVY_BINDING_SOURCES} ${TANTIVY_IK_PATCH}
     WORKING_DIRECTORY ${TANTIVY_BINDING_DIR}
     COMMENT "Building tantivy-binding (cargo, release profile)"
     VERBATIM)
@@ -84,3 +170,8 @@ add_dependencies(tantivy_binding build_tantivy_binding)
 set_target_properties(tantivy_binding PROPERTIES
     IMPORTED_LOCATION ${TANTIVY_BINDING_LIB}
     INTERFACE_INCLUDE_DIRECTORIES ${TANTIVY_BINDING_DIR}/include)
+
+install(FILES ${TANTIVY_IK_SOURCE_DIR}/ik.yml ${TANTIVY_IK_SOURCE_DIR}/LICENSE
+        DESTINATION ${OUTPUT_DIR}/lib/tantivy-packages)
+install(DIRECTORY ${TANTIVY_IK_SOURCE_DIR}/dict
+        DESTINATION ${OUTPUT_DIR}/lib/tantivy-packages)

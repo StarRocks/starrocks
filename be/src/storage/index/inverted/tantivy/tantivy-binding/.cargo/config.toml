@@ -1,0 +1,5 @@
+# CMake materializes this patched dependency from the locked Cargo registry
+# package before invoking cargo. Keeping the patch here also makes direct
+# cargo commands use the same dependency and Cargo.lock as the BE build.
+[patch.crates-io]
+ik-rs = { path = "target/patched-deps/ik-rs-0.7.0" }

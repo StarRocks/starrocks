@@ -629,8 +629,6 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "ik-rs"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fdbd4de23c2f076ea550fecd0bab153e1292211a8b9aeabad9a76b8ece148a6"
 dependencies = [
  "cfg-if",
  "log",
