@@ -23,7 +23,8 @@ explain select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 explain select * from t1 where k2=1196389819;
 
 -- name: test_create_error
-create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(k2, '%Y-%m-%d');
+-- an aggregate table may partition on an expression over its key columns, but never over a value column
+create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(v, '%Y-%m-%d');
 create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d');
 
 

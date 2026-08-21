@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -593,7 +594,23 @@ public class PartitionDescAnalyzer {
 
     private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs, KeysType keysType)
             throws AnalysisException {
-        List<String> slotRefs = Lists.newArrayList();
+        // A partition expression must be a function of the row it partitions. A non-deterministic one
+        // sends rows that belong together to different partitions, which breaks partition pruning for
+        // every table type and, on an aggregate or unique table, splits one key across partitions so
+        // it never merges into a single row.
+        if (desc.getPartitionExprs() != null) {
+            for (Expr partitionExpr : desc.getPartitionExprs()) {
+                Pair<Boolean, String> nonDeterministic = AnalyzerUtils.containsNonDeterministicFunction(partitionExpr);
+                if (nonDeterministic.first) {
+                    throw new AnalysisException("The partition expr should be deterministic, but got "
+                            + nonDeterministic.second);
+                }
+            }
+        }
+
+        // the expression carries the column name as the user spelled it, which may differ in case
+        // from the declared column, so the source columns are collected case insensitively
+        Set<String> slotRefs = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (desc.getPartitionExprs() != null) {
             slotRefs.addAll(desc.getPartitionExprs().stream()
                     .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
