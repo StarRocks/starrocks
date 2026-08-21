@@ -349,6 +349,56 @@ public class MvRewriteJoinTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("test_mv2");
     }
 
+    // Regression test for https://github.com/StarRocks/starrocks/issues/70935
+    // When MV has extra join ON predicates (e.g., a.v1 = b.v1) that the query does not,
+    // these "diff predicates" must be provable from the query's WHERE clause.
+    // The old code only checked that each side of the diff predicate existed in SOME equivalence
+    // class, but did not verify they were in the SAME class (i.e., bound to the same constant).
+    @Test
+    public void testMVRewriteJoinDiffPredicateWithDifferentConstants() throws Exception {
+        // MV joins on TWO predicates: a.k1=b.k1 AND a.v1=b.v1
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_diff_pred_mv\n" +
+                "PARTITION BY k1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1, b.v2 as b_v2\n" +
+                "FROM test_partition_tbl1 as a LEFT JOIN test_partition_tbl2 as b " +
+                "ON a.k1=b.k1 AND a.v1=b.v1;");
+
+        // Case 1: Query ON has only a.k1=b.k1, diff predicate is a.v1=b.v1.
+        // WHERE has a.v1=1 AND b.v1=2 — different constants, so a.v1=b.v1 is NOT provable.
+        // MV must NOT be used.
+        {
+            String query = "SELECT a.v2 FROM test_partition_tbl1 a " +
+                    "LEFT JOIN test_partition_tbl2 b ON a.k1=b.k1 " +
+                    "WHERE a.k1='2020-01-01' AND a.v1=1 AND b.v1=2;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_diff_pred_mv");
+        }
+
+        // Case 2: WHERE has a.v1=1 AND b.v1=1 — same constant, a.v1=b.v1 IS provable.
+        // MV SHOULD be used.
+        {
+            String query = "SELECT a.v2 FROM test_partition_tbl1 a " +
+                    "LEFT JOIN test_partition_tbl2 b ON a.k1=b.k1 " +
+                    "WHERE a.k1='2020-01-01' AND a.v1=1 AND b.v1=1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_diff_pred_mv");
+        }
+
+        // Case 3: WHERE only has predicate on one side (a.v1=1, no b.v1 predicate).
+        // a.v1=b.v1 is NOT provable. MV must NOT be used.
+        {
+            String query = "SELECT a.v2 FROM test_partition_tbl1 a " +
+                    "LEFT JOIN test_partition_tbl2 b ON a.k1=b.k1 " +
+                    "WHERE a.k1='2020-01-01' AND a.v1=1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_diff_pred_mv");
+        }
+
+        starRocksAssert.dropMaterializedView("test_diff_pred_mv");
+    }
+
     @Test
     public void testMVViewRewriteJoin() throws Exception {
         String view1 = "CREATE VIEW view1 as select * from test_partition_tbl1;";
