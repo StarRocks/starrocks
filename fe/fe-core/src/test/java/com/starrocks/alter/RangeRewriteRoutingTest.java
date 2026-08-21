@@ -15,6 +15,7 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -24,6 +25,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -35,6 +41,7 @@ import org.junit.jupiter.api.function.Executable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -83,6 +90,15 @@ public class RangeRewriteRoutingTest {
     private static AlterJobV2 createJob(String tableName, String alterSql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
         return handler().analyzeAndCreateJob(stmt.getAlterClauseList(), db(), table(tableName));
+    }
+
+    /**
+     * Run ALTER ... SET (...) the way the executor does. Property guards live in createAlterMetaJob,
+     * which analyzeAndCreateJob never reaches -- driving them through createJob proves nothing.
+     */
+    private static void alterMeta(String tableName, String alterSql) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        handler().processLakeTableAlterMeta(stmt.getAlterClauseList().get(0), db(), table(tableName));
     }
 
     /** Extract the underlying DdlException from a (possibly wrapped) throwable. */
@@ -436,30 +452,38 @@ public class RangeRewriteRoutingTest {
     }
 
 
-    // (l'') The same divergence reached through MODIFY COLUMN. A primary-key column cannot be demoted,
-    // but a value column can be promoted to one, so this path can route a primary-key table too. It
-    // must not: createRangeRewriteJob(List<Column>) passes sortKeyIdxes = null on the assumption that a
-    // routed keyness flip never has an explicit sort key pinning the column positions, so routing this
-    // shape would silently rewrite the table without its ORDER BY. Decline, and the existing keyness
-    // rejection stands.
+    /**
+     * (l'') The same divergence, reached through MODIFY COLUMN rather than a reorder.
+     *
+     * <p>The clause is built by hand on purpose. Spelled as SQL, {@code MODIFY COLUMN v2 INT KEY} on a
+     * primary-key table never survives analysis -- the analyzer fills in REPLACE for the column and then
+     * rejects the key/aggregate combination -- so the routing predicate is not reachable that way, and a
+     * SQL-level test would only be testing the analyzer. The guard below is therefore defence in depth:
+     * it keeps the predicate from answering on two different key spaces (ORDER BY names against
+     * primary-key names, which can never be equal) if another caller ever does reach it. Routing this
+     * shape would be worse than the false positive, because createRangeRewriteJob(List&lt;Column&gt;)
+     * passes sortKeyIdxes = null and would rewrite the table without its ORDER BY.
+     */
     @Test
-    public void testPrimaryKeyKeynessFlipOnSeparateSortKeyRejectedSynchronously() throws Exception {
+    public void testPrimaryKeyKeynessFlipOnSeparateSortKeyIsNotRouted() throws Exception {
         starRocksAssert.withTable("create table t_route_pk_sep_flip"
                 + " (k1 int not null, k2 int not null, v1 int, v2 int)\n"
                 + "primary key(k1, k2)\n"
                 + "order by(v1)\n"
                 + "properties('replication_num' = '1', 'file_bundling' = 'true');");
         OlapTable table = table("t_route_pk_sep_flip");
-        String sql = "alter table t_route_pk_sep_flip modify column v2 int key";
-        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(
-                table, stmt.getAlterClauseList().get(0)),
-                "a sort key that differs from the primary key must not route a keyness flip");
+        assertFalse(MetaUtils.getPhysicalSortKeyColumns(table, table.getBaseIndexMetaId()).stream()
+                        .map(Column::getName).collect(Collectors.toList())
+                        .equals(table.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList())),
+                "this table's ORDER BY must differ from its primary key for the case to mean anything");
 
-        DdlException e = assertThrowsDdlException(() -> createJob("t_route_pk_sep_flip", sql));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                e.getMessage().contains("MODIFY COLUMN that changes keyness is not supported"),
-                "unexpected message: " + e.getMessage());
+        // Promote the value column v2 to a key column: the flip the predicate has to answer about.
+        ColumnDef promoted = new ColumnDef("v2", new TypeDef(IntegerType.INT), true, null, null, false,
+                ColumnDef.DefaultValueDef.NOT_SET, "");
+        ModifyColumnClause clause = new ModifyColumnClause(promoted, null, null, Map.of());
+
+        assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(table, clause),
+                "a sort key that differs from the primary key must not route a keyness flip");
     }
 
     // (m) ADD INDEX on a range-distributed PRIMARY KEY table whose ORDER BY differs from the primary
@@ -507,7 +531,7 @@ public class RangeRewriteRoutingTest {
                 + "primary key(k1, k2)\n"
                 + "order by(v1)\n"
                 + "properties('replication_num' = '1', 'file_bundling' = 'true');");
-        DdlException e = assertThrowsDdlException(() -> createJob("t_route_pk_bundle",
+        DdlException e = assertThrowsDdlException(() -> alterMeta("t_route_pk_bundle",
                 "alter table t_route_pk_bundle set ('file_bundling' = 'false')"));
         org.junit.jupiter.api.Assertions.assertTrue(
                 e.getMessage().contains("file_bundling cannot be disabled"),
@@ -523,7 +547,7 @@ public class RangeRewriteRoutingTest {
                 + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1', 'file_bundling' = 'true');");
         try {
-            createJob("t_route_pk_bundle_ok", "alter table t_route_pk_bundle_ok set ('file_bundling' = 'false')");
+            alterMeta("t_route_pk_bundle_ok", "alter table t_route_pk_bundle_ok set ('file_bundling' = 'false')");
         } catch (Exception e) {
             org.junit.jupiter.api.Assertions.assertFalse(
                     String.valueOf(e.getMessage()).contains("file_bundling cannot be disabled"),

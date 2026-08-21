@@ -1218,6 +1218,18 @@ public class CompactionSchedulerTest {
                 return dragsUnshareRewrite[0];
             }
         };
+        // Reaching tablet collection is what says the pause did NOT fire: it is the first thing past
+        // the guard. Asserting on nextCompactionTime instead would prove nothing, because the ordinary
+        // path re-arms the partition on its own once it finds no tablets to compact.
+        final boolean[] reachedTabletCollection = {false};
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                 ComputeResource computeResource) {
+                reachedTabletCollection[0] = true;
+                return Map.of();
+            }
+        };
 
         OlapTable table = new LakeTable();
         CompactionMgr compactionManager = new CompactionMgr();
@@ -1257,17 +1269,20 @@ public class CompactionSchedulerTest {
         // to be visible at all.
         compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(), new Quantiles(1, 2, 3));
 
-        // Ordinary reshard: the pause must not fire, so nothing pushes the partition's next attempt out.
-        long beforeOrdinary = compactionManager.getStatistics(partition).getNextCompactionTime();
+        // Ordinary reshard: the pause must not fire, so the scheduler goes on to look for tablets.
         compactionScheduler.startCompaction(snapshot, info);
-        Assertions.assertEquals(beforeOrdinary, compactionManager.getStatistics(partition).getNextCompactionTime(),
-                "an ordinary reshard must not defer compaction on unrelated partitions");
+        Assertions.assertTrue(reachedTabletCollection[0],
+                "an ordinary reshard must not pause compaction on unrelated partitions");
 
-        // The UNSHARE-dragging shape does get paused, which pushes it out by the failure interval.
+        // The UNSHARE-dragging shape does get paused: it stops before tablet collection, drops the
+        // request, and pushes the partition out by the failure interval rather than dropping it.
+        reachedTabletCollection[0] = false;
         dragsUnshareRewrite[0] = true;
+        long beforePause = compactionManager.getStatistics(partition).getNextCompactionTime();
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info),
                 "a split that drags an UNSHARE rewrite must pause ordinary compaction");
-        Assertions.assertTrue(compactionManager.getStatistics(partition).getNextCompactionTime() > beforeOrdinary,
+        Assertions.assertFalse(reachedTabletCollection[0], "the pause must stop before tablet collection");
+        Assertions.assertTrue(compactionManager.getStatistics(partition).getNextCompactionTime() > beforePause,
                 "the pause must re-arm the partition rather than drop it");
     }
 }
