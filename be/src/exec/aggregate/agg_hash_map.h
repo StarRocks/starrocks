@@ -29,6 +29,7 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "exec/aggregate/agg_consec_keys_cache.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregate/compress_serializer.h"
@@ -41,6 +42,7 @@ namespace starrocks {
 DECLARE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 using AggDataPtr = uint8_t*;
+
 template <typename T>
 concept HasKeyType = requires {
     typename T::KeyType;
@@ -237,6 +239,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
+    // Consecutive keys cache - optimization for sorted/clustered data
+    ConsecutiveKeyCache<FieldType> _consecutive_key_cache;
+
     template <class... Args>
     AggHashMapWithOneNumberKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
@@ -244,9 +249,17 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
+    // Get cache statistics for profiling
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
+
     template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        // Notify cache of new chunk - this handles adaptive enable/disable logic
+        _consecutive_key_cache.on_chunk_start();
+
         auto key_column = key_columns[0].get();
         if constexpr (is_nullable) {
             return this->template compute_agg_states_nullable<Func, HTBuildOp>(
@@ -306,16 +319,36 @@ struct AggHashMapWithOneNumberKeyWithNullable
     }
 
     // prefetch branch better performance in case with larger hash tables
+    // Includes adaptive consecutive keys cache optimization for sorted/clustered data
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_prefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
                                               Func&& allocate_func, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, agg_hash_map_default_prefetch_dist());
+
+        // Check if adaptive cache is still enabled
+        // Note: This method is only called for non-is_no_prefetch_map types,
+        // but we add the check for safety and compile-time optimization
+        [[maybe_unused]] const bool use_cache = !is_no_prefetch_map<HashMap> &&
+                                                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) &&
+                                                _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
 
             FieldType key = column->immutable_data()[i];
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
 
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
@@ -327,6 +360,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key_with_hash(key, hash_values[i], (*agg_states)[i], allocate_func,
                                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 DCHECK(not_founds);
                 _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
@@ -334,7 +371,8 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    // prefetch branch better performance in case with small hash tables
+    // no-prefetch branch for small hash tables
+    // Includes adaptive consecutive keys cache optimization for sorted/clustered data
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_noprefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
                                                 Func&& allocate_func, ExtraAggParam* extra) {
@@ -343,8 +381,27 @@ struct AggHashMapWithOneNumberKeyWithNullable
         size_t num_rows = column->size();
         auto container = column->immutable_data();
 
+        // Check if adaptive cache is still enabled
+        // IMPORTANT: Disable cache for SmallFixedSizeHashMap (is_no_prefetch_map) because
+        // direct array lookup is already O(1) without hashing - cache adds overhead
+        [[maybe_unused]] const bool use_cache = !is_no_prefetch_map<HashMap> &&
+                                                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) &&
+                                                _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < num_rows; i++) {
             FieldType key = container[i];
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
+
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
@@ -354,6 +411,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key(key, (*agg_states)[i], allocate_func,
                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 DCHECK(not_founds);
                 _find_key((*agg_states)[i], (*not_founds)[i], key);
@@ -461,6 +522,9 @@ struct AggHashMapWithOneStringKeyWithNullable
     using Iterator = typename HashMap::iterator;
     using ResultVector = Buffer<Slice>;
 
+    // Consecutive keys cache - optimization for sorted/clustered data
+    ConsecutiveKeyCache<Slice> _consecutive_key_cache;
+
     template <class... Args>
     AggHashMapWithOneStringKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
@@ -468,9 +532,18 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
+    // Get cache statistics for profiling
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
+
     template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        // Notify cache of new chunk - handles adaptive enable/disable and resets
+        // cached Slice pointer (critical for memory safety with string keys)
+        _consecutive_key_cache.on_chunk_start();
+
         const auto* key_column = key_columns[0].get();
         if constexpr (is_nullable) {
             return this->template compute_agg_states_nullable<Func, HTBuildOp>(
@@ -525,15 +598,33 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
+    // Includes adaptive consecutive keys cache optimization for sorted/clustered data
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_prefetch(const BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool,
                                               Func&& allocate_func, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, agg_hash_map_default_prefetch_dist());
+
+        // Check if adaptive cache is still enabled
+        [[maybe_unused]] const bool use_cache =
+                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) && _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
             auto key = column->get_slice(i);
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
+
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
@@ -546,12 +637,17 @@ struct AggHashMapWithOneStringKeyWithNullable
                 this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
                                                             std::forward<Func>(allocate_func), (*agg_states)[i],
                                                             FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
             }
         }
     }
 
+    // Includes adaptive consecutive keys cache optimization for sorted/clustered data
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_noprefetch(const BinaryColumn* column, Buffer<AggDataPtr>* agg_states,
                                                 MemPool* pool, Func&& allocate_func, ExtraAggParam* extra) {
@@ -559,8 +655,24 @@ struct AggHashMapWithOneStringKeyWithNullable
         auto* __restrict not_founds = extra->not_founds;
         size_t num_rows = column->size();
 
+        // Check if adaptive cache is still enabled
+        [[maybe_unused]] const bool use_cache =
+                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) && _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < num_rows; i++) {
             auto key = column->get_slice(i);
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
+
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
@@ -571,6 +683,10 @@ struct AggHashMapWithOneStringKeyWithNullable
             } else if constexpr (HTBuildOp::allocate) {
                 this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
                                                   FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
@@ -690,6 +806,9 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     };
     std::vector<CacheEntry> caches;
 
+    // Consecutive keys cache for multi-column GROUP BY (with adaptive disable)
+    ConsecutiveSerializedKeyCache<> _consecutive_key_cache;
+
     template <class... Args>
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
@@ -700,9 +819,17 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     AggDataPtr get_null_key_data() { return nullptr; }
     void set_null_key_data(AggDataPtr data) {}
 
+    // Get cache statistics for profiling
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
+
     template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        // Notify cache of new chunk - handles adaptive enable/disable
+        _consecutive_key_cache.on_chunk_start();
+
         slice_sizes.assign(_chunk_size, 0);
         size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
@@ -734,6 +861,11 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                                                     ExtraAggParam* extra, size_t max_serialize_each_row) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
+
+        // Check if adaptive cache is still enabled
+        [[maybe_unused]] const bool use_cache =
+                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) && _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < chunk_size; ++i) {
             auto serialize_cursor = buffer;
             for (const auto& key_column : key_columns) {
@@ -742,6 +874,18 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             DCHECK(serialize_cursor <= buffer + max_serialize_each_row);
             size_t serialize_size = serialize_cursor - buffer;
             Slice key = {buffer, serialize_size};
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
+
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
@@ -751,6 +895,10 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key(key, pool, allocate_func, (*agg_states)[i],
                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
@@ -789,8 +937,25 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                                                                  size_t max_serialize_each_row) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
+
+        // Check if adaptive cache is still enabled
+        [[maybe_unused]] const bool use_cache =
+                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) && _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < chunk_size; ++i) {
             Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
+
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
@@ -800,7 +965,10 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key(key, pool, allocate_func, (*agg_states)[i],
                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
-
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
@@ -823,12 +991,29 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+
+        // Check if adaptive cache is still enabled
+        [[maybe_unused]] const bool use_cache =
+                (HTBuildOp::allocate && !HTBuildOp::fill_not_found) && _consecutive_key_cache.is_enabled();
+
         for (size_t i = 0; i < chunk_size; ++i) {
             if (__prefetch_dist != 0 && i + __prefetch_dist < chunk_size) {
                 this->hash_map.prefetch_hash(caches[i + __prefetch_dist].hashval);
             }
 
             const auto& key = caches[i].key;
+
+            // Try consecutive keys cache first (only if enabled and on allocate path)
+            if constexpr (HTBuildOp::allocate && !HTBuildOp::fill_not_found) {
+                if (use_cache) {
+                    AggDataPtr cached_state;
+                    if (_consecutive_key_cache.try_get(key, cached_state)) {
+                        (*agg_states)[i] = cached_state;
+                        continue;
+                    }
+                }
+            }
+
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key_with_hash(key, caches[i].hashval, pool, allocate_func, (*agg_states)[i],
@@ -839,6 +1024,10 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key_with_hash(key, caches[i].hashval, pool, allocate_func, (*agg_states)[i],
                                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                // Update cache with new key-state mapping (only if cache is enabled)
+                if (use_cache) {
+                    _consecutive_key_cache.update(key, (*agg_states)[i]);
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
             }
