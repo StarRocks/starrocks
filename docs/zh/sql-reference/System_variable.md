@@ -1143,7 +1143,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### lake_bucket_aware_min_buckets_per_worker
 
-* 描述：控制数据湖表（如 Iceberg 表）Bucket-aware 执行的自适应回退。当需要 Shuffle 的聚合查询读取分桶表时，如果经过分区和谓词裁剪后预估存活的分桶数量小于该值乘以存活工作节点数，优化器将不再对该 Scan 使用 Bucket-aware 单阶段聚合，而是回退到普通的 Shuffle（多阶段）聚合计划，以恢复并行度。例如，当分桶来源列上的等值过滤将查询裁剪到单个分桶、而查询又按高基数列分组时，该回退可以避免严重的数据倾斜。设置为 `0` 可禁用回退。值越大，回退越激进。仅在 `enable_bucket_aware_execution_on_lake` 为 `true` 时生效。
+* 描述：控制数据湖表（如 Iceberg 表）的 Bucket-aware 执行是否自适应回退。需要 Shuffle 的聚合查询读取分桶表时，优化器会在分区和谓词裁剪后预估剩余分桶数。如果剩余分桶数小于该值乘以存活工作节点数，优化器不会再对该 Scan 使用 Bucket-aware 单阶段聚合，而会回退到普通的 Shuffle（多阶段）聚合计划，以恢复并行度。例如，分桶来源列上的等值过滤把查询裁剪到单个分桶，但查询又按高基数列分组时，该回退可以避免严重的数据倾斜。设置为 `0` 可禁用回退。值越大，越容易回退。仅在 `enable_bucket_aware_execution_on_lake` 为 `true` 时生效。
 * 默认值：1.0
 * 数据类型：Double
 * 引入版本：v4.2
