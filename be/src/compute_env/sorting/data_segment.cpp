@@ -20,12 +20,14 @@
 
 namespace starrocks {
 
-void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
+Status DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
     chunk = cnk;
     order_by_columns.reserve(sort_exprs->size());
     for (ExprContext* expr_ctx : (*sort_exprs)) {
-        order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
+        ASSIGN_OR_RETURN(auto column, expr_ctx->evaluate(chunk.get()));
+        order_by_columns.push_back(std::move(column));
     }
+    return Status::OK();
 }
 
 } // namespace starrocks

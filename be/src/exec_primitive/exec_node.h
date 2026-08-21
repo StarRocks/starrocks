@@ -136,8 +136,8 @@ public:
 
     Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
     void register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc);
-    void eval_join_runtime_filters(Chunk* chunk);
-    void eval_join_runtime_filters(ChunkPtr* chunk);
+    Status eval_join_runtime_filters(Chunk* chunk);
+    Status eval_join_runtime_filters(ChunkPtr* chunk);
     void eval_filter_null_values(Chunk* chunk);
 
     // Returns a string representation in DFS order of the plan rooted at this.

@@ -43,6 +43,11 @@ bool ExchangeParallelMergeSourceOperator::has_output() const {
     if (_is_finished) {
         return false;
     }
+    // An order-by expression that failed on a merge worker is latched on the merger; the stage gates
+    // below never observe it, so report ready and let pull_chunk() propagate it.
+    if (_merger->has_eval_error()) {
+        return true;
+    }
     if (_merger->is_current_stage_finished(_driver_sequence, false)) {
         return false;
     }
@@ -64,13 +69,17 @@ Status ExchangeParallelMergeSourceOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> ExchangeParallelMergeSourceOperator::pull_chunk(RuntimeState* state) {
+    // The merge workers latch an order-by evaluation failure on the merger; check it before driving
+    // it further, and again afterwards for a failure latched by this very call.
+    RETURN_IF_ERROR(_merger->status());
     ChunkPtr chunk = _merger->try_get_next(_driver_sequence);
+    RETURN_IF_ERROR(_merger->status());
 
     if (_merger->is_finished()) {
         _is_finished = true;
     }
 
-    eval_runtime_bloom_filters(chunk.get());
+    RETURN_IF_ERROR(eval_runtime_bloom_filters(chunk.get()));
     return std::move(chunk);
 }
 
