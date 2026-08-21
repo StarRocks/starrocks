@@ -2492,8 +2492,7 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
     // cache in place and pollute the sst read-error metric).
     bool delvec_load_failed = false;
     auto load_del_vector = [&](uint32_t final_rssid) -> StatusOr<DelVectorPtr> {
-        auto del_vector_or =
-                load_merged_del_vector(tablet_manager, new_metadata, final_rssid, &del_vector_cache);
+        auto del_vector_or = load_merged_del_vector(tablet_manager, new_metadata, final_rssid, &del_vector_cache);
         if (!del_vector_or.ok()) {
             delvec_load_failed = true;
         }
