@@ -162,7 +162,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### `col_name`
 
-请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊目的，创建此类列可能会导致未定义的行为。如果您确实需要创建此类列，请将 FE 动态参数[`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) 设置为 `TRUE`。
+请注意，通常您不能创建以 `__op` 或 `__row` 开头的列名，因为这些名称格式在 StarRocks 中保留用于特殊目的，创建此类列可能会导致未定义的行为。对于内表，虚拟列的名称（`_tablet_id_`、`_segment_id_`、`_rss_id_`、`_source_id_`、`_row_id_`、`_rowset_id_` 和 `_dynamic_rssid_`）同样是保留名称，因为同名的表列会遮蔽虚拟列，导致两者在查询中都无法被引用。外部表不提供虚拟列，因此可以保留此类列名。如果您确实需要创建此类列，请将 FE 动态参数[`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 ### `col_type`
 

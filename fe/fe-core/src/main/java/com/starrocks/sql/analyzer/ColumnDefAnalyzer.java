@@ -85,6 +85,9 @@ public class ColumnDefAnalyzer {
             throw new AnalysisException("No column name or column type in column definition");
         }
         FeNameFormat.checkColumnName(name, isPartitionColumn);
+        if (isOlap) {
+            FeNameFormat.checkVirtualColumnNameNotUsed(name);
+        }
 
         // When string type length is not assigned, it needs to be assigned to 1.
         if (typeDef.getType().isScalarType()) {
