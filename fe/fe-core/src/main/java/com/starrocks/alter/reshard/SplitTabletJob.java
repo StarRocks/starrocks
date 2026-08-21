@@ -70,6 +70,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.IntSupplier;
 
 /*
  * SplitTabletJob is for tablet splitting.
@@ -1065,7 +1066,7 @@ public class SplitTabletJob extends TabletReshardJob {
         ComputeResource computeResource = resolveComputeResource(table.getId());
 
         boolean unpinPlacement = shouldUnpinPlacement(table, oldIndex, newIndex,
-                TabletReshardUtils.computeNodeCount(computeResource));
+                () -> TabletReshardUtils.computeNodeCount(computeResource));
 
         // LinkedHashMap so the CreateShardInfo list within each (partition, index) RPC
         // payload follows the ReshardingTablet iteration order; the same batch produced
@@ -1121,16 +1122,19 @@ public class SplitTabletJob extends TabletReshardJob {
      */
     @VisibleForTesting
     static boolean shouldUnpinPlacement(OlapTable table, MaterializedIndex oldIndex,
-                                        MaterializedIndex newIndex, int computeNodeCount) {
+                                        MaterializedIndex newIndex, IntSupplier computeNodeCount) {
         if (oldIndex == null) {
             return false;
         }
         if (oldIndex.getRowCount() == 0) {
             return true;
         }
+        // Resolved last and only if the two schema tests pass. TabletReshardUtils#computeNodeCount
+        // throws when the warehouse cannot be resolved, and an ordinary split must not be aborted by a
+        // placement heuristic it never consults.
         return MetaUtils.hasSeparateSortKey(table, newIndex.getMetaId())
                 && table.isFileBundling()
-                && oldIndex.getTablets().size() < 2 * computeNodeCount;
+                && oldIndex.getTablets().size() < 2 * computeNodeCount.getAsInt();
     }
 
     @VisibleForTesting

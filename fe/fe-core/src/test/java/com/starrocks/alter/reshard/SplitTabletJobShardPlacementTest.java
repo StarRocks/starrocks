@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntSupplier;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -136,7 +137,7 @@ public class SplitTabletJobShardPlacementTest {
     }
 
     private static final long INDEX_META_ID = 77L;
-    private static final int COMPUTE_NODES = 3;
+    private static final IntSupplier COMPUTE_NODES = () -> 3;
 
     private MaterializedIndex sourceIndex(long rowCount, int tabletCount) {
         MaterializedIndex index = mock(MaterializedIndex.class);
