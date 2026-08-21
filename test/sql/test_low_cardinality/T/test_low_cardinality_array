@@ -355,6 +355,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
+<<<<<<< HEAD
 insert into s3 values
 (28222, 724, "BJ", ['Hubei', 'Ningxia', 'Sichuan', 'Zhejiang'], ['HK', 'BJ', 'GD', 'GS', 'LN']),
 (28231, 607, "SH", ['Yunnan', 'Inner Mongolia', 'Taiwan', 'Hunan'], ['JL', 'HUN', 'GZ', 'XJ', 'GZ']),
@@ -483,3 +484,8 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_opti
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=true)*/ cast(v3 as array<string>) from s4 limit 1;
 
 with cte as (select st, IF(st = 'GS', null, lower(st)) r FROM s3, unnest(s3.a2) as T(st) order by a1) select * from cte order by st limit 1;
+=======
+select  array_contains(a1, NULL), array_contains_all(a1, array_slice(a1, 1, 2)), array_contains_seq(a1, array_slice(a1, 1, 2)) from s1 order by v1 limit 2;
+
+with cte as (select a1, a2 from s1) [materialized] select a1 from cte where a2[1] = 'JX' order by a1 limit 2;
+>>>>>>> 71fa88d ([BugFix] Fixing global dict expr propagation for cases where project hides a column used in predicates  (#78006))

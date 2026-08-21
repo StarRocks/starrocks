@@ -2603,4 +2603,276 @@ public class LowCardinalityTest2 extends PlanTestBase {
         Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
         Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPhysicalFilter() throws Exception {
+        String sql = """
+                  SELECT *
+                  FROM (
+                    SELECT
+                      MAX(C_USER) OVER (PARTITION BY C_DEPT) max_user
+                    FROM
+                      low_card_t1
+                  ) cte
+                  WHERE max_user != 'abc'
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: DictDecode(15: max(2: c_user), [<place-holder> != 'abc'])\n" +
+                "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    public void testCTEProduceAndConsume() throws Exception {
+        String sql = """
+                  WITH CTE AS (
+                    SELECT
+                      C_USER, C_DEPT
+                    FROM
+                      low_card_t1
+                  )
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    UPPER(T1.C_USER) s1
+                  FROM
+                    CTE AS T1 JOIN CTE AS T2 USING (C_DEPT)
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    36: DictDefine(35: c_user, [upper(<place-holder>)])\n" +
+                "    37: DictDefine(35: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  10:Decode\n" +
+                "  |  <dict id 36> : <string id 34>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  9:Project\n" +
+                "  |  output columns:\n" +
+                "  |  36 <-> DictDefine([37: c_user, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
+                "VARCHAR; args nullable: true; result nullable: true]])\n" +
+                "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    public void testCTEConsumeDecodedColumnKeepsStringRef() throws Exception {
+        // `c_par` is a passthrough low-card column that stays dict across the materialized CTE
+        // (so the CTE-consume is visited by DecodeRewriter); `c_user` is in the global dict map
+        // but is decoded inside the producer by lead(...,'NONE'). visitPhysicalCTEConsume must
+        // NOT rewrite the c_user CTE-output entry to its dict ref, otherwise the consume carries
+        // c_user as a dict (INT) slot the produce fragment no longer emits and BE fails with
+        // "slot_id not found".
+        String sql = """
+                  WITH CTE AS (
+                    SELECT c_par, c_user, c_dept,
+                           lead(c_user, 1, 'NONE') over (partition by c_dept order by c_user) nx
+                    FROM low_card_t1
+                  ) [materialized]
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    c_par, c_user, count(*) cnt
+                  FROM CTE
+                  WHERE nx != 'ZZZ'
+                  GROUP BY c_par, c_user
+                  """;
+        String plan = getVerboseExplain(sql);
+        // c_user was decoded in the producer; it must never be carried past the CTE as a dict ref.
+        assertNotContains(plan, "c_user, INT");
+    }
+
+    @Test
+    public void testCTEConsumeWithProjection() throws Exception {
+        String sql = """
+                  WITH CTE AS (
+                    SELECT
+                      C_USER
+                    FROM
+                      low_card_t1
+                  ) [materialized]
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    UPPER(C_USER) s1
+                  FROM
+                    CTE
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    16: DictDefine(14: c_user, [upper(<place-holder>)])\n" +
+                "    15: DictDefine(14: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  4:Decode\n" +
+                "  |  <dict id 16> : <string id 13>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  16 <-> DictDefine([15: c_user, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
+                "VARCHAR; args nullable: true; result nullable: true]])\n" +
+                "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    void testWindowSkewWithLowCardStringPassthrough() throws Exception {
+        starRocksAssert.withTable(
+                    "CREATE TABLE IF NOT EXISTS window_skew_lc (" +
+                            "  p int NULL, c varchar(50) NULL) " +
+                            "ENGINE=OLAP DUPLICATE KEY(p) " +
+                            "DISTRIBUTED BY HASH(p) BUCKETS 3 PROPERTIES (\"replication_num\"=\"1\");");
+        StatisticStorage prevStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        try {
+            connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
+            FeConstants.runningUnitTest = true;
+            if (!starRocksAssert.databaseExist("_statistics_")) {
+                StatisticsMetaManager m = new StatisticsMetaManager();
+                m.createStatisticsTablesForTest();
+            }
+            final OlapTable t = getOlapTable("window_skew_lc");
+            setTableStatistics(t, 1000);
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            final List<String> cols = List.of("p", "c");
+            storage.refreshColumnStatistics(t, cols, true);
+            storage.addColumnStatistic(t, "c", ColumnStatistic.builder().setNullsFraction(0.3).build());
+            storage.addColumnStatistic(t, "p", ColumnStatistic.builder().setNullsFraction(0.3).build());
+            storage.getColumnStatistics(t, cols);
+            connectContext.getGlobalStateMgr().setStatisticStorage(storage);
+
+            String sql = """
+                    WITH T AS (
+                      SELECT
+                        c,
+                        ROW_NUMBER()  over (PARTITION BY (CASE WHEN p IS NULL THEN 1 ELSE 0 END) ORDER BY p DESC )
+                      FROM
+                        window_skew_lc
+                    )
+                    SELECT c FROM T
+                    UNION ALL
+                    SELECT NULL FROM T
+                    """;
+
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "24:Decode\n" +
+                    "  |  <dict id 36> : <string id 21>\n" +
+                    "  |  cardinality: 2000\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [36, INT, true]\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [37: c, INT, true]\n" +
+                    "  |      [39: expr, INT, true]");
+        } finally {
+            FeConstants.runningUnitTest = false;
+            starRocksAssert.dropTable("window_skew_lc");
+            connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
+            connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
+        }
+    }
+
+    @Test
+    void testUnionAllConstantInputsOnly() throws Exception {
+        String sql = """
+                select c_user, "abc", null const FROM low_card_t1 as s
+                UNION ALL
+                select c_mr, null, null FROM low_card_t2;
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "9:Decode\n" +
+                "  |  <dict id 28> : <string id 24>\n" +
+                "  |  <dict id 30> : <string id 23>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [28, INT, true] | [25, BOOLEAN, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [26: c_user, INT, true] | [31: expr, INT, false] | [13: expr, BOOLEAN, true]\n" +
+                "  |      [29: cast, INT, true] | [32: expr, INT, true] | [20: expr, BOOLEAN, true]", plan);
+        String thrift = getThriftPlan(sql);
+        Assertions.assertTrue(thrift.contains("TGlobalDict(columnId:28"), thrift);
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT
+                       max(source), min(source), count(source), sum(length(source)),
+                       max(value), min(value), count(value), sum(length(value))
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // Aggregate is not pushed
+            assertContains(plan, "  10:AGGREGATE (update serialize)\n" +
+                    "  |  output: max(34: expr), min(34: expr), count(34: expr), sum(22: length), max(36: c_user)," +
+                    " min(36: c_user), count(36: c_user), sum(23: length)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  9:Project\n" +
+                    "  |  <slot 22> : DictDecode(34: expr, [length(<place-holder>)])\n" +
+                    "  |  <slot 23> : DictDecode(36: c_user, [length(<place-holder>)])\n" +
+                    "  |  <slot 34> : 34: expr\n" +
+                    "  |  <slot 36> : 36: c_user\n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
+    }
+
+    @Test
+    void unionAllDictificationWithAggregateUnionRewriteWithoutDictMapping() throws Exception {
+        boolean prevConfig = Config.push_down_non_grouped_aggregate_below_union;
+        try {
+            Config.push_down_non_grouped_aggregate_below_union = true;
+            String sql = """
+                     SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+                     FROM (
+                         SELECT 'test_table_1' as source, c_user as value FROM low_card_t1
+                         UNION ALL
+                         SELECT 'test_table_2' as source, c_mr as value FROM low_card_t2
+                     ) T;
+                    """;
+
+            String plan = getFragmentPlan(sql);
+            // update stage is pushed below the union, merge stage is above it.
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                    "  |  output: max(33: max), min(34: min), count(24: count), max(35: max), min(36: min), count(27: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:UNION", plan);
+        } finally {
+            Config.push_down_non_grouped_aggregate_below_union = prevConfig;
+        }
+    }
+
+    @Test
+    void testPredicateOnlyDictDecodeWithProjection() throws Exception {
+        String sql = """
+              WITH T1 AS ( SELECT C_USER, C_DEPT FROM low_card_t1) [MATERIALIZED]
+              SELECT C_DEPT FROM T1 WHERE C_USER = "str"
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    16: DictDefine(14: c_user, [<place-holder>])\n" +
+                "    17: DictDefine(15: c_dept, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 17> : <string id 13>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  17 <-> [17: c_dept, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:SELECT\n" +
+                "  |  predicates: DictDecode(16: c_user, [<place-holder> = 'str'])\n" +
+                "  |  cardinality: 1", plan);
+    }
+>>>>>>> 71fa88d ([BugFix] Fixing global dict expr propagation for cases where project hides a column used in predicates  (#78006))
 }
