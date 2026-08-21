@@ -20,6 +20,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionSpec;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -33,7 +34,6 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergMORParams.ScanTaskType.DATA_FILE_WITHOUT_EQ_DELETE;
 import static com.starrocks.connector.iceberg.IcebergMORParams.ScanTaskType.DATA_FILE_WITH_EQ_DELETE;
-import static com.starrocks.connector.iceberg.IcebergMORParams.ScanTaskType.EQ_DELETE;
 
 // only used for iceberg table with equality delete files.
 public class IcebergRemoteSourceTrigger {
@@ -49,9 +49,15 @@ public class IcebergRemoteSourceTrigger {
 
     private final boolean needToCheckEqualityIds;
 
+    // Table specs by id, used to compute each equality-delete file's partition scope (GLOBAL vs
+    // PARTITIONED) so eq-delete queues are keyed by the same (equalityIds, scope) the rewrite rule emits.
+    private final Map<Integer, PartitionSpec> specs;
+
     // for incremental scan range
-    public IcebergRemoteSourceTrigger(RemoteFileInfoSource remoteFileInfoSource, IcebergTableMORParams tableFullMORParams) {
+    public IcebergRemoteSourceTrigger(RemoteFileInfoSource remoteFileInfoSource, IcebergTableMORParams tableFullMORParams,
+                                      Map<Integer, PartitionSpec> specs) {
         this.delegate = remoteFileInfoSource;
+        this.specs = specs;
         Preconditions.checkArgument(tableFullMORParams.size() >= 3);
         this.needToCheckEqualityIds = tableFullMORParams.size() != 3;
         for (IcebergMORParams params : tableFullMORParams.getMorParamsList()) {
@@ -74,8 +80,10 @@ public class IcebergRemoteSourceTrigger {
     // Only fill the queue corresponding to morParams, and the remaining queues will not be filled with any file scan tasks.
     public IcebergRemoteSourceTrigger(RemoteFileInfoSource remoteFileInfoSource,
                                       IcebergMORParams morParams,
-                                      boolean needToCheckEqualityIds) {
+                                      boolean needToCheckEqualityIds,
+                                      Map<Integer, PartitionSpec> specs) {
         this.delegate = remoteFileInfoSource;
+        this.specs = specs;
         this.needToCheckEqualityIds = needToCheckEqualityIds;
 
         IcebergMORParams.ScanTaskType type = morParams.getScanTaskType();
@@ -122,7 +130,8 @@ public class IcebergRemoteSourceTrigger {
                 // otherwise delete table scan with certain equality ids can get no results and miss the join result.
                 Set<IcebergMORParams> haveAdded = new HashSet<>();
                 for (DeleteFile deleteFile : eqDeleteFiles) {
-                    IcebergMORParams key = IcebergMORParams.of(EQ_DELETE, deleteFile.equalityFieldIds());
+                    IcebergMORParams key = IcebergMORParams.ofEqDelete(
+                            deleteFile.equalityFieldIds(), IcebergMORParams.scopeOf(deleteFile, specs));
                     if (haveAdded.add(key)) { // not contain the key
                         Deque<RemoteFileInfo> queue = queues.get(key);
                         if (queue != null) {
