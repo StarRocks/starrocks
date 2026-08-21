@@ -851,8 +851,7 @@ Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(Tablet
         return Status::OK();
     }
 
-    auto input_metadata = std::make_shared<TabletMetadata>();
-    input_metadata->CopyFrom(*metadata);
+    auto input_metadata = std::make_shared<TabletMetadata>(*metadata);
     std::vector<PersistentIndexSstablePB> inputs;
     inputs.reserve(input_metadata->sstable_meta().sstables_size());
     uint64_t overlay_watermark = 0;

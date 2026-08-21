@@ -11303,7 +11303,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
 
     // ctx[1]'s floor is its discarded predicate id, so it shifts down to the base
     // watermark 3 and reserves exactly that one slot. ctx[2] is then lifted to 4
-    // instead of to 4'200'000'001, and its span survives intact.
+    // instead of to 2'100'000'001, and its span survives intact.
     EXPECT_EQ((std::vector<uint32_t>{1, 2, 4, kWideSpanTopId - 1}), rowset_ids);
     EXPECT_EQ(kWideSpanTopId, merged->next_rowset_id());
 }
