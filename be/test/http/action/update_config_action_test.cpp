@@ -273,4 +273,100 @@ TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cac
 }
 #endif
 
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+
+namespace {
+
+struct StarletUploadThresholdMapping {
+    const char* be_config;
+    int64_t* flag;
+    int64_t* config_value;
+    int64_t valid_value;
+};
+
+// Distinct valid_value per row, so deleting one UPDATE_STARLET_CONFIG line or swapping two fails.
+const StarletUploadThresholdMapping kStarletUploadThresholdMappings[] = {
+        {"starlet_fslib_s3_max_single_part_size", &FLAGS_fslib_s3_max_single_part_size,
+         &config::starlet_fslib_s3_max_single_part_size, 21000000},
+        {"starlet_fslib_s3_min_upload_part_size", &FLAGS_fslib_s3_min_upload_part_size,
+         &config::starlet_fslib_s3_min_upload_part_size, 22000000},
+        {"starlet_fslib_gcs_max_single_part_size", &FLAGS_fslib_gs_max_single_part_size,
+         &config::starlet_fslib_gcs_max_single_part_size, 23000000},
+        {"starlet_fslib_azure_storage_max_single_part_size", &FLAGS_fslib_azure_storage_max_single_part_size,
+         &config::starlet_fslib_azure_storage_max_single_part_size, 24000000},
+        {"starlet_fslib_azure_storage_min_upload_part_size", &FLAGS_fslib_azure_storage_min_upload_part_size,
+         &config::starlet_fslib_azure_storage_min_upload_part_size, 25000000},
+};
+
+constexpr size_t kStarletUploadThresholdMappingCount = std::size(kStarletUploadThresholdMappings);
+
+// Saves the BE configs and every starlet gflag on construction and puts them back on destruction.
+// Restores through config::set_config, never by assigning the config global directly:
+// Field::set_value maintains the _current_set_val/_last_set_val pair that Field::rollback() reads,
+// so a raw assignment would leave that metadata pointing at this test's value and a later rejected
+// update in another test could roll back to it.
+class ScopedStarletUploadThresholdConfigs {
+public:
+    ScopedStarletUploadThresholdConfigs() {
+        for (size_t i = 0; i < kStarletUploadThresholdMappingCount; ++i) {
+            _saved[i] = *kStarletUploadThresholdMappings[i].config_value;
+        }
+    }
+
+    ~ScopedStarletUploadThresholdConfigs() {
+        for (size_t i = 0; i < kStarletUploadThresholdMappingCount; ++i) {
+            auto st = config::set_config(kStarletUploadThresholdMappings[i].be_config, std::to_string(_saved[i]));
+            EXPECT_TRUE(st.ok()) << kStarletUploadThresholdMappings[i].be_config << ": " << st;
+        }
+    }
+
+private:
+    int64_t _saved[kStarletUploadThresholdMappingCount];
+    // Restores every gflag it saw at construction. The destructor body above always completes before
+    // any member is destroyed, so the config restore runs first and this undoes the gflag side after.
+    gflags::FlagSaver _flag_saver;
+};
+
+} // namespace
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs) {
+    ScopedStarletUploadThresholdConfigs scoped_configs;
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    for (const auto& mapping : kStarletUploadThresholdMappings) {
+        // ASSERT_OK is a do/while macro and cannot take a trailing `<< message`, so capture the
+        // status and use a streamable native assertion instead.
+        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
+        EXPECT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
+    }
+}
+
+// starlet's validator rejects non-positive values; the registry must roll the BE config back.
+// Covers all five mappings, with both 0 and a negative value.
+TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non_positive) {
+    ScopedStarletUploadThresholdConfigs scoped_configs;
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    for (const auto& mapping : kStarletUploadThresholdMappings) {
+        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
+        ASSERT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
+
+        for (const char* bad_value : {"0", "-1"}) {
+            EXPECT_FALSE(registry->update_config(mapping.be_config, bad_value).ok())
+                    << mapping.be_config << " should reject " << bad_value;
+            EXPECT_EQ(mapping.valid_value, *mapping.flag)
+                    << mapping.be_config << " flag changed on rejected " << bad_value;
+            EXPECT_EQ(mapping.valid_value, *mapping.config_value)
+                    << mapping.be_config << " config not rolled back on rejected " << bad_value;
+        }
+    }
+}
+
+#endif // USE_STAROS
+
+>>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 } // namespace starrocks

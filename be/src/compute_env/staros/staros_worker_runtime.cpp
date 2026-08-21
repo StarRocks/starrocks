@@ -61,6 +61,23 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 } // namespace
 
+<<<<<<< HEAD
+=======
+void apply_starlet_upload_threshold_configs() {
+#define APPLY_STARLET_UPLOAD_THRESHOLD(BE_CONFIG, STARLET_FLAG) \
+    apply_positive_int64_starlet_flag(#BE_CONFIG, #STARLET_FLAG, FLAGS_##STARLET_FLAG, config::BE_CONFIG)
+
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_gcs_max_single_part_size, fslib_gs_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_max_single_part_size,
+                                   fslib_azure_storage_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_min_upload_part_size,
+                                   fslib_azure_storage_min_upload_part_size);
+#undef APPLY_STARLET_UPLOAD_THRESHOLD
+}
+
+>>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 namespace fslib = staros::starlet::fslib;
 
 std::shared_ptr<StarOSWorker> get_staros_worker() {
