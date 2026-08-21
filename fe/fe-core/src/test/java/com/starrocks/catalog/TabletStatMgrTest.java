@@ -499,7 +499,7 @@ public class TabletStatMgrTest {
         };
 
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
-        Assertions.assertDoesNotThrow(() -> {
+        assertDoesNotThrow(() -> {
             Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
         });
     }
