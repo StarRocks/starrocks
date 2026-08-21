@@ -492,3 +492,5 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_opti
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=true)*/ cast(v3 as array<string>) from s4 limit 1;
 
 with cte as (select st, IF(st = 'GS', null, lower(st)) r FROM s3, unnest(s3.a2) as T(st) order by a1) select * from cte order by st limit 1;
+
+with cte as (select a1, a2 from s1) [materialized] select a1 from cte where a2[1] = 'JX' order by a1 limit 2;
