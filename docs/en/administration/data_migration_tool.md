@@ -161,6 +161,7 @@ These storage volumes are used **only during migration** to give target CNs read
    :::
 
 When transparent data encryption (TDE) is used in shared-data-to-shared-data migration, a newly copied private standalone physical file is read with its source encryption metadata and then re-encrypted under the target policy. If the source key hierarchy cannot be unwrapped, migration fails before the target publication. Newly copied shared or bundled physical files are unsupported when the source file is encrypted or target TDE is enabled. Objects that already exist on the target can be reused directly and retain their target encryption metadata. Migration from a shared-nothing source to a shared-data target fails closed when a source rowset or DCG file is encrypted; decrypting and re-encrypting those files on this path is not supported.
+
 </TabItem>
 </Tabs>
 
