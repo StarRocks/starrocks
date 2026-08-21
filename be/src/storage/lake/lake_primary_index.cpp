@@ -308,6 +308,24 @@ int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
 // - Each task allocates its own slot to avoid data races during parallel execution
 // - Shared state (deletes, status) is protected by mutex when updated
 // - Errors are accumulated and checked after all tasks complete
+Status LakePrimaryIndex::upsert_rows(uint32_t rssid, const std::vector<uint32_t>& rowids, MutableColumnPtr pks,
+                                     DeletesMap* deletes) {
+    if (rowids.empty()) {
+        return Status::OK();
+    }
+    // No token: the lookup of replaced locations runs inline, which leaves them in the slot rather
+    // than draining them, so this drains them itself -- same split of responsibility as upsert_owned.
+    std::mutex mutex;
+    Status status = Status::OK();
+    ParallelPublishContext context{.token = nullptr, .mutex = &mutex, .deletes = deletes, .status = &status};
+    context.extend_slots();
+    auto* slot = context.slots.back().get();
+    slot->pk_column = std::move(pks);
+    RETURN_IF_ERROR(upsert(rssid, rowids, *slot->pk_column, nullptr /* stat */, &context));
+    old_values_to_deletes(slot->old_values, deletes);
+    return status;
+}
+
 Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
                                       ParallelPublishContext* context) {
     DCHECK(!current.owned.empty());

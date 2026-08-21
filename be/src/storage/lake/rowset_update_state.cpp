@@ -443,7 +443,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     MutableColumns read_columns;
     read_columns.resize(read_column_ids.size());
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
-    _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->standalone_pk_column()->size());
+    const auto& segment_pk_column = _upserts[segment_id]->standalone_pk_column();
+    auto& src_rss_rowids = _partial_update_states[segment_id].src_rss_rowids;
+    src_rss_rowids.resize(segment_pk_column->size());
     for (uint32_t j = 0; j < read_columns.size(); ++j) {
         auto column = ChunkFactory::column_from_field(*read_column_schema.field(j).get());
         read_columns[j] = column->clone_empty();
@@ -451,15 +453,43 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     }
 
     // use upsert to get rowids for this segment
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
-            &(_partial_update_states[segment_id].src_rss_rowids), need_lock));
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
+    if (owned.empty()) {
+        RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+                params.tablet->id(), _base_versions[segment_id], segment_pk_column, &src_rss_rowids, need_lock));
+    } else {
+        // A cross-published child receives its siblings' rows too, and looking one up would resolve
+        // against sstables this child inherited -- the location can name a rowset the split pruned
+        // away, and get_column_values below would then fail the publish on an unknown rssid. Ask only
+        // about the rows this child owns and leave the rest at the "no old row" sentinel, which
+        // plan_read_by_rssid turns into default values. Those rows fall outside this child's key
+        // range, so nothing reads them from here anyway.
+        std::vector<uint32_t> owned_positions;
+        owned_positions.reserve(owned.size());
+        for (size_t i = 0; i < owned.size(); ++i) {
+            if (owned[i]) {
+                owned_positions.push_back(static_cast<uint32_t>(i));
+            }
+        }
+        std::fill(src_rss_rowids.begin(), src_rss_rowids.end(), static_cast<uint64_t>(-1));
+        if (!owned_positions.empty()) {
+            auto owned_pk_column = segment_pk_column->clone_empty();
+            TRY_CATCH_BAD_ALLOC(owned_pk_column->append_selective(*segment_pk_column, owned_positions.data(), 0,
+                                                                  owned_positions.size()));
+            std::vector<uint64_t> owned_rss_rowids(owned_positions.size());
+            RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+                    params.tablet->id(), _base_versions[segment_id], owned_pk_column, &owned_rss_rowids, need_lock));
+            for (size_t k = 0; k < owned_positions.size(); ++k) {
+                src_rss_rowids[owned_positions[k]] = owned_rss_rowids[k];
+            }
+        }
+    }
 
     size_t num_default = 0;
     std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
     vector<uint32_t> idxes;
-    plan_read_by_rssid(_partial_update_states[segment_id].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
-    size_t total_rows = _partial_update_states[segment_id].src_rss_rowids.size();
+    plan_read_by_rssid(src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
+    size_t total_rows = src_rss_rowids.size();
     // get column values by rowid, also get default values if needed
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
             params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
