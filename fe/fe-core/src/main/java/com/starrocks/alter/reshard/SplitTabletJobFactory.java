@@ -486,8 +486,15 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     @VisibleForTesting
     static List<Tablet> largestFirst(Collection<Tablet> tablets) {
+        // Snapshot the sizes before sorting. TabletStatMgr writes LakeTablet.dataSize from its own
+        // thread without the table lock, so a comparator that re-reads it is not transitive and
+        // TimSort answers that with "Comparison method violates its general contract!".
+        Map<Long, Long> sizeById = new HashMap<>();
+        for (Tablet tablet : tablets) {
+            sizeById.put(tablet.getId(), tablet.getDataSize(true));
+        }
         List<Tablet> ordered = new ArrayList<>(tablets);
-        ordered.sort(Comparator.comparingLong((Tablet t) -> t.getDataSize(true)).reversed()
+        ordered.sort(Comparator.comparingLong((Tablet t) -> sizeById.get(t.getId())).reversed()
                 .thenComparingLong(Tablet::getId));
         return ordered;
     }
