@@ -33,6 +33,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -393,4 +394,45 @@ public class RangeRewriteRoutingTest {
                 table, flipStmt.getAlterClauseList().get(0)),
                 "a cloud-native materialized view must not route to the range-rewrite job");
     }
+
+    // (l) A range-distributed PRIMARY KEY table's ORDER BY reorder must NOT route to the rewrite job
+    // when it would leave the sort key different from the primary key. A primary-key table routes by
+    // its primary key (MetaUtils#getRangeDistributionColumns), but the rewrite samples the new tablet
+    // boundaries over the NEW sort key -- routing it would store ranges in sort-key space that every
+    // writer and pruner then reads as primary-key space. Creating the same shape outright is gated
+    // behind tablet_reshard_enable_pk_order_by; ALTER must not be the back door.
+    @Test
+    public void testPrimaryKeyReorderSeparatingSortKeyRejectedSynchronously() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_sep (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_pk_sep");
+        for (String orderBy : List.of("order by (v1)", "order by (k2, k1)")) {
+            String sql = "alter table t_route_pk_sep " + orderBy;
+            AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(
+                    table, stmt.getAlterClauseList().get(0)),
+                    orderBy + " separates the sort key from the primary key and must not route");
+            // Declining the route lands on processModifySortKeyColumn's existing range rejection.
+            assertThrowsDdlException(() -> createJob("t_route_pk_sep", sql));
+        }
+    }
+
+    // (l') The same reorder spelled as the primary key itself keeps both key spaces identical, so it
+    // stays eligible -- the guard above is about divergence, not about primary-key tables as such.
+    @Test
+    public void testPrimaryKeyReorderMatchingPrimaryKeyStillRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_same (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_pk_same");
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table t_route_pk_same order by (k1, k2)", connectContext);
+        org.junit.jupiter.api.Assertions.assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(
+                table, stmt.getAlterClauseList().get(0)),
+                "a sort key equal to the primary key leaves range routing unchanged");
+    }
+
 }

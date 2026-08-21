@@ -4900,7 +4900,18 @@ public class SchemaChangeHandler extends AlterHandler {
             // A sort-key reorder (ALTER TABLE ... ORDER BY with fewer columns than the base schema)
             // always shifts the range sort key. A full-schema reorder is handled on a different path
             // and is not a range-rewrite.
-            return ((ReorderColumnsClause) clause).getColumnsByPos().size() != table.getBaseSchema().size();
+            if (((ReorderColumnsClause) clause).getColumnsByPos().size() == table.getBaseSchema().size()) {
+                return false;
+            }
+            // ... with one exception. A primary-key table routes by its primary key, never by its
+            // ORDER BY -- see MetaUtils#getRangeDistributionColumns. The rewrite samples the new
+            // boundaries over the NEW sort key, so a reorder that leaves the sort key differing from
+            // the primary key would store ranges in sort-key space while every writer and pruner
+            // resolves them in primary-key space, misrouting writes and pruning away live rows.
+            // Fall through to the range-distribution rejection below instead. Creating such a table
+            // outright is likewise gated (CreateTableAnalyzer, tablet_reshard_enable_pk_order_by);
+            // admitting it through ALTER would be the same shape by the back door.
+            return !reorderSeparatesSortKeyFromPrimaryKey(table, (ReorderColumnsClause) clause);
         }
         if (clause instanceof ModifyColumnClause) {
             ModifyColumnClause modifyClause = (ModifyColumnClause) clause;
@@ -4921,6 +4932,39 @@ public class SchemaChangeHandler extends AlterHandler {
                     .anyMatch(columnDef -> addTouchesKeyDerivedRangeSortKey(table, columnDef));
         }
         return false;
+    }
+
+    /**
+     * Whether this reorder would leave a primary-key table's sort key different from its primary key.
+     *
+     * <p>Non-primary-key tables always answer false: their tablet boundaries follow the sort key, so a
+     * reorder is exactly what the rewrite is for. Only a primary-key table has two distinct key spaces
+     * to disagree about.
+     */
+    private static boolean reorderSeparatesSortKeyFromPrimaryKey(OlapTable table, ReorderColumnsClause clause) {
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        List<Column> baseSchema = table.getBaseSchema();
+        List<Integer> primaryKeyIdxes = new ArrayList<>();
+        for (int i = 0; i < baseSchema.size(); ++i) {
+            if (baseSchema.get(i).isKey()) {
+                primaryKeyIdxes.add(i);
+            }
+        }
+        // Mirrors MetaUtils#usesPrimaryKeyForRange, which compares the stored sort-key indexes against
+        // the key columns in schema order. An unresolvable name is left out and so reads as different,
+        // which keeps the rejecting answer -- processModifySortKeyColumn reports the bad name itself.
+        List<Integer> newSortKeyIdxes = new ArrayList<>();
+        for (String columnName : clause.getColumnsByPos()) {
+            for (int i = 0; i < baseSchema.size(); ++i) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(columnName)) {
+                    newSortKeyIdxes.add(i);
+                    break;
+                }
+            }
+        }
+        return !primaryKeyIdxes.equals(newSortKeyIdxes);
     }
 
     /**
