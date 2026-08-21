@@ -46,7 +46,11 @@ public enum SkipReason {
     SAMPLE_FAILED,
     /** Planner concluded no useful split exists (no distinct cuts above the minimum). */
     NO_USEFUL_CUTS,
-    /** Submission of the reshard job to {@code TabletReshardJobMgr} failed (state check, journal, etc.). */
+    /**
+     * Submission of the reshard job to {@code TabletReshardJobMgr} failed (state check, journal, etc.).
+     * On the derived tier this also covers the reshard-job factory refusing to build the job at all —
+     * by then the cuts exist, so it is not a {@link #DERIVATION_FAILED}.
+     */
     SUBMIT_FAILED,
     /** Admitted reshard job entered a terminal-error state (CANCELLED, etc.) before reaching FINISHED. */
     JOB_FAILED_BEFORE_FINISH,
@@ -64,6 +68,8 @@ public enum SkipReason {
      * a stale catalog snapshot the load can retry against.
      */
     STALE_CATALOG_STATE,
+    // Also recorded by the derived tier when the target's visible-index set changes between planning the
+    // cuts and building the job -- the same class of stale-snapshot race, seen on a different snapshot.
     /**
      * Multi-partition path: {@link com.starrocks.server.LocalMetastore#addPartitions}
      * threw while pre-creating a target partition. Just this partition is
@@ -78,4 +84,39 @@ public enum SkipReason {
      * load between the grouper snapshot and the coordinator's re-resolve.
      */
     PARTITION_NOT_ELIGIBLE_POST_CREATE,
+    /**
+     * Target is a materialized view that the derived tier cannot key: not an incremental MV, more than
+     * one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no
+     * boundary source serves yet. Replaces an older unconditional materialized-view skip that recorded
+     * nothing at all.
+     */
+    MATERIALIZED_VIEW_TARGET,
+    /**
+     * Derived tier: the estimated output is too small for the row-id key space to be carved usefully —
+     * a tablet's share of rows would not stay clear of the gaps that per-node id caching leaves behind,
+     * so the split would be unbalanced rather than helpful.
+     */
+    ROW_ID_SPAN_TOO_SMALL,
+    /**
+     * Derived tier: the target's auto-increment counter has already handed out ids, so compute nodes may
+     * hold cached id intervals this planner cannot account for. Only a pristine id space lets the
+     * boundaries be derived; anything else falls back to no pre-split.
+     */
+    ROW_ID_SPACE_NOT_PRISTINE,
+    /** Derived tier: no usable output-size estimate, so the tablet count cannot be chosen. */
+    ESTIMATE_UNAVAILABLE,
+    /**
+     * Derived tier: the load writes more than one temporary partition. A row-id key is allocated from one
+     * counter for the whole table, so ids for any single partition form a contiguous band whenever the
+     * source is scanned in partition order — cuts spanning the whole id space would then leave most of
+     * each partition's tablets empty. Enabling the feature would not change this, which is why it is
+     * reported separately from the config gate.
+     */
+    MULTIPLE_TEMPORARY_PARTITIONS,
+    /**
+     * Derived tier: the boundary source threw. Distinct from {@link #SAMPLE_FAILED}, which belongs to
+     * the sampling tiers — the derived tier reads no data, so a failure there is a planning bug or a
+     * metadata race, not a sampling problem.
+     */
+    DERIVATION_FAILED,
 }

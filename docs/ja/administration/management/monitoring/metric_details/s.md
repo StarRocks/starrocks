@@ -554,8 +554,8 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。
-- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路（P2-a）では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。
+- ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。導出ティア（derived tier。Range 分散の増分マテリアライズドビューのリフレッシュで、境界をサンプリングではなく導出で求める経路）の値：`materialized_view_target`（ターゲットが導出ティアではキーにできないマテリアライズドビュー — 増分マテリアライズドビューでない、可視 index が 2 つ以上ある、ソートキーが単一の隠し row-id 列でない、あるいはまだどの境界ソースも扱えない row-id 種別）、`row_id_span_too_small`（推定出力が小さすぎて row-id のキー空間を有効に切り分けられない — 1 タブレットあたりの行数が、ノードごとの id キャッシュが残す空白を避けきれず、分割が有益どころか不均衡になる）、`row_id_space_not_pristine`（ターゲットの自動インクリメントカウンタが既に id を払い出しており、コンピュートノードがプランナーの計算に入らない id 区間をキャッシュしている可能性がある。境界を導出できるのは未使用の id 空間の場合のみ）、`multiple_temporary_partitions`（このリフレッシュが複数の置き換えパーティションに書き込む場合。Row ID はテーブル全体で 1 つのカウンタから払い出されるため、単一パーティションの id は連続した帯になり、id 空間全体にまたがる分割では各パーティションのほとんどのタブレットが空になります。機能を有効にしてもこれは変わらないため、`disabled_by_config` とは別に報告されます）、`estimate_unavailable`（利用できる出力サイズ見積もりがなく、タブレット数を決められない）、`derivation_failed`（境界ソースが例外を送出したか、導出した境界が検証に失敗。サンプリングティアに属する `tablet_pre_split_sampler_failed{reason=sample_failed}` とは別物）、`stale_catalog_state`（導出ティアでの意味：分割点を導出してからジョブを構築するまでの間にターゲットの可視 index 集合が変化した — 上記マルチパーティション経路と同種のスナップショット競合で、別のスナップショット上で起きたもの）、`submit_failed`（導出ティアでの意味：導出した分割点を受理済みジョブにできなかった — reshard ジョブファクトリが構築を拒否したか、`TabletReshardJobMgr` が受理を拒否したか。分割点そのものを生成できなかったことを表す `derivation_failed` とは別物です。サンプリングティアの同名の値は `tablet_pre_split_sampler_failed` に記録されます。そちらではサンプラーが実際に起動しているためです）。
+- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路（P2-a）では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。導出ティアのスキップも `tablet_pre_split_sampler_failed` ではなく本カウンタに記録されます：導出ティアはデータを一切読まないためサンプラーが起動することはなく、`derivation_failed` も同様です。
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -567,15 +567,15 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `reason` — eligibility 通過後の失敗カテゴリ（小文字化された `SkipReason`）。`sample_failed`（サンプラー実行が例外）、`timeout_pre_submit`（サンプリング + プランニング + 構築フェーズが `tablet_pre_split_pre_submit_timeout_seconds` を超過）、`submit_failed`（`TabletReshardJobMgr` が受理を拒否）、`pre_create_failed`（マルチパーティション経路：ターゲットパーティションの事前作成中に `LocalMetastore.addPartitions` が例外を送出 — その 1 パーティションは結合提出から外され、BE ランタイムの自動パーティション作成にフォールバックします。同じ取り込みの他のパーティションは継続し、`tablet_pre_split_sampler_failed{reason=pre_create_failed}` にも同時に記録されます）のいずれか。
+- ラベル: `reason` — eligibility 通過後の失敗カテゴリ（小文字化された `SkipReason`）。`sample_failed`（サンプラー実行が例外）、`timeout_pre_submit`（サンプリング + プランニング + 構築フェーズが `tablet_pre_split_pre_submit_timeout_seconds` を超過）、`submit_failed`（`TabletReshardJobMgr` が受理を拒否 — サンプリングティアのみ。導出ティアでの同じ拒否は、サンプラーが起動していないため `tablet_pre_split_eligibility_skipped` に記録されます）、`pre_create_failed`（マルチパーティション経路：ターゲットパーティションの事前作成中に `LocalMetastore.addPartitions` が例外を送出 — その 1 パーティションは結合提出から外され、BE ランタイムの自動パーティション作成にフォールバックします。同じ取り込みの他のパーティションは継続し、`tablet_pre_split_sampler_failed{reason=pre_create_failed}` にも同時に記録されます）のいずれか。
 - 説明: サンプラーが起動したものの、受理された reshard ジョブを生成できなかった回数を、理由別に集計した累計値。`tablet_pre_split_eligibility_skipped`（サンプラーが起動しなかった）や `tablet_pre_split_tier_used`（成功したティアを記録）とは別物です。meta-tier → data-tier のフォールバック自体は失敗ではなく、`tablet_pre_split_tier_used{tier=data_tier}` で追跡されます。
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `tier` — `meta_tier`（Parquet/ORC の row-group 統計から境界を計算。行データは読まない）または `data_tier`（FILES サブクエリで実際に取得した行サンプルから境界を計算。data-tier の直接起動と meta-tier → data-tier のフォールバックの両方を含む）。
-- 説明: サンプリングベースのタブレット事前分割について、境界を生成したサンプラーティア別の起動回数。
+- ラベル: `tier` — `meta_tier`（Parquet/ORC の row-group 統計から境界を計算。行データは読まない）、`data_tier`（FILES サブクエリで実際に取得した行サンプルから境界を計算。data-tier の直接起動と meta-tier → data-tier のフォールバックの両方を含む）、または `derived_tier`（ソートキー自身の値域について分かっていることから境界を計算。ファイル統計も行サンプルも使わず、何も読み取らない。ソートキーが隠し row-id 列で、その値の分布がデータではなく id の生成方法から決まる場合に使われる）。
+- 説明: サンプリングベースのタブレット事前分割について、境界を生成したティア別の起動回数。
 
 ## `starrocks_fe_tablet_pre_split_boundaries_planned`
 
@@ -612,13 +612,15 @@ description: "Alphabetical s"
 
 - 単位: ミリ秒
 - タイプ: ヒストグラム
-- 説明: 受理されたサンプリングベースのタブレット事前分割 reshard ジョブの `FINISHED` をコーディネーターが待機した壁時計時間。すべての本番取り込み種別で更新されます — INSERT-from-FILES と INSERT-from-table（いずれも `InsertPreSplitHook` 経由、`StmtExecutor` で `StatementPlanner.plan` が取り込みトランザクションを開く前に呼ばれる）、および Broker Load（`BrokerLoadPreSplitHook` 経由、`BrokerLoadJob.createLoadingTask` で `beginTxn` が `T_load` を開く前に呼ばれる）で、いずれも共有の `PreSplitFlow` を通じて同期待機します。テスト用の `runPreSplit` 同期待機ラッパーでも更新されます。いずれの経路でも、トリガーとなった取り込み自身が分割後のタブレットレイアウトに対してプランされます。
+- 説明: 受理されたサンプリングベースのタブレット事前分割 reshard ジョブの `FINISHED` をコーディネーターが待機した壁時計時間。すべての本番取り込み種別で更新されます — INSERT-from-FILES と INSERT-from-table（いずれも `InsertPreSplitHook` 経由、`StmtExecutor` で `StatementPlanner.plan` が取り込みトランザクションを開く前に呼ばれる）、Broker Load（`BrokerLoadPreSplitHook` 経由、`BrokerLoadJob.createLoadingTask` で `beginTxn` が `T_load` を開く前に呼ばれる）、および Range 分散の増分マテリアライズドビューのリフレッシュ（`InsertPreSplitHook` 経由、上書きの置き換えパーティションに対して）で、いずれも共有の `PreSplitFlow` を通じて同期待機します。テスト用の `runPreSplit` 同期待機ラッパーでも更新されます。いずれの経路でも、トリガーとなった取り込み自身が分割後のタブレットレイアウトに対してプランされます。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: サンプリングベースのタブレット事前分割で post-submit ハードキャップが発火した累計回数。受理された reshard ジョブが `tablet_pre_split_post_submit_wait_seconds` 以内に `FINISHED` に到達しなかったときにインクリメントされます。すべての本番取り込み種別でタイムアウト時に発火します — INSERT-from-FILES、INSERT-from-table、および Broker Load（いずれも共有の `PreSplitFlow` を通じて同期待機）。テスト用の `runPreSplit` 同期待機ラッパーでも発火します。取り込みはこのとき**中止せずに継続実行**し、その時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウト）。取り込み自体は中止されないため、`tablet_pre_split_load_abort` はインクリメントされません。
+- 説明: サンプリングベースのタブレット事前分割で post-submit ハードキャップが発火した累計回数。受理された reshard ジョブが `tablet_pre_split_post_submit_wait_seconds` 以内に `FINISHED` に到達しなかったときにインクリメントされます。すべての本番取り込み種別でタイムアウト時に発火します — INSERT-from-FILES、INSERT-from-table、Broker Load、および Range 分散の増分マテリアライズドビューのリフレッシュ（いずれも共有の `PreSplitFlow` を通じて同期待機）。テスト用の `runPreSplit` 同期待機ラッパーでも発火します。取り込みはこのとき**中止せずに継続実行**し、その時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウト）。取り込み自体は中止されないため、`tablet_pre_split_load_abort` はインクリメントされません。
+
+  ただしパーティションの置き換えで完了する 2 つの経路 — INSERT OVERWRITE と増分マテリアライズドビューのリフレッシュ — では、継続実行は成功とは限りません。これらはテーブルが `NORMAL` 状態のときにのみパーティションを置き換えるため、コミット前に reshard ジョブの完了を待ち、ステートメントの残り時間内に完了しなければそのステートメントは失敗します。したがってこれらの経路でこのカウンタが増え続ける場合は、無視せず調査する価値があります。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 

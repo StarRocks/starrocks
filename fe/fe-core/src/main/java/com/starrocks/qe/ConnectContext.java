@@ -953,6 +953,24 @@ public class ConnectContext {
         return (parent != null && parent.isKilled()) || isKilled;
     }
 
+    /**
+     * Whether this statement has been cancelled by any route, as opposed to {@link #isKilled()}, which
+     * only covers connection-scoped kills. {@code KILL QUERY}, a cancelled TaskRun and a closed client
+     * all call {@code kill(false, ...)}, which reaches only {@link StmtExecutor#cancel(String)} and
+     * leaves {@code isKilled} false. Use this wherever work outside query execution needs to notice
+     * cancellation -- by then the coordinator {@code cancel()} targets has usually already finished.
+     */
+    public boolean isStatementCancelled() {
+        if (isKilled()) {
+            return true;
+        }
+        StmtExecutor executorRef = executor;
+        if (executorRef != null && executorRef.isCancelled()) {
+            return true;
+        }
+        return parent != null && parent.isStatementCancelled();
+    }
+
     // Set kill flag to true;
     public void setKilled() {
         isKilled = true;

@@ -4876,6 +4876,13 @@ public class Config extends ConfigBase {
             + "enable_tablet_pre_split must also be true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
 
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "
+            + "refresh of a range-distributed incremental materialized view. Such a view is keyed by a "
+            + "hidden row-id column whose value domain is known, so its boundaries are derived rather "
+            + "than sampled and no data is read. Set to false to disable cluster-wide. The session "
+            + "variable enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_mv_refresh = true;
+
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
             + "On expiry the coordinator skips pre-split and the load proceeds against the "
