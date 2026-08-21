@@ -9479,6 +9479,148 @@ static void corrupt_first_data_block_type_byte(const std::string& path) {
     ASSERT_OK(wf->close());
 }
 
+static std::pair<Status, int> publish_merge_and_count_cache_drops(lake::TabletManager* tablet_manager,
+                                                                  const ReshardingTabletInfoPB& resharding_tablet,
+                                                                  int64_t base_version, int64_t new_version,
+                                                                  int64_t txn_id) {
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+
+    const bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    int drop_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_count; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    Status status = lake::publish_resharding_tablet(tablet_manager, resharding_tablet, base_version, new_version,
+                                                    txn_info, false, tablet_metadatas, tablet_ranges);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+    return {status, drop_count};
+}
+
+// An ownerless modern shared-rssid SST is classified by scanning the physical
+// source file. Corruption discovered after the table was opened must evict that
+// source's local cache, just like the rebuild paths do.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rssid_classifier_drops_corrupted_source_cache) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string sst_filename = "classifier_corrupted_cache.sst";
+    const auto sst_path = _tablet_manager->sst_location(child_a, sst_filename);
+    const uint64_t sst_filesize = write_legacy_pk_sstable(sst_path, {{"ownerless-key", /*rssid=*/1, /*rowid=*/0}});
+    corrupt_first_data_block_type_byte(sst_path);
+
+    auto make_child = [&](int64_t tablet_id, const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(3);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(2);
+        rowset->set_version(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(10);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(10);
+        add_shared_rssid_sstable(metadata.get(), sst_filename, /*rssid=*/1, /*shared_version=*/1,
+                                 /*max_rowid=*/0, sst_filesize);
+        return metadata;
+    };
+
+    ASSERT_OK(put_tablet_metadata(make_child(child_a, "classifier_live_a.dat")));
+    ASSERT_OK(put_tablet_metadata(make_child(child_b, "classifier_live_b.dat")));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    auto [status, drop_count] = publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding_tablet,
+                                                                    base_version, new_version, /*txn_id=*/205);
+    ASSERT_FALSE(status.ok()) << "classifier must surface the corrupted source SST";
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(1, drop_count) << "classifier corruption must evict the source SST cache";
+}
+
+// A conservative source-live gap triggers the exact non-shared validation scan
+// before rebuild. If that first read finds a corrupted local cache block, it
+// must evict the source cache rather than returning before the guarded rebuild.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_exact_scan_drops_corrupted_source_cache) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string sst_filename = "exact_scan_corrupted_cache.sst";
+    const auto sst_path = _tablet_manager->sst_location(child_a, sst_filename);
+    const uint64_t sst_filesize = write_legacy_pk_sstable(
+            sst_path, {{"live-key-1", /*rssid=*/1, /*rowid=*/0}, {"live-key-3", /*rssid=*/3, /*rowid=*/0}});
+    corrupt_first_data_block_type_byte(sst_path);
+
+    auto make_child = [&](int64_t tablet_id, bool include_sstable) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(4);
+        set_primary_key_schema(metadata.get(), 1001);
+        for (uint32_t rowset_id : {1u, 3u}) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(rowset_id);
+            rowset->set_version(1);
+            rowset->set_num_rows(1);
+            rowset->set_data_size(10);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(fmt::format("exact_scan_shared_{}.dat", rowset_id));
+            segment->set_size(10);
+            segment->set_shared(true);
+            stamp_physical_identity_uid(rowset, segment->filename());
+        }
+        if (include_sstable) {
+            auto* sst = metadata->mutable_sstable_meta()->add_sstables();
+            sst->set_filename(sst_filename);
+            sst->set_filesize(sst_filesize);
+            sst->set_shared(false);
+            sst->set_max_rss_rowid(static_cast<uint64_t>(3) << 32);
+        }
+        return metadata;
+    };
+
+    ASSERT_OK(put_tablet_metadata(make_child(child_a, /*include_sstable=*/true)));
+    ASSERT_OK(put_tablet_metadata(make_child(child_b, /*include_sstable=*/false)));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    auto [status, drop_count] = publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding_tablet,
+                                                                    base_version, new_version, /*txn_id=*/206);
+    ASSERT_FALSE(status.ok()) << "exact owner validation must surface the corrupted source SST";
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(1, drop_count) << "exact owner validation corruption must evict the source SST cache";
+}
+
 // Regression test for the legacy shared-sstable rebuild reading a corrupted
 // source sstable (usually a bad local cache copy): the merge must fail with
 // Corruption AND drop the source sstable's local cache, so a retried merge
@@ -9535,23 +9677,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_rebuild_drops_corrupted
     merging_info.add_old_tablet_ids(child_b);
     merging_info.set_new_tablet_id(merged_tablet);
 
-    TxnInfoPB txn_info;
-    txn_info.set_txn_id(99);
-
-    bool old_cfg = config::lake_clear_corrupted_cache_data;
-    config::lake_clear_corrupted_cache_data = true;
-    int drop_cnt = 0;
-    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
-                                                  txn_info, false, tablet_metadatas, tablet_ranges);
-
-    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::lake_clear_corrupted_cache_data = old_cfg;
+    auto [status, drop_cnt] = publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding_tablet,
+                                                                  base_version, new_version, /*txn_id=*/99);
 
     ASSERT_FALSE(status.ok()) << "merge over a corrupted source sstable must fail";
     EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
@@ -9647,23 +9774,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_corru
     merging_info.add_old_tablet_ids(child_b);
     merging_info.set_new_tablet_id(merged_tablet);
 
-    TxnInfoPB txn_info;
-    txn_info.set_txn_id(100);
-
-    bool old_cfg = config::lake_clear_corrupted_cache_data;
-    config::lake_clear_corrupted_cache_data = true;
-    int drop_cnt = 0;
-    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
-                                                  txn_info, false, tablet_metadatas, tablet_ranges);
-
-    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::lake_clear_corrupted_cache_data = old_cfg;
+    auto [status, drop_cnt] = publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding_tablet,
+                                                                  base_version, new_version, /*txn_id=*/100);
 
     ASSERT_FALSE(status.ok()) << "merge over a corrupted non-shared source sstable must fail";
     EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
@@ -9748,25 +9860,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_rebuild_drops_cache_on_
         merging_info.add_old_tablet_ids(child_b);
         merging_info.set_new_tablet_id(merged_tablet);
 
-        TxnInfoPB txn_info;
-        txn_info.set_txn_id(txn_id);
-
-        bool old_cfg = config::lake_clear_corrupted_cache_data;
-        config::lake_clear_corrupted_cache_data = true;
-        int drop_cnt = 0;
-        SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
-                                              [&](void*) { ++drop_cnt; });
-        SyncPoint::GetInstance()->EnableProcessing();
-
-        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
-                                                      new_version, txn_info, false, tablet_metadatas, tablet_ranges);
-
-        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-        SyncPoint::GetInstance()->DisableProcessing();
-        config::lake_clear_corrupted_cache_data = old_cfg;
-        return {status, drop_cnt};
+        return publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                   txn_id);
     };
 
     // (a) value bytes that fail protobuf parsing.
@@ -9872,25 +9967,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_cache
         merging_info.add_old_tablet_ids(child_b);
         merging_info.set_new_tablet_id(merged_tablet);
 
-        TxnInfoPB txn_info;
-        txn_info.set_txn_id(txn_id);
-
-        bool old_cfg = config::lake_clear_corrupted_cache_data;
-        config::lake_clear_corrupted_cache_data = true;
-        int drop_cnt = 0;
-        SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
-                                              [&](void*) { ++drop_cnt; });
-        SyncPoint::GetInstance()->EnableProcessing();
-
-        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
-                                                      new_version, txn_info, false, tablet_metadatas, tablet_ranges);
-
-        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-        SyncPoint::GetInstance()->DisableProcessing();
-        config::lake_clear_corrupted_cache_data = old_cfg;
-        return {status, drop_cnt};
+        return publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                   txn_id);
     };
 
     // (a) value bytes that fail protobuf parsing. The routing predicate is
