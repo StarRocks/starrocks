@@ -556,8 +556,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
 
     // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
-    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
-    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // candidate. Preserve that fact so the vector filter resolver can apply the configured underfill
+    // fallback policy. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
     // operator placed ABOVE this scan in the execution tree. ConnectorScanNode forwards the latter signal
     // to the provider during setup; providers constructed directly keep the default false value.
     _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
