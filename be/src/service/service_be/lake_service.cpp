@@ -710,6 +710,29 @@ static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRe
     }
 }
 
+// One aggregate request can be filled from two batches: FE's aggregatePublishWithCarryForward adds
+// the touched tablets and then the carry-forward tablets, and the batch added last ends up first in
+// publish_reqs. The carry-forward batch is built from synthetic TXN_EMPTY infos with
+// no_op_publish=true, which carry neither the real transaction's identity nor its commit time, so
+// reading publish_reqs(0) blindly can hand merge_tablet a placeholder to stamp into the parent it
+// builds. Prefer a batch that actually publishes a transaction; fall back to whatever exists when
+// every batch is a no-op, so an all-no-op request still behaves as it did.
+static const PublishVersionRequest* select_txn_bearing_publish_req(const AggregatePublishVersionRequest& request) {
+    const PublishVersionRequest* fallback = nullptr;
+    for (const auto& publish_req : request.publish_reqs()) {
+        if (publish_req.txn_infos().empty()) {
+            continue;
+        }
+        if (!publish_req.txn_infos(publish_req.txn_infos_size() - 1).no_op_publish()) {
+            return &publish_req;
+        }
+        if (fallback == nullptr) {
+            fallback = &publish_req;
+        }
+    }
+    return fallback;
+}
+
 // Build the query-only parent metadata after all child publishes have succeeded.
 // merge_tablet is also the range-tablet merge primitive, so it already provides
 // rowset-family deduplication and PK delvec union. Phase one intentionally rejects
@@ -720,13 +743,13 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
     if (request.parent_tablet_publish_infos().empty()) {
         return Status::OK();
     }
-    if (request.publish_reqs().empty() || request.publish_reqs(0).txn_infos().empty()) {
+    const auto* publish_req = select_txn_bearing_publish_req(request);
+    if (publish_req == nullptr) {
         return Status::InvalidArgument("parent tablet publish requires transaction info");
     }
 
-    const auto& publish_req = request.publish_reqs(0);
-    const auto& txn_info = publish_req.txn_infos(publish_req.txn_infos_size() - 1);
-    const int64_t new_version = publish_req.new_version();
+    const auto& txn_info = publish_req->txn_infos(publish_req->txn_infos_size() - 1);
+    const int64_t new_version = publish_req->new_version();
     for (const auto& parent_info : request.parent_tablet_publish_infos()) {
         if (!parent_info.has_parent_tablet_id() || parent_info.child_tablet_ids_size() < 1) {
             return Status::InvalidArgument("parent tablet publish requires one parent and at least one child");
