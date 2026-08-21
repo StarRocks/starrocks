@@ -495,7 +495,7 @@ TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_open_io_error_still_co
     const std::string before = metadata->SerializeAsString();
     const auto read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error",
-                                         [](void* arg) { *static_cast<Status*>(arg) = Status::IOError("injected"); });
+                                          [](void* arg) { *static_cast<Status*>(arg) = Status::IOError("injected"); });
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp clear_sync_point([&]() {
         SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::init:table_open_error");
