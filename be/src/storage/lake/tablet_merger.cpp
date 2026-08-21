@@ -35,6 +35,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
+#include "gutil/strings/escaping.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -2150,16 +2151,14 @@ std::optional<uint64_t> project_source_max_rss_rowid(const PersistentIndexSstabl
     return projected;
 }
 
-// Walk |values_pb|'s non-tombstone entries and update |*max_encoded| /
-// |*initialized| with the encoded `(rssid<<32)|rowid` if larger.
-void update_max_encoded_rss_rowid_from(const IndexValuesWithVerPB& values_pb, uint64_t* max_encoded,
-                                       bool* initialized) {
+// Walk |values_pb|'s non-tombstone entries and update |*max_encoded| with
+// the encoded `(rssid<<32)|rowid` if larger.
+void update_max_encoded_rss_rowid_from(const IndexValuesWithVerPB& values_pb, std::optional<uint64_t>* max_encoded) {
     for (const auto& index_value : values_pb.values()) {
         if (is_index_tombstone(index_value)) continue;
         const uint64_t encoded = encode_rss_rowid(index_value.rssid(), index_value.rowid());
-        if (!*initialized || encoded > *max_encoded) {
+        if (!max_encoded->has_value() || encoded > max_encoded->value()) {
             *max_encoded = encoded;
-            *initialized = true;
         }
     }
 }
@@ -2277,6 +2276,14 @@ StatusOr<bool> remap_legacy_entry_or_drop(const Slice& entry_key, IndexValuesWit
             retained_values.add_values()->CopyFrom(index_value);
             continue;
         }
+        if (routes.use_key_ranges && route == nullptr) {
+            return Status::Corruption(
+                    fmt::format("legacy shared sstable data entry has no source tablet route: encoded_key_size={} "
+                                "encoded_key_hex={} stored_rssid={} stored_rowid={} source_rssid_offset={} "
+                                "source_route_count={}",
+                                entry_key.size, strings::b2a_hex(entry_key.data, static_cast<int>(entry_key.size)),
+                                index_value.rssid(), index_value.rowid(), source_rssid_offset, routes.routes.size()));
+        }
         const int64_t lifted_rssid = static_cast<int64_t>(index_value.rssid()) + source_rssid_offset;
         if (lifted_rssid < 0 || lifted_rssid > std::numeric_limits<uint32_t>::max()) {
             return Status::Corruption(fmt::format(
@@ -2286,8 +2293,11 @@ StatusOr<bool> remap_legacy_entry_or_drop(const Slice& entry_key, IndexValuesWit
         const uint32_t source_rssid = static_cast<uint32_t>(lifted_rssid);
         std::optional<uint32_t> final_rssid;
         if (routes.use_key_ranges) {
-            if (route == nullptr || route->old_tablet_index >= lookup_maps.size()) {
-                continue;
+            if (route->old_tablet_index >= lookup_maps.size()) {
+                return Status::Corruption(fmt::format(
+                        "legacy shared sstable source route references missing lookup map: old_tablet_index={} "
+                        "lookup_map_count={}",
+                        route->old_tablet_index, lookup_maps.size()));
             }
             const auto& data_map = lookup_maps[route->old_tablet_index].data_rssid_map;
             auto mapped_entry = data_map.find(source_rssid);
@@ -2438,12 +2448,7 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
     // (4) Project src.max_rss_rowid through the rebuild before the scan so
     // tombstone-only files and files whose source max points at a delete-only
     // rowset still get a stable watermark.
-    uint64_t max_encoded_rss_rowid = 0;
-    bool max_encoded_initialized = false;
-    if (auto initial_max = project_source_max_rss_rowid(src_pb, old_tablet_indexes, lookup_maps)) {
-        max_encoded_rss_rowid = *initial_max;
-        max_encoded_initialized = true;
-    }
+    auto max_encoded_rss_rowid = project_source_max_rss_rowid(src_pb, old_tablet_indexes, lookup_maps);
 
     // (3) Per-rssid delvec cache. fill_cache=false / fill_data_cache=false so
     // a one-shot bulk merge scan doesn't pollute long-lived block / delvec
@@ -2498,7 +2503,7 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
             ++dropped_entry_count;
             continue;
         }
-        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid, &max_encoded_initialized);
+        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid);
         const std::string serialized_entry = values_pb.SerializeAsString();
         RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
         ++kept_entry_count;
@@ -2518,8 +2523,7 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(
-            finalize_legacy_rebuild_output(output_writer, max_encoded_initialized ? max_encoded_rss_rowid : 0, out_pb));
+    RETURN_IF_ERROR(finalize_legacy_rebuild_output(output_writer, max_encoded_rss_rowid.value_or(0), out_pb));
     cleanup_partial_output.cancel(); // file is now referenced; keep it
     g_tablet_merge_legacy_sstable_rebuild_total << 1;
     return Status::OK();
@@ -2596,12 +2600,10 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
     // only widens this initial value as non-tombstone entries are
     // written.
     const uint32_t source_max_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
-    uint64_t max_encoded_rss_rowid = 0;
-    bool max_encoded_initialized = false;
+    std::optional<uint64_t> max_encoded_rss_rowid;
     if (auto projected_max_high = ctx.map_rssid(source_max_high); projected_max_high.ok()) {
         max_encoded_rss_rowid =
                 encode_rss_rowid(projected_max_high.value(), extract_rss_rowid_low(src_pb.max_rss_rowid()));
-        max_encoded_initialized = true;
     } else if (static_cast<int64_t>(source_max_high) + ctx.rssid_offset() >= 0) {
         // Only a projection below the carried source-rowset floor describes a
         // stale watermark. Positive overflow remains a fatal metadata error.
@@ -2660,7 +2662,7 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         if (dropped_value) ++dropped_entry_count;
         if (retained_values.values_size() == 0) continue;
         values_pb.Swap(&retained_values);
-        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid, &max_encoded_initialized);
+        update_max_encoded_rss_rowid_from(values_pb, &max_encoded_rss_rowid);
         const std::string serialized_entry = values_pb.SerializeAsString();
         RETURN_IF_ERROR(output_writer.table_builder->Add(entry_key, Slice(serialized_entry)));
         ++kept_entry_count;
@@ -2678,8 +2680,7 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(
-            finalize_legacy_rebuild_output(output_writer, max_encoded_initialized ? max_encoded_rss_rowid : 0, out_pb));
+    RETURN_IF_ERROR(finalize_legacy_rebuild_output(output_writer, max_encoded_rss_rowid.value_or(0), out_pb));
     cleanup_partial_output.cancel();
     g_tablet_merge_non_shared_sstable_rebuild_total << 1;
     return Status::OK();
