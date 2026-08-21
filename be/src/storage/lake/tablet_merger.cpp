@@ -3465,6 +3465,10 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
         if (old_tablet_metadata == nullptr) {
             return Status::InvalidArgument("old tablet metadata is null");
         }
+        // Validate every source before output metadata is copied and cleared.
+        // In particular, skip_sstable_merge drops projected SST metadata later,
+        // but it must not allow an unsupported source allocation domain through.
+        RETURN_IF_ERROR(compute_supported_next_rowset_id(*old_tablet_metadata));
         merge_contexts.emplace_back(old_tablet_metadata);
     }
 
