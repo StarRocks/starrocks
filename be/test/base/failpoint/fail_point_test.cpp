@@ -381,6 +381,35 @@ TEST(FailPointTest, init_from_conf_pause_mode) {
     std::remove(conf_path.c_str());
 }
 
+// FailPointRegistry stores a RAW pointer and has no removal API, so a failpoint handed to it must
+// outlive the test. File-scope here, so the registration also happens exactly once under
+// --gtest_repeat.
+static failpoint::FailPoint s_conf_unknown_mode_fp("test_conf_unknown_mode");
+static const bool s_conf_unknown_mode_registered =
+        failpoint::FailPointRegistry::GetInstance()->add(&s_conf_unknown_mode_fp).ok();
+
+// A typo in the conf file's "mode" must be rejected. Before this was fixed the unmatched string left
+// PFailPointTriggerMode.mode unset, and proto2 reports an unset optional enum as its FIRST value --
+// ENABLE -- so a typo silently ARMED the failpoint instead of reporting an error. Assert both halves:
+// the parse fails, and the failpoint is left untouched.
+TEST(FailPointTest, init_from_conf_rejects_unknown_mode) {
+    ASSERT_TRUE(s_conf_unknown_mode_registered);
+
+    const std::string conf_path = "./fail_point_conf_unknown_mode.json";
+    {
+        std::ofstream out(conf_path);
+        out << R"({"test_conf_unknown_mode": {"mode": "nonsense"}})";
+    }
+    DeferOp remove_conf([&] { std::remove(conf_path.c_str()); });
+
+    ASSERT_FALSE(failpoint::init_failpoint_from_conf(conf_path));
+    // A freshly constructed FailPoint is DISABLE, so DISABLE here proves setMode() was never reached
+    // -- the parse bailed instead of arming.
+    ASSERT_EQ(FailPointTriggerModeType::DISABLE, s_conf_unknown_mode_fp.to_pb().trigger_mode().mode());
+    ASSERT_FALSE(s_conf_unknown_mode_fp.to_pb().trigger_mode().pause());
+    ASSERT_FALSE(s_conf_unknown_mode_fp.shouldFail());
+}
+
 // Every other pause test calls fp.shouldFail() directly, which bypasses libfiu entirely. In
 // production the only caller is libfiu's external callback, invoked from inside fiu_fail() while it
 // holds a __thread recursion counter and a pthread_rwlock read lock. This test drives the real macro
