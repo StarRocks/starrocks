@@ -3655,4 +3655,20 @@ public class AggregateTest extends PlanTestBase {
                 () -> getFragmentPlan(sql));
         assertThat(exception.getMessage(), containsString("histogram() does not support GROUP BY"));
     }
+
+    @Test
+    public void testHistogramWithDistinctThrowsError() throws Exception {
+        String sql = "select histogram(distinct v1, 10, 1.0) from t0";
+        StarRocksPlannerException exception = assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("histogram() does not support DISTINCT"));
+    }
+
+    @Test
+    public void testHistogramWithDistinctAndGroupByThrowsError() throws Exception {
+        String sql = "select v2, histogram(distinct v1, 10, 1.0) from t0 group by v2";
+        StarRocksPlannerException exception = assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan(sql));
+        assertThat(exception.getMessage(), containsString("histogram() does not support DISTINCT"));
+    }
 }
