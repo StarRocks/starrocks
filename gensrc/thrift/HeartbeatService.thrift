@@ -52,6 +52,7 @@ struct TBackendInfo {
     10: optional i64 mem_limit_bytes
 
     11: optional Types.TPort arrow_flight_port
+    12: optional i32 text_analyzer_runtime_abi
 }
 
 struct THeartbeatResult {

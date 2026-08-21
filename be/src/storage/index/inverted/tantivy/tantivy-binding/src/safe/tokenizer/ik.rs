@@ -12,78 +12,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! IK dictionary-based Chinese segmentation.
-//!
-//! `tantivy-ik` 0.7 implements `tantivy-tokenizer-api` 0.2, while the
-//! in-tree Tantivy uses a newer tokenizer API. This module is a small adapter:
-//! it delegates segmentation to `tantivy_ik::IkTokenizer`, then converts the
-//! returned tokens into the in-tree Tantivy token type.
-
-use ik_rs::core::ik_segmenter::TokenMode;
+use ik_rs::core::ik_segmenter::{IKSegmenter, TokenMode};
 use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
-use tantivy_ik::IkTokenizer as TantivyIkTokenizer;
-use tantivy_tokenizer_api_v02::{
-    TokenStream as TantivyIkTokenStream, Tokenizer as TantivyIkTokenizerApi,
-};
+
+use super::spec::IkMode;
 
 #[derive(Clone)]
-pub(super) struct IkTokenizer {
-    inner: TantivyIkTokenizer,
+pub struct IkTokenizer {
+    mode: IkMode,
 }
 
 impl IkTokenizer {
-    pub(super) fn new(mode: TokenMode) -> Self {
-        Self {
-            inner: TantivyIkTokenizer::new(mode),
-        }
+    pub fn new(mode: IkMode) -> Self {
+        Self { mode }
     }
 }
 
-impl Default for IkTokenizer {
-    fn default() -> Self {
-        Self::new(TokenMode::INDEX)
-    }
-}
-
-pub(super) struct IkTokenStream {
+pub struct IkTokenStream {
     tokens: Vec<Token>,
-    index: usize,
-}
-
-impl TokenStream for IkTokenStream {
-    fn advance(&mut self) -> bool {
-        if self.index >= self.tokens.len() {
-            return false;
-        }
-        self.index += 1;
-        true
-    }
-
-    fn token(&self) -> &Token {
-        &self.tokens[self.index - 1]
-    }
-
-    fn token_mut(&mut self) -> &mut Token {
-        &mut self.tokens[self.index - 1]
-    }
+    next: usize,
+    current: Token,
 }
 
 impl Tokenizer for IkTokenizer {
     type TokenStream<'a> = IkTokenStream;
 
     fn token_stream<'a>(&'a mut self, text: &'a str) -> Self::TokenStream<'a> {
-        let mut source = TantivyIkTokenizerApi::token_stream(&mut self.inner, text);
-        let mut tokens = Vec::new();
-        while TantivyIkTokenStream::advance(&mut source) {
-            let source_token = TantivyIkTokenStream::token(&source);
-            tokens.push(Token {
-                offset_from: source_token.offset_from,
-                offset_to: source_token.offset_to,
-                position: source_token.position,
-                text: source_token.text.to_lowercase(),
-                position_length: source_token.position_length,
-            });
+        let mut boundaries: Vec<usize> = text.char_indices().map(|(offset, _)| offset).collect();
+        boundaries.push(text.len());
+        let mode = match self.mode {
+            IkMode::Search => TokenMode::SEARCH,
+            IkMode::Index => TokenMode::INDEX,
+        };
+        let tokens = IKSegmenter::new()
+            .tokenize(text, mode)
+            .into_iter()
+            .map(|lexeme| Token {
+                offset_from: boundaries[lexeme.begin_pos()],
+                offset_to: boundaries[lexeme.end_pos()],
+                position: lexeme.begin_pos(),
+                text: lexeme.lexeme_text().to_string(),
+                position_length: lexeme.len(),
+            })
+            .collect();
+        IkTokenStream {
+            tokens,
+            next: 0,
+            current: Token::default(),
         }
-        IkTokenStream { tokens, index: 0 }
+    }
+}
+
+impl TokenStream for IkTokenStream {
+    fn advance(&mut self) -> bool {
+        if self.next >= self.tokens.len() {
+            return false;
+        }
+        self.current = self.tokens[self.next].clone();
+        self.next += 1;
+        true
+    }
+
+    fn token(&self) -> &Token {
+        &self.current
+    }
+
+    fn token_mut(&mut self) -> &mut Token {
+        &mut self.current
     }
 }

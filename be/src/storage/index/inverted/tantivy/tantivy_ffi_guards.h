@@ -58,6 +58,14 @@ struct TantivyF32ArrayGuard {
     TantivyF32ArrayGuard& operator=(const TantivyF32ArrayGuard&) = delete;
 };
 
+struct TantivyTokenArrayGuard {
+    tb::RustTokenArray& arr;
+    explicit TantivyTokenArrayGuard(tb::RustTokenArray& a) : arr(a) {}
+    ~TantivyTokenArrayGuard() { tb::tantivy_free_token_array(arr); }
+    TantivyTokenArrayGuard(const TantivyTokenArrayGuard&) = delete;
+    TantivyTokenArrayGuard& operator=(const TantivyTokenArrayGuard&) = delete;
+};
+
 // Owning RAII handle for any FFI pointer that tantivy hands back through
 // `*mut c_void`. The free function is captured as a non-type template
 // parameter, so the dispatch is resolved at compile time and we don't pay
@@ -102,5 +110,6 @@ private:
 using TantivyWriterGuard = TantivyFfiHandle<&tb::tantivy_free_index_writer>;
 using TantivyReaderGuard = TantivyFfiHandle<&tb::tantivy_free_index_reader>;
 using TantivyCompoundReaderGuard = TantivyFfiHandle<&tb::tantivy_free_index_reader>;
+using TantivyAnalyzerGuard = TantivyFfiHandle<&tb::tantivy_free_analyzer>;
 
 } // namespace starrocks

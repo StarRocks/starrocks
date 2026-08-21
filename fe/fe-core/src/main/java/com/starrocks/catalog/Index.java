@@ -57,6 +57,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
@@ -64,6 +65,8 @@ import java.util.stream.Collectors;
  * This class will used in olaptable
  */
 public class Index implements Writable {
+    private static final String TEXT_ANALYZER_DEFINITION_PROPERTY = "analyzer_definition";
+    private static final String TEXT_ANALYZER_DIGEST_PROPERTY = "analyzer_digest";
 
     @SerializedName(value = "indexId")
     private long indexId;
@@ -232,7 +235,14 @@ public class Index implements Writable {
             sb.append(" USING ").append(indexType.getDisplayName());
         }
         if (properties != null) {
-            sb.append(getPropertiesString());
+            Map<String, String> displayedProperties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            displayedProperties.putAll(properties);
+            displayedProperties.remove(TEXT_ANALYZER_DEFINITION_PROPERTY);
+            displayedProperties.remove(TEXT_ANALYZER_DIGEST_PROPERTY);
+            if (!displayedProperties.isEmpty()) {
+                sb.append(String.format("(%s)",
+                        new PrintableMap<>(displayedProperties, "=", true, false, ",")));
+            }
         }
         if (comment != null) {
             sb.append(" COMMENT '" + comment + "'");

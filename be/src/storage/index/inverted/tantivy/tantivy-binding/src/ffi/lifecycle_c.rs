@@ -14,9 +14,18 @@
 
 //! Lifecycle helpers — release ownership of values handed to C++.
 
-use std::ffi::{c_char, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 
-use crate::ffi::result::{RustF32Array, RustResult, RustStringArray, RustU32Array};
+use crate::ffi::catch::catch_ffi;
+use crate::ffi::handle::{as_ref, create_binding, free_binding};
+use crate::ffi::result::{
+    raw_to_str, RustF32Array, RustResult, RustStringArray, RustToken, RustTokenArray, RustU32Array,
+};
+
+#[derive(Clone)]
+struct AnalyzerHandle {
+    pipeline: crate::safe::tokenizer::pipeline::PipelineTokenizer,
+}
 
 /// Release a `RustResult` and any owned content it carries.
 ///
@@ -77,6 +86,169 @@ pub unsafe extern "C" fn tantivy_free_string_array(array: RustStringArray) {
             }
         }
     }));
+}
+
+/// Release a `RustTokenArray` produced by `RustTokenArray::from_tokens`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_free_token_array(array: RustTokenArray) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if array.ptr.is_null() || array.len == 0 {
+            return;
+        }
+        let slice: *mut [RustToken] = std::slice::from_raw_parts_mut(array.ptr, array.len);
+        let boxed = Box::from_raw(slice);
+        for token in boxed.iter() {
+            if !token.term.is_null() {
+                drop(CString::from_raw(token.term));
+            }
+            if !token.token_type.is_null() {
+                drop(CString::from_raw(token.token_type));
+            }
+        }
+    }));
+}
+
+/// Validate and canonicalize an analyzer definition or legacy tokenizer name.
+/// Returns `[canonical_json, sha256_digest]` in `out`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_analyzer_canonicalize(
+    definition: *const c_char,
+    out: *mut RustStringArray,
+) -> RustResult {
+    catch_ffi(|| {
+        if definition.is_null() || out.is_null() {
+            return RustResult::err("definition/out pointer is NULL");
+        }
+        *out = RustStringArray::EMPTY;
+        let definition = match CStr::from_ptr(definition).to_str() {
+            Ok(value) => value,
+            Err(e) => return RustResult::err(format!("definition is not valid UTF-8: {e}")),
+        };
+        match crate::safe::tokenizer::canonicalize(definition) {
+            Ok((canonical, digest)) => {
+                *out = RustStringArray::from_strings(vec![canonical, digest]);
+                RustResult::ok_none()
+            }
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
+}
+
+/// Create a reusable analyzer handle. `expected_digest` may be NULL/empty.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_create_analyzer(
+    definition: *const c_char,
+    expected_digest: *const c_char,
+) -> RustResult {
+    catch_ffi(|| {
+        if definition.is_null() {
+            return RustResult::err("definition pointer is NULL");
+        }
+        let definition = match CStr::from_ptr(definition).to_str() {
+            Ok(value) => value,
+            Err(e) => return RustResult::err(format!("definition is not valid UTF-8: {e}")),
+        };
+        let expected = if expected_digest.is_null() {
+            None
+        } else {
+            match CStr::from_ptr(expected_digest).to_str() {
+                Ok("") => None,
+                Ok(value) => Some(value),
+                Err(e) => {
+                    return RustResult::err(format!("expected_digest is not valid UTF-8: {e}"))
+                }
+            }
+        };
+        match crate::safe::tokenizer::resolve(definition, expected) {
+            Ok(resolved) => RustResult::ok_ptr(create_binding(AnalyzerHandle {
+                pipeline: resolved.pipeline,
+            })),
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_free_analyzer(analyzer: *mut c_void) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        free_binding::<AnalyzerHandle>(analyzer);
+    }));
+}
+
+/// Retain an analyzer by returning an independently owned handle that uses the
+/// same immutable pipeline. The returned pointer must be released with
+/// `tantivy_free_analyzer`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_retain_analyzer(analyzer: *const c_void) -> RustResult {
+    catch_ffi(|| {
+        let analyzer: &AnalyzerHandle = match as_ref(analyzer) {
+            Some(value) => value,
+            None => return RustResult::err("analyzer is NULL"),
+        };
+        RustResult::ok_ptr(create_binding(analyzer.clone()))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_analyzer_tokenize(
+    analyzer: *const c_void,
+    text_ptr: *const u8,
+    text_len: usize,
+    out: *mut RustStringArray,
+) -> RustResult {
+    catch_ffi(|| {
+        if out.is_null() {
+            return RustResult::err("out pointer is NULL");
+        }
+        *out = RustStringArray::EMPTY;
+        let analyzer: &AnalyzerHandle = match as_ref(analyzer) {
+            Some(value) => value,
+            None => return RustResult::err("analyzer is NULL"),
+        };
+        let text = match raw_to_str(text_ptr, text_len) {
+            Ok(value) => value,
+            Err(e) => return RustResult::err(format!("text: {e}")),
+        };
+        match analyzer.pipeline.analyze(text) {
+            Ok(tokens) => {
+                *out = RustStringArray::from_strings(
+                    tokens.into_iter().map(|token| token.text).collect(),
+                );
+                RustResult::ok_none()
+            }
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_analyzer_tokenize_detail(
+    analyzer: *const c_void,
+    text_ptr: *const u8,
+    text_len: usize,
+    out: *mut RustTokenArray,
+) -> RustResult {
+    catch_ffi(|| {
+        if out.is_null() {
+            return RustResult::err("out pointer is NULL");
+        }
+        *out = RustTokenArray::EMPTY;
+        let analyzer: &AnalyzerHandle = match as_ref(analyzer) {
+            Some(value) => value,
+            None => return RustResult::err("analyzer is NULL"),
+        };
+        let text = match raw_to_str(text_ptr, text_len) {
+            Ok(value) => value,
+            Err(e) => return RustResult::err(format!("text: {e}")),
+        };
+        match analyzer.pipeline.analyze(text) {
+            Ok(tokens) => {
+                *out = RustTokenArray::from_tokens(tokens);
+                RustResult::ok_none()
+            }
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
 }
 
 #[no_mangle]

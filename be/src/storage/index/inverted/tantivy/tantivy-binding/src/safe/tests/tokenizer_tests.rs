@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use crate::safe::tokenizer::{
-    build, tokenize, TOKENIZER_CJK, TOKENIZER_ENGLISH, TOKENIZER_IK, TOKENIZER_IK_SMART,
-    TOKENIZER_JIEBA, TOKENIZER_NGRAM, TOKENIZER_RAW, TOKENIZER_STANDARD,
+    build, canonicalize, resolve, tokenize, tokenize_detail, TOKENIZER_CJK, TOKENIZER_ENGLISH,
+    TOKENIZER_IK, TOKENIZER_IK_SMART, TOKENIZER_JIEBA, TOKENIZER_NGRAM, TOKENIZER_RAW,
+    TOKENIZER_STANDARD,
 };
 
 #[test]
@@ -82,14 +83,27 @@ fn invalid_ngram_config_rejected() {
 }
 
 #[test]
-fn old_chinese_name_rejected() {
-    match build("chinese") {
-        Ok(_) => panic!("expected error for old 'chinese' name"),
-        Err(e) => {
-            let msg = e.to_string();
-            assert!(msg.contains("unsupported tokenizer"), "got: {msg}");
-        }
-    }
+fn ik_tokenize_with_builtin_dictionary() {
+    let tokens = tokenize("ik", "张华考上了北京大学").unwrap();
+    assert!(tokens.contains(&"张华".to_string()), "got: {tokens:?}");
+    assert!(tokens.contains(&"北京大学".to_string()), "got: {tokens:?}");
+}
+
+#[test]
+fn ik_accepts_compatible_mode_names() {
+    let smart = canonicalize(r#"{"tokenizer":{"type":"ik","mode":"ik_smart"}}"#)
+        .unwrap()
+        .0;
+    let max_word = canonicalize(r#"{"tokenizer":{"type":"ik","mode":"ik_max_word"}}"#)
+        .unwrap()
+        .0;
+    assert!(smart.contains(r#""mode":"search""#));
+    assert!(max_word.contains(r#""mode":"index""#));
+}
+
+#[test]
+fn legacy_chinese_alias_builds() {
+    assert!(build("chinese").is_ok());
 }
 
 #[test]
@@ -190,6 +204,14 @@ fn standard_caps_tokens_at_clucene_limit() {
 
 // Contract: english_analyzer uses SimpleTokenizer + RemoveLongFilter + LowerCaser
 // + StopWordFilter(English). See `english_analyzer()` in safe/tokenizer/mod.rs.
+#[test]
+fn raw_preserves_empty_placeholder() {
+    let tokens = tokenize(TOKENIZER_RAW, "").unwrap();
+    assert_eq!(tokens, vec![""]);
+}
+
+// The legacy English adapter preserves SimpleTokenizer + length + lowercase +
+// bundled English stopword behavior.
 // Key behavior: (1) English stopwords like "the" ARE removed; (2) no Porter
 // stemming — inflected forms are kept as-is (e.g. "foxes" stays "foxes").
 #[test]
@@ -199,6 +221,14 @@ fn english_tokenize() {
     assert!(tokens.contains(&"brown".to_string()));
     assert!(tokens.contains(&"fox".to_string()));
     assert!(!tokens.contains(&"the".to_string()));
+}
+
+#[test]
+fn legacy_standard_preserves_english_adapter_behavior() {
+    assert_eq!(
+        tokenize("standard", "The Quick Fox").unwrap(),
+        tokenize("english", "The Quick Fox").unwrap()
+    );
 }
 
 #[test]
@@ -274,6 +304,44 @@ fn ik_default_is_index_mode() {
     );
 }
 
+const PIPELINE: &str = r#"{
+  "char_filter":[
+    {"type":"unicode_normalize","form":"nfkc"},
+    {"type":"mapping","mappings":["＆ => &"]}
+  ],
+  "tokenizer":{"type":"standard"},
+  "token_filter":[
+    {"type":"lowercase"},
+    {"type":"stop","stopwords":["the"]},
+    {"type":"length","min":2,"max":32}
+  ]
+}"#;
+
+#[test]
+fn pipeline_is_canonical_and_digest_is_stable() {
+    let (canonical, digest) = canonicalize(PIPELINE).unwrap();
+    assert_eq!(digest.len(), 64);
+    assert_eq!(
+        canonicalize(&canonical).unwrap(),
+        (canonical.clone(), digest)
+    );
+    assert!(canonical.contains("\"spec_version\":1"));
+    assert!(canonical.contains("\"runtime_abi_version\":1"));
+    assert!(canonical.contains("\"resource_refs\""));
+}
+
+#[test]
+fn canonical_definition_matches_fe_contract() {
+    let definition = r#"{"token_filter":[{"type":"lowercase"}],"tokenizer":{"type":"cjk"}}"#;
+    let expected = r#"{"spec_version":1,"runtime_abi_version":1,"builtin_model_version":"starrocks-tantivy-3.5-v1","char_filter":[],"tokenizer":{"type":"chinese"},"token_filter":[{"type":"lowercase"}],"resource_refs":[]}"#;
+    let (canonical, digest) = canonicalize(definition).unwrap();
+    assert_eq!(canonical, expected);
+    assert_eq!(
+        digest,
+        "7b054591ed8e95c775dac57c1b1a7a9e4649d420d6ee814ec269e4768aa6a8f2"
+    );
+}
+
 #[test]
 fn ik_search_mode_is_coarser_than_index_mode() {
     let text = "中华人民共和国国歌";
@@ -289,4 +357,142 @@ fn ik_mixed_text_lowercase() {
     let tokens = tokenize(TOKENIZER_IK, "StarRocks数据库").unwrap();
     assert!(tokens.contains(&"starrocks".to_string()), "got: {tokens:?}");
     assert!(tokens.contains(&"数据库".to_string()), "got: {tokens:?}");
+}
+
+#[test]
+fn analyzer_digest_mismatch_fails_closed() {
+    let (_, digest) = canonicalize(PIPELINE).unwrap();
+    assert!(resolve(PIPELINE, Some(&digest)).is_ok());
+    let error = match resolve(
+        PIPELINE,
+        Some("0000000000000000000000000000000000000000000000000000000000000000"),
+    ) {
+        Ok(_) => panic!("expected digest mismatch"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("analyzer digest mismatch"));
+}
+
+#[test]
+fn pipeline_applies_char_and_token_filters_in_order() {
+    let tokens = tokenize(PIPELINE, "Ｔｈｅ Quick＆BROWN a").unwrap();
+    assert_eq!(tokens, vec!["quick&brown"]);
+}
+
+#[test]
+fn stop_filter_preserves_position_gap_and_original_offsets() {
+    let definition = r#"{
+      "tokenizer":{"type":"standard"},
+      "token_filter":[{"type":"lowercase"},{"type":"stop","stopwords":["and"]}]
+    }"#;
+    let tokens = tokenize_detail(definition, "Red AND Blue").unwrap();
+    assert_eq!(tokens.len(), 2);
+    assert_eq!((tokens[0].text.as_str(), tokens[0].position), ("red", 0));
+    assert_eq!((tokens[1].text.as_str(), tokens[1].position), ("blue", 2));
+    assert_eq!((tokens[1].offset_from, tokens[1].offset_to), (8, 12));
+}
+
+#[test]
+fn mapping_corrects_offsets_to_original_input() {
+    let definition = r#"{
+      "char_filter":[{"type":"mapping","mappings":["＆ => and"]}],
+      "tokenizer":{"type":"standard"}
+    }"#;
+    let tokens = tokenize_detail(definition, "A＆B").unwrap();
+    assert_eq!(
+        tokens
+            .iter()
+            .map(|token| token.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["AandB"]
+    );
+    assert_eq!((tokens[0].offset_from, tokens[0].offset_to), (0, 5));
+}
+
+#[test]
+fn mapping_expansion_never_produces_zero_length_offsets() {
+    let definition = r#"{
+      "char_filter":[{"type":"mapping","mappings":["X => a b"]}],
+      "tokenizer":{"type":"standard"}
+    }"#;
+    let tokens = tokenize_detail(definition, "X").unwrap();
+    assert_eq!(
+        tokens
+            .iter()
+            .map(|token| (token.text.as_str(), token.offset_from, token.offset_to))
+            .collect::<Vec<_>>(),
+        vec![("a", 0, 1), ("b", 0, 1)]
+    );
+}
+
+#[test]
+fn nfc_composes_combining_sequence_and_preserves_original_offsets() {
+    let definition = r#"{
+      "char_filter":[{"type":"unicode_normalize","form":"nfc"}],
+      "tokenizer":{"type":"standard"}
+    }"#;
+    let tokens = tokenize_detail(definition, "Cafe\u{301}").unwrap();
+    assert_eq!(tokens[0].text, "Café");
+    assert_eq!((tokens[0].offset_from, tokens[0].offset_to), (0, 6));
+}
+
+#[test]
+fn nfd_expansion_preserves_original_end_offset() {
+    let definition = r#"{
+      "char_filter":[{"type":"unicode_normalize","form":"nfd"}],
+      "tokenizer":{"type":"standard"}
+    }"#;
+    let tokens = tokenize_detail(definition, "é").unwrap();
+    assert_eq!(tokens[0].text, "e");
+    assert_eq!((tokens[0].offset_from, tokens[0].offset_to), (0, 2));
+}
+
+#[test]
+fn nfc_composes_hangul_jamo_and_preserves_original_offsets() {
+    let definition = r#"{
+      "char_filter":[{"type":"unicode_normalize","form":"nfc"}],
+      "tokenizer":{"type":"standard"}
+    }"#;
+    let tokens = tokenize_detail(definition, "\u{1100}\u{1161}").unwrap();
+    assert_eq!(tokens[0].text, "가");
+    assert_eq!((tokens[0].offset_from, tokens[0].offset_to), (0, 6));
+}
+
+#[test]
+fn phase_one_rejects_external_resources_and_unknown_fields() {
+    let resource = r#"{
+      "tokenizer":{"type":"jieba","user_dictionary":"s3://bucket/dict"}
+    }"#;
+    assert!(canonicalize(resource)
+        .unwrap_err()
+        .to_string()
+        .contains("unknown field"));
+
+    let refs = r#"{
+      "tokenizer":{"type":"standard"},
+      "resource_refs":[{"name":"dict","digest":"abc"}]
+    }"#;
+    assert!(canonicalize(refs)
+        .unwrap_err()
+        .to_string()
+        .contains("resource_refs are not supported"));
+}
+
+#[test]
+fn ngram_pipeline_honors_bounds() {
+    let definition = r#"{"tokenizer":{"type":"ngram","min_gram":2,"max_gram":3}}"#;
+    assert_eq!(
+        tokenize(definition, "abcd").unwrap(),
+        vec!["ab", "abc", "bc", "bcd", "cd"]
+    );
+}
+
+#[test]
+fn analyzer_limits_fail_without_truncation() {
+    let invalid_ngram = r#"{"tokenizer":{"type":"ngram","min_gram":1,"max_gram":33}}"#;
+    assert!(canonicalize(invalid_ngram).is_err());
+
+    let oversized = "x".repeat(crate::safe::tokenizer::spec::MAX_INPUT_BYTES + 1);
+    let error = tokenize("raw", &oversized).unwrap_err();
+    assert!(error.to_string().contains("input exceeds"));
 }

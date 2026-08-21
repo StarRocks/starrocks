@@ -66,6 +66,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int cpuCores;
     @SerializedName(value = "mlb")
     private long memLimitBytes;
+    @SerializedName(value = "textAnalyzerRuntimeAbi")
+    private int textAnalyzerRuntimeAbi;
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
 
@@ -153,6 +155,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public long getMemLimitBytes() {
         return memLimitBytes;
+    }
+
+    public int getTextAnalyzerRuntimeAbi() {
+        return textAnalyzerRuntimeAbi;
+    }
+
+    public void setTextAnalyzerRuntimeAbi(int textAnalyzerRuntimeAbi) {
+        this.textAnalyzerRuntimeAbi = textAnalyzerRuntimeAbi;
     }
 
     public boolean isSetStoragePath() {

@@ -41,12 +41,13 @@ public:
     uint64_t size() const override;
 
 private:
-    TantivyInvertedWriter(std::string field_name, std::string temp_dir, std::string tokenizer, int64_t index_id,
-                          bool support_phrase, bool support_bm25);
+    TantivyInvertedWriter(std::string field_name, std::string temp_dir, std::string analyzer_definition,
+                          std::string analyzer_digest, int64_t index_id, bool support_phrase, bool support_bm25);
 
     std::string _field_name;
     std::string _temp_dir;
-    std::string _tokenizer;
+    std::string _analyzer_definition;
+    std::string _analyzer_digest;
     int64_t _index_id = 0;
     bool _support_phrase = true;
     bool _support_bm25 = true;

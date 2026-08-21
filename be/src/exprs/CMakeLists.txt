@@ -36,6 +36,7 @@ set(EXPR_FILES
   expr.cpp
   function_context.cpp
   table_function/table_function_factory.cpp
+  table_function/tokenize_detail.cpp
   table_function/json_each.cpp
   table_function/list_rowsets.cpp
   arithmetic_expr.cpp

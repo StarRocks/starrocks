@@ -141,6 +141,82 @@ SELECT tokenize('ngram:2:3', 'Ab中');
 
 ## Basic operation
 
+### Create and use a custom Tantivy text analyzer
+
+You can define a database-scoped, immutable text analyzer and bind a GIN index to it. The analyzer definition is a
+strict JSON document. StarRocks canonicalizes the document, calculates a SHA-256 digest, and stores a fixed snapshot
+of the definition in the index metadata. A text analyzer cannot be replaced or modified. To change the pipeline,
+create an analyzer with a new name and migrate the index explicitly.
+
+```sql
+CREATE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{
+    "char_filter": [
+      {"type": "unicode_normalize", "form": "nfkc"},
+      {"type": "mapping", "mappings": ["C++ => cpp"]}
+    ],
+    "tokenizer": {"type": "jieba", "mode": "search", "hmm": true},
+    "token_filter": [
+      {"type": "lowercase"},
+      {"type": "stop", "stopwords": ["the", "a"]},
+      {"type": "length", "min": 1, "max": 40},
+      {"type": "remove_punctuation"}
+    ]
+  }'
+);
+
+CREATE TABLE products (
+  id BIGINT,
+  description STRING,
+  INDEX description_gin (description) USING GIN ("analyzer" = "product_search")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replicated_storage" = "false");
+```
+
+The `analyzer` and legacy `parser` index properties are mutually exclusive. The phase-one definition supports:
+
+- Character filters: `unicode_normalize` (`nfc`, `nfkc`, `nfd`, or `nfkd`) and literal `mapping` rules written as
+  `source => target`.
+- Tokenizers: `none`, `english`, `standard`, `chinese`, `cjk`, `jieba`, `ik`, and `ngram`. `jieba` supports
+  `search` and `default` modes. `ik` supports `search` (`ik_smart`) and `index` (`ik_max_word`) modes. `ngram`
+  requires `min_gram` and `max_gram`.
+- Ordered token filters: `lowercase`, inline `stop`, `length`, and `remove_punctuation`.
+
+External files, paths, URIs, dictionaries, and non-empty `resource_refs` are rejected. A definition is limited to
+64 KiB and 16 pipeline components. A mapping filter accepts at most 256 rules, 1 KiB per rule, and 32 KiB in total.
+A stop filter accepts at most 1,024 words, 256 bytes per word, and 32 KiB in total. `ngram` values must satisfy
+`1 <= min_gram <= max_gram <= 32` and `max_gram - min_gram <= 16`. Runtime analysis rejects input over 1 MiB,
+output over 1,000,000 tokens, and a token over 32 KiB; it never silently truncates a definition or token stream.
+
+Use the following statements to inspect and manage analyzers:
+
+```sql
+SHOW TEXT ANALYZERS;
+SHOW TEXT ANALYZERS FROM db_name;
+DESC TEXT ANALYZER product_search;
+SHOW CREATE TEXT ANALYZER product_search;
+DROP TEXT ANALYZER product_search RESTRICT;
+```
+
+`SHOW TEXT ANALYZERS` returns one row for every named analyzer. Creating an existing name fails, and `CREATE OR
+REPLACE TEXT ANALYZER` is not supported. `DROP` fails while any index references the analyzer. `SHOW CREATE TABLE`
+displays only the fully qualified analyzer name; the internal definition snapshot and digest are not displayed.
+
+To inspect exact token metadata, query the `tokenize_detail` table function. Offsets are UTF-8 byte offsets into the
+original input before character filtering.
+
+In the 3.5 privilege model, analyzer operations use database privileges: creation requires `CREATE TABLE`, dropping
+requires `ALTER`, and inspection or use requires any privilege on the analyzer database.
+
+```sql
+SELECT token.*
+FROM (SELECT 1) AS input,
+     tokenize_detail('product_search', 'StarRocks C++ database') AS token;
+-- term, position, position_length, start_offset, end_offset, token_type
+```
+
 ### Create full-text inverted index
 
 Before creating a fulltext inverted index, you need to enable FE configuration item `enable_experimental_gin`.

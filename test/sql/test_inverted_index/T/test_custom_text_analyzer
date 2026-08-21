@@ -1,0 +1,74 @@
+-- name: test_custom_text_analyzer
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+CREATE DATABASE IF NOT EXISTS db_${uuid0};
+USE db_${uuid0};
+
+CREATE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{"char_filter":[{"type":"unicode_normalize","form":"nfkc"},{"type":"mapping","mappings":["C++ => cpp"]}],"tokenizer":{"type":"standard"},"token_filter":[{"type":"lowercase"},{"type":"stop","stopwords":["and","the"]},{"type":"remove_punctuation"}]}'
+);
+SHOW TEXT ANALYZERS;
+DESC TEXT ANALYZER product_search;
+SHOW CREATE TEXT ANALYZER product_search;
+CREATE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{"tokenizer":{"type":"standard"}}'
+);
+CREATE OR REPLACE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{"tokenizer":{"type":"standard"}}'
+);
+
+SET use_tantivy_tokenize = true;
+SELECT tokenize('product_search', 'The C++ AND StarRocks');
+SELECT concat_ws('|', term, CAST(position AS STRING), CAST(position_length AS STRING),
+                 CAST(start_offset AS STRING), CAST(end_offset AS STRING), token_type)
+FROM (SELECT 1) input, tokenize_detail('product_search', 'Red AND Blue') token
+ORDER BY position;
+
+CREATE TABLE docs (
+  id BIGINT NOT NULL,
+  content VARCHAR(255),
+  INDEX idx_content(content) USING GIN (
+    "analyzer" = "product_search",
+    "support_phrase" = "true"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO docs VALUES
+  (1, 'The C++ AND StarRocks'),
+  (2, 'Red and Blue'),
+  (3, 'Red Blue'),
+  (4, 'Blue Red'),
+  (5, 'cpp database');
+
+SET enable_gin_filter = true;
+SELECT id FROM docs WHERE content MATCH_ANY 'C++' ORDER BY id;
+SELECT id FROM docs WHERE content MATCH_PHRASE 'Red and Blue' ORDER BY id;
+SELECT id FROM docs WHERE content MATCH_PHRASE 'Red Blue' ORDER BY id;
+SHOW CREATE TABLE docs;
+
+CREATE TEXT ANALYZER product_search_v2 PROPERTIES (
+  "definition" = '{"tokenizer":{"type":"ngram","min_gram":2,"max_gram":2},"token_filter":[{"type":"lowercase"}]}'
+);
+CREATE TABLE docs_v2 (
+  id BIGINT NOT NULL,
+  content VARCHAR(255),
+  INDEX idx_content_v2(content) USING GIN ("analyzer" = "product_search_v2")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO docs_v2 VALUES (1, 'ABC'), (2, 'ZZ');
+SELECT tokenize('product_search_v2', 'ABC');
+SELECT id FROM docs WHERE content MATCH_ANY 'C++' ORDER BY id;
+SELECT id FROM docs_v2 WHERE content MATCH 'AB' ORDER BY id;
+
+DROP TEXT ANALYZER product_search RESTRICT;
+DROP TEXT ANALYZER product_search_v2 RESTRICT;
+
+DROP TABLE docs;
+DROP TABLE docs_v2;
+DROP TEXT ANALYZER product_search RESTRICT;
+DROP TEXT ANALYZER product_search_v2 RESTRICT;
+DROP DATABASE db_${uuid0};

@@ -141,6 +141,81 @@ SELECT tokenize('ngram:2:3', 'Ab中');
 
 ## 基本操作
 
+### 创建和使用 Tantivy 自定义文本分析器
+
+您可以创建数据库级、不可变的文本分析器，并将 GIN 索引绑定到该分析器。分析器定义使用严格的 JSON
+格式。StarRocks 会对定义进行规范化、计算 SHA-256 摘要，并在索引元数据中保存定义的固定快照。文本
+分析器创建后不能替换或修改；需要调整 Pipeline 时，应创建新名称并显式迁移索引。
+
+```sql
+CREATE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{
+    "char_filter": [
+      {"type": "unicode_normalize", "form": "nfkc"},
+      {"type": "mapping", "mappings": ["C++ => cpp"]}
+    ],
+    "tokenizer": {"type": "jieba", "mode": "search", "hmm": true},
+    "token_filter": [
+      {"type": "lowercase"},
+      {"type": "stop", "stopwords": ["the", "a"]},
+      {"type": "length", "min": 1, "max": 40},
+      {"type": "remove_punctuation"}
+    ]
+  }'
+);
+
+CREATE TABLE products (
+  id BIGINT,
+  description STRING,
+  INDEX description_gin (description) USING GIN ("analyzer" = "product_search")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replicated_storage" = "false");
+```
+
+索引属性 `analyzer` 和原有的 `parser` 不能同时设置。一阶段定义支持：
+
+- 字符过滤器：`unicode_normalize`（`nfc`、`nfkc`、`nfd` 或 `nfkd`），以及使用
+  `source => target` 格式的字面量 `mapping` 规则。
+- 分词器：`none`、`english`、`standard`、`chinese`、`cjk`、`jieba`、`ik` 和 `ngram`。
+  `jieba` 支持 `search`、`default` 模式；`ik` 支持 `search`（`ik_smart`）和 `index`
+  （`ik_max_word`）模式；`ngram` 必须设置 `min_gram` 和 `max_gram`。
+- 按声明顺序执行的词元过滤器：`lowercase`、内联 `stop`、`length` 和 `remove_punctuation`。
+
+一阶段不允许使用外部文件、路径、URI、外部词典或非空 `resource_refs`。单个定义最大为 64 KiB，
+流水线最多包含 16 个组件。单个 mapping 过滤器最多包含 256 条规则，单条最大 1 KiB，总计最大 32 KiB；
+单个 stop 过滤器最多包含 1,024 个停用词，单词最大 256 字节，总计最大 32 KiB。`ngram` 必须满足
+`1 <= min_gram <= max_gram <= 32` 且 `max_gram - min_gram <= 16`。运行时拒绝超过 1 MiB 的输入、
+超过 1,000,000 个词元的输出以及超过 32 KiB 的单个词元，不会静默截断定义或词元流。
+
+使用以下语句查看和管理分析器：
+
+```sql
+SHOW TEXT ANALYZERS;
+SHOW TEXT ANALYZERS FROM db_name;
+DESC TEXT ANALYZER product_search;
+SHOW CREATE TEXT ANALYZER product_search;
+DROP TEXT ANALYZER product_search RESTRICT;
+```
+
+`SHOW TEXT ANALYZERS` 为每个命名分析器返回一行。创建同名对象会失败，并且不支持 `CREATE OR REPLACE
+TEXT ANALYZER`。只要仍有索引引用，`DROP` 就会失败。`SHOW CREATE TABLE` 的索引属性只展示完整分析器
+名称，不展示内部保存的定义快照与摘要。
+
+可以通过 `tokenize_detail` 表函数查看精确的词元元数据；其中 offset 是字符过滤前原始输入中的 UTF-8
+字节偏移。
+
+在 3.5 权限模型中，分析器操作复用数据库权限：创建需要 `CREATE TABLE`，删除需要 `ALTER`，查看或使用
+分析器需要拥有该分析器所在数据库中的任意权限。
+
+```sql
+SELECT token.*
+FROM (SELECT 1) AS input,
+     tokenize_detail('product_search', 'StarRocks C++ database') AS token;
+-- term, position, position_length, start_offset, end_offset, token_type
+```
+
 ### 创建全文倒排索引
 
 在创建全文倒排索引之前，需要启用 FE 配置项 `enable_experimental_gin`。

@@ -38,8 +38,8 @@ use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, RegexQuery, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption};
 use tantivy::{
-    Directory, DocSet, Index, IndexReader, InvertedIndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader,
-    Term, COLLECT_BLOCK_BUFFER_LEN,
+    Directory, DocSet, Index, IndexReader, InvertedIndexReader, ReloadPolicy, Score,
+    SegmentOrdinal, SegmentReader, Term, COLLECT_BLOCK_BUFFER_LEN,
 };
 
 use crate::error::{Result, TantivyBindingError};
@@ -48,7 +48,7 @@ use crate::error::{Result, TantivyBindingError};
 const BITMAP_FLUSH_BLOCK: usize = 4096;
 
 /// C callback that appends a block of BE row ids into the caller-owned bitmap
-/// (the C++ side does `roaring::Roaring::addMany`). 
+/// (the C++ side does `roaring::Roaring::addMany`).
 /// `set_bitset` callback so tantivy hits stream straight into the result bitmap
 /// without a `Vec<u32>` round-trip.
 pub type SetBitmapFn = extern "C" fn(ctx: *mut c_void, ids: *const u32, len: usize);
@@ -91,19 +91,31 @@ impl IndexReaderWrapper {
         tokenizer_name: &str,
         reload_policy: ReloadPolicy,
     ) -> Result<Self> {
+        Self::open_with_digest(dir, field_name, tokenizer_name, None, reload_policy)
+    }
+
+    pub fn open_with_digest<D: Directory>(
+        dir: D,
+        field_name: &str,
+        analyzer_definition: &str,
+        expected_digest: Option<&str>,
+        reload_policy: ReloadPolicy,
+    ) -> Result<Self> {
         let index = Index::open(dir)?;
         let schema = index.schema();
         let text_field = schema.get_field(field_name).map_err(|_| {
-            TantivyBindingError::InvalidArgument(format!(
-                "field '{field_name}' not found in index"
-            ))
+            TantivyBindingError::InvalidArgument(format!("field '{field_name}' not found in index"))
         })?;
-        let analyzer = crate::safe::tokenizer::build(tokenizer_name)?;
+        let analyzer =
+            crate::safe::tokenizer::resolve(analyzer_definition, expected_digest)?.analyzer;
         index
             .tokenizers()
             .register(crate::safe::tokenizer::TOKENIZER_NAME, analyzer);
 
-        let reader = index.reader_builder().reload_policy(reload_policy).try_into()?;
+        let reader = index
+            .reader_builder()
+            .reload_policy(reload_policy)
+            .try_into()?;
         Ok(Self {
             _index: index,
             reader,
@@ -115,7 +127,28 @@ impl IndexReaderWrapper {
     /// `path` (i.e. via `MmapDirectory`) with `OnCommitWithDelay` reload.
     pub fn load(path: &Path, field_name: &str, tokenizer_name: &str) -> Result<Self> {
         let dir = MmapDirectory::open(path)?;
-        Self::open(dir, field_name, tokenizer_name, ReloadPolicy::OnCommitWithDelay)
+        Self::open(
+            dir,
+            field_name,
+            tokenizer_name,
+            ReloadPolicy::OnCommitWithDelay,
+        )
+    }
+
+    pub fn load_with_digest(
+        path: &Path,
+        field_name: &str,
+        analyzer_definition: &str,
+        expected_digest: Option<&str>,
+    ) -> Result<Self> {
+        let dir = MmapDirectory::open(path)?;
+        Self::open_with_digest(
+            dir,
+            field_name,
+            analyzer_definition,
+            expected_digest,
+            ReloadPolicy::OnCommitWithDelay,
+        )
     }
 
     /// Single-term query (also used for EQUAL_QUERY on a non-tokenized field).
@@ -162,9 +195,8 @@ impl IndexReaderWrapper {
             Some(r) => r,
             None => return Ok(Vec::new()),
         };
-        let query = RegexQuery::from_pattern(&regex, self.text_field).map_err(|err| {
-            TantivyBindingError::Internal(format!("RegexQueryError: {err}"))
-        })?;
+        let query = RegexQuery::from_pattern(&regex, self.text_field)
+            .map_err(|err| TantivyBindingError::Internal(format!("RegexQueryError: {err}")))?;
         self.collect_doc_ids(&query)
     }
 
@@ -187,7 +219,8 @@ impl IndexReaderWrapper {
             .iter()
             .map(|t| {
                 let term = Term::from_field_text(self.text_field, t);
-                let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
+                let q: Box<dyn Query> =
+                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
                 (Occur::Should, q)
             })
             .collect();
@@ -207,7 +240,8 @@ impl IndexReaderWrapper {
             .iter()
             .map(|t| {
                 let term = Term::from_field_text(self.text_field, t);
-                let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
+                let q: Box<dyn Query> =
+                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
                 (Occur::Must, q)
             })
             .collect();
@@ -217,17 +251,23 @@ impl IndexReaderWrapper {
 
     /// MATCH_PHRASE: ordered terms with at most `slop` positional gaps.
     pub fn phrase_query(&self, terms: &[&str], slop: u32) -> Result<Vec<u32>> {
+        self.phrase_query_with_positions(terms, None, slop)
+    }
+
+    pub fn phrase_query_with_positions(
+        &self,
+        terms: &[&str],
+        positions: Option<&[u32]>,
+        slop: u32,
+    ) -> Result<Vec<u32>> {
         if terms.is_empty() {
             return Ok(Vec::new());
         }
         if terms.len() == 1 {
             return self.term_query(terms[0]);
         }
-        let tantivy_terms: Vec<Term> = terms
-            .iter()
-            .map(|t| Term::from_field_text(self.text_field, t))
-            .collect();
-        let mut pq = PhraseQuery::new(tantivy_terms);
+        let mut pq =
+            PhraseQuery::new_with_offset(self.phrase_terms_with_positions(terms, positions)?);
         pq.set_slop(slop);
         self.collect_doc_ids(&pq)
     }
@@ -271,7 +311,12 @@ impl IndexReaderWrapper {
     /// (the Doris bitmap-AND path). Otherwise a selective term exists and the
     /// general collector (leapfrog + direct write) is already optimal. An absent
     /// MUST term short-circuits to empty.
-    pub fn match_all_query_bitmap(&self, terms: &[&str], min_df_ratio: f64, sink: BitmapSink) -> Result<()> {
+    pub fn match_all_query_bitmap(
+        &self,
+        terms: &[&str],
+        min_df_ratio: f64,
+        sink: BitmapSink,
+    ) -> Result<()> {
         if terms.is_empty() {
             return Ok(());
         }
@@ -285,13 +330,15 @@ impl IndexReaderWrapper {
             }
             min_df = min_df.min(df);
         }
-        let all_high = terms.len() >= 2 && num_docs > 0 && (min_df as f64 / num_docs as f64) >= min_df_ratio;
+        let all_high =
+            terms.len() >= 2 && num_docs > 0 && (min_df as f64 / num_docs as f64) >= min_df_ratio;
         if !all_high {
             let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
                 .iter()
                 .map(|t| {
                     let term = Term::from_field_text(self.text_field, t);
-                    let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+                    let q: Box<dyn Query> =
+                        Box::new(TermQuery::new(term, IndexRecordOption::Basic));
                     (Occur::Must, q)
                 })
                 .collect();
@@ -299,7 +346,10 @@ impl IndexReaderWrapper {
         }
 
         // Bitmap-AND path: all terms high-frequency, no selective lead.
-        let tterms: Vec<Term> = terms.iter().map(|t| Term::from_field_text(self.text_field, t)).collect();
+        let tterms: Vec<Term> = terms
+            .iter()
+            .map(|t| Term::from_field_text(self.text_field, t))
+            .collect();
         let mut out: Vec<u32> = Vec::with_capacity(BITMAP_FLUSH_BLOCK);
         for seg in searcher.segment_readers() {
             let max_doc = seg.max_doc();
@@ -342,8 +392,8 @@ impl IndexReaderWrapper {
             let alive = seg.alive_bitset();
             let base = row_id.values_for_doc(0).next();
             let last = row_id.values_for_doc(max_doc - 1).next();
-            let contiguous =
-                alive.is_none() && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
+            let contiguous = alive.is_none()
+                && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
             let base = base.unwrap_or(0) as u32;
             for_each_set_bit(&acc, max_doc, |doc| {
                 if let Some(ab) = alive {
@@ -372,19 +422,62 @@ impl IndexReaderWrapper {
 
     /// MATCH_PHRASE, streamed into `sink`.
     pub fn phrase_query_bitmap(&self, terms: &[&str], slop: u32, sink: BitmapSink) -> Result<()> {
+        self.phrase_query_bitmap_with_positions(terms, None, slop, sink)
+    }
+
+    pub fn phrase_query_bitmap_with_positions(
+        &self,
+        terms: &[&str],
+        positions: Option<&[u32]>,
+        slop: u32,
+        sink: BitmapSink,
+    ) -> Result<()> {
         if terms.is_empty() {
             return Ok(());
         }
         if terms.len() == 1 {
             return self.term_query_bitmap(terms[0], sink);
         }
-        let tantivy_terms: Vec<Term> = terms
-            .iter()
-            .map(|t| Term::from_field_text(self.text_field, t))
-            .collect();
-        let mut pq = PhraseQuery::new(tantivy_terms);
+        let mut pq =
+            PhraseQuery::new_with_offset(self.phrase_terms_with_positions(terms, positions)?);
         pq.set_slop(slop);
         self.collect_to_bitmap(&pq, sink)
+    }
+
+    fn phrase_terms_with_positions(
+        &self,
+        terms: &[&str],
+        positions: Option<&[u32]>,
+    ) -> Result<Vec<(usize, Term)>> {
+        if let Some(positions) = positions {
+            if positions.len() != terms.len() {
+                return Err(TantivyBindingError::InvalidArgument(
+                    "phrase term and position counts differ".to_string(),
+                ));
+            }
+        }
+        let base = positions
+            .and_then(|values| values.first())
+            .copied()
+            .unwrap_or(0);
+        terms
+            .iter()
+            .enumerate()
+            .map(|(index, term)| {
+                let position = positions
+                    .map(|values| values[index].checked_sub(base))
+                    .unwrap_or(Some(index as u32))
+                    .ok_or_else(|| {
+                        TantivyBindingError::InvalidArgument(
+                            "phrase token positions must be nondecreasing".to_string(),
+                        )
+                    })?;
+                Ok((
+                    position as usize,
+                    Term::from_field_text(self.text_field, term),
+                ))
+            })
+            .collect()
     }
 
     /// MATCH_WILDCARD, streamed into `sink`.
@@ -428,7 +521,13 @@ impl IndexReaderWrapper {
     ) -> Result<Vec<(u32, f32)>> {
         let searcher = self.reader.searcher();
         if limit == 0 {
-            return Ok(searcher.search(query, &RowIdScoreCollector { min_score, max_score })?);
+            return Ok(searcher.search(
+                query,
+                &RowIdScoreCollector {
+                    min_score,
+                    max_score,
+                },
+            )?);
         }
         let top = searcher.search(query, &TopDocs::with_limit(limit))?;
         let mut out = Vec::with_capacity(top.len());
@@ -439,8 +538,15 @@ impl IndexReaderWrapper {
             if score < min_score || score > max_score {
                 continue;
             }
-            if cur.as_ref().map(|(ord, _)| *ord != addr.segment_ord).unwrap_or(true) {
-                let ff = searcher.segment_reader(addr.segment_ord).fast_fields().u64("row_id")?;
+            if cur
+                .as_ref()
+                .map(|(ord, _)| *ord != addr.segment_ord)
+                .unwrap_or(true)
+            {
+                let ff = searcher
+                    .segment_reader(addr.segment_ord)
+                    .fast_fields()
+                    .u64("row_id")?;
                 cur = Some((addr.segment_ord, ff));
             }
             if let Some((_, ff)) = &cur {
@@ -487,9 +593,13 @@ impl Collector for BitmapCollector {
         let row_id = seg.fast_fields().u64("row_id")?;
         let max_doc = seg.max_doc();
         let base = row_id.values_for_doc(0).next();
-        let last = if max_doc > 0 { row_id.values_for_doc(max_doc - 1).next() } else { None };
-        let contiguous =
-            max_doc > 0 && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
+        let last = if max_doc > 0 {
+            row_id.values_for_doc(max_doc - 1).next()
+        } else {
+            None
+        };
+        let contiguous = max_doc > 0
+            && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
         Ok(BitmapSegmentCollector {
             sink: self.sink,
             row_id,
@@ -603,8 +713,15 @@ impl Collector for RowIdCollector {
     type Fruit = Vec<u32>;
     type Child = RowIdSegmentCollector;
 
-    fn for_segment(&self, _ord: SegmentOrdinal, seg: &SegmentReader) -> tantivy::Result<RowIdSegmentCollector> {
-        Ok(RowIdSegmentCollector { row_id: seg.fast_fields().u64("row_id")?, ids: Vec::new() })
+    fn for_segment(
+        &self,
+        _ord: SegmentOrdinal,
+        seg: &SegmentReader,
+    ) -> tantivy::Result<RowIdSegmentCollector> {
+        Ok(RowIdSegmentCollector {
+            row_id: seg.fast_fields().u64("row_id")?,
+            ids: Vec::new(),
+        })
     }
 
     fn requires_scoring(&self) -> bool {
@@ -724,7 +841,11 @@ impl Collector for RowIdScoreCollector {
     type Fruit = Vec<(u32, f32)>;
     type Child = RowIdScoreSegmentCollector;
 
-    fn for_segment(&self, _ord: SegmentOrdinal, seg: &SegmentReader) -> tantivy::Result<RowIdScoreSegmentCollector> {
+    fn for_segment(
+        &self,
+        _ord: SegmentOrdinal,
+        seg: &SegmentReader,
+    ) -> tantivy::Result<RowIdScoreSegmentCollector> {
         Ok(RowIdScoreSegmentCollector {
             row_id: seg.fast_fields().u64("row_id")?,
             hits: Vec::new(),

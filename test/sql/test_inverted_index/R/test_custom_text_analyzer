@@ -1,0 +1,161 @@
+-- name: test_custom_text_analyzer
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE DATABASE IF NOT EXISTS db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{"char_filter":[{"type":"unicode_normalize","form":"nfkc"},{"type":"mapping","mappings":["C++ => cpp"]}],"tokenizer":{"type":"standard"},"token_filter":[{"type":"lowercase"},{"type":"stop","stopwords":["and","the"]},{"type":"remove_punctuation"}]}'
+);
+-- result:
+-- !result
+SHOW TEXT ANALYZERS;
+-- result:
+[REGEX](?s)^(?!.*Version).*product_search.*59697d73a613bc0322d040cfa1180f0af304cc40ff3044090c57dc6dccf3e116.*$
+-- !result
+DESC TEXT ANALYZER product_search;
+-- result:
+[REGEX](?s)^(?!.*Version).*Name\tproduct_search.*Digest\t59697d73a613bc0322d040cfa1180f0af304cc40ff3044090c57dc6dccf3e116.*Runtime ABI\t1.*References.*$
+-- !result
+SHOW CREATE TEXT ANALYZER product_search;
+-- result:
+db_${uuid0}.product_search	CREATE TEXT ANALYZER `db_${uuid0}`.`product_search` PROPERTIES ("definition" = '{"spec_version":1,"runtime_abi_version":1,"builtin_model_version":"starrocks-tantivy-3.5-v1","char_filter":[{"type":"unicode_normalize","form":"nfkc"},{"type":"mapping","mappings":["C++ => cpp"]}],"tokenizer":{"type":"standard"},"token_filter":[{"type":"lowercase"},{"type":"stop","stopwords":["and","the"]},{"type":"remove_punctuation"}],"resource_refs":[]}')
+-- !result
+CREATE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{"tokenizer":{"type":"standard"}}'
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: TEXT ANALYZER product_search already exists.')
+-- !result
+CREATE OR REPLACE TEXT ANALYZER product_search PROPERTIES (
+  "definition" = '{"tokenizer":{"type":"standard"}}'
+);
+-- result:
+E: (1064, "Getting syntax error at line 1, column 18. Detail message: No viable statement for input 'CREATE OR REPLACE TEXT'.")
+-- !result
+SET use_tantivy_tokenize = true;
+-- result:
+-- !result
+SELECT tokenize('product_search', 'The C++ AND StarRocks');
+-- result:
+["cpp","starrocks"]
+-- !result
+SELECT concat_ws('|', term, CAST(position AS STRING), CAST(position_length AS STRING),
+                 CAST(start_offset AS STRING), CAST(end_offset AS STRING), token_type)
+FROM (SELECT 1) input, tokenize_detail('product_search', 'Red AND Blue') token
+ORDER BY position;
+-- result:
+red|0|1|0|3|word
+blue|2|1|8|12|word
+-- !result
+CREATE TABLE docs (
+  id BIGINT NOT NULL,
+  content VARCHAR(255),
+  INDEX idx_content(content) USING GIN (
+    "analyzer" = "product_search",
+    "support_phrase" = "true"
+  )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO docs VALUES
+  (1, 'The C++ AND StarRocks'),
+  (2, 'Red and Blue'),
+  (3, 'Red Blue'),
+  (4, 'Blue Red'),
+  (5, 'cpp database');
+-- result:
+-- !result
+SET enable_gin_filter = true;
+-- result:
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'C++' ORDER BY id;
+-- result:
+1
+5
+-- !result
+SELECT id FROM docs WHERE content MATCH_PHRASE 'Red and Blue' ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM docs WHERE content MATCH_PHRASE 'Red Blue' ORDER BY id;
+-- result:
+3
+-- !result
+SHOW CREATE TABLE docs;
+-- result:
+docs	CREATE TABLE `docs` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `content` varchar(255) NULL COMMENT "",
+  INDEX idx_content (`content`) USING GIN("analyzer" = "db_${uuid0}.product_search", "imp_lib" = "tantivy", "support_bm25" = "true", "support_phrase" = "true") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+CREATE TEXT ANALYZER product_search_v2 PROPERTIES (
+  "definition" = '{"tokenizer":{"type":"ngram","min_gram":2,"max_gram":2},"token_filter":[{"type":"lowercase"}]}'
+);
+-- result:
+-- !result
+CREATE TABLE docs_v2 (
+  id BIGINT NOT NULL,
+  content VARCHAR(255),
+  INDEX idx_content_v2(content) USING GIN ("analyzer" = "product_search_v2")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO docs_v2 VALUES (1, 'ABC'), (2, 'ZZ');
+-- result:
+-- !result
+SELECT tokenize('product_search_v2', 'ABC');
+-- result:
+["ab","bc"]
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'C++' ORDER BY id;
+-- result:
+1
+5
+-- !result
+SELECT id FROM docs_v2 WHERE content MATCH 'AB' ORDER BY id;
+-- result:
+1
+-- !result
+DROP TEXT ANALYZER product_search RESTRICT;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Cannot drop TEXT ANALYZER product_search because it is referenced by indexes: db_${uuid0}.docs.idx_content.')
+-- !result
+DROP TEXT ANALYZER product_search_v2 RESTRICT;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Cannot drop TEXT ANALYZER product_search_v2 because it is referenced by indexes: db_${uuid0}.docs_v2.idx_content_v2.')
+-- !result
+DROP TABLE docs;
+-- result:
+-- !result
+DROP TABLE docs_v2;
+-- result:
+-- !result
+DROP TEXT ANALYZER product_search RESTRICT;
+-- result:
+-- !result
+DROP TEXT ANALYZER product_search_v2 RESTRICT;
+-- result:
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

@@ -17,7 +17,10 @@
 #include <fmt/format.h>
 #include <tantivy_binding.h>
 
+#include <algorithm>
+#include <boost/algorithm/string/trim.hpp>
 #include <fstream>
+#include <iterator>
 #include <vector>
 
 #include "common/config.h"
@@ -41,10 +44,11 @@ namespace starrocks {
 namespace tb = ::starrocks::tantivy_binding;
 
 TantivyInvertedReader::TantivyInvertedReader(std::string path, uint32_t index_id, std::string field_name,
-                                             std::string tokenizer_name)
+                                             std::string analyzer_definition, std::string analyzer_digest)
         : InvertedReader(std::move(path), index_id),
           _field_name(std::move(field_name)),
-          _tokenizer_name(std::move(tokenizer_name)) {}
+          _analyzer_definition(std::move(analyzer_definition)),
+          _analyzer_digest(std::move(analyzer_digest)) {}
 
 Status TantivyInvertedReader::create(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index,
                                      LogicalType field_type, std::unique_ptr<InvertedReader>* res) {
@@ -55,32 +59,17 @@ Status TantivyInvertedReader::create(const std::string& path, const std::shared_
         field_name = "content";
     }
 
-    auto parser_str = get_parser_string_from_properties(tablet_index->index_properties());
-    std::string tokenizer_name;
-    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH) {
-        tokenizer_name = "english";
-    } else if (parser_str == INVERTED_INDEX_PARSER_STANDARD) {
-        tokenizer_name = "standard";
-    } else if (parser_str == INVERTED_INDEX_PARSER_CHINESE) {
-        tokenizer_name = "cjk";
-    } else if (parser_str == INVERTED_INDEX_PARSER_JIEBA) {
-        tokenizer_name = "jieba";
-    } else if (parser_str == INVERTED_INDEX_PARSER_IK) {
-        tokenizer_name =
-                get_parser_mode_string_from_properties(tablet_index->index_properties()) == INVERTED_INDEX_PARSER_SMART
-                        ? "ik_smart"
-                        : "ik";
-    } else if (parser_str == INVERTED_INDEX_PARSER_NGRAM) {
-        ASSIGN_OR_RETURN(tokenizer_name, get_tantivy_ngram_tokenizer_name(tablet_index->index_properties()));
-    } else if (parser_str == INVERTED_INDEX_PARSER_NONE) {
-        tokenizer_name = "raw";
-    } else {
-        tokenizer_name = "english";
-    }
+    ASSIGN_OR_RETURN(auto analyzer_definition, get_tantivy_analyzer_definition(tablet_index->index_properties()));
+    auto analyzer_digest = get_tantivy_analyzer_digest(tablet_index->index_properties());
 
     uint32_t index_id = static_cast<uint32_t>(tablet_index->index_id());
-    auto reader =
-            std::make_unique<TantivyInvertedReader>(path, index_id, std::move(field_name), std::move(tokenizer_name));
+    auto reader = std::make_unique<TantivyInvertedReader>(path, index_id, std::move(field_name),
+                                                          std::move(analyzer_definition), std::move(analyzer_digest));
+    tb::RustResult analyzer_result =
+            tb::tantivy_create_analyzer(reader->_analyzer_definition.c_str(), reader->_analyzer_digest.c_str());
+    TantivyResultGuard analyzer_result_guard(analyzer_result);
+    RETURN_IF_ERROR(tantivy_status_from_error(analyzer_result));
+    reader->_analyzer = TantivyAnalyzerGuard(analyzer_result.value.ptr);
     *res = std::move(reader);
     return Status::OK();
 }
@@ -124,6 +113,22 @@ Status TantivyInvertedReader::open_compound(TantivyInvertedReader* reader, FileS
         }
     }
 
+    if (!reader->_analyzer_digest.empty()) {
+        const auto manifest = std::find_if(layout.files.begin(), layout.files.end(), [](const auto& file) {
+            return file.name == "_starrocks_analyzer_manifest";
+        });
+        if (manifest == layout.files.end()) {
+            return Status::Corruption("tantivy analyzer manifest is missing for digest " + reader->_analyzer_digest);
+        }
+        std::string actual(manifest->length, '\0');
+        RETURN_IF_ERROR(ra_file->read_at_fully(manifest->offset, actual.data(), manifest->length));
+        boost::algorithm::trim(actual);
+        if (actual != reader->_analyzer_digest) {
+            return Status::Corruption(fmt::format("tantivy analyzer manifest mismatch: metadata={}, index={}",
+                                                  reader->_analyzer_digest, actual));
+        }
+    }
+
     LOG(INFO) << "tantivy compound open: bin_path=" << bin_path << " index_id=" << index_id
               << " file_table=" << file_table_json;
     return reader->load_compound(std::move(ra_file), file_table_json);
@@ -132,7 +137,21 @@ Status TantivyInvertedReader::open_compound(TantivyInvertedReader* reader, FileS
 Status TantivyInvertedReader::load(const IndexReadOptions& /*opt*/, void* /*meta*/) {
     if (_loaded) return Status::OK();
 
-    tb::RustResult r = tb::tantivy_load_index_reader(_index_path.c_str(), _field_name.c_str(), _tokenizer_name.c_str());
+    if (!_analyzer_digest.empty()) {
+        std::ifstream manifest(_index_path + "/_starrocks_analyzer_manifest", std::ios::binary);
+        if (!manifest.good()) {
+            return Status::Corruption("tantivy analyzer manifest is missing for digest " + _analyzer_digest);
+        }
+        std::string actual((std::istreambuf_iterator<char>(manifest)), std::istreambuf_iterator<char>());
+        boost::algorithm::trim(actual);
+        if (actual != _analyzer_digest) {
+            return Status::Corruption(
+                    fmt::format("tantivy analyzer manifest mismatch: metadata={}, index={}", _analyzer_digest, actual));
+        }
+    }
+
+    tb::RustResult r = tb::tantivy_load_index_reader(_index_path.c_str(), _field_name.c_str(),
+                                                     _analyzer_definition.c_str(), _analyzer_digest.c_str());
     TantivyResultGuard guard(r);
     RETURN_IF_ERROR(tantivy_status_from_error(r));
 
@@ -161,8 +180,9 @@ Status TantivyInvertedReader::load_compound(std::unique_ptr<RandomAccessFile> ra
     if (_loaded) return Status::OK();
 
     _compound_ra_file = std::move(ra_file);
-    tb::RustResult r = tb::tantivy_open_compound_reader(_compound_ra_file.get(), file_table_json.c_str(),
-                                                        _field_name.c_str(), _tokenizer_name.c_str());
+    tb::RustResult r =
+            tb::tantivy_open_compound_reader(_compound_ra_file.get(), file_table_json.c_str(), _field_name.c_str(),
+                                             _analyzer_definition.c_str(), _analyzer_digest.c_str());
     TantivyResultGuard guard(r);
     RETURN_IF_ERROR(tantivy_status_from_error(r));
 
@@ -206,23 +226,26 @@ namespace {
 struct TokenizedTerms {
     std::vector<std::string> strs;
     std::vector<tb::FFISlice> slices;
+    std::vector<uint32_t> positions;
 };
 
-StatusOr<TokenizedTerms> tokenize_query(const std::string& tokenizer_name, const std::string& text) {
+StatusOr<TokenizedTerms> tokenize_query(void* analyzer, const std::string& text) {
     TokenizedTerms result;
-    tb::RustStringArray out{};
-    tb::RustResult r = tb::tantivy_tokenize(tokenizer_name.c_str(), reinterpret_cast<const uint8_t*>(text.data()),
-                                            text.size(), &out);
+    tb::RustTokenArray out{};
+    tb::RustResult r = tb::tantivy_analyzer_tokenize_detail(analyzer, reinterpret_cast<const uint8_t*>(text.data()),
+                                                            text.size(), &out);
     TantivyResultGuard rg(r);
     if (!r.success) {
-        if (out.ptr) tb::tantivy_free_string_array(out);
+        if (out.ptr) tb::tantivy_free_token_array(out);
         return tantivy_status_from_error(r);
     }
     result.strs.reserve(out.len);
+    result.positions.reserve(out.len);
     for (size_t i = 0; i < out.len; ++i) {
-        result.strs.emplace_back(out.ptr[i]);
+        result.strs.emplace_back(out.ptr[i].term);
+        result.positions.emplace_back(static_cast<uint32_t>(out.ptr[i].position));
     }
-    tb::tantivy_free_string_array(out);
+    tb::tantivy_free_token_array(out);
     result.slices.reserve(result.strs.size());
     for (const auto& t : result.strs) {
         result.slices.push_back({reinterpret_cast<const uint8_t*>(t.data()), t.size()});
@@ -255,7 +278,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
     }
     case InvertedIndexQueryType::MATCH_ANY_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
+        ASSIGN_OR_RETURN(auto terms, tokenize_query(_analyzer.get(), std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_match_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
                                                           bit_map, sr_tantivy_append_rowids);
@@ -275,7 +298,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
     }
     case InvertedIndexQueryType::MATCH_ALL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
+        ASSIGN_OR_RETURN(auto terms, tokenize_query(_analyzer.get(), std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
                                                               config::tantivy_match_all_bitmap_min_df_ratio, bit_map,
@@ -297,11 +320,11 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
     }
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY: {
         const auto* pqv = reinterpret_cast<const PhraseQueryValue*>(query_value);
-        ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(pqv->text.data, pqv->text.size)));
+        ASSIGN_OR_RETURN(auto terms, tokenize_query(_analyzer.get(), std::string(pqv->text.data, pqv->text.size)));
         if (terms.slices.empty()) return Status::OK();
-        tb::RustResult r = tb::tantivy_phrase_match_query_bitmap(reader_handle, terms.slices.data(),
-                                                                 terms.slices.size(), static_cast<uint32_t>(pqv->slop),
-                                                                 bit_map, sr_tantivy_append_rowids);
+        tb::RustResult r = tb::tantivy_phrase_match_query_bitmap(
+                reader_handle, terms.slices.data(), terms.slices.size(), terms.positions.data(),
+                static_cast<uint32_t>(pqv->slop), bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -331,7 +354,7 @@ Status TantivyInvertedReader::_query_impl_scored(void* reader_handle, const void
         terms = use_tokenized_query(*reinterpret_cast<const TokenizedQueryValue*>(query_value));
     } else {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        ASSIGN_OR_RETURN(terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
+        ASSIGN_OR_RETURN(terms, tokenize_query(_analyzer.get(), std::string(slice->data, slice->size)));
     }
     if (terms.slices.empty()) return Status::OK();
 

@@ -44,6 +44,13 @@ std::string get_parser_mode_string_from_properties(const std::map<std::string, s
 
 StatusOr<std::string> get_tantivy_ngram_tokenizer_name(const std::map<std::string, std::string>& properties);
 
+// Resolve the single Tantivy analyzer configuration carried by TabletIndex.
+// New indexes carry canonical AnalyzerSpec JSON; legacy indexes are adapted to
+// the historical tokenizer name. Unknown legacy parsers fail closed.
+StatusOr<std::string> get_tantivy_analyzer_definition(const std::map<std::string, std::string>& properties);
+
+std::string get_tantivy_analyzer_digest(const std::map<std::string, std::string>& properties);
+
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties);
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);

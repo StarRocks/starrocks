@@ -92,6 +92,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TextAnalyzer;
+import com.starrocks.catalog.TextAnalyzerMgr;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
@@ -170,6 +172,7 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DescTextAnalyzerStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
@@ -195,6 +198,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -236,6 +240,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTextAnalyzersStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
@@ -2917,6 +2922,48 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
             return new ShowResultSet(statement.getMetaData(), allInfo);
+        }
+
+        @Override
+        public ShowResultSet visitShowTextAnalyzersStatement(ShowTextAnalyzersStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName() == null ? context.getDatabase() : statement.getDbName();
+            Database db = TextAnalyzerMgr.resolveName(dbName, context, true).getDb();
+            List<List<String>> rows = Lists.newArrayList();
+            for (TextAnalyzer analyzer : db.getTextAnalyzers()) {
+                rows.add(Lists.newArrayList(Long.toString(analyzer.getId()), db.getOriginName(), analyzer.getName(),
+                        analyzer.getDigest(), analyzer.getCanonicalDefinition(),
+                        analyzer.getOwner(), TimeUtils.longToTimeString(analyzer.getCreateTime()),
+                        String.join(",", TextAnalyzerMgr.findReferences(db, analyzer))));
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescTextAnalyzerStatement(DescTextAnalyzerStmt statement, ConnectContext context) {
+            TextAnalyzer analyzer = TextAnalyzerMgr.require(statement.getAnalyzerName(), context);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(analyzer.getDbId());
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList("Id", Long.toString(analyzer.getId())));
+            rows.add(Lists.newArrayList("Database", db.getOriginName()));
+            rows.add(Lists.newArrayList("Name", analyzer.getName()));
+            rows.add(Lists.newArrayList("Digest", analyzer.getDigest()));
+            rows.add(Lists.newArrayList("Runtime ABI", Integer.toString(analyzer.getRuntimeAbiVersion())));
+            rows.add(Lists.newArrayList("Definition", analyzer.getCanonicalDefinition()));
+            rows.add(Lists.newArrayList("Owner", analyzer.getOwner()));
+            rows.add(Lists.newArrayList("Create Time", TimeUtils.longToTimeString(analyzer.getCreateTime())));
+            rows.add(Lists.newArrayList("References", String.join(",", TextAnalyzerMgr.findReferences(db, analyzer))));
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateTextAnalyzerStatement(
+                ShowCreateTextAnalyzerStmt statement, ConnectContext context) {
+            TextAnalyzer analyzer = TextAnalyzerMgr.require(statement.getAnalyzerName(), context);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(analyzer.getDbId());
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList(db.getOriginName() + "." + analyzer.getName(),
+                    TextAnalyzerMgr.toCreateSql(db, analyzer)));
+            return new ShowResultSet(statement.getMetaData(), rows);
         }
 
         @Override

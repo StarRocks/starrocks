@@ -65,7 +65,7 @@ void build_index_raw(const std::string& index_path, const std::string& field, co
     // tokenizer="raw" → no tokenization, term dict equals the original strings.
     // This gives the wildcard FFI parser=none semantics.
     tb::RustResult cw =
-            tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "raw", true, true, 0, 0, "default");
+            tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "raw", "", true, true, 0, 0, "default");
     RustResultGuard g_cw{cw};
     ASSERT_TRUE(cw.success) << "create_index_writer: " << (cw.error ? cw.error : "?");
     void* writer = cw.value.ptr;
@@ -119,7 +119,7 @@ TEST(TantivyWildcard, SubstringPrefixSuffixAndStarEquivalence) {
     const std::string field = "f";
     build_index_raw(index_path, field, {"foo", "foobar", "barfoo", "baz", "afoob", "FOO"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success) << "load_reader: " << (lr.error ? lr.error : "?");
     void* reader = lr.value.ptr;
@@ -154,7 +154,7 @@ TEST(TantivyWildcard, NullPlaceholdersDoNotMatchPercent) {
     // doc 0,2 = "alpha"; doc 1,3 = NULL → empty placeholder
     build_index_raw(index_path, field, {"alpha", "", "alpha", ""});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;
@@ -181,7 +181,7 @@ TEST(TantivyWildcard, RegexMetacharactersInLiteralsAreEscaped) {
     const std::string field = "f";
     build_index_raw(index_path, field, {"a.b", "axb", "ab", "aab"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;
@@ -202,7 +202,7 @@ TEST(TantivyWildcard, EmptyPatternReturnsEmptyResult) {
     const std::string field = "f";
     build_index_raw(index_path, field, {"a", "b"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "raw", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;

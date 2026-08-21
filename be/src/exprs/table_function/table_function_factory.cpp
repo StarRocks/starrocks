@@ -24,6 +24,7 @@
 #include "exprs/table_function/multi_unnest.h"
 #include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
+#include "exprs/table_function/tokenize_detail.h"
 #include "exprs/table_function/unnest.h"
 #include "exprs/table_function/unnest_bitmap.h"
 #include "udf/java/java_function_fwd.h"
@@ -108,6 +109,14 @@ TableFunctionResolver::TableFunctionResolver() {
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);
+
+    TableFunctionPtr tokenize_detail = std::make_shared<TokenizeDetail>();
+    add_function_mapping("tokenize_detail", {TYPE_VARCHAR, TYPE_VARCHAR},
+                         {TYPE_VARCHAR, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_VARCHAR},
+                         tokenize_detail);
+    add_function_mapping("tokenize_detail_by_definition", {TYPE_VARCHAR, TYPE_VARCHAR},
+                         {TYPE_VARCHAR, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_VARCHAR},
+                         tokenize_detail);
 
 #define M(TYPE)                                                                  \
     add_function_mapping("subdivide_bitmap", {TYPE_OBJECT, TYPE}, {TYPE_OBJECT}, \

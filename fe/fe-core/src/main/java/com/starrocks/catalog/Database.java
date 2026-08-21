@@ -109,6 +109,8 @@ public class Database extends MetaObject implements Writable {
     private volatile long dataQuotaBytes;
     @SerializedName(value = "r")
     private volatile long replicaQuotaSize;
+    @SerializedName(value = "textAnalyzers")
+    private ConcurrentMap<String, TextAnalyzer> textAnalyzers = Maps.newConcurrentMap();
 
     private final Map<String, Table> nameToTable;
     private final Map<Long, Table> idToTable;
@@ -421,6 +423,39 @@ public class Database extends MetaObject implements Writable {
 
     public Table getTable(String tableName) {
         return nameToTable.get(tableName);
+    }
+
+    private ConcurrentMap<String, TextAnalyzer> textAnalyzers() {
+        if (textAnalyzers == null) {
+            synchronized (this) {
+                if (textAnalyzers == null) {
+                    textAnalyzers = Maps.newConcurrentMap();
+                }
+            }
+        }
+        return textAnalyzers;
+    }
+
+    public TextAnalyzer getTextAnalyzer(String name) {
+        return textAnalyzers().get(textAnalyzerKey(name));
+    }
+
+    public List<TextAnalyzer> getTextAnalyzers() {
+        return textAnalyzers().values().stream()
+                .sorted(java.util.Comparator.comparing(TextAnalyzer::getName))
+                .collect(Collectors.toList());
+    }
+
+    public synchronized void putTextAnalyzer(TextAnalyzer analyzer) {
+        textAnalyzers().put(textAnalyzerKey(analyzer.getName()), analyzer);
+    }
+
+    public synchronized TextAnalyzer removeTextAnalyzer(String name) {
+        return textAnalyzers().remove(textAnalyzerKey(name));
+    }
+
+    private static String textAnalyzerKey(String name) {
+        return name.toLowerCase(java.util.Locale.ROOT);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {

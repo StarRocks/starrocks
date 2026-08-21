@@ -33,7 +33,8 @@ public:
     static Status open_compound(TantivyInvertedReader* reader, FileSystem* fs, const std::string& bin_path,
                                 int64_t index_id, const std::string& column_name);
 
-    TantivyInvertedReader(std::string path, uint32_t index_id, std::string field_name, std::string tokenizer_name);
+    TantivyInvertedReader(std::string path, uint32_t index_id, std::string field_name, std::string analyzer_definition,
+                          std::string analyzer_digest);
     ~TantivyInvertedReader() override = default;
 
     Status load(const IndexReadOptions& opt, void* meta) override;
@@ -74,7 +75,9 @@ private:
                               std::unordered_map<uint32_t, float>* row_to_score);
 
     std::string _field_name;
-    std::string _tokenizer_name;
+    std::string _analyzer_definition;
+    std::string _analyzer_digest;
+    TantivyAnalyzerGuard _analyzer;
 
     // Local reader (direct .ivt directory).
     TantivyReaderGuard _reader;

@@ -72,8 +72,8 @@ std::vector<uint32_t> array_to_vector(const tb::RustU32Array& arr) {
 
 // Build a writer at `index_path`, append `docs` in order, commit, and free.
 void build_index(const std::string& index_path, const std::string& field, const std::vector<std::string>& docs) {
-    tb::RustResult cw =
-            tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "english", true, true, 0, 0, "default");
+    tb::RustResult cw = tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "english", "", true, true, 0,
+                                                        0, "default");
     RustResultGuard g_cw{cw};
     ASSERT_TRUE(cw.success) << "create_index_writer: " << (cw.error ? cw.error : "?");
     void* writer = cw.value.ptr;
@@ -114,7 +114,7 @@ TEST(TantivySmoke, RoundTripTermQuery) {
     const std::string field = "title";
     build_index(index_path, field, {"hello world", "tantivy ffi", "starrocks integration"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success) << "load_reader: " << (lr.error ? lr.error : "?");
     void* reader = lr.value.ptr;
@@ -161,7 +161,7 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
     const std::string field = "f";
     build_index(index_path, field, {"the quick brown fox", "the lazy brown dog", "quick fox jumps over"});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;
@@ -205,6 +205,7 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
         tb::RustResult r = tb::tantivy_phrase_match_query(reader, terms.data(), terms.size(),
+                                                          /*positions=*/nullptr,
                                                           /*slop=*/0, &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << (r.error ? r.error : "?");
@@ -218,6 +219,7 @@ TEST(TantivySmoke, MatchAnyAllPhrase) {
         tb::RustU32Array out{};
         RustU32ArrayGuard g_out{out};
         tb::RustResult r = tb::tantivy_phrase_match_query(reader, terms.data(), terms.size(),
+                                                          /*positions=*/nullptr,
                                                           /*slop=*/1, &out);
         RustResultGuard g{r};
         ASSERT_TRUE(r.success) << (r.error ? r.error : "?");
@@ -244,7 +246,7 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
     // Row 0 = "alpha", row 1 = NULL, row 2 = "alpha", row 3 = NULL.
     build_index(index_path, field, {"alpha", "", "alpha", ""});
 
-    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english");
+    tb::RustResult lr = tb::tantivy_load_index_reader(index_path.c_str(), field.c_str(), "english", "");
     RustResultGuard g_lr{lr};
     ASSERT_TRUE(lr.success);
     void* reader = lr.value.ptr;
@@ -264,8 +266,8 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
 
 TEST(TantivySmoke, CreateWriterReportsError) {
     // /proc is read-only on Linux, so create_dir_all + index init should fail.
-    tb::RustResult r = tb::tantivy_create_index_writer("/proc/sr_tantivy_should_fail", "title", "english", true, true,
-                                                       0, 0, "default");
+    tb::RustResult r = tb::tantivy_create_index_writer("/proc/sr_tantivy_should_fail", "title", "english", "", true,
+                                                       true, 0, 0, "default");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);
     EXPECT_NE(r.error, nullptr);
@@ -285,7 +287,7 @@ TEST(TantivySmoke, UnsupportedTokenizerReportsError) {
         }
     } cleanup{index_path};
 
-    tb::RustResult r = tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer", true,
+    tb::RustResult r = tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer", "", true,
                                                        true, 0, 0, "default");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);

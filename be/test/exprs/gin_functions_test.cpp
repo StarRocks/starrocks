@@ -89,6 +89,8 @@ TEST_F(GinFunctionsTest, CLuceneTokenizers) {
 }
 
 TEST_F(GinFunctionsTest, RejectsEngineSpecificUnsupportedTokenizer) {
+    ASSERT_EQ((std::vector<std::string>{"hello"}), tokenize("standard", "hello", true).value());
+    ASSERT_TRUE(tokenize("ik", "中华人民共和国", true).ok());
     ASSERT_TRUE(tokenize("jieba", "中华人民共和国", false).status().is_not_supported());
     ASSERT_TRUE(tokenize("ik", "中华人民共和国", false).status().is_not_supported());
     ASSERT_TRUE(tokenize("ngram:2:3", "hello", false).status().is_not_supported());

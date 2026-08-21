@@ -80,6 +80,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private volatile int cpuCores = 0; // Cpu cores of node
     @SerializedName("mlb")
     private volatile long memLimitBytes = 0;
+    @SerializedName("textAnalyzerRuntimeAbi")
+    private volatile int textAnalyzerRuntimeAbi = 0;
 
     @SerializedName("lastUpdateMs")
     private volatile long lastUpdateMs;
@@ -230,6 +232,14 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
     public String getVersion() {
         return version;
+    }
+
+    public int getTextAnalyzerRuntimeAbi() {
+        return textAnalyzerRuntimeAbi;
+    }
+
+    public void setTextAnalyzerRuntimeAbi(int textAnalyzerRuntimeAbi) {
+        this.textAnalyzerRuntimeAbi = textAnalyzerRuntimeAbi;
     }
 
     public int getBePort() {
@@ -634,6 +644,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 if (!GlobalStateMgr.isCheckpointThread()) {
                     BackendResourceStat.getInstance().setMemLimitBytesOfBe(hbResponse.getBeId(), hbResponse.getMemLimitBytes());
                 }
+            }
+
+            if (this.textAnalyzerRuntimeAbi != hbResponse.getTextAnalyzerRuntimeAbi()) {
+                isChanged = true;
+                this.textAnalyzerRuntimeAbi = hbResponse.getTextAnalyzerRuntimeAbi();
             }
 
             heartbeatErrMsg = "";

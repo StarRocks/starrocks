@@ -227,6 +227,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
@@ -238,6 +239,7 @@ import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DescTextAnalyzerStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -271,6 +273,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.DropTextAnalyzerStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -393,6 +396,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -439,6 +443,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTextAnalyzersStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -4428,6 +4433,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             backendList = Lists.newArrayList(tmp.split(","));
         }
         return new ShowFailPointStatement(pattern, backendList, createPos(ctx));
+    }
+
+    // ----------------------------------------------- Text Analyzer Statement --------------------------------------------------
+    @Override
+    public ParseNode visitCreateTextAnalyzerStatement(StarRocksParser.CreateTextAnalyzerStatementContext context) {
+        String name = getQualifiedName(context.qualifiedName()).toString();
+        return new CreateTextAnalyzerStmt(name, getProperties(context.properties()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropTextAnalyzerStatement(StarRocksParser.DropTextAnalyzerStatementContext context) {
+        return new DropTextAnalyzerStmt(getQualifiedName(context.qualifiedName()).toString(),
+                context.EXISTS() != null, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowTextAnalyzersStatement(StarRocksParser.ShowTextAnalyzersStatementContext context) {
+        String dbName = context.identifierOrString() == null ? null
+                : ((Identifier) visit(context.identifierOrString())).getValue();
+        return new ShowTextAnalyzersStmt(dbName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDescTextAnalyzerStatement(StarRocksParser.DescTextAnalyzerStatementContext context) {
+        return new DescTextAnalyzerStmt(getQualifiedName(context.qualifiedName()).toString(), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateTextAnalyzerStatement(
+            StarRocksParser.ShowCreateTextAnalyzerStatementContext context) {
+        return new ShowCreateTextAnalyzerStmt(getQualifiedName(context.qualifiedName()).toString(),
+                createPos(context));
     }
 
     // ----------------------------------------------- Dictionary Statement -----------------------------------------------------

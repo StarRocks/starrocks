@@ -74,6 +74,7 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
     path: *const c_char,
     field_name: *const c_char,
     tokenizer: *const c_char,
+    analyzer_digest: *const c_char,
     support_phrase: bool,
     support_bm25: bool,
     memory_budget_bytes: usize,
@@ -84,6 +85,17 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
         let path_str = cstr_or_err!(path, "path");
         let field_name_str = cstr_or_err!(field_name, "field_name");
         let tokenizer_str = cstr_or_err!(tokenizer, "tokenizer");
+        let analyzer_digest_str = if analyzer_digest.is_null() {
+            None
+        } else {
+            match CStr::from_ptr(analyzer_digest).to_str() {
+                Ok("") => None,
+                Ok(value) => Some(value),
+                Err(e) => {
+                    return RustResult::err(format!("analyzer_digest is not valid UTF-8: {e}"))
+                }
+            }
+        };
         let merge_policy_str = if merge_policy.is_null() {
             "default"
         } else {
@@ -92,10 +104,11 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
                 Err(_) => "default",
             }
         };
-        match IndexWriterWrapper::create(
+        match IndexWriterWrapper::create_with_digest(
             std::path::Path::new(path_str),
             field_name_str,
             tokenizer_str,
+            analyzer_digest_str,
             support_phrase,
             support_bm25,
             memory_budget_bytes,
@@ -137,9 +150,7 @@ pub unsafe extern "C" fn tantivy_index_add_strings_batch(
         for (i, s) in slices.iter().enumerate() {
             match s.as_str() {
                 Ok(str_val) => refs.push(str_val),
-                Err(e) => {
-                    return RustResult::err(format!("values_ptr[{i}]: {e}"))
-                }
+                Err(e) => return RustResult::err(format!("values_ptr[{i}]: {e}")),
             }
         }
         match w.add_strings_batch(&refs) {

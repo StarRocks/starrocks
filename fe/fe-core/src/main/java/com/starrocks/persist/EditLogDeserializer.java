@@ -267,6 +267,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.class)
+            .put(OperationType.OP_CREATE_TEXT_ANALYZER, TextAnalyzerLog.class)
+            .put(OperationType.OP_DROP_TEXT_ANALYZER, TextAnalyzerLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

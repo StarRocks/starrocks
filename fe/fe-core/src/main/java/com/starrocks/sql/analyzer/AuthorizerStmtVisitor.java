@@ -106,12 +106,14 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DescTextAnalyzerStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -126,6 +128,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTextAnalyzerStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
@@ -170,6 +173,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateTextAnalyzerStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
@@ -195,6 +199,7 @@ import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTextAnalyzersStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
@@ -1630,6 +1635,63 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
 
         return null;
+    }
+
+    // TEXT ANALYZER is a database-scoped schema object. The 3.5 privilege model has no dedicated
+    // analyzer object, so use the closest database privileges and keep inspection database-scoped.
+    @Override
+    public Void visitCreateTextAnalyzerStatement(CreateTextAnalyzerStmt statement, ConnectContext context) {
+        checkTextAnalyzerDbAction(context, textAnalyzerDb(statement.getAnalyzerName(), context),
+                PrivilegeType.CREATE_TABLE);
+        return null;
+    }
+
+    @Override
+    public Void visitDropTextAnalyzerStatement(DropTextAnalyzerStmt statement, ConnectContext context) {
+        checkTextAnalyzerDbAction(context, textAnalyzerDb(statement.getAnalyzerName(), context), PrivilegeType.ALTER);
+        return null;
+    }
+
+    @Override
+    public Void visitShowTextAnalyzersStatement(ShowTextAnalyzersStmt statement, ConnectContext context) {
+        checkAnyTextAnalyzerDbAction(context,
+                statement.getDbName() == null ? context.getDatabase() : statement.getDbName());
+        return null;
+    }
+
+    @Override
+    public Void visitDescTextAnalyzerStatement(DescTextAnalyzerStmt statement, ConnectContext context) {
+        checkAnyTextAnalyzerDbAction(context, textAnalyzerDb(statement.getAnalyzerName(), context));
+        return null;
+    }
+
+    @Override
+    public Void visitShowCreateTextAnalyzerStatement(ShowCreateTextAnalyzerStmt statement, ConnectContext context) {
+        checkAnyTextAnalyzerDbAction(context, textAnalyzerDb(statement.getAnalyzerName(), context));
+        return null;
+    }
+
+    private static String textAnalyzerDb(String analyzerName, ConnectContext context) {
+        int separator = analyzerName.indexOf('.');
+        return separator < 0 ? context.getDatabase() : analyzerName.substring(0, separator);
+    }
+
+    private static void checkTextAnalyzerDbAction(ConnectContext context, String dbName, PrivilegeType privilegeType) {
+        try {
+            Authorizer.checkDbAction(context, context.getCurrentCatalog(), dbName, privilegeType);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(), context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), privilegeType.name(), ObjectType.DATABASE.name(), dbName);
+        }
+    }
+
+    private static void checkAnyTextAnalyzerDbAction(ConnectContext context, String dbName) {
+        try {
+            Authorizer.checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(), context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), dbName);
+        }
     }
 
     @Override

@@ -46,7 +46,7 @@ use tantivy::ReloadPolicy;
 use crate::error::Result;
 use crate::ffi::catch::catch_ffi;
 use crate::ffi::handle::{as_ref, create_binding, free_binding};
-use crate::ffi::result::{FFISlice, RustF32Array, RustResult, RustU32Array, raw_to_str};
+use crate::ffi::result::{raw_to_str, FFISlice, RustF32Array, RustResult, RustU32Array};
 use crate::safe::index_reader::{BitmapSink, SetBitmapFn};
 use crate::safe::pull_directory::PullDirectory;
 use crate::safe::IndexReaderWrapper;
@@ -59,6 +59,20 @@ macro_rules! cstr_or_err {
         match CStr::from_ptr($ptr).to_str() {
             Ok(s) => s,
             Err(e) => return RustResult::err(format!("{} is not valid UTF-8: {e}", $what)),
+        }
+    }};
+}
+
+macro_rules! optional_cstr_or_err {
+    ($ptr:expr, $what:expr) => {{
+        if $ptr.is_null() {
+            None
+        } else {
+            match CStr::from_ptr($ptr).to_str() {
+                Ok("") => None,
+                Ok(value) => Some(value),
+                Err(e) => return RustResult::err(format!("{} is not valid UTF-8: {e}", $what)),
+            }
         }
     }};
 }
@@ -176,12 +190,19 @@ pub unsafe extern "C" fn tantivy_load_index_reader(
     path: *const c_char,
     field_name: *const c_char,
     tokenizer_name: *const c_char,
+    analyzer_digest: *const c_char,
 ) -> RustResult {
     catch_ffi(|| {
         let path_str = cstr_or_err!(path, "path");
         let field_name_str = cstr_or_err!(field_name, "field_name");
         let tokenizer_str = cstr_or_err!(tokenizer_name, "tokenizer_name");
-        match IndexReaderWrapper::load(std::path::Path::new(path_str), field_name_str, tokenizer_str) {
+        let analyzer_digest_str = optional_cstr_or_err!(analyzer_digest, "analyzer_digest");
+        match IndexReaderWrapper::load_with_digest(
+            std::path::Path::new(path_str),
+            field_name_str,
+            tokenizer_str,
+            analyzer_digest_str,
+        ) {
             Ok(r) => RustResult::ok_ptr(create_binding(r)),
             Err(e) => RustResult::err(e.to_string()),
         }
@@ -216,6 +237,7 @@ pub unsafe extern "C" fn tantivy_open_compound_reader(
     file_table_json: *const c_char,
     field_name: *const c_char,
     tokenizer_name: *const c_char,
+    analyzer_digest: *const c_char,
 ) -> RustResult {
     catch_ffi(|| {
         if ra_file_handle.is_null() {
@@ -224,6 +246,7 @@ pub unsafe extern "C" fn tantivy_open_compound_reader(
         let json_str = cstr_or_err!(file_table_json, "file_table_json");
         let field_name_str = cstr_or_err!(field_name, "field_name");
         let tokenizer_str = cstr_or_err!(tokenizer_name, "tokenizer_name");
+        let analyzer_digest_str = optional_cstr_or_err!(analyzer_digest, "analyzer_digest");
 
         let parsed: HashMap<String, FileTableEntry> = match serde_json::from_str(json_str) {
             Ok(v) => v,
@@ -236,7 +259,13 @@ pub unsafe extern "C" fn tantivy_open_compound_reader(
             .collect();
 
         let dir = PullDirectory::new(ra_file_handle, file_table);
-        match IndexReaderWrapper::open(dir, field_name_str, tokenizer_str, ReloadPolicy::Manual) {
+        match IndexReaderWrapper::open_with_digest(
+            dir,
+            field_name_str,
+            tokenizer_str,
+            analyzer_digest_str,
+            ReloadPolicy::Manual,
+        ) {
             Ok(reader) => RustResult::ok_ptr(create_binding(reader)),
             Err(e) => RustResult::err(e.to_string()),
         }
@@ -367,10 +396,20 @@ pub unsafe extern "C" fn tantivy_phrase_match_query(
     reader: *const c_void,
     terms: *const FFISlice,
     count: usize,
+    positions: *const u32,
     slop: u32,
     out: *mut RustU32Array,
 ) -> RustResult {
-    catch_ffi(|| with_query_terms(reader, terms, count, out, |r, t| r.phrase_query(t, slop)))
+    catch_ffi(|| {
+        let positions = if positions.is_null() {
+            None
+        } else {
+            Some(std::slice::from_raw_parts(positions, count))
+        };
+        with_query_terms(reader, terms, count, out, |r, t| {
+            r.phrase_query_with_positions(t, positions, slop)
+        })
+    })
 }
 
 /// MATCH_WILDCARD query: returns rows whose indexed term matches the SQL
@@ -478,7 +517,11 @@ pub unsafe extern "C" fn tantivy_match_query_bitmap(
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
-    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.match_any_query_bitmap(t, s)))
+    catch_ffi(|| {
+        with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| {
+            r.match_any_query_bitmap(t, s)
+        })
+    })
 }
 
 /// MATCH_ALL → bitmap. SAFETY: as `tantivy_match_query`.
@@ -491,7 +534,11 @@ pub unsafe extern "C" fn tantivy_match_all_query_bitmap(
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
-    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.match_all_query_bitmap(t, min_df_ratio, s)))
+    catch_ffi(|| {
+        with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| {
+            r.match_all_query_bitmap(t, min_df_ratio, s)
+        })
+    })
 }
 
 /// MATCH_PHRASE → bitmap. SAFETY: as `tantivy_phrase_match_query`.
@@ -500,11 +547,21 @@ pub unsafe extern "C" fn tantivy_phrase_match_query_bitmap(
     reader: *const c_void,
     terms: *const FFISlice,
     count: usize,
+    positions: *const u32,
     slop: u32,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
-    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.phrase_query_bitmap(t, slop, s)))
+    catch_ffi(|| {
+        let positions = if positions.is_null() {
+            None
+        } else {
+            Some(std::slice::from_raw_parts(positions, count))
+        };
+        with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| {
+            r.phrase_query_bitmap_with_positions(t, positions, slop, s)
+        })
+    })
 }
 
 /// MATCH_WILDCARD → bitmap. SAFETY: as `tantivy_wildcard_query`.
