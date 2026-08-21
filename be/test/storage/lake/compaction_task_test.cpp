@@ -194,8 +194,9 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
 
 // Pins the cache-fill flags that reach SegmentReadOptions from the compaction read path:
 //  - fill_data_cache must follow the per-algorithm config, not a hardcoded value;
-//  - horizontal compaction must keep fill_metadata_cache on, so the read pass reuses the segments
-//    already opened by calculate_chunk_size() instead of re-reading every footer.
+//  - both algorithms must keep fill_metadata_cache on, so the read pass reuses the segments
+//    already opened by the chunk-size estimation instead of re-reading every footer (vertical
+//    compaction pays that price once per column group).
 // The two data-cache configs are deliberately set to opposite values so that a hardcoded flag on
 // either side would fail here rather than accidentally match the expectation.
 TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options) {
@@ -238,7 +239,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options) {
 
     bool seen = false;
     bool fill_data_cache = !horizontal;
-    bool fill_metadata_cache = !horizontal;
+    bool fill_metadata_cache = false;
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
         auto* seg_options = static_cast<SegmentReadOptions*>(arg);
@@ -259,7 +260,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options) {
 
     ASSERT_TRUE(seen);
     EXPECT_EQ(horizontal, fill_data_cache);
-    EXPECT_EQ(horizontal, fill_metadata_cache);
+    EXPECT_TRUE(fill_metadata_cache);
 }
 
 TEST_P(LakeDuplicateKeyCompactionTest, test_skip_write_txnlog) {
