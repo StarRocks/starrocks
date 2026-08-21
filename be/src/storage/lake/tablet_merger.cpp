@@ -3167,6 +3167,8 @@ StatusOr<uint64_t> compute_safe_merged_rebuild_point(const std::vector<TabletMer
     return safe_point.value_or(0);
 }
 
+Status finalize_next_rowset_id(TabletMetadataPB* metadata);
+
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
@@ -3333,16 +3335,16 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     // helper for the full reasoning.
     reassign_fileset_ids_for_ordered_runs(dest);
 
-    if (!dest->empty()) {
-        ASSIGN_OR_RETURN(const uint64_t safe_rebuild_point, compute_safe_merged_rebuild_point(merge_contexts));
-        const auto rebuild_counts = LakePersistentIndex::need_rebuild_counts(
-                *new_metadata, new_metadata->sstable_meta(), safe_rebuild_point);
-        if (rebuild_counts.first > 0) {
-            ASSIGN_OR_RETURN(auto materialized_metadata,
-                             update_manager->flush_pk_memtable(std::make_shared<TabletMetadataPB>(*new_metadata),
-                                                               new_metadata->version(), safe_rebuild_point));
-            new_metadata->mutable_sstable_meta()->CopyFrom(materialized_metadata->sstable_meta());
-        }
+    RETURN_IF_ERROR(finalize_next_rowset_id(new_metadata));
+    RETURN_IF_ERROR(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(tablet_manager, new_metadata));
+    ASSIGN_OR_RETURN(const uint64_t safe_rebuild_point, compute_safe_merged_rebuild_point(merge_contexts));
+    const auto rebuild_counts =
+            LakePersistentIndex::need_rebuild_counts(*new_metadata, new_metadata->sstable_meta(), safe_rebuild_point);
+    if (rebuild_counts.first > 0) {
+        ASSIGN_OR_RETURN(auto materialized_metadata,
+                         update_manager->flush_pk_memtable(std::make_shared<TabletMetadataPB>(*new_metadata),
+                                                           new_metadata->version(), safe_rebuild_point));
+        new_metadata->mutable_sstable_meta()->CopyFrom(materialized_metadata->sstable_meta());
     }
     return Status::OK();
 }
