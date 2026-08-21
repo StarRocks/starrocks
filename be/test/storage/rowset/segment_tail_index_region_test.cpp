@@ -261,19 +261,60 @@ TEST_F(SegmentTailIndexRegionTest, LegacyLayoutIsUnchanged) {
     verify_all_rows(region_file, tablet_schema);
 }
 
-// A vertical writer finalizes one column group at a time, so an early group's indexes would be
-// buried under a later group's data pages. It must keep the legacy layout even with the config on.
-TEST_F(SegmentTailIndexRegionTest, VerticalWriteKeepsLegacyLayout) {
+// A vertical writer finalizes one column group at a time, so an early group's indexes reach the
+// tail only by surviving until the last group's data is on disk. This matters well beyond
+// compaction ergonomics: CompactionUtils::choose_compaction_algorithm picks VERTICAL for any table
+// wider than vertical_compaction_max_columns_per_group (5) with more than one source rowset, so if
+// the vertical path fell back to the legacy layout the region would disappear from essentially
+// every wide table at its first real compaction.
+TEST_F(SegmentTailIndexRegionTest, VerticalWriteAlsoProducesRegion) {
     auto tablet_schema = make_schema();
     config::enable_segment_tail_index_region = true;
 
-    const std::string file_name = kSegmentDir + "/vertical";
+    const std::string file_name = kSegmentDir + "/vertical_region";
     auto result = write_vertical(file_name, tablet_schema);
 
-    EXPECT_FALSE(result.footer.has_small_index_region_offset());
-    EXPECT_FALSE(result.footer.has_small_index_region_size());
+    ASSERT_TRUE(result.footer.has_small_index_region_offset());
+    ASSERT_TRUE(result.footer.has_small_index_region_size());
+    const uint64_t region_begin = result.footer.small_index_region_offset();
+    const uint64_t region_end = region_begin + result.footer.small_index_region_size();
+    EXPECT_EQ(result.footer_position, region_end);
+
+    // Every column, including those from the FIRST group, must have landed in the tail region --
+    // that is the whole point, and the case a per-group write would get wrong.
+    auto offsets = collect_small_index_offsets(result.footer);
+    ASSERT_FALSE(offsets.empty());
+    for (uint64_t offset : offsets) {
+        EXPECT_GE(offset, region_begin);
+        EXPECT_LT(offset, region_end);
+    }
+
+    // The short key index belongs to the region too. _has_key is reassigned by every init() and
+    // the LAST vertical group holds value columns, so a naive `if (_has_key)` at region-write time
+    // skips it entirely and leaves the footer with no short_key_index_page.
+    ASSERT_TRUE(result.footer.has_short_key_index_page());
+    EXPECT_GE(result.footer.short_key_index_page().offset(), region_begin);
+    EXPECT_LT(result.footer.short_key_index_page().offset(), region_end);
 
     verify_all_rows(file_name, tablet_schema);
+}
+
+// The vertical and horizontal writers must agree: same rows in, same layout guarantees out.
+TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
+    auto tablet_schema = make_schema();
+    config::enable_segment_tail_index_region = true;
+
+    const std::string h_file = kSegmentDir + "/agree_horizontal";
+    const std::string v_file = kSegmentDir + "/agree_vertical";
+    auto h = write_horizontal(h_file, tablet_schema);
+    auto v = write_vertical(v_file, tablet_schema);
+
+    EXPECT_EQ(collect_small_index_offsets(h.footer).size(), collect_small_index_offsets(v.footer).size());
+    EXPECT_EQ(h.footer_position, h.footer.small_index_region_offset() + h.footer.small_index_region_size());
+    EXPECT_EQ(v.footer_position, v.footer.small_index_region_offset() + v.footer.small_index_region_size());
+
+    verify_all_rows(h_file, tablet_schema);
+    verify_all_rows(v_file, tablet_schema);
 }
 
 } // namespace starrocks
