@@ -143,6 +143,16 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");"
         );
+        starRocksAssert.withTable("CREATE TABLE `agg_state_arr` (\n" +
+                "  `k` int NULL, \n" +
+                "  `v` array_agg_distinct(varchar(100)) \n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");"
+        );
         FeConstants.runningUnitTest = false;
     }
 
@@ -364,6 +374,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select array_length(a1), a1[1] from pc0";
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+
+        // An AGG_STATE_UNION column stores a serialized aggregate state, and the storage layer rebuilds
+        // the array by running the aggregate function over it. Asking the BE for /v/OFFSET alone leaves
+        // the merge an array that kept its offsets and lost its elements: array_length() answers 0 or 1,
+        // and a wider merge indexes past the element column and kills the BE. No path for those columns.
+        sql = "select array_length(v) from agg_state_arr";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
 
         sql = "select a1[map1[1]] from pc0";
         plan = getVerboseExplain(sql);
