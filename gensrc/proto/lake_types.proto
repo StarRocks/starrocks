@@ -325,6 +325,14 @@ enum CompactionStrategyPB {
     REAL_TIME = 1;
 }
 
+// Extension point for TabletMetadataPB. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TabletMetadataPB
+// fields belong on TabletMetadataPB itself, whose remaining numbers are free.
+message TabletMetadataExtPB {
+}
+
 message TabletMetadataPB {
     optional int64 id = 1;
     optional int64 version = 2;
@@ -379,6 +387,16 @@ message TabletMetadataPB {
     // upstream) so that no upstream field is ever allocated on these tags.
     repeated int64 placeholder_50 = 50;
     optional bytes placeholder_51 = 51;
+    optional TabletMetadataExtPB ext = 25;
+}
+
+// Extension point for MetadataUpdateInfoPB. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New
+// MetadataUpdateInfoPB fields belong on MetadataUpdateInfoPB itself, whose
+// remaining numbers are free.
+message MetadataUpdateInfoExtPB {
 }
 
 message MetadataUpdateInfoPB {
@@ -390,6 +408,7 @@ message MetadataUpdateInfoPB {
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
     optional TabletRangePB tablet_range = 7;
+    optional MetadataUpdateInfoExtPB ext = 8;
 }
 
 message BundleTabletMetadataPB {
