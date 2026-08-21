@@ -711,34 +711,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::_build_segment_iterators(
         TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_for_build_iter_us");
         RETURN_IF_ERROR(load_segments(&segments, false));
     }
-<<<<<<< HEAD
-=======
-    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-    // Size the result up front so each iterator is written to its segment's position. The returned
-    // vector must stay positionally aligned with `segments`: callers index it by segment position to
-    // derive the rssid (rowset id + segment idx), skip null entries, and assert the size equals the
-    // segment count. A segment that produces no iterator (e.g. fully pruned by zonemap predicate
-    // filtering) is left as the default null, never compacting away its slot.
-    std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
-    SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
-    seg_options.stats = stats;
-    seg_options.lake_io_opts.fs = seg_options.fs;
-    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
-    seg_options.is_primary_keys = true;
-    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
-    // for delvec lookup instead of reading the same version back from object storage. This is
-    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
-    // new-version bundle has been persisted, so that version exists only in the RPC response here.
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
-                                                                   seg_options.lake_io_opts, _tablet_metadata);
-    seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
-    seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
-    seg_options.version = version;
-    seg_options.tablet_id = tablet_id();
-    seg_options.rowset_id = metadata().id();
-
->>>>>>> d158b0c61bd... [Feature] Serve reads from a virtual parent while an UNSHARE compaction makes the children private (#77871)
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     // One slot per segment; a segment that yields no iterator keeps its null placeholder.
@@ -793,8 +765,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    seg_options.delvec_loader =
-            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts);
+    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
+    // for delvec lookup instead of reading the same version back from object storage. This is
+    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
+    // new-version bundle has been persisted, so that version exists only in the RPC response here.
+    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
+                                                                   seg_options.lake_io_opts, _tablet_metadata);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;
