@@ -19,6 +19,7 @@
 
 #include <unordered_map>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
@@ -265,6 +266,7 @@ CONTINUE_HANDLE_MERGING_TABLET:
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(tablet_reshard_after_identical_pk_flush);
 Status handle_identical_tablet(TabletManager* tablet_manager, const IdenticalTabletInfoPB& identical_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas) {
@@ -337,6 +339,14 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
         return flushed_old_metadata_or.status();
     }
     const auto& old_tablet_old_metadata = flushed_old_metadata_or.value();
+
+    // The identical path's only file write is the PK-index flush above, so this is its only
+    // orphan-file window: the flushed sstables exist but no metadata references them yet. Armed
+    // WITH PAUSE, a thread parks here holding no data, index or metacache mutex -- the flush released
+    // its sharded PK-index lock before returning -- and the only lake serialization state it still
+    // holds is this reshard's publish token. (libfiu holds its own read lock across the callback; see
+    // fail_point.h.) Armed ENABLE, the publish fails and the frontend retries.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_after_identical_pk_flush);
 
     auto old_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
     old_tablet_new_metadata->set_version(new_version);
@@ -548,6 +558,7 @@ StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetada
     return new_txn_log;
 }
 
+DEFINE_FAIL_POINT(tablet_reshard_between_metadata_writes);
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
@@ -607,6 +618,16 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
             tablet_manager->metacache()->cache_aggregation_partition(
                     tablet_manager->tablet_metadata_root_location(tablet_id), true);
         }
+        // Deliberately at the END of the body: one tablet is now switched to the new version and the
+        // rest are not, which is the partial-switch state a reshard has to recover from. At the top of
+        // the loop this would instead stop before any write, and a released pause would then let the
+        // whole loop finish.
+        //
+        // Two caveats for a consumer. |tablet_metadatas| is an unordered_map, so WHICH tablet lands
+        // first is unspecified -- assert "some but not all", never a specific id. And under aggregate
+        // publish (skip_write_tablet_metadata) the loop only populates the metacache, so the partial
+        // state is a partial CACHE population rather than a durable one.
+        FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_between_metadata_writes);
     }
 
     g_tablet_reshard_latency << (butil::gettimeofday_us() - reshard_start_ts);

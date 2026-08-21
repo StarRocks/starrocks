@@ -884,6 +884,139 @@ TEST_F(LakeTabletReshardTest, test_identical_tablet_flush_failure_propagates) {
     EXPECT_FALSE(res.ok());
 }
 
+// Reachability net for the reshard-path failpoints. Each asserts BOTH directions: armed -> the
+// reshard fails, disarmed -> it succeeds. The armed direction is what catches a typo'd name or a
+// DEFINE_FAIL_POINT that never registers, since set_failpoint_mode() silently no-ops on an unknown
+// name and the reshard would then succeed. The disarmed direction catches a site that fails
+// unconditionally.
+//
+// Each direction gets its OWN tablet ids, and the ARMED run goes first. A successful
+// publish_resharding_tablet writes the new-version metadata through put_tablet_metadata, which also
+// caches it, and handle_identical_tablet opens with a metacache lookup of exactly that key and
+// returns early on a hit -- so reusing one tablet id and running the success first would make the
+// armed run take the retry fast path and never reach the hook at all.
+//
+// Note what this does NOT prove: SetUp arms skip_lake_pk_index_flush, so flush_pk_memtable returns
+// immediately and writes nothing. The hook sits after that call so it is still reached, but the
+// orphan-file window it exists for (flushed sstables that no metadata references yet) needs a real
+// PK index and belongs to the cluster test.
+TEST_F(LakeTabletReshardTest, test_identical_reshard_failpoint_after_pk_flush) {
+    auto run_identical_reshard = [&]() {
+        starrocks::TabletMetadata metadata;
+        auto tablet_id = next_id();
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+
+        auto* rowset_meta_pb = metadata.add_rowsets();
+        rowset_meta_pb->set_id(2);
+        {
+            auto* sm = rowset_meta_pb->add_segment_metas();
+            sm->set_filename("test_0.dat");
+            sm->set_size(512);
+            sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+            sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+            sm->set_num_rows(3);
+        }
+        rowset_meta_pb->set_data_size(512);
+        rowset_meta_pb->set_num_rows(3);
+        CHECK_OK(put_tablet_metadata(metadata));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& identical_tablet = *resharding_tablet.mutable_identical_tablet_info();
+        identical_tablet.set_old_tablet_id(tablet_id);
+        identical_tablet.set_new_tablet_id(next_id());
+
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, metadata.version(),
+                                               metadata.version() + 1, txn_info, false, tablet_metadatas,
+                                               tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_reshard_after_identical_pk_flush", FailPointTriggerModeType::ENABLE);
+    auto armed = run_identical_reshard();
+    set_failpoint_mode("tablet_reshard_after_identical_pk_flush", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached on the identical-reshard path";
+
+    EXPECT_OK(run_identical_reshard());
+}
+
+// The hook sits at the END of publish_resharding_tablet's per-tablet metadata-write loop, so when the
+// armed run returns it has already persisted exactly ONE of the two tablets' new-version metadata.
+// tablet_metadatas is an unordered_map, so which one is unspecified -- assert "exactly one", never a
+// particular id.
+TEST_F(LakeTabletReshardTest, test_reshard_failpoint_between_metadata_writes) {
+    auto build_identical_reshard = [&](int64_t* old_tablet_id, int64_t* new_tablet_id,
+                                       ReshardingTabletInfoPB* resharding_tablet, int64_t* base_version) {
+        starrocks::TabletMetadata metadata;
+        *old_tablet_id = next_id();
+        metadata.set_id(*old_tablet_id);
+        metadata.set_version(2);
+
+        auto* rowset_meta_pb = metadata.add_rowsets();
+        rowset_meta_pb->set_id(2);
+        {
+            auto* sm = rowset_meta_pb->add_segment_metas();
+            sm->set_filename("test_0.dat");
+            sm->set_size(512);
+            sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+            sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+            sm->set_num_rows(3);
+        }
+        rowset_meta_pb->set_data_size(512);
+        rowset_meta_pb->set_num_rows(3);
+        CHECK_OK(put_tablet_metadata(metadata));
+
+        *new_tablet_id = next_id();
+        auto& identical_tablet = *resharding_tablet->mutable_identical_tablet_info();
+        identical_tablet.set_old_tablet_id(*old_tablet_id);
+        identical_tablet.set_new_tablet_id(*new_tablet_id);
+        *base_version = metadata.version();
+    };
+
+    auto run = [&](const ReshardingTabletInfoPB& resharding_tablet, int64_t base_version) {
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, base_version + 1,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    {
+        int64_t old_tablet_id = 0;
+        int64_t new_tablet_id = 0;
+        int64_t base_version = 0;
+        ReshardingTabletInfoPB resharding_tablet;
+        build_identical_reshard(&old_tablet_id, &new_tablet_id, &resharding_tablet, &base_version);
+
+        set_failpoint_mode("tablet_reshard_between_metadata_writes", FailPointTriggerModeType::ENABLE);
+        auto armed = run(resharding_tablet, base_version);
+        set_failpoint_mode("tablet_reshard_between_metadata_writes", FailPointTriggerModeType::DISABLE);
+        EXPECT_FALSE(armed.ok()) << "hook not reached in the metadata-write loop";
+
+        const int64_t new_version = base_version + 1;
+        const bool old_written = _tablet_manager->get_tablet_metadata(old_tablet_id, new_version, false).ok();
+        const bool new_written = _tablet_manager->get_tablet_metadata(new_tablet_id, new_version, false).ok();
+        EXPECT_NE(old_written, new_written)
+                << "expected exactly one tablet to be switched, got old=" << old_written << " new=" << new_written;
+    }
+
+    {
+        int64_t old_tablet_id = 0;
+        int64_t new_tablet_id = 0;
+        int64_t base_version = 0;
+        ReshardingTabletInfoPB resharding_tablet;
+        build_identical_reshard(&old_tablet_id, &new_tablet_id, &resharding_tablet, &base_version);
+        EXPECT_OK(run(resharding_tablet, base_version));
+    }
+}
+
 // Phase-1 per-segment shared (end-to-end). After splitting a rowset whose two
 // segments occupy disjoint key ranges, each child keeps only its overlapping
 // segment, marks it private (shared=false), drops the sibling's segment,
@@ -12728,4 +12861,356 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
 }
 
 // =============================================================================
+// Reachability nets for the merge-path failpoints. Same shape as the reshard-path ones: ARMED first
+// (so the failure returns before any metadata is written and the disarmed run below still takes the
+// full path rather than the metacache retry fast path), then disarmed on fresh tablet ids.
+// =============================================================================
+
+// Merge phase 1 -- the rowset-id reassignment stage. Fires on every merge.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_rssid_reassign) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t tablet_a = next_id();
+        const int64_t tablet_b = next_id();
+        const int64_t new_tablet = next_id();
+
+        prepare_tablet_dirs(tablet_a);
+        prepare_tablet_dirs(tablet_b);
+        prepare_tablet_dirs(new_tablet);
+
+        TabletMetadataPB meta_a;
+        meta_a.set_id(tablet_a);
+        meta_a.set_version(base_version);
+        meta_a.set_next_rowset_id(3);
+        add_rowset_with_predicate(&meta_a, 1, 1, false);
+        add_rowset_with_predicate(&meta_a, 2, 2, false);
+        CHECK_OK(put_tablet_metadata(meta_a));
+
+        TabletMetadataPB meta_b;
+        meta_b.set_id(tablet_b);
+        meta_b.set_version(base_version);
+        meta_b.set_next_rowset_id(2);
+        add_rowset_with_predicate(&meta_b, 1, 1, false);
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.set_new_tablet_id(new_tablet);
+        merging_tablet.add_old_tablet_ids(tablet_a);
+        merging_tablet.add_old_tablet_ids(tablet_b);
+
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_rssid_reassign", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_rssid_reassign", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached at the merge rssid-reassignment stage";
+
+    EXPECT_OK(run_merge());
+}
+
+// The window in which a delete predicate has been copied into the merged metadata but is not yet
+// confined to its source tablet's range. The hook is guarded on has_delete_predicate(), so it fires
+// only for a merge whose source actually carries one -- that guard is what makes it express this
+// window rather than "the first rowset of any merge". Both sources here get a predicate; neither
+// tablet is a primary-key tablet, which is the case that uses delete predicates in production.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_before_delete_predicate_range) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t tablet_a = next_id();
+        const int64_t tablet_b = next_id();
+        const int64_t new_tablet = next_id();
+
+        prepare_tablet_dirs(tablet_a);
+        prepare_tablet_dirs(tablet_b);
+        prepare_tablet_dirs(new_tablet);
+
+        TabletMetadataPB meta_a;
+        meta_a.set_id(tablet_a);
+        meta_a.set_version(base_version);
+        meta_a.set_next_rowset_id(3);
+        add_rowset_with_predicate(&meta_a, 1, 1, false); // data
+        add_rowset_with_predicate(&meta_a, 2, 2, true);  // delete predicate
+        CHECK_OK(put_tablet_metadata(meta_a));
+
+        TabletMetadataPB meta_b;
+        meta_b.set_id(tablet_b);
+        meta_b.set_version(base_version);
+        meta_b.set_next_rowset_id(3);
+        add_rowset_with_predicate(&meta_b, 1, 1, false); // data
+        add_rowset_with_predicate(&meta_b, 2, 2, true);  // delete predicate
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.set_new_tablet_id(new_tablet);
+        merging_tablet.add_old_tablet_ids(tablet_a);
+        merging_tablet.add_old_tablet_ids(tablet_b);
+
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_before_delete_predicate_range", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_before_delete_predicate_range", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached before the delete-predicate range attachment";
+
+    EXPECT_OK(run_merge());
+}
+
+// =============================================================================
+// The three merge file-write hooks. Each sits after its file is durable and before any metadata
+// references it -- the orphan-file window. Each fixture must actually reach its own phase, so these
+// reuse the shapes of the existing tests that exercise those phases.
+// =============================================================================
+
+// merge_delvecs writes a merged delvec file. Primary-key only, and skipped entirely when there is no
+// source delvec and no synthesized gap, so both sources carry a delvec here.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t tablet_a = next_id();
+        const int64_t tablet_b = next_id();
+        const int64_t new_tablet = next_id();
+
+        prepare_tablet_dirs(tablet_a);
+        prepare_tablet_dirs(tablet_b);
+        prepare_tablet_dirs(new_tablet);
+
+        auto build = [&](int64_t tablet_id, uint32_t rowset_id, int64_t schema_id, const std::string& delvec_name,
+                         const std::string& delvec_content) {
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(tablet_id);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(rowset_id + 1);
+            set_primary_key_schema(meta.get(), schema_id);
+            add_rowset(meta.get(), rowset_id, 7, 1);
+            add_delvec(meta.get(), tablet_id, base_version, rowset_id, delvec_name, delvec_content);
+            return meta;
+        };
+
+        auto meta_a = build(tablet_a, 10, 1001, "delvec-a", "aaaa");
+        auto meta_b = build(tablet_b, 1, 2002, "delvec-b", "bbbbbb");
+        CHECK_OK(put_tablet_metadata(meta_a));
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.add_old_tablet_ids(tablet_a);
+        merging_tablet.add_old_tablet_ids(tablet_b);
+        merging_tablet.set_new_tablet_id(new_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached after the merged delvec file was written";
+
+    EXPECT_OK(run_merge());
+}
+
+// The .cols rebuild only runs when two DCG entries claim the SAME column id for the same target
+// segment, so this mirrors the two-children-same-column fixture: both children update c1 on one
+// shared base segment over disjoint row windows.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_dcg_cols) {
+    constexpr int kNumRows = 100;
+    constexpr int kBoundary = 50;
+    constexpr uint32_t kSegmentRssid = 1;
+    constexpr int64_t kTxnId = 887;
+
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        auto source_value_of = [](int row) { return row * 10; };
+        const std::string shared_segment_name = "shared_seg.dat";
+        const uint64_t base_segment_size =
+                write_two_column_segment(merged_tablet, shared_segment_name, kNumRows, source_value_of);
+
+        auto child_a_update = [](int row) { return row + 100000; };
+        auto child_b_update = [](int row) { return row + 200000; };
+        const std::string cols_a_name = lake::gen_cols_filename(kTxnId);
+        const std::string cols_b_name = lake::gen_cols_filename(kTxnId + 1);
+        auto a_cell = [&](int row) { return row < kBoundary ? child_a_update(row) : source_value_of(row); };
+        auto b_cell = [&](int row) { return row >= kBoundary ? child_b_update(row) : source_value_of(row); };
+        write_c1_only_cols_file(child_a, cols_a_name, kNumRows, a_cell);
+        write_c1_only_cols_file(child_b, cols_b_name, kNumRows, b_cell);
+
+        auto build_child = [&](int64_t tablet_id, int lower_key, int upper_key, const std::string& cols_filename) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(base_version);
+            metadata->set_next_rowset_id(10);
+            const auto [c0_uid, c1_uid] = set_two_column_pk_schema(metadata.get(), 4001);
+            (void)c0_uid;
+
+            auto* tablet_range = metadata->mutable_range();
+            tablet_range->set_lower_bound_included(true);
+            tablet_range->set_upper_bound_included(false);
+            *tablet_range->mutable_lower_bound() = generate_sort_key(lower_key);
+            *tablet_range->mutable_upper_bound() = generate_sort_key(upper_key);
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(kSegmentRssid);
+            rowset->set_version(1);
+            rowset->set_num_rows(kNumRows);
+            rowset->set_data_size(base_segment_size);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(shared_segment_name);
+                sm->set_size(base_segment_size);
+                sm->set_shared(true);
+            }
+            stamp_physical_identity_uid(rowset, shared_segment_name);
+            *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
+            *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(upper_key);
+            rowset->mutable_range()->set_lower_bound_included(true);
+            rowset->mutable_range()->set_upper_bound_included(false);
+            (*metadata->mutable_rowset_to_schema())[kSegmentRssid] = 4001;
+
+            auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[kSegmentRssid];
+            dcg.add_column_files(cols_filename);
+            dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+            dcg.add_versions(1);
+            dcg.add_shared_files(false);
+            return metadata;
+        };
+
+        auto meta_a = build_child(child_a, 0, kBoundary, cols_a_name);
+        auto meta_b = build_child(child_b, kBoundary, kNumRows, cols_b_name);
+        CHECK_OK(put_tablet_metadata(meta_a));
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+        merging_tablet.add_old_tablet_ids(child_a);
+        merging_tablet.add_old_tablet_ids(child_b);
+        merging_tablet.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(kTxnId + 2);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_write_dcg_cols", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_write_dcg_cols", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached after the rebuilt .cols segment was written";
+
+    EXPECT_OK(run_merge());
+}
+
+// The sstable rebuild only runs for a legacy-form shared sstable (shared=true, no shared_rssid), so
+// this mirrors the dead-rssid rebuild fixture: both children reference one legacy shared sstable.
+TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_sstable) {
+    auto run_merge = [&]() {
+        const int64_t base_version = 1;
+        const int64_t new_version = 2;
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        const std::string legacy_filename = "ghost_rssid.sst";
+        const auto legacy_path = _tablet_manager->sst_location(child_a, legacy_filename);
+        const uint64_t legacy_filesize = write_legacy_pk_sstable(
+                legacy_path,
+                {{"k1", /*rssid=*/1, /*rowid=*/0}, {"k2", /*rssid=*/2, /*rowid=*/0}, {"k3", /*rssid=*/3, /*rowid=*/0}});
+
+        auto make_child = [&](int64_t tablet_id, uint32_t live_rowset_id, const std::string& seg_filename) {
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(tablet_id);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(live_rowset_id + 1);
+            set_primary_key_schema(meta.get(), 1001);
+            auto* rowset = meta->add_rowsets();
+            rowset->set_id(live_rowset_id);
+            rowset->set_version(1);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(seg_filename);
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
+            auto* sst = meta->mutable_sstable_meta()->add_sstables();
+            sst->set_filename(legacy_filename);
+            sst->set_filesize(legacy_filesize);
+            sst->set_shared(true);
+            sst->set_max_rss_rowid((static_cast<uint64_t>(3) << 32) | 0);
+            return meta;
+        };
+
+        auto meta_a = make_child(child_a, /*live_rowset_id=*/1, "seg_a.dat");
+        auto meta_b = make_child(child_b, /*live_rowset_id=*/2, "seg_b.dat");
+        CHECK_OK(put_tablet_metadata(meta_a));
+        CHECK_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(child_a);
+        merging_info.add_old_tablet_ids(child_b);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    };
+
+    set_failpoint_mode("tablet_merge_after_write_sstable", FailPointTriggerModeType::ENABLE);
+    auto armed = run_merge();
+    set_failpoint_mode("tablet_merge_after_write_sstable", FailPointTriggerModeType::DISABLE);
+    EXPECT_FALSE(armed.ok()) << "hook not reached after the rebuilt sstable was written";
+
+    EXPECT_OK(run_merge());
+}
+
 } // namespace starrocks
