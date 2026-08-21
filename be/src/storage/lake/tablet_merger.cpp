@@ -30,6 +30,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -2372,6 +2373,9 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
                              /*delvec=*/nullptr, src_metadata, tablet_manager));
     sstable::ReadOptions source_read_options;
     source_read_options.fill_cache = false;
+    // Catch corrupted source blocks as Corruption instead of silently rebuilding
+    // garbage into the merged tablet's index.
+    source_read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
     auto merged_tablet_schema = TabletSchema::create(new_metadata.schema());
     ASSIGN_OR_RETURN(auto seek_range,
@@ -2525,6 +2529,9 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
                              /*delvec=*/nullptr, src_metadata, tablet_manager));
     sstable::ReadOptions source_read_options;
     source_read_options.fill_cache = false;
+    // Catch corrupted source blocks as Corruption instead of silently rebuilding
+    // garbage into the merged tablet's index.
+    source_read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
     source_iterator->SeekToFirst();
     if (!source_iterator->Valid()) {
