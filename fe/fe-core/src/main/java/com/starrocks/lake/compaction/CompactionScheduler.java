@@ -16,9 +16,9 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
