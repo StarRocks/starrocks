@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -376,7 +377,14 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.removePartition(partitionIdentifier);
                 return null;
             }
-            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD && !unshare) {
+            // Only for the shape whose split drags a full UNSHARE rewrite: that rewrite has to be the
+            // one compaction on the partition, because runCleaningJob cancels and then waits on the
+            // resharded partitions' compactions and a stream of new ones keeps it from settling. Every
+            // other table -- including an ordinary range split -- keeps compacting through its reshard,
+            // as it did before this feature existed; pausing those was collateral, and on a wide table
+            // it meant every partition stopped compacting for the life of one tablet's split.
+            if (!unshare && table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && TabletReshardUtils.splitRewritesEveryShard(table)) {
                 compactionManager.enableCompactionAfter(partitionIdentifier,
                         Config.lake_compaction_interval_ms_on_failure);
                 return null;
