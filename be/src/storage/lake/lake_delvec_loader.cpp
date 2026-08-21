@@ -32,6 +32,15 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
             return Status::OK();
         }
     }
+    if (_holder != nullptr) {
+        *pdelvec = std::make_shared<DelVector>();
+        if (_holder->find(tsid, version, pdelvec->get())) {
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(load_from_file(tsid, version, pdelvec));
+        _holder->put(tsid, version, **pdelvec);
+        return Status::OK();
+    }
     return load_from_file(tsid, version, pdelvec);
 }
 
