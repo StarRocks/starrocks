@@ -331,6 +331,18 @@ description: "Alphabetical s"
 - Labels: `type` (`add_column`, `drop_column`, or `modify_column`), `is_leader`
 - Description: Number of ALTER TABLE column operations, by type. A single statement can contain several operations — for example, `ADD COLUMN a, DROP COLUMN b` — and each is counted separately under its type. Renames, reorders, and comment-only changes are not counted. Reported only by the Leader FE (`is_leader="true"`).
 
+## `starrocks_fe_backup_snapshot_clean_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of failed attempts to delete a backup snapshot from its repository, whether by automatic TTL cleanup or by DROP SNAPSHOT.
+
+## `starrocks_fe_backup_snapshot_clean_success`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of backup snapshots deleted from their repository, whether by automatic TTL cleanup or by DROP SNAPSHOT.
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes

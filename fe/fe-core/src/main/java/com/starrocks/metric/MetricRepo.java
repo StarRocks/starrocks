@@ -319,6 +319,8 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
+    public static LongCounterMetric COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS;
+    public static LongCounterMetric COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 
     public static LongCounterMetric COUNTER_LOAD_ADD;
@@ -1027,6 +1029,12 @@ public final class MetricRepo {
         COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", MetricUnit.REQUESTS,
                 "current unfinished backup job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_BACKUP_JOB);
+        COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS = new LongCounterMetric("backup_snapshot_clean_success",
+                MetricUnit.REQUESTS, "total backup snapshots deleted by ttl cleanup or DROP SNAPSHOT");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS);
+        COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED = new LongCounterMetric("backup_snapshot_clean_failed",
+                MetricUnit.REQUESTS, "total failed attempts to delete a backup snapshot");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED);
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);

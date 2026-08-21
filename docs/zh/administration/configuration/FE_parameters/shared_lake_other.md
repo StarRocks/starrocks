@@ -873,6 +873,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 LDAP 对象中标识用户的属性名称。
 - 引入版本: -
 
+### `backup_clean_check_interval_seconds`
+
+- 默认值: 3600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Leader FE 扫描到期备份快照的周期。仅在 `enable_backup_snapshot_auto_clean` 为 `true` 时生效。修改后从下一轮开始生效，无需重启。
+- 引入版本: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 自动清理在同一个快照上连续失败多少次后不再重试。只统计自动清理自身的失败次数。计数保存在内存中，因此重启 FE、切换 Leader 或调大该值都会恢复重试。DROP SNAPSHOT 不受该值约束。
+- 引入版本: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - 默认值: 86400 * 1000
@@ -881,6 +899,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 备份作业的超时时长。如果超过此值，备份作业将失败。
 - 引入版本: -
+
+### `enable_backup_snapshot_auto_clean`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否自动删除仓库中已到期的备份快照。只有当远端 job info 文件中记录的创建集群是本集群、且到期时间已过时，该快照才会被删除。其他集群创建的快照、本特性引入之前创建的快照，以及保留策略读取失败的快照都不会被自动删除。参见 [BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md) 的 `ttl` 属性。
+- 引入版本: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 
