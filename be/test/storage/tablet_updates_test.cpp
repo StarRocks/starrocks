@@ -4821,4 +4821,89 @@ TEST_F(TabletUpdatesTest, test_do_manual_compaction_via_task_queue) {
     EXPECT_TRUE(_tablet->verify().ok());
 }
 
+// Publishing a txn must release its in-writing accounting entry; the primary key branch used to skip it.
+TEST_F(TabletUpdatesTest, test_publish_txn_releases_in_writing_data_size) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.emplace_back(i);
+    }
+    _tablet->updates()->stop_apply(true);
+    auto rs = create_rowset(_tablet, keys);
+    PUniqueId load_id;
+    load_id.set_hi(2000);
+    load_id.set_lo(2000);
+    const int64_t partition_id = 200;
+    const int64_t txn_id = 200;
+    ASSERT_TRUE(StorageEngine::instance()
+                        ->txn_manager()
+                        ->commit_txn(_tablet, partition_id, txn_id, load_id, rs, false, false)
+                        .ok());
+    _tablet->add_in_writing_data_size(txn_id, 100);
+    // An unrelated txn's entry must survive: the release is per-txn, not a wholesale clear.
+    _tablet->add_in_writing_data_size(txn_id + 1000, 7);
+    ASSERT_EQ(107, _tablet->in_writing_data_size());
+    ASSERT_TRUE(
+            StorageEngine::instance()->txn_manager()->publish_txn(partition_id, _tablet, txn_id, 2, rs, 0, false).ok());
+    ASSERT_EQ(7, _tablet->in_writing_data_size());
+}
+
+// Overwrite publish (online OPTIMIZE) released nothing at all, for every keys type.
+TEST_F(TabletUpdatesTest, test_publish_overwrite_txn_releases_in_writing_data_size) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.emplace_back(i);
+    }
+    _tablet->updates()->stop_apply(true);
+    auto rs = create_rowset(_tablet, keys);
+    PUniqueId load_id;
+    load_id.set_hi(2001);
+    load_id.set_lo(2001);
+    const int64_t partition_id = 201;
+    const int64_t txn_id = 201;
+    ASSERT_TRUE(StorageEngine::instance()
+                        ->txn_manager()
+                        ->commit_txn(_tablet, partition_id, txn_id, load_id, rs, false, false)
+                        .ok());
+    _tablet->add_in_writing_data_size(txn_id, 100);
+    // An unrelated txn's entry must survive: the release is per-txn, not a wholesale clear.
+    _tablet->add_in_writing_data_size(txn_id + 1000, 7);
+    ASSERT_EQ(107, _tablet->in_writing_data_size());
+    ASSERT_TRUE(StorageEngine::instance()
+                        ->txn_manager()
+                        ->publish_overwrite_txn(partition_id, _tablet, txn_id, 2, rs, 0)
+                        .ok());
+    ASSERT_EQ(7, _tablet->in_writing_data_size());
+}
+
+// A txn committed then discarded (quorum lost, cancel) is cleared here, the only release chance left.
+TEST_F(TabletUpdatesTest, test_delete_txn_releases_in_writing_data_size) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.emplace_back(i);
+    }
+    _tablet->updates()->stop_apply(true);
+    auto rs = create_rowset(_tablet, keys);
+    PUniqueId load_id;
+    load_id.set_hi(2002);
+    load_id.set_lo(2002);
+    const int64_t partition_id = 202;
+    const int64_t txn_id = 202;
+    ASSERT_TRUE(StorageEngine::instance()
+                        ->txn_manager()
+                        ->commit_txn(_tablet, partition_id, txn_id, load_id, rs, false, false)
+                        .ok());
+    _tablet->add_in_writing_data_size(txn_id, 100);
+    // An unrelated txn's entry must survive: the release is per-txn, not a wholesale clear.
+    _tablet->add_in_writing_data_size(txn_id + 1000, 7);
+    ASSERT_EQ(107, _tablet->in_writing_data_size());
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->delete_txn(partition_id, _tablet, txn_id).ok());
+    ASSERT_EQ(7, _tablet->in_writing_data_size());
+}
+
 } // namespace starrocks
