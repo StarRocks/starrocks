@@ -622,8 +622,9 @@ Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMap
 
     if (zm.has_not_null()) {
         if (UNLIKELY(!zm.has_min() || !zm.has_max())) {
-            LOG(ERROR) << "Corrupted zone map protobuf detected: " << zm.ShortDebugString();
-            return Status::Corruption("Corrupted zone map data: missing min or max values");
+            // Do not print `zm`: protobuf reflection over a corrupted message faults.
+            return Status::Corruption(
+                    fmt::format("Bad file {}: zone map for column {} has no min or max", file_name(), _name));
         }
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
@@ -1024,7 +1025,13 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     LogicalType lt = _get_zone_map_parse_type(predicates[0]);
     ZoneMapDetail detail;
     auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
-    CHECK(st.ok()) << st;
+    if (!st.ok()) {
+        // Degrade to NO pruning instead of failing: returning true means the segment cannot
+        // be excluded, so it is read in full and no matching row can be lost. This returns
+        // bool, so the Status has nowhere else to go.
+        LOG_EVERY_N(WARNING, 100) << "skip segment zone map pruning for column " << _name << ": " << st;
+        return true;
+    }
     auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
