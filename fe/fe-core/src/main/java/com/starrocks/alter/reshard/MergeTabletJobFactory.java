@@ -15,6 +15,9 @@
 package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -32,6 +35,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.TabletGroupList;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -40,6 +44,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 /*
  * MergeTabletJobFactory is for creating TabletReshardJob for tablet merging.
@@ -71,6 +76,26 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
 
+        // Refuse to start a merge while any peer GroupId is unstable: range-colocate group membership
+        // is shared across DBs, so merging against ranges the colocate checker is still aligning would
+        // plan on a snapshot that is about to change. Mirrors SplitTabletJobFactory#validateTableLevel.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId myGroupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        if (myGroupId != null && colocateTableIndex.isAnyGroupWithSameColocateGroupIdUnstable(myGroupId.grpId)) {
+            throw new StarRocksException("Cannot merge tablets for range-colocate group "
+                    + myGroupId.grpId + ": group is unstable; wait for alignment to complete before retrying");
+        }
+        // A registered range-colocate group whose range list is empty has a topology we cannot see --
+        // its OP_COLOCATE_RANGE_UPDATE has not been replayed yet. Refuse rather than treat it as
+        // not-colocate: merging without boundary knowledge would create SPREAD-only shards and, once
+        // the topology appears, nothing repairs them -- ColocateChecker only visits UNSTABLE groups,
+        // and a merge that never marked one leaves no trace. Merge is an optimization, so declining it
+        // costs nothing. This matches TabletStatMgr, which withholds the merge signal in the same state.
+        if (myGroupId != null && colocateTableIndex.getColocateRanges(myGroupId.grpId).isEmpty()) {
+            throw new StarRocksException("Cannot merge tablets for range-colocate group "
+                    + myGroupId.grpId + ": its colocate ranges are not available yet");
+        }
+
         // Compute the parallelism floor before acquiring the table lock — it touches warehouse / node
         // state and must not be coupled to the table READ lock held inside createReshardingPhysicalPartitions.
         // Only the size-based auto-merge path is floor-gated; explicit tablet-group merges skip the lookup.
@@ -98,6 +123,19 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
 
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
 
+        // Snapshot the colocate ranges once for the whole plan so every index is classified against
+        // the same topology. Null ranges means the table is not range-colocate, and every tablet is
+        // then treated as belonging to one implicit range (pre-colocate behavior).
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId colocateGroupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        // An empty range list means the group is registered but its range record has not been replayed
+        // yet; treat it as not-colocate rather than rejecting every group as uncontained.
+        List<ColocateRange> rawRanges = colocateGroupId == null ? null
+                : colocateTableIndex.getColocateRanges(colocateGroupId.grpId);
+        List<ColocateRange> colocateRanges = rawRanges == null || rawRanges.isEmpty() ? null : rawRanges;
+        int colocateColumnCount = colocateRanges == null ? 0
+                : colocateTableIndex.getGroupSchema(colocateGroupId).getColocateColumnCount();
+
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             if (table.getState() != OlapTable.OlapTableState.NORMAL) {
                 throw new StarRocksException("Unexpected table state " + table.getState()
@@ -118,7 +156,8 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                             continue;
                         }
                         List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex,
-                                mergeTabletGroupsForIndex);
+                                mergeTabletGroupsForIndex,
+                                classifierFor(oldIndex, colocateRanges, colocateColumnCount));
                         if (reshardingTablets.isEmpty()) {
                             continue;
                         }
@@ -157,13 +196,15 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                        List<List<Long>> mergeTabletGroupsForIndex =
-                                createMergeTabletGroups(physicalPartition, oldIndex, targetSize, parallelismFloor);
+                        ColocateRangeUtils.Classifier classifier =
+                                classifierFor(oldIndex, colocateRanges, colocateColumnCount);
+                        List<List<Long>> mergeTabletGroupsForIndex = createMergeTabletGroups(
+                                physicalPartition, oldIndex, targetSize, parallelismFloor, classifier);
                         if (mergeTabletGroupsForIndex.isEmpty()) {
                             continue;
                         }
                         List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex,
-                                mergeTabletGroupsForIndex);
+                                mergeTabletGroupsForIndex, classifier);
                         if (reshardingTablets.isEmpty()) {
                             continue;
                         }
@@ -265,7 +306,8 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
     }
 
     private List<List<Long>> createMergeTabletGroups(
-            PhysicalPartition physicalPartition, MaterializedIndex oldIndex, long targetSize, int parallelismFloor) {
+            PhysicalPartition physicalPartition, MaterializedIndex oldIndex, long targetSize, int parallelismFloor,
+            @Nullable ColocateRangeUtils.Classifier classifier) {
         // pairThresh: a single tablet at or above this is excluded from merging — aligned with
         //             TabletReshardUtils.needMerge() so a tablet that on its own already satisfies
         //             the new size band cannot be picked up as a merge candidate.
@@ -290,11 +332,30 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         List<Long> currentTabletGroup = new ArrayList<>();
         long currentSize = 0;
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        // Index of the colocate range the current group lives in; -1 both as the initial value and as
+        // "this tablet belongs to no single range", which is why an unmergeable tablet always flushes.
+        int currentColocateRangeIndex = -1;
         for (Tablet tablet : orderedTablets) {
             if (!(tablet instanceof LakeTablet)) {
                 flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
+                continue;
+            }
+
+            // A merge group must never span a colocate range: the merged tablet would sit in two
+            // ColocateRanges at once, which de-aligns the group and makes every colocate plan fail
+            // closed at RangeColocateScanDispatch#requireAligned -- and nothing marks the group
+            // unstable, so the colocate checker would never repair it. A tablet that is already
+            // spanning (index -1) is not a merge candidate at all and separates the groups around it.
+            int colocateRangeIndex = classifier == null ? 0 : classifier.indexOf(tablet);
+            if (colocateRangeIndex < 0 || colocateRangeIndex != currentColocateRangeIndex) {
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
+                currentTabletGroup = new ArrayList<>();
+                currentSize = 0;
+                currentColocateRangeIndex = colocateRangeIndex;
+            }
+            if (colocateRangeIndex < 0) {
                 continue;
             }
 
@@ -338,6 +399,19 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         return mergeTabletGroups;
     }
 
+    /**
+     * Binds the colocate ranges to {@code index}'s own sort key, or {@code null} when the table has no
+     * range-colocate group. Resolved per index rather than from the base index because a rollup / MV
+     * can have a shorter sort key, and classifying its tablets against the base arity would compare
+     * bounds of different widths.
+     */
+    @Nullable
+    private ColocateRangeUtils.Classifier classifierFor(MaterializedIndex index,
+            @Nullable List<ColocateRange> colocateRanges, int colocateColumnCount) {
+        return ColocateRangeUtils.Classifier.of(colocateRanges,
+                MetaUtils.getRangeDistributionColumns(table, index.getMetaId()), colocateColumnCount);
+    }
+
     private static void flushMergeTabletGroup(List<List<Long>> groups, List<Long> currentGroup) {
         if (currentGroup.size() >= 2) {
             groups.add(currentGroup);
@@ -345,7 +419,8 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
     }
 
     private List<ReshardingTablet> createReshardingTablets(MaterializedIndex index,
-            List<List<Long>> mergeTabletGroups) throws StarRocksException {
+            List<List<Long>> mergeTabletGroups, @Nullable ColocateRangeUtils.Classifier classifier)
+            throws StarRocksException {
         List<ReshardingTablet> reshardingTablets = new ArrayList<>();
         if (mergeTabletGroups == null || mergeTabletGroups.isEmpty()) {
             return reshardingTablets;
@@ -383,11 +458,33 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                 throw new StarRocksException(
                         "Tablets in a merge tablet group must be contiguous in index " + index.getId());
             }
+            // Group-shape checks, alongside contiguity: every member must also sit inside ONE colocate
+            // range, or the merged tablet would span a boundary -- the group loses range alignment and
+            // every colocate plan then fails closed at RangeColocateScanDispatch#requireAligned. This
+            // is the funnel both producers pass through: an explicit ALTER ... MERGE TABLETS group is
+            // rejected here, while createMergeTabletGroups has already broken its groups at boundaries,
+            // so for the automatic path this is a fail-closed assertion on that grouper.
+            int groupColocateRangeIndex = -1;
             for (int i = minPos; i <= maxPos; i++) {
                 Tablet tablet = orderedTablets.get(i);
                 if (!groupTabletIds.contains(tablet.getId())) {
                     throw new StarRocksException(
                             "Tablets in a merge tablet group must be contiguous in index " + index.getId());
+                }
+                if (classifier != null) {
+                    int colocateRangeIndex = classifier.indexOf(tablet);
+                    if (colocateRangeIndex < 0) {
+                        throw new StarRocksException("Tablet " + tablet.getId()
+                                + " is not contained in a single colocate range in table "
+                                + db.getFullName() + '.' + table.getName() + "; it cannot be merged");
+                    }
+                    if (groupColocateRangeIndex < 0) {
+                        groupColocateRangeIndex = colocateRangeIndex;
+                    } else if (groupColocateRangeIndex != colocateRangeIndex) {
+                        throw new StarRocksException("Tablets in a merge tablet group must be in the"
+                                + " same colocate range; tablet " + tablet.getId() + " crosses a colocate"
+                                + " range boundary in table " + db.getFullName() + '.' + table.getName());
+                    }
                 }
                 groupTablets.add(tablet);
             }

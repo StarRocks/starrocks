@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Range;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -35,6 +36,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -66,6 +68,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
@@ -80,8 +83,14 @@ public class TabletStatMgrTest {
     private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
     // The bound the scan handed to the drain on the last runScan.
     private static int capturedBound;
+    // The merge signal the scan handed to the drain on the last runScan.
+    private static long capturedMinAdjacentPairSize;
 
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
+
+    // The split cap every runScan pins, named so a case can derive the parallelism floor the scan
+    // actually applied instead of restating the number.
+    private static final int PINNED_MAX_SPLIT_COUNT = 1024;
 
     // The scan fixture is the only thing here that registers a database in the singleton metastore, so
     // its id must be one no built-in owns: ids below GlobalStateMgr.NEXT_ID_INIT_VALUE (10000) are
@@ -671,8 +680,17 @@ public class TabletStatMgrTest {
      * the probe.
      */
     private long runScan(boolean leader, int stubbedNodeCount, long... tabletSizes) {
+        return runScan(leader, stubbedNodeCount, () -> registerRangeDistributionTable(tabletSizes));
+    }
+
+    /**
+     * As above, over a table the caller registers itself -- the range-colocate cases below need a
+     * fixture the size-only builder cannot describe.
+     */
+    private long runScan(boolean leader, int stubbedNodeCount, Runnable registerFixture) {
         long[] captured = {-1L};
         capturedBound = -1;
+        capturedMinAdjacentPairSize = -1L;
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
         NODE_COUNT_RESOLUTIONS.set(0);
 
@@ -697,15 +715,16 @@ public class TabletStatMgrTest {
                     long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
                 captured[0] = maxAdaptiveSplitTabletSize;
                 capturedBound = adaptiveBound;
+                capturedMinAdjacentPairSize = minAdjacentTabletPairSize;
             }
         };
 
         int savedMaxSplitCount = Config.tablet_reshard_max_split_count;
         // Pinned above every node count used below so the bound is governed by the node count;
         // a change to this default must not be able to flatten these cases into each other.
-        Config.tablet_reshard_max_split_count = 1024;
+        Config.tablet_reshard_max_split_count = PINNED_MAX_SPLIT_COUNT;
         try {
-            registerRangeDistributionTable(tabletSizes);
+            registerFixture.run();
             new TabletStatMgr().runAfterCatalogReady();
         } finally {
             Config.tablet_reshard_max_split_count = savedMaxSplitCount;
@@ -779,5 +798,381 @@ public class TabletStatMgrTest {
     public void emitsNoEarlySignalWhenTheNodeCountIsUnavailable() {
         assertEquals(0L, runScan(true, 0, 8L << 30),
                 "an unresolved node count keeps the merge floor at 0 and emits no early signal");
+    }
+
+    private static final long ROLLUP_INDEX_ID = 6L;
+    private static final long COLOCATE_GROUP_ID = 7001L;
+    private static final int COLOCATE_COLUMN_COUNT = 1;
+    private static final long OBSERVER_TABLE_ID = 8L;
+    private static final long ORPHANED_INDEX_ID = 9L;
+    // Never passed to setIndexMeta, so getIndexMetaByMetaId cannot resolve it.
+    private static final long ORPHANED_INDEX_META_ID = 10L;
+    private static final long OBSERVER_ROWS_PER_TABLET = 100L;
+
+    /**
+     * What the mocked colocate index says about the fixture table. Three states, not two, because the
+     * scan distinguishes three: not range-colocate at all (ordinary boundary-blind signal), range-colocate
+     * and classifiable, and range-colocate but not classifiable right now -- the last withholds the merge
+     * signal instead of falling back to the first.
+     */
+    private enum ColocateState {
+        NOT_COLOCATE,
+        STABLE,
+        UNSTABLE
+    }
+
+    private static final Column COLOCATE_COLUMN = new Column("k1", IntegerType.INT, true, null, "", "");
+
+    // Sort key of the second visible index: a strict prefix of the base index's (k1, k2), which is what
+    // a rollup or an MV can carry. Only k1 is a key column, so the resolved sort key is (k1).
+    private static final List<Column> ROLLUP_SCHEMA = List.of(COLOCATE_COLUMN,
+            new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+
+    /**
+     * The colocate topology every range-colocate case below tiles:
+     * R0 = (-inf, 200), R1 = [200, 300), R2 = [300, +inf). The only within-range pair is carved out of
+     * R1, the MIDDLE range, so a classification that collapsed onto the first or the last colocate
+     * range cannot land on the right answer by accident.
+     */
+    private static final List<ColocateRange> COLOCATE_RANGES = List.of(
+            new ColocateRange(Range.lt(colocatePrefix(200)), 9001L),
+            new ColocateRange(Range.gelt(colocatePrefix(200), colocatePrefix(300)), 9002L),
+            new ColocateRange(Range.ge(colocatePrefix(300)), 9003L));
+
+    private static Tuple colocatePrefix(int k1) {
+        return new Tuple(List.of(Variant.of(IntegerType.INT, String.valueOf(k1))));
+    }
+
+    /**
+     * The tablet ranges of one index, tiling {@link #COLOCATE_RANGES} against that index's OWN sort key:
+     * one tablet per colocate range, plus -- when {@code carveMiddleRange} -- a second tablet inside R1,
+     * the topology's only pair a merge may legally act on.
+     */
+    private static List<Range<Tuple>> tileColocateRanges(List<Column> sortKeyColumns, boolean carveMiddleRange) {
+        List<Range<Tuple>> expanded = ColocateRangeUtils.expandColocateRanges(
+                COLOCATE_RANGES, sortKeyColumns, COLOCATE_COLUMN_COUNT);
+        if (!carveMiddleRange) {
+            return expanded;
+        }
+        // 250 lies inside R1 and is not a registered colocate boundary, so both halves stay in R1.
+        Tuple carvePoint = ColocateRangeUtils.expandToFullSortKey(
+                Range.ge(colocatePrefix(250)), sortKeyColumns, COLOCATE_COLUMN_COUNT).getLowerBound();
+        return List.of(expanded.get(0),
+                Range.gelt(expanded.get(1).getLowerBound(), carvePoint),
+                Range.gelt(carvePoint, expanded.get(1).getUpperBound()),
+                expanded.get(2));
+    }
+
+    /**
+     * Registers a range-distribution LakeTable whose visible indexes tile the colocate topology, and
+     * makes the colocate index answer for it according to {@code colocateState}. Returns the physical
+     * partition, so a caller can reach either index to post-process it (see the classification-failure
+     * cases) or to read its row counts back after the scan.
+     *
+     * <p>Three sizes give one tablet per ColocateRange, so every adjacent pair crosses a boundary; four
+     * carve R1 in two and so add the topology's only within-range pair. A non-null {@code rollupSizes}
+     * adds a second VISIBLE index, tiled the same way against its own shorter sort key.
+     */
+    private PhysicalPartition registerColocateTable(ColocateState colocateState, long[] baseSizes,
+                                                    long[] rollupSizes) {
+        LakeTable table = createLakeTableForTest();
+        table.setDefaultDistributionInfo(new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition();
+
+        MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+        baseIndex.clearTabletsForRestore();
+        addTiledTablets(table, baseIndex, 100L, baseSizes);
+
+        if (rollupSizes != null) {
+            table.setIndexMeta(ROLLUP_INDEX_ID, "r1", ROLLUP_SCHEMA, 0, 0, (short) 1,
+                    TStorageType.COLUMN, KeysType.AGG_KEYS);
+            physicalPartition.createRollupIndex(
+                    new MaterializedIndex(ROLLUP_INDEX_ID, MaterializedIndex.IndexState.NORMAL));
+            addTiledTablets(table, physicalPartition.getLatestIndex(ROLLUP_INDEX_ID), 200L, rollupSizes);
+        }
+
+        mockColocateTableIndex(colocateState);
+
+        registeredDb = new Database(SCAN_DB_ID, SCAN_DB_NAME);
+        registeredDb.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
+        return physicalPartition;
+    }
+
+    /**
+     * The lower bound of a malformed or racing TabletRange: fewer values than the colocate prefix, which
+     * is what trips {@code extractColocatePrefix}'s precondition inside {@code Classifier.indexOf}.
+     */
+    private static TabletRange rangeTooShortForColocatePrefix() {
+        return new TabletRange(Range.ge(new Tuple(List.of())));
+    }
+
+    /**
+     * Adds a second table to the same database and returns its base index, so a case can check that the
+     * row-count pass still reached a table walked AFTER the one whose classification blew up.
+     *
+     * <p>Hash-distributed on purpose, which makes it reshard-INELIGIBLE: an eligible table would emit a
+     * reshard candidate of its own and overwrite the very signal under assertion.
+     */
+    private MaterializedIndex registerObserverTable() {
+        LakeTable table = createLakeTableForTest();
+        Deencapsulation.setField(table, "id", OBSERVER_TABLE_ID);
+        Deencapsulation.setField(table, "name", "observer");
+        MaterializedIndex index =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex();
+        for (Tablet tablet : index.getTablets()) {
+            ((LakeTablet) tablet).setRowCount(OBSERVER_ROWS_PER_TABLET);
+        }
+        registeredDb.registerTableUnlocked(table);
+        return index;
+    }
+
+    private static void addTiledTablets(OlapTable table, MaterializedIndex index, long firstTabletId,
+                                        long[] tabletSizes) {
+        addTiledTablets(MetaUtils.getRangeDistributionColumns(table, index.getMetaId()),
+                index, firstTabletId, tabletSizes);
+    }
+
+    /**
+     * As above, against an explicitly supplied sort key -- for an index whose own sort key cannot be
+     * resolved at all, which is the point of the fixture that uses it.
+     */
+    private static void addTiledTablets(List<Column> sortKeyColumns, MaterializedIndex index,
+                                        long firstTabletId, long[] tabletSizes) {
+        List<Range<Tuple>> ranges = tileColocateRanges(sortKeyColumns, tabletSizes.length == 4);
+        TabletMeta tabletMeta =
+                new TabletMeta(SCAN_DB_ID, TABLE_ID, PARTITION_ID, index.getId(), TStorageMedium.HDD, true);
+        for (int i = 0; i < tabletSizes.length; i++) {
+            LakeTablet tablet = new LakeTablet(firstTabletId + i);
+            tablet.setRange(new TabletRange(ranges.get(i)));
+            tablet.setDataSize(tabletSizes[i]);
+            // A row count as well, so a case can tell "the row-count pass ran" from its zero default.
+            tablet.setRowCount(tabletSizes[i]);
+            // Fresh by construction, so the merge-freshness walk of the same scan is well defined.
+            tablet.setDataSizeUpdateTime(Long.MAX_VALUE);
+            index.addTablet(tablet, tabletMeta, false);
+        }
+    }
+
+    /**
+     * Adds a second VISIBLE index whose metaId was never registered with setIndexMeta -- the shape a
+     * stale id from a dropped rollup leaves behind. {@code MetaUtils.getRangeDistributionColumns} throws
+     * on it, so this index's Classifier cannot be CONSTRUCTED. That is a different thing from an index
+     * that simply never needed one, and the scan has to tell them apart.
+     */
+    private static MaterializedIndex addIndexWithUnresolvableMeta(OlapTable table,
+                                                                  PhysicalPartition physicalPartition,
+                                                                  long[] tabletSizes) {
+        MaterializedIndex index = new MaterializedIndex(ORPHANED_INDEX_ID, ORPHANED_INDEX_META_ID,
+                MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        physicalPartition.createRollupIndex(index);
+        // Tiled against the BASE sort key: this index's own is unresolvable by construction, and the
+        // ranges are immaterial anyway since classification never gets as far as reading them.
+        addTiledTablets(MetaUtils.getRangeDistributionColumns(table, INDEX_ID), index, 300L, tabletSizes);
+        return index;
+    }
+
+    private static void mockColocateTableIndex(ColocateState colocateState) {
+        ColocateTableIndex.GroupId groupId = new ColocateTableIndex.GroupId(SCAN_DB_ID, COLOCATE_GROUP_ID);
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, List.of(COLOCATE_COLUMN), 0,
+                (short) 1, DistributionInfo.DistributionInfoType.RANGE);
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public ColocateTableIndex.GroupId getRangeColocateGroupId(long tableId) {
+                // UNSTABLE still hands back a real GroupId: the group exists and the ranges are readable,
+                // it is only the topology that is mid-flight. A mock that answered null here would test
+                // the not-colocate path instead of the one it means to.
+                return colocateState == ColocateState.NOT_COLOCATE ? null : groupId;
+            }
+
+            @Mock
+            public List<ColocateRange> getColocateRanges(long colocateGroupId) {
+                return COLOCATE_RANGES;
+            }
+
+            @Mock
+            public ColocateGroupSchema getGroupSchema(ColocateTableIndex.GroupId id) {
+                return groupSchema;
+            }
+
+            @Mock
+            public boolean isAnyGroupWithSameColocateGroupIdUnstable(long colocateGroupId) {
+                return colocateState == ColocateState.UNSTABLE;
+            }
+        };
+    }
+
+    @Test
+    public void testMergeSignalSkipsCrossColocateBoundaryPair() {
+        // 2 compute nodes -> parallelism floor 2, and every index below holds more than two tablets, so
+        // eligibleForMerge is true: what these assertions read is the colocate classification and not
+        // the parallelism floor swallowing the signal.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.STABLE, new long[] {1L, 2L, 4L}, null));
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentPairSize,
+                "one tablet per ColocateRange: every adjacent pair crosses a boundary, so no merge signal");
+
+        // The same table with R1 carved in two. 2 + 4 is neither the smallest pair the walk sees
+        // (1 + 2 crosses into R1) nor the last one (4 + 8 crosses out of it), so a boundary-blind walk
+        // cannot produce it.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.STABLE, new long[] {1L, 2L, 4L, 8L}, null));
+        assertEquals(6L, capturedMinAdjacentPairSize,
+                "the pair inside R1 is the one actionable pair and must be the signal");
+    }
+
+    @Test
+    public void testMergeSignalUsesPerIndexSortKey() {
+        // The base index holds one tablet per range and so offers no pair; the rollup carries an
+        // actionable within-R1 pair with a crossing pair on either side of it. The rollup's sort key is
+        // one column shorter, so its tablet bounds are narrower than the BASE index's expansion of the
+        // same ColocateRange: classifying it against the base sort key rejects the R1 lower half as
+        // uncontained and loses the pair.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.STABLE,
+                new long[] {100L, 200L, 400L}, new long[] {1L, 2L, 4L, 8L}));
+        assertEquals(6L, capturedMinAdjacentPairSize,
+                "the rollup's within-range pair must be classified against the rollup's own sort key");
+    }
+
+    @Test
+    public void testMergeSignalUnchangedForNonColocateTable() {
+        // The fixture of the second case above, minus the colocate group. Nothing separates the ranges
+        // any more, so the smallest adjacent pair wins -- the pre-colocate behavior, and the proof that
+        // the two cases above are about the classification rather than about the fixture.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.NOT_COLOCATE, new long[] {1L, 2L, 4L, 8L}, null));
+        assertEquals(3L, capturedMinAdjacentPairSize,
+                "a non-colocate table must still signal its smallest adjacent pair");
+    }
+
+    @Test
+    public void testMergeSignalWithheldWhileTheColocateGroupIsUnstable() {
+        // The group exists and its ranges read fine; only the topology is mid-flight. Signalling here
+        // would be worse than silence: MergeTabletJobFactory refuses to plan while any peer is unstable,
+        // so the candidate would be rebuilt and rejected on every scan for as long as alignment takes.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.UNSTABLE, new long[] {1L, 2L, 4L, 8L}, null));
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentPairSize,
+                "an unstable colocate group must withhold the merge signal, not fall back to blind pairing");
+
+        // Not vacuous: the SAME tablets with the group stable do produce the R1 pair. Note what this
+        // pins down -- an implementation that treated "unstable" as "not colocate" would answer 3 above
+        // (the boundary-crossing 1 + 2), not Long.MAX_VALUE and not the 6 below.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.STABLE, new long[] {1L, 2L, 4L, 8L}, null));
+        assertEquals(6L, capturedMinAdjacentPairSize,
+                "the same fixture with a stable group must signal its within-range pair");
+    }
+
+    @Test
+    public void testMergeSignalWithheldWhenTabletClassificationThrows() {
+        MaterializedIndex[] indexes = new MaterializedIndex[2];
+        runScan(true, 2, () -> {
+            indexes[0] = registerColocateTable(ColocateState.STABLE, new long[] {1L, 2L, 4L, 8L}, null)
+                    .getLatestBaseIndex();
+            // Deliberately the LAST tablet: the walk has already banked the good R1 pair by then, so what
+            // this pins is that the banked signal is DISCARDED, not merely that the walk stopped early.
+            indexes[0].getTablets().get(3).setRange(rangeTooShortForColocatePrefix());
+            indexes[1] = registerObserverTable();
+        });
+
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentPairSize,
+                "an index whose classification blew up must contribute no merge signal at all");
+        // The point of catching inside the tablet walk: the scan's per-table loop has no catch of its
+        // own, so an escaping exception would cost this table AND every table after it its row counts.
+        assertEquals(15L, indexes[0].getRowCount(),
+                "the failing index must still get its row counts (1 + 2 + 4 + 8)");
+        assertEquals(OBSERVER_TABLE_ID, registeredDb.getTables().get(1).getId(),
+                "harness precondition: the observer must be walked AFTER the failing table");
+        assertEquals(2 * OBSERVER_ROWS_PER_TABLET, indexes[1].getRowCount(),
+                "a table walked after the failing one must still get its row counts");
+    }
+
+    @Test
+    public void testMergeSignalIsTheMinimumAcrossIndexes() {
+        // Two visible indexes with distinct adjacent-pair minima, 30 and 3. Run both arrangements: an
+        // implementation that OVERWRITES the table minimum per index instead of folding it with Math.min
+        // answers whichever index it happens to walk last, so it cannot survive both orderings whatever
+        // that order is. Non-colocate on purpose -- this is about the fold, not the classification.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.NOT_COLOCATE,
+                new long[] {10L, 20L, 100L}, new long[] {1L, 2L, 100L}));
+        assertEquals(3L, capturedMinAdjacentPairSize,
+                "the table signal is the smallest adjacent pair over ALL indexes (small pair in the rollup)");
+
+        runScan(true, 2, () -> registerColocateTable(ColocateState.NOT_COLOCATE,
+                new long[] {1L, 2L, 100L}, new long[] {10L, 20L, 100L}));
+        assertEquals(3L, capturedMinAdjacentPairSize,
+                "same, with the small pair in the base index instead");
+    }
+
+    @Test
+    public void testOneUnclassifiableIndexWithholdsTheWholeTableSignal() {
+        // Two range-colocate indexes: the base classifies cleanly and earns a legal within-R1 pair of
+        // 60, the rollup blows up on one tablet. Both scans below share the fixture; only the second
+        // corrupts a tablet.
+        runScan(true, 2, () -> registerColocateTable(ColocateState.STABLE,
+                new long[] {10L, 20L, 40L, 80L}, new long[] {1L, 2L, 4L, 8L}));
+        assertEquals(6L, capturedMinAdjacentPairSize,
+                "sanity: intact, both indexes classify and the table signal is min(60, 6)");
+
+        runScan(true, 2, () -> registerColocateTable(ColocateState.STABLE,
+                        new long[] {10L, 20L, 40L, 80L}, new long[] {1L, 2L, 4L, 8L})
+                .getLatestIndex(ROLLUP_INDEX_ID).getTablets().get(3)
+                .setRange(rangeTooShortForColocatePrefix()));
+        // The base index's 60 is a perfectly good signal and it must STILL be withheld: the factory
+        // walks every visible index, would hit the same bad tablet in the rollup and reject the whole
+        // job, so emitting the base index's pair only rebuilds a doomed candidate on every scan.
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentPairSize,
+                "one unclassifiable index must withhold the whole table's merge signal, not just its own");
+    }
+
+    @Test
+    public void testAnIndexBelowTheFloorDoesNotWithholdASiblingsSignal() {
+        // 3 compute nodes -> parallelism floor 3. The base index holds exactly 3 tablets, so it is NOT
+        // eligible for merge; the rollup holds 4 and is. An index below the floor is skipped on purpose
+        // and therefore never gets a classifier -- but "was not classified" is not "could not be
+        // classified", and reading it as the latter suppresses the rollup's perfectly legal pair.
+        PhysicalPartition[] partition = new PhysicalPartition[1];
+        runScan(true, 3, () -> partition[0] = registerColocateTable(ColocateState.STABLE,
+                new long[] {10L, 20L, 40L}, new long[] {1L, 2L, 4L, 8L}));
+
+        // Assert the eligibility split rather than trusting it: derived from the same floor function and
+        // the same pinned split cap the scan used, so this cannot quietly stop being the case it claims.
+        int parallelismFloor = TabletReshardUtils.parallelismFloor(3, PINNED_MAX_SPLIT_COUNT);
+        assertTrue(partition[0].getLatestBaseIndex().getTablets().size() <= parallelismFloor,
+                "precondition: the base index must sit AT or below the parallelism floor");
+        assertTrue(partition[0].getLatestIndex(ROLLUP_INDEX_ID).getTablets().size() > parallelismFloor,
+                "precondition: the rollup must sit above the parallelism floor");
+
+        assertEquals(6L, capturedMinAdjacentPairSize,
+                "a floor-suppressed index must not withhold the signal an eligible sibling earned");
+    }
+
+    @Test
+    public void testAnIneligibleIndexWithAnUnbuildableClassifierWithholdsTheWholeSignal() {
+        // 3 compute nodes -> parallelism floor 3. The base index is eligible (4 tablets) and earns a
+        // legal within-R1 pair of 6. The second index is AT the floor and so contributes no pair of its
+        // own -- but its classifier cannot be BUILT, and MergeTabletJobFactory builds one for every
+        // visible index before it consults the merge budget. It would hit the same failure and reject
+        // the whole job, so the base index's good pair has to be withheld rather than emitted.
+        PhysicalPartition[] partition = new PhysicalPartition[1];
+        MaterializedIndex[] orphaned = new MaterializedIndex[1];
+        runScan(true, 3, () -> {
+            partition[0] = registerColocateTable(ColocateState.STABLE, new long[] {1L, 2L, 4L, 8L}, null);
+            orphaned[0] = addIndexWithUnresolvableMeta((OlapTable) registeredDb.getTable(TABLE_ID),
+                    partition[0], new long[] {10L, 20L, 40L});
+        });
+
+        // Preconditions, asserted rather than assumed: the eligibility split is real, and the second
+        // index really is one whose sort key cannot be resolved -- otherwise this would quietly become
+        // the mixed-floor case above, which expects the opposite answer.
+        int parallelismFloor = TabletReshardUtils.parallelismFloor(3, PINNED_MAX_SPLIT_COUNT);
+        assertTrue(orphaned[0].getTablets().size() <= parallelismFloor,
+                "precondition: the unbuildable index must sit AT or below the parallelism floor");
+        assertTrue(partition[0].getLatestBaseIndex().getTablets().size() > parallelismFloor,
+                "precondition: the base index must sit above the parallelism floor");
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> MetaUtils.getRangeDistributionColumns(
+                        (OlapTable) registeredDb.getTable(TABLE_ID), ORPHANED_INDEX_META_ID),
+                "precondition: the second index's sort key must genuinely be unresolvable");
+
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentPairSize,
+                "an index whose classifier cannot be built withholds the table signal even when it is "
+                        + "below the merge floor");
     }
 }

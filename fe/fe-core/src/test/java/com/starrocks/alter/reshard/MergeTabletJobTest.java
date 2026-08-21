@@ -616,8 +616,9 @@ public class MergeTabletJobTest {
         // against the mocked synthetic warehouse and fail).
         new MockUp<StarOSAgent>() {
             @Mock
-            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
-                                             FileCacheInfo cacheInfo, long groupId, Map<String, String> properties,
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
                                              ComputeResource computeResource) {
             }
         };
@@ -1291,11 +1292,15 @@ public class MergeTabletJobTest {
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartition.getId()));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        Map<Long, List<Long>> newTabletIdToGroupIds = new HashMap<>();
+        for (long newTabletId : newToOldTabletIds.keySet()) {
+            newTabletIdToGroupIds.put(newTabletId, List.of(newIndex.getShardGroupId()));
+        }
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
                 newToOldTabletIds,
+                newTabletIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartition.getId()),
                 table.getPartitionFileCacheInfo(physicalPartition.getId()),
-                newIndex.getShardGroupId(),
                 properties, WarehouseManager.DEFAULT_RESOURCE);
     }
 
@@ -1310,9 +1315,9 @@ public class MergeTabletJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
-                                             long groupId,
                                              Map<String, String> properties,
                                              ComputeResource computeResource) throws DdlException {
                 throw new DdlException("simulated StarOS failure");
