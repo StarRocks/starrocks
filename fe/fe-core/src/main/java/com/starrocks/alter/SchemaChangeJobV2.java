@@ -163,6 +163,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
+    // compression dict info
+    @SerializedName(value = "hasZstdCompressionChange")
+    private boolean hasZstdCompressionChange;
+    @SerializedName(value = "zstdCompressionColumns")
+    private Set<ColumnId> zstdCompressionColumns = null;
+    @SerializedName(value = "zstdCompressionPageSizes")
+    private Map<ColumnId, Integer> zstdCompressionPageSizes = null;
+
     // alter index info
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
@@ -263,6 +271,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.hasBfChange = job.hasBfChange;
         this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
         this.bfFpp = job.bfFpp;
+        // See the note in LakeTableSchemaChangeJob's copy constructor: this is what
+        // copyForPersist() serializes, and onFinished() reads these three fields.
+        this.hasZstdCompressionChange = job.hasZstdCompressionChange;
+        this.zstdCompressionColumns =
+                job.zstdCompressionColumns == null ? null : Sets.newHashSet(job.zstdCompressionColumns);
+        this.zstdCompressionPageSizes =
+                job.zstdCompressionPageSizes == null ? null : Maps.newHashMap(job.zstdCompressionPageSizes);
         this.indexChange = job.indexChange;
         this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
         this.watershedTxnId = job.watershedTxnId;
@@ -319,6 +334,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
+    }
+
+    public void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns,
+                                Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.hasZstdCompressionChange = hasZstdCompressionChange;
+        this.zstdCompressionColumns = zstdCompressionColumns;
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
     }
 
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -461,6 +483,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
+                            .setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes)
                             .setIndexes(originIndexMetaId == baseIndexMetaId ?
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
@@ -767,7 +790,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxMetaId);
                     if (originSchemaTColumns == null) {
                         originSchemaTColumns = tbl.getSchemaByIndexMetaId(originIdxMetaId).stream()
-                                .map(Column::toThrift)
+                                .map(column -> {
+                                    TColumn tColumn = column.toThrift();
+                                    // BE rebuilds the base schema from these and diffs it against the new
+                                    // one to choose between hard-linking the existing files and rewriting
+                                    // them. Without the per-column ZSTD fields the base always reads as
+                                    // "no ZSTD", so every later schema change on such a table pays a full
+                                    // rewrite that changes no encoding. Only those fields are filled in
+                                    // here: is_bloom_filter_column and has_bitmap_index have the same
+                                    // problem on this path and predate this feature.
+                                    column.setIndexFlag(tColumn, List.of(), null,
+                                            tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes());
+                                    return tColumn;
+                                })
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(originIdxMetaId, originSchemaTColumns);
                     }
@@ -1028,6 +1063,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // update bloom filter
         if (hasBfChange) {
             tbl.setBloomFilterInfo(bfColumns, bfFpp);
+        }
+        // update compression dict columns
+        if (hasZstdCompressionChange) {
+            tbl.setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes);
         }
         // update index
         if (indexChange) {

@@ -339,6 +339,32 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setBloomFilterInfo(bfColumnIds, bfFpp);
 
                 IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
+
+                // analyze compression dict columns
+                Map<String, Integer> zstdCompressionPageSizes =
+                        PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(properties, baseSchema);
+                Set<String> zstdCompressionColumns =
+                        zstdCompressionPageSizes == null ? null : zstdCompressionPageSizes.keySet();
+                if (zstdCompressionColumns != null && zstdCompressionColumns.isEmpty()) {
+                    zstdCompressionColumns = null;
+                }
+                Set<ColumnId> zstdCompressionColumnIds = null;
+                Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
+                if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+                    zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    zstdCompressionColumnIds.addAll(
+                            zstdCompressionColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                    zstdCompressionPageSizeIds = Maps.newHashMap();
+                    for (Map.Entry<String, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                        if (entry.getValue() != null && entry.getValue() > 0) {
+                            zstdCompressionPageSizeIds.put(ColumnId.create(entry.getKey()), entry.getValue());
+                        }
+                    }
+                    if (zstdCompressionPageSizeIds.isEmpty()) {
+                        zstdCompressionPageSizeIds = null;
+                    }
+                }
+                table.setZstdCompressionColumns(zstdCompressionColumnIds, zstdCompressionPageSizeIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

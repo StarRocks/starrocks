@@ -59,6 +59,10 @@ class TypeInfo;
 class BlockCompressionCodec;
 class WritableFile;
 
+namespace compression {
+class ZstdCDict;
+} // namespace compression
+
 class Column;
 
 static const size_t dictionary_min_rowcount = 256;
@@ -101,6 +105,19 @@ struct ColumnWriterOptions {
     std::string field_name;
     const FlatJsonConfig* flat_json_config = nullptr;
 
+    // compression dict column-level compression dictionary (a ZSTD dictionary). Set true (via segment_writer from
+    // the tablet schema, or propagated to flat-JSON sub-columns) to build a
+    // per-column per-segment sampled dictionary and compress every data page
+    // referencing it. Only meaningful for ZSTD PLAIN string/JSON columns.
+    bool use_zstd_compression = false;
+    // How much smaller the trial pages have to get before the per-column dictionary
+    // is kept. Defaults to config::zstd_compression_dict_min_gain; tests set it
+    // directly, including to a negative value, to force a decision either way.
+    double zstd_compression_dict_min_gain = 0.10;
+    // Initialized from config::zstd_compression_dict_sample_bytes in the constructor
+    // (config.h is deliberately not included by this header).
+    uint32_t zstd_compression_dict_sample_bytes;
+
     std::string to_string() const {
         std::string meta_str;
         if (meta) {
@@ -127,6 +144,8 @@ struct ColumnWriterOptions {
         oss << "is_compaction=" << is_compaction << ", ";
         oss << "need_flat=" << need_flat << ", ";
         oss << "field_name=\"" << field_name << "\", ";
+        oss << "use_zstd_compression=" << use_zstd_compression << ", ";
+        oss << "zstd_compression_dict_min_gain=" << zstd_compression_dict_min_gain << ", ";
         oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
         oss << "}";
         return oss.str();
@@ -317,6 +336,51 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    // Write side of the per-column ZSTD compression dictionary. Lazily built from
+    // the first eligible page's encoded values; every page AFTER that one is then
+    // compressed referencing it. See finish_current_page() (sampling gate) and
+    // write_data() (dict page emission).
+    //
+    // The page the sample came from is compressed WITHOUT the dictionary. It would
+    // otherwise compress against itself, which tells us nothing about whether the
+    // dictionary is worth keeping -- and the reader decodes a no-dict frame
+    // identically whether or not a raw-content dictionary is referenced, so a plain
+    // page 0 in a dictionary column is safe.
+    std::unique_ptr<compression::ZstdCDict> _compression_cdict;
+    std::string _zstd_compression_dict_sample; // dict bytes, persisted as the dict page
+    bool _zstd_compression_dict_ready = false; // _compression_cdict has been built
+    bool _cdict_used = false;                  // at least one data page was actually dict-compressed
+    // Whether the dictionary has been put to the test yet. The first page compressed
+    // after the dictionary exists is compressed BOTH ways and the smaller result is
+    // kept; if the dictionary did not win by a clear margin it is abandoned for the
+    // whole column, which is what keeps it from costing anything on data it cannot
+    // help (incompressible bytes, rows so large a page holds one of them, columns
+    // whose redundancy a plain page already captures).
+    bool _zstd_compression_dict_proven = false;
+    // Trial state. The first kZstdDictTrialPages pages after the sample are
+    // compressed BOTH ways and written plainly, so the decision stays reversible
+    // without buffering anything. Several pages rather than one, because a column
+    // whose rows differ wildly in size can easily open with pages the dictionary
+    // cannot help and still benefit greatly overall.
+    static constexpr int kZstdDictTrialPages = 8;
+    int _zstd_compression_dict_trial_pages = 0;
+    uint64_t _zstd_compression_dict_trial_with = 0;
+    uint64_t _zstd_compression_dict_trial_without = 0;
+    // A column that never reaches kZstdDictTrialPages pages ends up with no
+    // dictionary at all, which is the right answer for it: the dictionary page is
+    // about a page in size, so on a column of a few pages it cannot pay for itself
+    // however well it compresses them.
+    // Set when the trial rejected the dictionary. The decision is final for the
+    // whole column: without it the sampling gate below, which only asks whether a
+    // dictionary exists right now, would simply build another one from a later page
+    // and that one would never be put to the test.
+    bool _zstd_compression_dict_abandoned = false;
+    // Set for exactly the page the dictionary was sampled from, so that page is
+    // compressed plainly instead of against itself.
+    bool _sampling_page = false;
+    // Level to bake into the CDict (-1 = zstd default).
+    int _effective_compression_level() const;
 
     Buffer<Slice> _slice_buf;
 };

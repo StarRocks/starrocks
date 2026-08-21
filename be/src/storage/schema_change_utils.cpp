@@ -759,6 +759,13 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             } else if (new_column.is_bf_column() != ref_column.is_bf_column()) {
                 *sc_directly = true;
                 return Status::OK();
+            } else if (new_column.use_zstd_compression() != ref_column.use_zstd_compression() ||
+                       new_column.zstd_compression_page_size() != ref_column.zstd_compression_page_size()) {
+                // the column's on-disk encoding changed. A linked schema change hard-links the
+                // existing segments, so the ALTER would report success while the data stays
+                // encoded the old way.
+                *sc_directly = true;
+                return Status::OK();
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();

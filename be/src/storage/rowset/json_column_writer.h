@@ -89,5 +89,16 @@ protected:
 
     // Track global dict validity for each sub-column
     std::map<std::string, bool> _subcolumn_dict_valid;
+
+    // captured from the parent ColumnWriterOptions so it can be propagated to
+    // the flat string/JSON sub-columns (the `remain` blob is the primary target).
+    // The fallback plain _json_writer already carries this flag via its own opts.
+    bool _use_zstd_compression = false;
+    // The parent column's data page size. The flattened sub-columns are what
+    // actually holds the data, so a per-column page size that stopped at the
+    // parent would have no effect on a JSON column at all.
+    uint32_t _data_page_size = 0;
+    uint32_t _zstd_compression_dict_sample_bytes = 0;
+    double _zstd_compression_dict_min_gain = 0;
 };
 } // namespace starrocks
