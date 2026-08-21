@@ -352,10 +352,10 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
 
 // Mark every scan whose output is reduced by a row-filtering operator (a SELECT carrying a residual
 // predicate that could not be pushed into the scan) sitting ABOVE it but below the TopN limit. An ANN
-// top-k scan consumes this so its filter resolver uses the exact brute-force path instead of a
-// segment-level k-limit that would under-return. This observes the real execution tree (not a planner
-// heuristic), so it stays correct regardless of how single-column predicates are placed. A TopN resets
-// the marker: a filter above the limit is applied post-limit and cannot break completeness.
+// top-k scan consumes this so its filter resolver can apply the configured underfill fallback policy.
+// This observes the real execution tree (not a planner heuristic), so the marker stays accurate
+// regardless of how single-column predicates are placed. A TopN resets the marker: a filter above the
+// limit is applied post-limit and cannot affect the scan's top-k completeness.
 static void mark_filtered_above_scans(ExecNode* node, bool saw_filter) {
     switch (node->type()) {
     case TPlanNodeType::SORT_NODE:

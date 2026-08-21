@@ -2286,7 +2286,7 @@ TEST_F(LakeRowsetDcgTest, get_each_segment_iterator_no_delvec_applies_overlay_sk
 // Regression: the lake read-options propagation chain must carry has_predicate_above_iterator
 // from RowsetReadOptions into SegmentReadOptions. Before the fix, Rowset::read copied ~28 option
 // fields but skipped this one, so a shared-data ANN scan with an above-iterator residual saw the
-// default (false) and could wrongly take segment-level PRE, which under-returns. The non-lake
+// default (false) and could not apply the configured top-k underfill fallback policy. The non-lake
 // Rowset path already copies it (storage/rowset/rowset.cpp).
 TEST_F(LakeRowsetTest, test_propagate_has_predicate_above_iterator) {
     create_rowsets_for_testing();

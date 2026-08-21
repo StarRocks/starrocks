@@ -1479,16 +1479,19 @@ Status SegmentIterator::_init_ann_reader() {
     // _init_column_iterators runs (refine re-ranks above the scan, stays out).
     if (_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
         // PRE picks the top-k inside the segment, so anything that drops rows above the iterator --
-        // an above-iterator predicate, or a runtime filter post-filtering the top-k -- makes it
-        // under-return; fall back to exact brute-force (the upper TopN cuts its k after the filter).
-        // A residual additionally needs index filtered-search support; no residual is a plain top-k.
+        // an above-iterator predicate, or a runtime filter evaluated after the per-segment ANN -- can
+        // make it under-return. When the underfill fallback is enabled, route those queries to exact
+        // brute-force (the upper TopN cuts its k after the filter). When it is disabled, keep the ANN
+        // physical plan and accept that evaluating those predicates later may return fewer than k
+        // rows. A residual additionally needs index filtered-search support; no residual is a plain
+        // top-k.
         const bool has_runtime_filter =
                 _opts.enable_join_runtime_filter_pushdown &&
                 (!_opts.runtime_filter_preds.empty() || _opts.runtime_range_pruner.has_runtime_filters());
-        const bool prefilter_allowed =
-                !_opts.has_predicate_above_iterator && !has_runtime_filter &&
-                (_opts.pred_tree.empty() || _vector_index_ctx->ann_reader->supports_efficient_filtered_search());
-        if (!prefilter_allowed) {
+        const bool must_fallback_for_post_ann_filter = config::enable_vector_index_topk_underfill_fallback &&
+                                                       (_opts.has_predicate_above_iterator || has_runtime_filter);
+        if (must_fallback_for_post_ann_filter ||
+            (!_opts.pred_tree.empty() && !_vector_index_ctx->ann_reader->supports_efficient_filtered_search())) {
             RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
         }
     }
