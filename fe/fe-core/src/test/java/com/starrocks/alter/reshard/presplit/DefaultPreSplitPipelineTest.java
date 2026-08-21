@@ -150,6 +150,7 @@ public class DefaultPreSplitPipelineTest {
             dataTierCallCapture.set(request);
             throw new StarRocksException("dataTier should not be called");
         };
+        PreSplitProfile profile = new PreSplitProfile();
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
@@ -157,12 +158,18 @@ public class DefaultPreSplitPipelineTest {
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
-            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
-                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+            try (PreSplitProfile.Scope ignored =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
 
             Assertions.assertTrue(prepared.isPresent());
             Assertions.assertSame(fakeJob, prepared.get().payload());
             Assertions.assertNull(dataTierCallCapture.get(), "data tier must not be invoked when meta tier succeeds");
+            Assertions.assertEquals(FILE_TOTAL_BYTES,
+                    profile.toRuntimeProfile().getCounter(PreSplitProfile.ESTIMATED_INPUT_BYTES).getValue(),
+                    "metadata-only attempts must expose the estimate that sized the split");
         }
     }
 
@@ -174,6 +181,7 @@ public class DefaultPreSplitPipelineTest {
         Sampler dataTier = request -> new SampleSet(
                 List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
                 new Estimates(FILE_TOTAL_BYTES, 4L));
+        PreSplitProfile profile = new PreSplitProfile();
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
@@ -181,10 +189,16 @@ public class DefaultPreSplitPipelineTest {
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
-            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
-                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+            try (PreSplitProfile.Scope ignored =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
 
             Assertions.assertTrue(prepared.isPresent());
+            Assertions.assertEquals("meta_tier, data_tier",
+                    profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                    "fallback profiles must retain both attempted tiers");
         }
     }
 
@@ -234,13 +248,20 @@ public class DefaultPreSplitPipelineTest {
         Sampler dataTier = request -> {
             throw new AssertionError("data tier must not be invoked when meta tier returns NO_SPLIT");
         };
+        PreSplitProfile profile = new PreSplitProfile();
 
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
-            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
-                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+            try (PreSplitProfile.Scope ignored =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
 
             Assertions.assertTrue(prepared.isEmpty(), "NO_SPLIT must short-circuit to Optional.empty");
+            Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_META_TIER,
+                    profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                    "NO_SPLIT attempts must still identify the source tier that produced the result");
             mocked.verifyNoInteractions();
         }
     }
@@ -790,12 +811,16 @@ public class DefaultPreSplitPipelineTest {
             long baselineTierCount = MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue();
 
             TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+            PreSplitProfile profile = new PreSplitProfile();
             try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
                 mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                         .thenReturn(fakeJob);
 
-                newDerivedPipeline(singleBaseTarget(), derived)
-                        .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+                try (PreSplitProfile.Scope ignored =
+                             PreSplitProfile.startAttempt(profile, LoadKind.MV_REFRESH)) {
+                    newDerivedPipeline(singleBaseTarget(), derived)
+                            .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+                }
             }
 
             Assertions.assertEquals(0L, MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS.getValue().longValue(),
@@ -805,6 +830,12 @@ public class DefaultPreSplitPipelineTest {
                     "the derived tier must still report which tier produced the boundaries");
             Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount());
             Assertions.assertEquals(2, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getSnapshot().getMax());
+            Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_DERIVED_TIER,
+                    profile.toRuntimeProfile().getInfoString("SourceTiers"));
+            Assertions.assertEquals(FILE_TOTAL_BYTES,
+                    profile.toRuntimeProfile().getCounter(PreSplitProfile.ESTIMATED_INPUT_BYTES).getValue());
+            Assertions.assertEquals(2L,
+                    profile.toRuntimeProfile().getCounter(PreSplitProfile.BOUNDARIES_PLANNED).getValue());
         });
     }
 
