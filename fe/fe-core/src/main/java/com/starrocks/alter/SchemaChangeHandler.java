@@ -4952,13 +4952,12 @@ public class SchemaChangeHandler extends AlterHandler {
 
     /**
      * Whether this is a range-distributed primary-key table whose ORDER BY key differs from its primary
-     * key. Range distribution is part of the test on purpose: a HASH-distributed primary-key table has
-     * always been allowed a separate ORDER BY and is not affected by any of this.
+     * key. Both the range and the primary-key tests live inside {@link MetaUtils#hasSeparateSortKey},
+     * so a HASH-distributed primary-key table with a separate ORDER BY -- long supported, unaffected by
+     * any of this -- cannot be caught by re-deriving the condition slightly differently here.
      */
     private static boolean isSeparateSortKeyRangePrimaryKey(OlapTable olapTable) {
-        return olapTable.isRangeDistribution()
-                && olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                && MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId());
+        return MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId());
     }
 
     /**

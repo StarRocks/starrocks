@@ -319,7 +319,7 @@ public class MetaUtils {
         }
         List<Column> schema = indexMeta.getSchema();
         List<Column> sortKeyColumns = new ArrayList<>();
-        if (usesPrimaryKeyForRange(indexMeta)) {
+        if (usesPrimaryKeyForRange(olapTable, indexMeta)) {
             for (Column column : schema) {
                 boolean isKey = column.isKey();
                 if (keynessOverride != null) {
@@ -364,10 +364,23 @@ public class MetaUtils {
                     "OlapTable %s has no MaterializedIndexMeta for indexMetaId %d",
                     olapTable.getName(), indexMetaId));
         }
-        return usesPrimaryKeyForRange(indexMeta);
+        return usesPrimaryKeyForRange(olapTable, indexMeta);
     }
 
-    private static boolean usesPrimaryKeyForRange(MaterializedIndexMeta indexMeta) {
+    /**
+     * Whether this index routes by its primary key rather than by its ORDER BY.
+     *
+     * <p>Range distribution is part of the test, and deliberately lives here rather than at the call
+     * sites: a HASH-distributed primary-key table has always been allowed an ORDER BY that differs from
+     * its primary key, and for that shape the sort key is still the answer. Leaving the test to callers
+     * made it something each one could forget -- and every caller of
+     * {@link #getRangeDistributionColumns(OlapTable, long)} that forgot it would silently be handed the
+     * primary-key columns for a table whose routing has nothing to do with them.
+     */
+    private static boolean usesPrimaryKeyForRange(OlapTable olapTable, MaterializedIndexMeta indexMeta) {
+        if (!olapTable.isRangeDistribution()) {
+            return false;
+        }
         if (indexMeta.getKeysType() != KeysType.PRIMARY_KEYS || indexMeta.getSortKeyIdxes() == null) {
             return false;
         }
