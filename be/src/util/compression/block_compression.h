@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <vector>
 
@@ -43,6 +44,13 @@
 #include "util/slice.h"
 
 namespace starrocks {
+
+// Handles for the per-column ZSTD compression dictionary. Forward-declared (defined
+// in zstd_dict.h) so this widely-included header does not pull in <zstd.h>.
+namespace compression {
+class ZstdCDict;
+class ZstdDDict;
+} // namespace compression
 
 // This class is used to encapsulate Compression/Decompression algorithm.
 // This class only used to compress a block data, which means all data
@@ -79,10 +87,33 @@ public:
                             size_t uncompressed_size = -1, faststring* compressed_body1 = nullptr,
                             raw::RawString* compressed_body2 = nullptr) const;
 
+    // compress `input` referencing a per-column compression dictionary (a ZSTD dictionary). The
+    // compression level is baked into the CDict. Only ZstdBlockCompression
+    // overrides this; the base returns NotSupported so any accidental use on a
+    // non-ZSTD codec fails loudly instead of writing undecodable bytes.
+    virtual Status compress(const std::vector<Slice>& input, Slice* output, bool use_compression_buffer,
+                            size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
+                            const compression::ZstdCDict* cdict) const {
+        return Status::NotSupported("dict-based compress is not supported by this codec");
+    }
+
     // Decompress input data into output, output's capacity should be large
     // enough for decompressed data. Size of decompressed data will be set in
     // output's size.
     virtual Status decompress(const Slice& input, Slice* output) const = 0;
+
+    // decompress a frame referencing a per-column compression dictionary (a ZSTD dictionary).
+    // Only ZstdBlockCompression overrides this; the base returns NotSupported.
+    // `use_ctx_cache` selects the decompression context strategy: true keeps a
+    // dictionary-loaded context warm in a thread-local slot (so consecutive pages
+    // of a column skip re-establishing the dictionary session), false borrows from
+    // the shared pool like every other decompression. Reads pass true; false exists
+    // so that the pool path -- which is also where a context-allocation failure
+    // lands -- stays reachable from tests instead of only under memory pressure.
+    virtual Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict,
+                              bool use_ctx_cache = true) const {
+        return Status::NotSupported("dict-based decompress is not supported by this codec");
+    }
 
     // Returns an upper bound on the max compressed length.
     virtual size_t max_compressed_len(size_t len) const = 0;
@@ -110,5 +141,38 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
                                    int compression_level = -1);
 
 bool use_compression_pool(CompressionTypePB type);
+
+// Dictionary decompression keeps a few ZSTD contexts warm per thread (see
+// DictDCtxCache in the .cpp). Global malloc is hooked, so those ~94 KB allocations are
+// already charged to whichever thread-local memory tracker happened to be current when
+// a context was created -- usually some query's -- and are only released when the thread
+// exits. That leaves the charge on a query that has long finished.
+//
+// A higher layer installs this scope so the allocation and the free are both attributed
+// to a stable, process-level tracker instead. Base must not know what a MemTracker is,
+// so it only calls the two hooks around ZSTD_createDCtx / ZSTD_freeDCtx. Both are
+// called on the thread that owns the context; leave() must undo exactly what enter()
+// did on that same thread. Installing nothing keeps the pre-existing behaviour.
+using DictDCtxAllocScopeHook = void (*)();
+
+namespace detail {
+// Inline variables rather than definitions in the .cpp: the installer lives in a
+// higher-level module, and a fresh cross-archive symbol would depend on static library
+// ordering that some test targets do not provide.
+inline DictDCtxAllocScopeHook g_dict_dctx_scope_enter = nullptr;
+inline DictDCtxAllocScopeHook g_dict_dctx_scope_leave = nullptr;
+inline std::atomic<size_t> g_dict_dctx_cache_bytes{0};
+} // namespace detail
+
+inline void set_dict_dctx_alloc_scope(DictDCtxAllocScopeHook enter, DictDCtxAllocScopeHook leave) {
+    detail::g_dict_dctx_scope_enter = enter;
+    detail::g_dict_dctx_scope_leave = leave;
+}
+
+// Bytes currently held by the per-thread dictionary decompression contexts, summed over
+// every thread. Exposed so the attribution above can be sanity-checked from outside.
+inline size_t dict_dctx_cache_memory_bytes() {
+    return detail::g_dict_dctx_cache_bytes.load(std::memory_order_relaxed);
+}
 
 } // namespace starrocks
