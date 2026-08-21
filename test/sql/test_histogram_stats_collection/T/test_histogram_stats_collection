@@ -1,0 +1,243 @@
+-- name: test_histogram_scope_default
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+-- k_num: 5000 distinct values, above histogram_mcv_size (100), so MCV exclusion
+--        leaves rows behind and the histogram() aggregate produces real buckets.
+-- k_low: 20 distinct values, below histogram_mcv_size, so the MCVs cover every
+--        value and the bucket subquery ends up empty.
+-- k_str: char family, which always takes the placeholder bucket path.
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- histogram_sample_ratio is pinned to 1 in every ANALYZE below. The analyzer already
+-- rewrites it to 1 for tables under statistic_sample_collect_rows rows, but only when
+-- the table's reported row count is non-zero, and that count lags tablet reports right
+-- after an INSERT. Passing it explicitly keeps the collected values stable.
+
+-- No histogram_stats_scope property: should collect every kind, like 'mcv,buckets'.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1') WITH SYNC MODE;
+
+select count(1) from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1';
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+drop database histo_test_${uuid0} force;
+
+
+-- name: test_histogram_scope_mcv
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- scope 'mcv' skips the bucket aggregate entirely. A numeric column can carry sampled
+-- bounds, so the single placeholder bucket gets real min/max rather than the Infinity
+-- fallback used for types that cannot carry bounds.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv') WITH SYNC MODE;
+
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+-- These two are opposite polarity: the Infinity fallback must NOT be used (expects 0) and
+-- the real sampled bounds must be (expects 1). Together they pin the placeholder bucket to
+-- [["1","5000",<non-mcv count>,0]].
+select buckets like '[["Infinity"%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+select buckets like '[["1","5000",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+-- The placeholder is a single bucket. This is what separates it from a real histogram,
+-- since both are non-null.
+select json_length(parse_json(buckets)) from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+-- Scope value matching is case insensitive.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'MCV') WITH SYNC MODE;
+select mcv is not null, buckets like '[["1","5000",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+drop database histo_test_${uuid0} force;
+
+
+-- name: test_histogram_scope_buckets
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- scope 'buckets' skips MCV collection, so mcv is written as SQL NULL and no values are
+-- excluded from the bucket aggregate.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'buckets') WITH SYNC MODE;
+
+select mcv is null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+select buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+-- A real histogram, not the single placeholder bucket: more than one bucket, and the
+-- lower bound is a collected value rather than the Infinity fallback.
+select json_length(parse_json(buckets)) > 1 from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+select buckets like '[["Infinity"%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+drop database histo_test_${uuid0} force;
+
+
+-- name: test_histogram_scope_all_kinds
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- Naming both kinds collects MCVs and real buckets in the same row.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv,buckets') WITH SYNC MODE;
+
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+select json_length(parse_json(buckets)) > 1 from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+
+-- Multiple columns in one statement each get their own row.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num, k_str PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv,buckets') WITH SYNC MODE;
+[ORDER] select column_name, mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' order by column_name;
+
+drop database histo_test_${uuid0} force;
+
+
+-- name: test_histogram_scope_low_cardinality
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- k_low has 20 distinct values, under the default histogram_mcv_size of 100, so every
+-- value becomes an MCV and the bucket subquery excludes all rows. The bucket aggregate
+-- then sees no input and writes SQL NULL. This is the intended behaviour: the MCVs
+-- already describe the column completely.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv,buckets') WITH SYNC MODE;
+
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+select buckets is null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+
+-- Same column under scope 'buckets': no MCVs are collected, so nothing is excluded and
+-- real buckets are produced even though the cardinality is low.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'buckets') WITH SYNC MODE;
+
+select mcv is null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+
+-- Capping the MCV size below the cardinality leaves values for the buckets.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low PROPERTIES('histogram_sample_ratio' = '1', 'histogram_mcv_size' = '5', 'histogram_stats_scope' = 'mcv,buckets') WITH SYNC MODE;
+
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+
+drop database histo_test_${uuid0} force;
+
+
+-- name: test_histogram_scope_date_bounds
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+CREATE TABLE `t1` (
+    `k_num`   bigint,
+    `k_date`  date,
+    `k_low_date` date
+)
+PROPERTIES ('replication_num' = '1');
+
+-- k_date spans 1000 distinct days (above histogram_mcv_size), so sampled bounds are usable.
+-- k_low_date has 10 distinct days, all of which become MCVs, so the bounds subquery excludes
+-- every row and comes back empty.
+INSERT INTO t1
+SELECT g1, days_add('2024-01-01', g1 % 1000), days_add('2024-01-01', g1 % 10)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- Bounds are sampled from the non-MCV rows, so the bucket carries real dates rather than Infinity.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_date PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv') WITH SYNC MODE;
+
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_date';
+select buckets not like '%Infinity%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_date';
+
+-- With no usable bounds a date column stores NULL buckets, not the Infinity placeholder:
+-- HistogramUtils.convertBuckets cannot parse "Infinity" as a date and would drop the bucket,
+-- silently losing the non-MCV count from getTotalRows().
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low_date PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv') WITH SYNC MODE;
+
+select mcv is not null, buckets is null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low_date';
+
+drop database histo_test_${uuid0} force;
+
+-- name: test_histogram_scope_varchar
+
+create database histo_test_${uuid0};
+use histo_test_${uuid0};
+
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+
+-- Char family columns always skip the bucket aggregate, and they cannot carry sampled
+-- bounds, so the placeholder bucket uses the Infinity fallback for both bounds.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_str PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv') WITH SYNC MODE;
+
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+select buckets like '[["Infinity","Infinity",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+
+-- scope 'buckets' on a char family column cannot produce buckets, so the MCVs are collected
+-- anyway rather than storing a row that carries no information at all.
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_str PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'buckets') WITH SYNC MODE;
+
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+select buckets like '[["Infinity","Infinity",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+
+-- 40 distinct values over 5000 rows, all captured as MCVs, so the placeholder carries no rows.
+select buckets = '[["Infinity","Infinity",0,0]]' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+
+drop database histo_test_${uuid0} force;
+

@@ -335,6 +335,7 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 | histogram_sample_ratio            | FLOAT    | 0.1               | ヒストグラムのサンプリング比率。                          |
 | histogram_max_sample_row_count    | LONG     | 10000000          | ヒストグラムのために収集する最大行数。       |
 | histogram_collect_bucket_ndv_mode | STRING   | none              | ヒストグラムバケットごとの重複排除カウント (NDV) を推定するモード。`none` (デフォルト、重複排除カウントは収集されません)、`hll` (HyperLogLog を使用して正確に推定)、または `sample` (低オーバーヘッドのサンプルベースの推定器を使用)。 |
+| histogram_stats_scope             | STRING   | `mcv,buckets`     | ヒストグラムで収集する統計情報の種類。`mcv` (最も一般的な値) と `buckets` (等高バケット) のカンマ区切りの集合で指定します。プロパティを省略するとすべての種類を収集します。`buckets` を収集しない場合は、行数が正しく保たれるように全体を覆う単一のバケットが保存されます。 |
 
 ヒストグラムのために収集する行数は、複数のパラメータによって制御されます。それは `statistic_sample_collect_rows` とテーブル行数 * `histogram_sample_ratio` の間の大きい値です。この数は `histogram_max_sample_row_count` で指定された値を超えることはできません。値を超えた場合、`histogram_max_sample_row_count` が優先されます。
 

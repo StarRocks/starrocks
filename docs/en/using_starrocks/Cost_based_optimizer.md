@@ -333,6 +333,7 @@ Parameter description:
 | histogram_sample_ratio            | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count    | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
 | histogram_collect_bucket_ndv_mode | STRING   | none              | The mode for estimating the number of distinct values (NDV) per histogram bucket. `none` (default, no distinct count collected), `hll` (uses HyperLogLog for accurate estimation), or `sample` (uses a low overhead sample-based estimator). |
+| histogram_stats_scope             | STRING   | `mcv,buckets`     | The kinds of statistics to collect for a histogram, as a comma-separated set of `mcv` (most common values) and `buckets` (equi-height buckets). Omit the property to collect every kind. When `buckets` is not collected, a single all-encompassing bucket is stored so that the row count stays correct. |
 
 The number of rows to collect for a histogram is controlled by multiple parameters. It is the larger value between `statistic_sample_collect_rows` and table row count * `histogram_sample_ratio`. The number cannot exceed the value specified by `histogram_max_sample_row_count`. If the value is exceeded, `histogram_max_sample_row_count` takes precedence.
 

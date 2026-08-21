@@ -91,6 +91,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+            StatsConstants.HISTOGRAM_STATS_SCOPE,
             StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
             StatsConstants.INIT_SAMPLE_STATS_JOB,
 
@@ -491,6 +492,20 @@ public class AnalyzeStmtAnalyzer {
                         p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
+
+                // Validated but deliberately not defaulted into the map: omitting the property already
+                // means "collect every kind", so there is nothing to materialise.
+                if (properties.containsKey(StatsConstants.HISTOGRAM_STATS_SCOPE)) {
+                    try {
+                        StatsConstants.parseHistogramStatsScope(
+                                properties.get(StatsConstants.HISTOGRAM_STATS_SCOPE));
+                    } catch (IllegalArgumentException e) {
+                        throw new SemanticException("Property '%s' must be a comma-separated subset of %s: %s",
+                                StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_VALUES,
+                                e.getMessage());
+                    }
+                }
+
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
                         p -> String.valueOf(Config.histogram_collect_bucket_ndv_mode));
 
