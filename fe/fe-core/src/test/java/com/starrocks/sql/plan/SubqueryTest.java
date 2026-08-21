@@ -1369,50 +1369,50 @@ public class SubqueryTest extends PlanTestBase {
             String sql =
                     "select nullif((select max(v4) from t1), (select min(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  7:Project\n"
-                    + "  |  <slot 12> : nullif(6: max, 10: min)");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 12> : nullif(5: max, 10: min)");
         }
         {
             String sql =
                     "select nullif((select max(v4) from t1), (select avg(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  7:Project\n"
-                    + "  |  <slot 12> : nullif(CAST(6: max AS DOUBLE), 10: avg)");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 12> : nullif(CAST(5: max AS DOUBLE), 10: avg)");
         }
         {
             String sql =
                     "select ifnull((select max(v4) from t1), (select min(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  7:Project\n" +
-                    "  |  <slot 12> : ifnull(6: max, 10: min)");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 12> : ifnull(5: max, 10: min)");
         }
         {
             String sql =
                     "select ifnull((select max(v4) from t1), (select avg(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  7:Project\n" +
-                    "  |  <slot 12> : ifnull(CAST(6: max AS DOUBLE), 10: avg)");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 12> : ifnull(CAST(5: max AS DOUBLE), 10: avg)");
         }
         {
             String sql =
                     "select ifnull((select max(v4) from t1), (select min(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  7:Project\n" +
-                    "  |  <slot 12> : ifnull(6: max, 10: min)");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 12> : ifnull(5: max, 10: min)");
         }
         {
             String sql =
                     "select coalesce((select max(v4) from t1), (select any_value(v5) from t1), (select min(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  12:Project\n" +
-                    "  |  <slot 17> : coalesce(6: max, 11: any_value, 15: min)");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 17> : coalesce(5: max, 10: any_value, 15: min)");
         }
         {
             String sql =
                     "select coalesce((select max(v4) from t1), (select avg(v5) from t1), (select min(v6) from t1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  12:Project\n" +
-                    "  |  <slot 17> : coalesce(CAST(6: max AS DOUBLE), 11: avg, CAST(15: min AS DOUBLE))");
+            assertContains(plan, "  2:Project\n"
+                    + "  |  <slot 17> : coalesce(CAST(5: max AS DOUBLE), 10: avg, CAST(15: min AS DOUBLE))");
         }
         {
             String sql =
@@ -1421,8 +1421,8 @@ public class SubqueryTest extends PlanTestBase {
                             "else (select min(v6) from t1) " +
                             "end c";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  13:Project\n" +
-                    "  |  <slot 17> : if(11: count > 10, 16: max, 5: min)");
+            assertContains(plan, "  7:Project\n"
+                    + "  |  <slot 17> : if(10: count > 10, 15: max, 5: min)");
         }
         {
             String sql =
@@ -1431,8 +1431,8 @@ public class SubqueryTest extends PlanTestBase {
                             "else (select avg(v6) from t1) " +
                             "end c";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  13:Project\n" +
-                    "  |  <slot 17> : if(11: count > 10, CAST(16: max AS DOUBLE), 5: avg)");
+            assertContains(plan, "  7:Project\n"
+                    + "  |  <slot 17> : if(10: count > 10, CAST(15: max AS DOUBLE), 5: avg)");
         }
         {
             String sql =
@@ -1442,9 +1442,9 @@ public class SubqueryTest extends PlanTestBase {
                             "else (select min(v6) from t1) " +
                             "end c";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  24:Project\n" +
-                    "  |  <slot 27> : CASE WHEN 11: count > 10 THEN 16: max WHEN 21: count > 20 " +
-                    "THEN 26: any_value ELSE 5: min END");
+            assertContains(plan, "  12:Project\n"
+                    + "  |  <slot 27> : CASE WHEN 10: count > 10 THEN 15: max "
+                    + "WHEN 20: count > 20 THEN 25: any_value ELSE 5: min END");
         }
         {
             String sql =
@@ -1454,9 +1454,9 @@ public class SubqueryTest extends PlanTestBase {
                             "else (select min(v6) from t1) " +
                             "end c";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  24:Project\n" +
-                    "  |  <slot 27> : CASE WHEN 11: count > 10 THEN CAST(16: max AS DOUBLE) " +
-                    "WHEN 21: count > 20 THEN 26: avg ELSE CAST(5: min AS DOUBLE) END");
+            assertContains(plan, "  12:Project\n"
+                    + "  |  <slot 27> : CASE WHEN 10: count > 10 THEN CAST(15: max AS DOUBLE) "
+                    + "WHEN 20: count > 20 THEN 25: avg ELSE CAST(5: min AS DOUBLE) END");
         }
     }
 

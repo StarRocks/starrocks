@@ -686,6 +686,14 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: boolean
 * **導入バージョン**: v3.2.0
 
+### enable_merge_same_predicate_scalar_agg
+
+* **説明**: 同一のテーブルを同一の述語で読む、CROSS JOIN されたスカラー集計を、1 回のスキャンと 1 回の集計にマージするかどうか。`SELECT (SELECT count(*) FROM t WHERE p), (SELECT sum(a) FROM t WHERE p)` のようなクエリは、この機能が無効な場合サブクエリごとに `t` をスキャンします。述語が構造的に完全に一致するブランチのみがマージされるため、マージ後のスキャンが持つ述語はマージ前と同一であり、パーティションプルーニング、ゾーンマップ、遅延マテリアライゼーションの動作は変わりません。OLAP テーブルおよび Hive、Iceberg、Hudi、Delta Lake、Paimon、ODPS の外部テーブルに適用されます。GROUP BY、LIMIT、JOIN、非決定的な式を含むブランチ、および複数の DISTINCT カラムを生成することになる場合はマージされません。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **データ型**: boolean
+* **導入バージョン**: v4.2.0
+
 ### enable_materialized_view_agg_pushdown_rewrite
 
 * **説明**: マテリアライズドビュークエリ書き換えのための集計プッシュダウンを有効にするかどうか。`true` に設定されている場合、集計関数はクエリ実行中に Scan Operator にプッシュダウンされ、Join Operator が実行される前にマテリアライズドビューによって書き換えられます。これにより、Join によるデータ拡張が軽減され、クエリパフォーマンスが向上します。この機能のシナリオと制限の詳細については、[Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown) を参照してください。

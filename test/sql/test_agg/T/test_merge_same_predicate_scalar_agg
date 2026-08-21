@@ -1,0 +1,99 @@
+-- name: test_merge_same_predicate_scalar_agg
+
+-- Value-level correctness for the MergeSamePredicateScalarAggRule rewrite: every query below is run twice,
+-- once with the rule on and once with it off, and the two results must agree. The data is tiny and fixed so the
+-- expected values can be checked by hand:
+--   k=1 -> (10,100),(20,200)      k=2 -> (30,300),(40,NULL)
+--   k=3 -> (NULL,500)             k=99 -> no rows
+
+create table t_mspa (
+    k int,
+    a int,
+    b int
+) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+
+insert into t_mspa values (1, 10, 100), (1, 20, 200), (2, 30, 300), (2, 40, null), (3, null, 500);
+
+-- two branches sharing one predicate: merged into a single scan
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa where k = 1) c, (select sum(a) from t_mspa where k = 1) s;
+
+-- empty result set: count must stay 0, the other aggregates must stay NULL
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa where k = 99) c1,
+       (select count(a) from t_mspa where k = 99) c2,
+       (select sum(a) from t_mspa where k = 99) s,
+       (select avg(a) from t_mspa where k = 99) av,
+       (select max(a) from t_mspa where k = 99) mx;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa where k = 99) c1,
+       (select count(a) from t_mspa where k = 99) c2,
+       (select sum(a) from t_mspa where k = 99) s,
+       (select avg(a) from t_mspa where k = 99) av,
+       (select max(a) from t_mspa where k = 99) mx;
+
+-- count(*) vs count(col) when the aggregated column is NULL for every matching row
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa where k = 3) c1,
+       (select count(a) from t_mspa where k = 3) c2,
+       (select sum(a) from t_mspa where k = 3) s,
+       (select max(b) from t_mspa where k = 3) mx;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa where k = 3) c1,
+       (select count(a) from t_mspa where k = 3) c2,
+       (select sum(a) from t_mspa where k = 3) s,
+       (select max(b) from t_mspa where k = 3) mx;
+
+-- NULLs mixed with non-NULLs inside one group
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa where k = 2) c1,
+       (select count(b) from t_mspa where k = 2) c2,
+       (select sum(b) from t_mspa where k = 2) s,
+       (select avg(b) from t_mspa where k = 2) av;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa where k = 2) c1,
+       (select count(b) from t_mspa where k = 2) c2,
+       (select sum(b) from t_mspa where k = 2) s,
+       (select avg(b) from t_mspa where k = 2) av;
+
+-- five branches under one predicate
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa where k = 1) c1,
+       (select sum(a) from t_mspa where k = 1) c2,
+       (select max(a) from t_mspa where k = 1) c3,
+       (select min(b) from t_mspa where k = 1) c4,
+       (select avg(b) from t_mspa where k = 1) c5;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa where k = 1) c1,
+       (select sum(a) from t_mspa where k = 1) c2,
+       (select max(a) from t_mspa where k = 1) c3,
+       (select min(b) from t_mspa where k = 1) c4,
+       (select avg(b) from t_mspa where k = 1) c5;
+
+-- a single DISTINCT column merges with a plain aggregate
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(distinct a) from t_mspa where k = 1) d1, (select sum(b) from t_mspa where k = 1) d2;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(distinct a) from t_mspa where k = 1) d1, (select sum(b) from t_mspa where k = 1) d2;
+
+-- two independent groups: each merges on its own, the two predicates stay separate
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa where k = 1) g2,
+       (select count(*) from t_mspa where k = 2) g3, (select sum(a) from t_mspa where k = 2) g4;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa where k = 1) g1, (select sum(a) from t_mspa where k = 1) g2,
+       (select count(*) from t_mspa where k = 2) g3, (select sum(a) from t_mspa where k = 2) g4;
+
+-- derived-table form: the same physical shape reached through a different syntax
+set enable_merge_same_predicate_scalar_agg = true;
+select * from (select count(*) c from t_mspa where k = 1) x, (select sum(a) s from t_mspa where k = 1) y;
+set enable_merge_same_predicate_scalar_agg = false;
+select * from (select count(*) c from t_mspa where k = 1) x, (select sum(a) s from t_mspa where k = 1) y;
+
+-- no predicate at all
+set enable_merge_same_predicate_scalar_agg = true;
+select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select count(a) from t_mspa) n3;
+set enable_merge_same_predicate_scalar_agg = false;
+select (select count(*) from t_mspa) n1, (select sum(a) from t_mspa) n2, (select count(a) from t_mspa) n3;

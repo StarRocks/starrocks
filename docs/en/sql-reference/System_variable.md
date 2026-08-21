@@ -821,6 +821,14 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_merge_same_predicate_scalar_agg
+
+* **Description**: Whether to merge cross-joined scalar aggregations that read the same table under an identical predicate into a single scan and a single aggregation. A query such as `SELECT (SELECT count(*) FROM t WHERE p), (SELECT sum(a) FROM t WHERE p)` otherwise scans `t` once per subquery. Only branches whose predicates are structurally identical are merged, so the surviving scan keeps that predicate unchanged and partition pruning, zone maps and late materialization behave exactly as before. Applies to OLAP tables and to Hive, Iceberg, Hudi, Delta Lake, Paimon and ODPS external tables. Branches that carry a GROUP BY, a LIMIT, a join, a non-deterministic expression, or that would produce more than one DISTINCT column are left alone.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v4.2.0
+
 ### enable_materialized_view_agg_pushdown_rewrite
 
 * **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown).

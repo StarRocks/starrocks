@@ -216,7 +216,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         Arguments[] cases = new Arguments[] {
                 Arguments.of("Q06", 6, 6, 6, 6, 6),
                 Arguments.of("Q07", 2, 2, 2, 2, 2),
-                Arguments.of("Q09", 30, 30, 30, 30, 30),
+                Arguments.of("Q09", 10, 10, 10, 10, 10),
                 Arguments.of("Q10", 2, 2, 2, 2, 2),
                 Arguments.of("Q13", 2, 2, 2, 2, 2),
                 Arguments.of("Q14_1", 16, 16, 16, 16, 16),
