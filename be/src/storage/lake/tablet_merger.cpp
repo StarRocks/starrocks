@@ -3260,7 +3260,17 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
 
                 // Tombstones carry no segment owner. Preserve them and use a stable
                 // projection only for metadata ordering; multi_get keeps the sentinel.
-                ASSIGN_OR_RETURN(auto tombstone_rssid, first_ctx.map_rssid(source_rssid));
+                uint32_t tombstone_rssid = 0;
+                auto mapped_tombstone_rssid = first_ctx.map_rssid(source_rssid);
+                if (mapped_tombstone_rssid.ok()) {
+                    tombstone_rssid = mapped_tombstone_rssid.value();
+                } else {
+                    const int64_t natural_rssid = static_cast<int64_t>(source_rssid) + first_ctx.rssid_offset();
+                    if (natural_rssid >= 0) return mapped_tombstone_rssid.status();
+                    // The stale source watermark is below this context's carried
+                    // rowset floor. Tombstones do not dereference it, so use the
+                    // earliest valid ordering watermark instead of failing merge.
+                }
                 auto* out = dest->Add();
                 out->CopyFrom(group.source_pb);
                 RETURN_IF_ERROR(
