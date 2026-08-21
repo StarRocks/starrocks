@@ -17,14 +17,18 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/runtime/query_context.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Partitions_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -129,28 +133,28 @@ protected:
 TEST_F(ExchangePassThroughTest, test_exchange_pass_through) {
     int32_t driver_sequence = 0;
     auto exchange_sink = _exchange_sink_factory->create(_degree_of_parallelism, driver_sequence);
-    exchange_sink->prepare(_runtime_state.get());
+    ASSERT_OK(exchange_sink->prepare(_runtime_state.get()));
 
     size_t sent_bytes = 0;
     size_t chunk_bytes = _chunk_builder._chunk_size * 8;
     // data is batched up to max_transmit_batched_bytes. Until then no data is actually sent.
     while (sent_bytes + chunk_bytes < config::max_transmit_batched_bytes) {
         sent_bytes += chunk_bytes;
-        exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
+        ASSERT_OK(exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next()));
         ChunkUniquePtr received_chunk = nullptr;
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
         EXPECT_TRUE(received_chunk == nullptr);
     }
 
     // once the sent bytes exceeds max_transmit_batched_bytes, the data is sent.
-    exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
+    ASSERT_OK(exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next()));
     ChunkUniquePtr received_chunk = nullptr;
     std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
     EXPECT_TRUE(received_chunk != nullptr);
 
     // sending chunks without consuming leads to a full sink buffer.
     while (!_sink_buffer->is_full()) {
-        exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
+        ASSERT_OK(exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next()));
     }
 
     // receiver ready to consume the data.
