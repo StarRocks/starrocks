@@ -134,6 +134,11 @@ public:
 
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
+    // Append an sstable fileset containing only keys that occur in more than one of the
+    // tablet-merge inputs. The overlay preserves the winner selected by normal PK-index
+    // ordering and leaves metadata unchanged when there are no conflicts.
+    static Status append_duplicate_key_overlay_for_tablet_merge(TabletManager* tablet_mgr, TabletMetadataPB* metadata);
+
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
                                          const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
@@ -229,9 +234,17 @@ private:
                                            std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level,
                                            bool* contain_shared_sstables);
 
+    static Status prepare_merging_iterator_for_sstables(
+            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+            const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
+            std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
+            std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables);
+
     static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
             std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            const TabletMetadataPtr& metadata, bool contain_shared_sstables);
+            const TabletMetadataPtr& metadata, bool contain_shared_sstables,
+            KeyValueMergerOutputMode output_mode = KeyValueMergerOutputMode::kAllKeys,
+            bool enable_multiple_output_files = false);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 

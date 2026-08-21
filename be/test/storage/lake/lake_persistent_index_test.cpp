@@ -32,8 +32,10 @@
 #include "column/runtime_type_traits.h"
 #include "column/serde/column_array_serde.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
+#include "platform/key_cache.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -51,6 +53,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "test_util.h"
 #include "types/datum.h"
@@ -321,7 +324,408 @@ protected:
         ASSERT_OK(wf->append(Slice(reinterpret_cast<const char*>(buffer.data()), used)));
         ASSERT_OK(wf->close());
     }
+
+    struct OverlayInputEntry {
+        std::string key;
+        int64_t version;
+        IndexValue value;
+    };
+
+    PersistentIndexSstablePB* append_overlay_input(TabletMetadata* metadata,
+                                                   const std::vector<OverlayInputEntry>& entries,
+                                                   uint64_t max_rss_rowid) {
+        KeyValueMerger merger("", 0, false, _tablet_mgr.get(), metadata->id(), false);
+        for (const auto& entry : entries) {
+            KeyValueMergerTestIterator iter(entry.key, entry.version, entry.value, max_rss_rowid);
+            EXPECT_OK(merger.merge(&iter));
+        }
+        auto outputs_or = merger.finish();
+        EXPECT_OK(outputs_or.status());
+        if (!outputs_or.ok() || outputs_or->size() != 1) {
+            return nullptr;
+        }
+        const auto& output = outputs_or->front();
+        auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
+        sstable->set_filename(output.filename);
+        sstable->set_filesize(output.filesize);
+        sstable->set_encryption_meta(output.encryption_meta);
+        sstable->set_max_rss_rowid(max_rss_rowid);
+        sstable->mutable_range()->set_start_key(output.start_key);
+        sstable->mutable_range()->set_end_key(output.end_key);
+        sstable->mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+        return sstable;
+    }
+
+    std::vector<std::pair<std::string, IndexValueWithVer>> read_overlay_sstable(
+            int64_t tablet_id, const PersistentIndexSstablePB& sstable) {
+        std::vector<std::pair<std::string, IndexValueWithVer>> entries;
+        RandomAccessFileOptions ropts;
+        if (!sstable.encryption_meta().empty()) {
+            ASSIGN_OR_ABORT(ropts.encryption_info,
+                            KeyCache::instance().unwrap_encryption_meta(sstable.encryption_meta()));
+        }
+        ASSIGN_OR_ABORT(auto rf,
+                        fs::new_random_access_file(ropts, _tablet_mgr->sst_location(tablet_id, sstable.filename())));
+        sstable::Options options;
+        std::unique_ptr<sstable::Table> table;
+        auto open_st = sstable::Table::Open(options, rf.get(), sstable.filesize(), table);
+        EXPECT_OK(open_st);
+        if (!open_st.ok()) {
+            return entries;
+        }
+        sstable::ReadOptions read_options;
+        std::unique_ptr<sstable::Iterator> iter(table->NewIterator(read_options));
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            IndexValuesWithVerPB value_pb;
+            const bool parsed = value_pb.ParseFromArray(iter->value().data, iter->value().size);
+            EXPECT_TRUE(parsed);
+            if (!parsed) {
+                return entries;
+            }
+            EXPECT_EQ(1, value_pb.values_size());
+            if (value_pb.values_size() != 1) {
+                return entries;
+            }
+            const auto& value = value_pb.values(0);
+            entries.emplace_back(
+                    iter->key().to_string(),
+                    IndexValueWithVer{value.version(),
+                                      IndexValue((static_cast<uint64_t>(value.rssid()) << 32) | value.rowid())});
+        }
+        EXPECT_OK(iter->status());
+        return entries;
+    }
+
+    std::string encode_varchar_key(const TabletMetadata& metadata, const std::string& key) {
+        auto tablet_schema = TabletSchema::create(metadata.schema());
+        auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
+        auto chunk = std::make_unique<Chunk>();
+        auto column = BinaryColumn::create();
+        column->append(Slice(key));
+        chunk->append_column(std::move(column), 0);
+        MutableColumnPtr encoded;
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, encoded.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        return down_cast<BinaryColumn*>(encoded.get())->get_slice(0).to_string();
+    }
+
+    void set_varchar_tablet_range(TabletMetadata* metadata, const std::string& lower, const std::string& upper) {
+        auto* schema = metadata->mutable_schema();
+        schema->clear_sort_key_idxes();
+        schema->add_sort_key_idxes(0);
+        schema->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        auto* range = metadata->mutable_range();
+        range->Clear();
+        range->mutable_lower_bound()->add_values()->CopyFrom(make_string_variant_pb(lower));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->add_values()->CopyFrom(make_string_variant_pb(upper));
+        range->set_upper_bound_included(false);
+    }
+
+    void ensure_kek_in_key_cache() {
+        if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
+            return;
+        }
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_key = EncryptionKey::create_from_pb(pb).value();
+        auto kek = root_key->generate_key().value();
+        kek->set_id(2);
+        KeyCache::instance().add_key(root_key);
+        KeyCache::instance().add_key(kek);
+    }
 };
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_prefers_newer_live_over_later_tombstone) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    constexpr uint64_t live_value = (static_cast<uint64_t>(7) << 32) | 11;
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 20, IndexValue(live_value)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 10, IndexValue(NullIndexValue)}}, 200));
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+    auto entries = read_overlay_sstable(metadata->id(), metadata->sstable_meta().sstables(2));
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ("duplicate", entries[0].first);
+    EXPECT_EQ(20, entries[0].second.first);
+    EXPECT_EQ(live_value, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_keeps_newer_tombstone) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    constexpr uint64_t live_value = (static_cast<uint64_t>(7) << 32) | 11;
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"deleted", 10, IndexValue(live_value)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"deleted", 20, IndexValue(NullIndexValue)}}, 200));
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+    auto entries = read_overlay_sstable(metadata->id(), metadata->sstable_meta().sstables(2));
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ("deleted", entries[0].first);
+    EXPECT_EQ(20, entries[0].second.first);
+    EXPECT_EQ(NullIndexValue, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_no_duplicates_writes_nothing) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"a", 10, IndexValue(1)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"b", 20, IndexValue(2)}}, 200));
+    const std::string before = metadata->SerializeAsString();
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    EXPECT_EQ(before, metadata->SerializeAsString());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_filters_shared_duplicates_outside_tablet_range) {
+    auto metadata = make_varchar_pk_metadata();
+    set_varchar_tablet_range(metadata.get(), "b", "d");
+    const auto a = encode_varchar_key(*metadata, "a");
+    const auto b = encode_varchar_key(*metadata, "b");
+    const auto c = encode_varchar_key(*metadata, "c");
+    const auto d = encode_varchar_key(*metadata, "d");
+    std::vector<OverlayInputEntry> older = {
+            {a, 10, IndexValue(1)}, {b, 10, IndexValue(2)}, {c, 10, IndexValue(3)}, {d, 10, IndexValue(4)}};
+    std::vector<OverlayInputEntry> newer = {
+            {a, 20, IndexValue(11)}, {b, 20, IndexValue(12)}, {c, 20, IndexValue(13)}, {d, 20, IndexValue(14)}};
+    auto* older_sst = append_overlay_input(metadata.get(), older, 100);
+    ASSERT_NE(nullptr, older_sst);
+    older_sst->set_shared(true);
+    auto* newer_sst = append_overlay_input(metadata.get(), newer, 200);
+    ASSERT_NE(nullptr, newer_sst);
+    newer_sst->set_shared(true);
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+    auto entries = read_overlay_sstable(metadata->id(), metadata->sstable_meta().sstables(2));
+    ASSERT_EQ(2, entries.size());
+    EXPECT_EQ(b, entries[0].first);
+    EXPECT_EQ(c, entries[1].first);
+    EXPECT_EQ(b, metadata->sstable_meta().sstables(2).range().start_key());
+    EXPECT_EQ(c, metadata->sstable_meta().sstables(2).range().end_key());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_embedded_delvec) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    metadata->set_version(2);
+    constexpr uint32_t deleted_rssid = 2;
+    constexpr uint32_t deleted_rowid = 5;
+    ASSERT_NE(nullptr,
+              append_overlay_input(
+                      metadata.get(),
+                      {{"duplicate", 30, IndexValue((static_cast<uint64_t>(deleted_rssid) << 32) | deleted_rowid)}},
+                      100));
+    ASSERT_NE(nullptr,
+              append_overlay_input(metadata.get(),
+                                   {{"duplicate", 10, IndexValue((static_cast<uint64_t>(3) << 32) | 6)}}, 200));
+    ASSERT_NE(nullptr,
+              append_overlay_input(metadata.get(),
+                                   {{"duplicate", 20, IndexValue((static_cast<uint64_t>(4) << 32) | 7)}}, 300));
+
+    DelVector delvec;
+    delvec.set_empty();
+    std::shared_ptr<DelVector> new_delvec;
+    delvec.add_dels_as_new_version({deleted_rowid}, metadata->version(), &new_delvec);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    builder.append_delvec(new_delvec, deleted_rssid);
+    ASSERT_OK(builder.finalize(next_id()));
+    auto page = metadata->delvec_meta().delvecs().find(deleted_rssid);
+    ASSERT_TRUE(page != metadata->delvec_meta().delvecs().end());
+    metadata->mutable_sstable_meta()->mutable_sstables(0)->mutable_delvec()->CopyFrom(page->second);
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_EQ(4, metadata->sstable_meta().sstables_size());
+    auto entries = read_overlay_sstable(metadata->id(), metadata->sstable_meta().sstables(3));
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ(20, entries[0].second.first);
+    EXPECT_EQ((static_cast<uint64_t>(4) << 32) | 7, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_tde_round_trip) {
+    ensure_kek_in_key_cache();
+    const bool old_tde = config::enable_transparent_data_encryption;
+    config::enable_transparent_data_encryption = true;
+    DeferOp restore_tde([&]() { config::enable_transparent_data_encryption = old_tde; });
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 10, IndexValue(1)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 20, IndexValue(2)}}, 200));
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+    const auto& overlay = metadata->sstable_meta().sstables(2);
+    EXPECT_FALSE(overlay.encryption_meta().empty());
+    ASSERT_OK(KeyCache::instance().unwrap_encryption_meta(overlay.encryption_meta()).status());
+    auto entries = read_overlay_sstable(metadata->id(), overlay);
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ(20, entries[0].second.first);
+    EXPECT_EQ(2, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_multiple_outputs_form_one_fileset) {
+    const int64_t old_target_size = config::pk_index_target_file_size;
+    config::pk_index_target_file_size = 1;
+    DeferOp restore_target_size([&]() { config::pk_index_target_file_size = old_target_size; });
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    std::vector<OverlayInputEntry> older;
+    std::vector<OverlayInputEntry> newer;
+    for (int i = 0; i < 500; ++i) {
+        const std::string key = fmt::format("key_{:04}", i);
+        older.push_back({key, 10, IndexValue(static_cast<uint64_t>(i + 1))});
+        newer.push_back({key, 20, IndexValue(static_cast<uint64_t>(i + 101))});
+    }
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), older, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), newer, 200));
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_GT(metadata->sstable_meta().sstables_size(), 3);
+    const auto& first_overlay = metadata->sstable_meta().sstables(2);
+    ASSERT_TRUE(first_overlay.has_fileset_id());
+    const auto overlay_fileset_id = UniqueId(first_overlay.fileset_id()).to_string();
+    EXPECT_NE(UniqueId(metadata->sstable_meta().sstables(0).fileset_id()).to_string(), overlay_fileset_id);
+    EXPECT_NE(UniqueId(metadata->sstable_meta().sstables(1).fileset_id()).to_string(), overlay_fileset_id);
+    for (int i = 2; i < metadata->sstable_meta().sstables_size(); ++i) {
+        const auto& overlay = metadata->sstable_meta().sstables(i);
+        EXPECT_EQ(overlay_fileset_id, UniqueId(overlay.fileset_id()).to_string());
+        EXPECT_EQ(200, overlay.max_rss_rowid());
+        EXPECT_EQ(metadata->version(), overlay.generation_version());
+        EXPECT_FALSE(overlay.shared());
+        EXPECT_EQ(0, overlay.rssid_offset());
+        EXPECT_FALSE(overlay.has_shared_rssid());
+        EXPECT_FALSE(overlay.has_shared_version());
+        EXPECT_FALSE(overlay.has_delvec());
+        EXPECT_TRUE(overlay.encryption_meta().empty());
+        if (i > 2) {
+            EXPECT_LT(metadata->sstable_meta().sstables(i - 1).range().end_key(), overlay.range().start_key());
+        }
+    }
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    std::string first_key = "key_0000";
+    std::string last_key = "key_0499";
+    Slice lookup_keys[] = {Slice(first_key), Slice(last_key)};
+    IndexValue values[2];
+    ASSERT_OK(index->get(2, lookup_keys, values));
+    EXPECT_EQ(101, values[0].get_value());
+    EXPECT_EQ(600, values[1].get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_unique_key_inside_range_falls_through) {
+    auto metadata = make_varchar_pk_metadata();
+    set_varchar_tablet_range(metadata.get(), "a", "z");
+    const auto duplicate = encode_varchar_key(*metadata, "duplicate");
+    const auto unique = encode_varchar_key(*metadata, "unique");
+    constexpr uint64_t unique_value = (static_cast<uint64_t>(5) << 32) | 9;
+    auto* base = append_overlay_input(metadata.get(),
+                                      {{duplicate, 10, IndexValue(1)}, {unique, 10, IndexValue(unique_value)}}, 100);
+    ASSERT_NE(nullptr, base);
+    base->set_shared(true);
+    auto* newer = append_overlay_input(metadata.get(), {{duplicate, 20, IndexValue(2)}}, 200);
+    ASSERT_NE(nullptr, newer);
+    newer->set_shared(true);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+    auto entries = read_overlay_sstable(metadata->id(), metadata->sstable_meta().sstables(2));
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ(duplicate, entries[0].first);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    Slice key(unique);
+    IndexValue value;
+    ASSERT_OK(index->get(1, &key, &value));
+    EXPECT_EQ(unique_value, value.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_tombstone_compaction_lifecycle) {
+    const double old_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;
+    const int32_t old_min_versions = config::lake_pk_index_sst_min_compaction_versions;
+    DeferOp restore_compaction_config([&]() {
+        config::lake_pk_index_cumulative_base_compaction_ratio = old_ratio;
+        config::lake_pk_index_sst_min_compaction_versions = old_min_versions;
+    });
+    config::lake_pk_index_sst_min_compaction_versions = 2;
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    metadata->set_version(10);
+    constexpr uint64_t old_live_value = (static_cast<uint64_t>(3) << 32) | 7;
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"gone", 10, IndexValue(old_live_value)}}, 100));
+    const std::string old_base_filename = metadata->sstable_meta().sstables(0).filename();
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"gone", 20, IndexValue(NullIndexValue)}}, 200));
+    ASSERT_OK(LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get()));
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    Slice gone("gone");
+    IndexValue value;
+    ASSERT_OK(index->get(1, &gone, &value));
+    ASSERT_EQ(NullIndexValue, value.get_value());
+
+    // A cumulative compaction deliberately excludes the old live base. Its output must
+    // keep the overlay tombstone, because the base still remains referenced below it.
+    config::lake_pk_index_cumulative_base_compaction_ratio = 100.0;
+    TxnLogPB cumulative_log;
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), metadata, &cumulative_log));
+    ASSERT_EQ(2, cumulative_log.op_compaction().input_sstables_size());
+    for (const auto& input : cumulative_log.op_compaction().input_sstables()) {
+        EXPECT_NE(old_base_filename, input.filename());
+    }
+    ASSERT_TRUE(cumulative_log.op_compaction().has_output_sstable());
+    auto cumulative_entries = read_overlay_sstable(metadata->id(), cumulative_log.op_compaction().output_sstable());
+    ASSERT_EQ(1, cumulative_entries.size());
+    EXPECT_EQ(NullIndexValue, cumulative_entries[0].second.second.get_value());
+    ASSERT_OK(index->apply_opcompaction(metadata, cumulative_log.op_compaction()));
+    auto cumulative_metadata = std::make_shared<TabletMetadata>();
+    cumulative_metadata->CopyFrom(*metadata);
+    cumulative_metadata->set_version(11);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder cumulative_builder(tablet, cumulative_metadata);
+    ASSERT_OK(index->commit(&cumulative_builder));
+    ASSERT_EQ(2, cumulative_metadata->sstable_meta().sstables_size());
+    EXPECT_EQ(old_base_filename, cumulative_metadata->sstable_meta().sstables(0).filename());
+    ASSERT_OK(index->get(1, &gone, &value));
+    EXPECT_EQ(NullIndexValue, value.get_value());
+
+    // Once a base compaction includes both the old live base and the cumulative
+    // tombstone, it can safely drop the tombstone together with the last old live input.
+    config::lake_pk_index_cumulative_base_compaction_ratio = 0.0;
+    TxnLogPB base_log;
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), cumulative_metadata, &base_log));
+    ASSERT_EQ(2, base_log.op_compaction().input_sstables_size());
+    EXPECT_FALSE(base_log.op_compaction().has_output_sstable());
+    EXPECT_TRUE(base_log.op_compaction().output_sstables().empty());
+    ASSERT_OK(index->apply_opcompaction(cumulative_metadata, base_log.op_compaction()));
+    auto final_metadata = std::make_shared<TabletMetadata>();
+    final_metadata->CopyFrom(*cumulative_metadata);
+    final_metadata->set_version(12);
+    MetaFileBuilder base_builder(tablet, final_metadata);
+    ASSERT_OK(index->commit(&base_builder));
+    EXPECT_TRUE(final_metadata->sstable_meta().sstables().empty());
+    auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), final_metadata->id());
+    ASSERT_OK(reloaded->init(final_metadata));
+    ASSERT_OK(reloaded->get(1, &gone, &value));
+    EXPECT_EQ(NullIndexValue, value.get_value());
+}
 
 TEST_F(LakePersistentIndexTest, test_key_value_merger_duplicate_only_emits_newer_live) {
     KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), false,
@@ -1061,6 +1465,37 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_value_parse_corruption_dro
     ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
     ASSERT_EQ(txn_log->op_compaction().input_sstables_size(), drop_cnt);
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+TEST_F(LakePersistentIndexTest, test_tablet_merge_overlay_corruption_is_atomic_and_drops_all_input_caches_once) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 10, IndexValue(1)}}, 100));
+    ASSERT_NE(nullptr, append_overlay_input(metadata.get(), {{"duplicate", 20, IndexValue(2)}}, 200));
+    for (auto& input : *metadata->mutable_sstable_meta()->mutable_sstables()) {
+        uint64_t new_size = 0;
+        rewrite_sstable_with_garbage_value(_tablet_mgr->sst_location(metadata->id(), input.filename()), &new_size);
+        input.set_filesize(new_size);
+    }
+    const std::string before = metadata->SerializeAsString();
+    const auto read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    const bool old_clear_cache = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    DeferOp restore_clear_cache([&]() { config::lake_clear_corrupted_cache_data = old_clear_cache; });
+    int drop_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_count; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto st = LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(_tablet_mgr.get(), metadata.get());
+
+    ASSERT_TRUE(st.is_corruption()) << st;
+    EXPECT_EQ(before, metadata->SerializeAsString());
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_EQ(2, drop_count);
 }
 #endif // USE_STAROS && !BUILD_FORMAT_LIB
 
