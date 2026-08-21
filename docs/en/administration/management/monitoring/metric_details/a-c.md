@@ -457,7 +457,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 ## `zstd_compression_dict_pages_written`
 
 - Unit: Count
-- Description: Cumulative number of compression dictionary pages written to segment files. One dictionary page is written per column per segment, so this metric counts the columns that actually used a compression dictionary, not the number of dictionary-compressed data pages.
+- Description: Cumulative number of compression dictionary pages written to segment files. One dictionary page is written per column writer per segment, and a flat JSON column has one writer per flattened sub-column, each of which can produce its own dictionary page. So this metric counts writers that actually used a compression dictionary -- not schema columns, and not dictionary-compressed data pages.
 
 ## `consistency_mem_bytes`
 

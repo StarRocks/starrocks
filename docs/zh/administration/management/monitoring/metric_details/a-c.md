@@ -457,7 +457,7 @@ description: "Alphabetical a - c"
 ## `zstd_compression_dict_pages_written`
 
 - 单位：计数
-- 描述：写入 Segment 文件的压缩字典页的累计数量。每个 Segment 的每一列最多写入一个字典页，因此该指标统计的是实际用上压缩字典的列数，而非使用字典压缩的数据页数量。
+- 描述：写入 Segment 文件的压缩字典页的累计数量。每个 Segment 的每个列 writer 最多写入一个字典页，而打平的 JSON 列会为每个打平子列各建一个 writer、各自可能写出自己的字典页。因此该指标统计的是实际用上压缩字典的 writer 数——既不是 schema 列数，也不是使用字典压缩的数据页数量。
 
 ## `consistency_mem_bytes`
 
