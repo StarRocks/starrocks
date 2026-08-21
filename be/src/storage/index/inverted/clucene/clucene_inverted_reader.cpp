@@ -41,8 +41,10 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
     if (is_string_type(field_type)) {
         InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(tablet_index->index_properties()));
+        const bool support_phrase = get_support_phrase_from_properties(tablet_index->index_properties());
         // Only support full text search for now
-        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index->index_id(), parser_type);
+        *res = std::make_unique<FullTextCLuceneInvertedReader>(path, tablet_index->index_id(), parser_type,
+                                                               support_phrase);
         return Status::OK();
     } else {
         return Status::InvalidArgument(fmt::format("Not supported type {}", field_type));
@@ -87,7 +89,13 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         match_operator = std::make_unique<MatchAllOperator>(&index_searcher, nullptr, column_name_ws, tokens);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
-        // in phrase query
+        // PhraseQuery requires positional postings (the prx file). When the index was built with
+        // support_phrase=false the prx file is absent, so reject the query here with a clear error
+        // rather than returning an empty result set.
+        if (!_support_phrase) {
+            return Status::NotSupported(
+                    "MATCH_PHRASE requires the GIN index to be created with 'support_phrase' = 'true'");
+        }
         match_operator = std::make_unique<MatchPhraseOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
                                                                search_wstr, 0, _parser_type);
         break;

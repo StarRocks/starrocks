@@ -73,6 +73,84 @@ public class GINIndexTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `docs` (\n" +
+                "  `id` int NOT NULL COMMENT \"\",\n" +
+                "  `content` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  INDEX idx_content (`content`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"standard\", " +
+                "\"support_phrase\" = \"true\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        // A second table whose GIN index does NOT enable support_phrase. MATCH_PHRASE queries
+        // against `docs_no_phrase.content` must be rejected by the FE analyzer.
+        starRocksAssert.withTable("CREATE TABLE `docs_no_phrase` (\n" +
+                "  `id` int NOT NULL COMMENT \"\",\n" +
+                "  `content` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  INDEX idx_content (`content`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"english\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        // A third table without any GIN index at all. MATCH_PHRASE must still be rejected.
+        starRocksAssert.withTable("CREATE TABLE `docs_no_index` (\n" +
+                "  `id` int NOT NULL COMMENT \"\",\n" +
+                "  `content` varchar(200) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        // A builtin GIN index cannot serve MATCH_PHRASE because the builtin implementation
+        // does not store term positions. The FE must surface a dedicated error.
+        starRocksAssert.withTable("CREATE TABLE `docs_builtin` (\n" +
+                "  `id` int NOT NULL COMMENT \"\",\n" +
+                "  `content` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  INDEX idx_content (`content`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"english\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        // A clucene GIN index with parser=none is not tokenized and therefore cannot serve
+        // MATCH_PHRASE. The FE must surface a dedicated error.
+        starRocksAssert.withTable("CREATE TABLE `docs_parser_none` (\n" +
+                "  `id` int NOT NULL COMMENT \"\",\n" +
+                "  `content` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  INDEX idx_content (`content`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"none\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        // GIN index on `tag` but NOT on `content`. MATCH_PHRASE on `content` must be rejected
+        // because the GIN-on-another-column case should not silently fall back to a non-GIN
+        // execution; it must surface the dedicated FE error.
+        starRocksAssert.withTable("CREATE TABLE `docs_gin_other_col` (\n" +
+                "  `id` int NOT NULL COMMENT \"\",\n" +
+                "  `tag` varchar(64) NOT NULL COMMENT \"\",\n" +
+                "  `content` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  INDEX idx_tag (`tag`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"english\", " +
+                "\"support_phrase\" = \"true\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
     }
 
     @Test
@@ -276,6 +354,271 @@ public class GINIndexTest extends PlanTestBase {
         StringLiteral stringExpr = new StringLiteral("test");
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
+        MatchExpr phraseExpr = new MatchExpr(MatchExpr.MatchOperator.MATCH_PHRASE, slot, stringExpr);
+        Assertions.assertEquals(MatchExpr.MatchOperator.MATCH_PHRASE, phraseExpr.getMatchOperator());
+    }
+
+    @Test
+    public void testMatchPhraseParseAnalyzeAndPlan() throws Exception {
+        String sql = "SELECT * FROM docs WHERE content MATCH_PHRASE 'inverted index'";
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertNotNull(statement);
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "content MATCH_PHRASE 'inverted index'");
+    }
+
+    @Test
+    public void testMatchPhraseAnalyzeInvalidOperands() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "left operand of MATCH must be of type STRING with NOT NULL",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs WHERE id MATCH_PHRASE 'inverted index'", connectContext));
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "right operand of MATCH must be of type StringLiteral with NOT NULL",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs WHERE content MATCH_PHRASE 1", connectContext));
+    }
+
+    @Test
+    public void testSupportPhraseDdlValidation() {
+        Column col = new Column("f2", StringType.STRING, true);
+
+        // support_phrase=true requires imp_lib=clucene (default is clucene, so omitting imp_lib is OK)
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "true");
+                }}, KeysType.DUP_KEYS));
+
+        // support_phrase=true + imp_lib=builtin must fail
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.BUILTIN.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "true");
+                }}, KeysType.DUP_KEYS),
+                "support_phrase is only supported when imp_lib = clucene");
+
+        // support_phrase=true + parser=none must fail (positions on untokenized fields are meaningless)
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_NONE);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "true");
+                }}, KeysType.DUP_KEYS),
+                "support_phrase=true requires a tokenizing parser");
+
+        // Illegal value (neither true nor false) must fail
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "yes");
+                }}, KeysType.DUP_KEYS),
+                "INVERTED index support_phrase should be true or false");
+
+        // support_phrase=false is always OK (matches the backward-compat default for old DDLs that
+        // omit the key entirely)
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "false");
+                }}, KeysType.DUP_KEYS));
+    }
+
+    @Test
+    public void testMatchPhraseRejectedWithoutSupportPhrase() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires the GIN index to be created with 'support_phrase' = 'true'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_no_phrase WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    @Test
+    public void testMatchPhraseRejectedWithoutGinIndex() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "MATCH_PHRASE requires a GIN index on column 'content'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_no_index WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    @Test
+    public void testMatchPhraseRejectedOnBuiltinImpl() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "is only supported when imp_lib = 'clucene'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_builtin WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    @Test
+    public void testMatchPhraseRejectedOnParserNone() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires a tokenizing parser",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_parser_none WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    @Test
+    public void testMatchPhraseAcceptedWithSupportPhrase() throws Exception {
+        ExceptionChecker.expectThrowsNoException(
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    // The FE validator must still reject MATCH_PHRASE on a column whose table has a GIN index
+    // on a DIFFERENT column. Without this check the query would be silently translated and
+    // either return wrong results or fail at the BE with a generic "no GIN index" error.
+    @Test
+    public void testMatchPhraseRejectedOnOtherColumnGinIndex() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "MATCH_PHRASE requires a GIN index on column 'content'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_gin_other_col WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    // NOT MATCH_PHRASE parses into CompoundPredicate(NOT, MatchExpr(...)). Without
+    // descending into the wrapped MatchExpr the analyzer would silently skip the
+    // support_phrase check and let the request reach the BE.
+    @Test
+    public void testMatchPhraseValidationRunsUnderNotPrefix() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires the GIN index to be created with 'support_phrase' = 'true'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_no_phrase WHERE NOT (content MATCH_PHRASE 'inverted index')",
+                        connectContext));
+    }
+
+    // AND-combined predicates: the support_phrase check has to run for the MATCH_PHRASE
+    // operand even when sandwiched between other predicates. The first MATCH (no phrase
+    // requirement) must not short-circuit validation of the second one.
+    @Test
+    public void testMatchPhraseValidationRunsInsideAndPredicate() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires the GIN index to be created with 'support_phrase' = 'true'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_no_phrase WHERE content MATCH 'inverted' "
+                                + "AND content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    // OR-combined predicates: same as AND but the MATCH_PHRASE is the first operand. We
+    // assert the analyzer descends into both branches of CompoundPredicate.
+    @Test
+    public void testMatchPhraseValidationRunsInsideOrPredicate() {
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires the GIN index to be created with 'support_phrase' = 'true'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_no_phrase WHERE content MATCH_PHRASE 'inverted index' "
+                                + "OR id = 1",
+                        connectContext));
+    }
+
+    // Multi-table (JOIN) resolution: the SlotRef must walk to the correct underlying OlapTable
+    // even when two relations have a column of the same physical name. We use table-qualified
+    // slots without aliases so that the FE validator can look the table up by its real name
+    // (resolving aliases to their underlying OlapTable is currently a silent-skip path that
+    // is intentionally out of scope for this PR).
+    @Test
+    public void testMatchPhraseWithMultipleTablesInFromClause() throws Exception {
+        // Positive: docs.content has support_phrase=true → accepted.
+        ExceptionChecker.expectThrowsNoException(
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT docs.id FROM docs, docs_no_phrase "
+                                + "WHERE docs.id = docs_no_phrase.id "
+                                + "AND docs.content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+
+        // Negative: docs_no_phrase.content has support_phrase=false → rejected even though
+        // another relation in the same FROM clause (docs) has a matching column with
+        // support_phrase=true. This guards against the analyzer accidentally picking up
+        // the wrong relation's GIN properties.
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires the GIN index to be created with 'support_phrase' = 'true'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT docs.id FROM docs, docs_no_phrase "
+                                + "WHERE docs.id = docs_no_phrase.id "
+                                + "AND docs_no_phrase.content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    // Pins down the case-insensitive value handling in IndexAnalyzer.checkInvertedIndexSupportPhrase.
+    // FE/BE both call equalsIgnoreCase/to_lower_copy, so mixed-case "TRUE"/"True" must be
+    // accepted at DDL time, otherwise older or hand-edited DDLs would silently lose phrase
+    // support.
+    @Test
+    public void testSupportPhraseDdlAcceptsMixedCaseValue() {
+        Column col = new Column("f2", StringType.STRING, true);
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "TRUE");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "True");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(col, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+                    put(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY, "False");
+                }}, KeysType.DUP_KEYS));
+    }
+
+    // Locks the public-contract default for SUPPORT_PHRASE: when the DDL does not set the
+    // property, the FE behaves as if it were "false" and rejects MATCH_PHRASE. This is the
+    // contract that matters end-to-end (the BE side asserts the symmetric default in
+    // get_support_phrase_from_properties). Changing this default would silently flip the
+    // storage format on upgrade and risk crashing the BE when reading old segments.
+    @Test
+    public void testSupportPhraseDefaultsToFalse() throws Exception {
+        // Pin the key spelling: the FE constant and the enum name must agree so the FE/BE
+        // BE round-trip stays consistent.
+        Assertions.assertEquals("support_phrase",
+                IndexParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT));
+        Assertions.assertEquals(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY,
+                IndexParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT));
+
+        // End-to-end default check: a GIN index that omits support_phrase must reject
+        // MATCH_PHRASE. docs_no_phrase is created without the property in beforeClass,
+        // simulating an older index that predates this feature.
+        ExceptionChecker.expectThrowsWithMsg(Exception.class,
+                "requires the GIN index to be created with 'support_phrase' = 'true'",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "SELECT * FROM docs_no_phrase WHERE content MATCH_PHRASE 'inverted index'",
+                        connectContext));
+    }
+
+    // Smoke test for the SqlToScalarOperatorTranslator path: a MATCH_PHRASE in SQL must
+    // produce a MatchExprOperator (rendered as "<col> MATCH_PHRASE 'literal'" by
+    // ExpressionPrinter) in the planner output. This covers the AST -> ScalarOperator
+    // translation step that has otherwise no direct UT.
+    @Test
+    public void testMatchPhraseTranslatesToMatchExprOperatorInPlan() throws Exception {
+        String plan = getFragmentPlan(
+                "SELECT * FROM docs WHERE content MATCH_PHRASE 'inverted index'");
+        // The fragment plan prints the scalar predicate via ExpressionPrinter, which
+        // formats MatchExprOperator as `<col> MATCH_PHRASE '<literal>'`.
+        assertContains(plan, "MATCH_PHRASE 'inverted index'");
+        // The keyword must NOT be downgraded to plain MATCH/MATCH_ANY/MATCH_ALL.
+        Assertions.assertFalse(plan.contains("MATCH 'inverted index'"),
+                "MATCH_PHRASE must not be lowered to MATCH; full plan was:\n" + plan);
+        Assertions.assertFalse(plan.contains("MATCH_ALL 'inverted index'"));
+        Assertions.assertFalse(plan.contains("MATCH_ANY 'inverted index'"));
     }
 
     @Test

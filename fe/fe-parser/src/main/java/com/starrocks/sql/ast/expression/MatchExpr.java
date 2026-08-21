@@ -59,7 +59,8 @@ public class MatchExpr extends Expr {
     public enum MatchOperator {
         MATCH("MATCH"),
         MATCH_ANY("MATCH_ANY"),
-        MATCH_ALL("MATCH_ALL");
+        MATCH_ALL("MATCH_ALL"),
+        MATCH_PHRASE("MATCH_PHRASE");
 
         private final String name;
 

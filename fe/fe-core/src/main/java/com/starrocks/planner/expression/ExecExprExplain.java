@@ -517,6 +517,8 @@ public class ExecExprExplain implements ExecExprVisitor<String, Void> {
                 return "MATCH_ANY";
             case MATCH_ALL:
                 return "MATCH_ALL";
+            case MATCH_PHRASE:
+                return "MATCH_PHRASE";
             default:
                 return op.toString();
         }

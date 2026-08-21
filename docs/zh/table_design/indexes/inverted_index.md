@@ -64,6 +64,32 @@ PROPERTIES (
   - `chinese`: 中文分词。此分词方法使用 CLucene 中的 [CJK Analyzer](https://lucene.apache.org/core/6_6_1/analyzers-common/org/apache/lucene/analysis/cjk/package-summary.html) 进行分词。
   - `standard`: 多语言分词。此分词方法提供基于语法的分词（基于 [Unicode Text Segmentation algorithm](https://unicode.org/reports/tr29/)），适用于大多数语言和混合语言的情况，如中英文。例如，此分词方法可以区分中英文。当中英文共存时，分词后会将大写英文字符转换为小写。因此，查询条件中的关键词需要是小写英文而不是大写英文，以利用全文倒排索引定位数据行。
 - 索引列的数据类型必须是 CHAR、VARCHAR 或 STRING。
+- `support_phrase` 参数（默认 `false`）控制是否将词项位置信息写入磁盘（CLucene 中的 `.prx` 文件），这是利用索引执行 `MATCH_PHRASE` 短语查询的前提。如果需要在该列上执行 `MATCH_PHRASE`，必须在建索引时设置为 `true`。注意：
+  - 仅在 `imp_lib = clucene`（默认值）时支持，不能与 `imp_lib = builtin` 组合使用。
+  - 不能与 `parser = none` 组合使用，必须指定 `english`、`chinese` 或 `standard` 之一。
+  - 开启 `support_phrase` 会增加索引文件体积和写入开销，建议仅在确实需要短语查询的列上启用。
+
+  示例：
+
+  ```SQL
+  CREATE TABLE `docs` (
+      `id` INT NOT NULL,
+      `content` VARCHAR(200) NOT NULL,
+      INDEX idx_content (`content`)
+          USING GIN("imp_lib" = "clucene", "parser" = "english", "support_phrase" = "true")
+  )
+  DUPLICATE KEY(`id`)
+  DISTRIBUTED BY HASH(`id`)
+  PROPERTIES ("replicated_storage" = "false");
+  ```
+
+  索引创建后即可执行 `MATCH_PHRASE` 查询：
+
+  ```SQL
+  SELECT * FROM docs WHERE content MATCH_PHRASE 'inverted index';
+  ```
+
+  如果该列没有 GIN 索引，或者 GIN 索引没有设置 `support_phrase = "true"`，FE 会在语义分析阶段直接拒绝 `MATCH_PHRASE` 查询并报错。对于在该参数引入前创建的旧索引，会按 `support_phrase = false` 处理以保证向后兼容；如需短语查询请重建索引并显式设置 `support_phrase = "true"`。
 
 #### 在创建表后添加全文倒排索引
 

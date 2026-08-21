@@ -57,6 +57,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.SUPPORT_PHRASE;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
@@ -79,6 +80,8 @@ public class IndexAnalyzer {
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
     public static String INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
+
+    public static final String INVERTED_INDEX_SUPPORT_PHRASE_KEY = SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT);
 
     // BloomFilterIndexUtil constants
     public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
@@ -198,6 +201,7 @@ public class IndexAnalyzer {
 
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
         checkInvertedIndexNgram(properties);
+        checkInvertedIndexSupportPhrase(properties);
         checkInvertedIndexLowerCase(properties);
 
         // add default properties
@@ -219,6 +223,56 @@ public class IndexAnalyzer {
         }
         properties.clear();
         properties.putAll(lowerCased);
+    }
+
+    /**
+     * Validate the optional `support_phrase` GIN property.
+     * <p>
+     * Semantics:
+     * <ul>
+     *   <li>If the key is absent, it defaults to {@code false} (handled by readers, not written here for
+     *       backward compatibility).</li>
+     *   <li>The value must be {@code true} or {@code false} (case-insensitive).</li>
+     *   <li>When set to {@code true}:
+     *     <ul>
+     *       <li>{@code imp_lib} must be {@code clucene}; the builtin implementation does not support phrase.</li>
+     *       <li>{@code parser} must be a tokenizing parser ({@code standard}/{@code english}/{@code chinese});
+     *           {@code parser=none} is rejected since term positions are meaningless without tokenization.</li>
+     *     </ul>
+     *   </li>
+     * </ul>
+     */
+    public static void checkInvertedIndexSupportPhrase(Map<String, String> properties) throws SemanticException {
+        if (properties == null) {
+            return;
+        }
+        String value = properties.get(INVERTED_INDEX_SUPPORT_PHRASE_KEY);
+        if (value == null) {
+            return;
+        }
+
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+            throw new SemanticException("INVERTED index support_phrase should be true or false, but got: " + value);
+        }
+
+        if (!"true".equalsIgnoreCase(value)) {
+            return;
+        }
+
+        String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        // When imp_lib is omitted in DDL, addDefaultProperties() will later fill clucene as the default. To make
+        // the constraint enforceable at this point we treat null as clucene (the default), but reject any explicit
+        // non-clucene value such as builtin.
+        if (impValue != null && !CLUCENE.name().equalsIgnoreCase(impValue)) {
+            throw new SemanticException("support_phrase is only supported when imp_lib = clucene");
+        }
+
+        String parser = getInvertedIndexParser(properties);
+        if (parser.equalsIgnoreCase(INVERTED_INDEX_PARSER_NONE)) {
+            throw new SemanticException(
+                    "support_phrase=true requires a tokenizing parser (standard/english/chinese); "
+                            + "parser=none is not supported");
+        }
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {

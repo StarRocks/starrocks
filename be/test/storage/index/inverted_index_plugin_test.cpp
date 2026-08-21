@@ -119,4 +119,67 @@ TEST(InvertedIndexPluginTest, builtin_plugin_test) {
     ASSERT_NE(nullptr, reader);
 }
 
+// Tests for get_support_phrase_from_properties(). This helper is the single source of
+// truth for the BE-side interpretation of the GIN `support_phrase` property; both the
+// CLucene writer (to decide whether to keep term positions on disk) and the reader
+// (to decide whether MATCH_PHRASE_QUERY can be served) read it. The contract is:
+//   1. missing key  -> false  (backward compatibility with pre-feature indexes)
+//   2. "true" / "True" / "TRUE" -> true  (case-insensitive on value)
+//   3. anything else (including "false", "yes", "1", empty string) -> false
+TEST(InvertedIndexPluginTest, support_phrase_property_test) {
+    // Missing key must default to false so old metadata (no support_phrase) keeps the
+    // legacy behavior where MATCH_PHRASE is unavailable.
+    {
+        std::map<std::string, std::string> props;
+        ASSERT_FALSE(get_support_phrase_from_properties(props));
+    }
+
+    // Canonical "true" enables phrase support.
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "true";
+        ASSERT_TRUE(get_support_phrase_from_properties(props));
+    }
+
+    // Value is matched case-insensitively. This mirrors the FE-side validator
+    // (IndexAnalyzer.checkInvertedIndexSupportPhrase uses equalsIgnoreCase) so that
+    // metadata round-tripped from older FE versions or hand-edited TabletIndex
+    // dumps still works.
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "True";
+        ASSERT_TRUE(get_support_phrase_from_properties(props));
+    }
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "TRUE";
+        ASSERT_TRUE(get_support_phrase_from_properties(props));
+    }
+
+    // Explicit "false" stays false.
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "false";
+        ASSERT_FALSE(get_support_phrase_from_properties(props));
+    }
+
+    // Anything that is not "true" must be treated as false; we explicitly do not
+    // accept "yes" / "1" / etc. to keep the contract strict and predictable.
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "yes";
+        ASSERT_FALSE(get_support_phrase_from_properties(props));
+    }
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "1";
+        ASSERT_FALSE(get_support_phrase_from_properties(props));
+    }
+    {
+        std::map<std::string, std::string> props;
+        props[INVERTED_INDEX_SUPPORT_PHRASE_KEY] = "";
+        ASSERT_FALSE(get_support_phrase_from_properties(props));
+    }
+}
+
 } // namespace starrocks
