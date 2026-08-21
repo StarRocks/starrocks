@@ -100,6 +100,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     auto version = index_value_ver.values(0).version();
     auto index_value = build_index_value(index_value_ver.values(0));
     if (Slice(_key) == key) {
+        ++_current_key_occurrences;
         if (!_current_value.has_value()) {
             _max_rss_rowid = max_rss_rowid;
             _current_value.emplace(version, index_value);
@@ -153,18 +154,21 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
         _key.assign(key.data, key.size);
         _max_rss_rowid = max_rss_rowid;
         _current_value.emplace(version, index_value);
+        _current_key_occurrences = 1;
     }
     return Status::OK();
 }
 
 Status KeyValueMerger::flush() {
     if (!_current_value.has_value()) {
+        _current_key_occurrences = 0;
         return Status::OK();
     }
 
     const auto& current = *_current_value;
     const bool skip_tombstone = _merge_base_level && current.second == IndexValue(NullIndexValue);
-    if (!skip_tombstone) {
+    const bool emit_key = _output_mode == KeyValueMergerOutputMode::kAllKeys || _current_key_occurrences >= 2;
+    if (emit_key && !skip_tombstone) {
         // Reuse scratch protobuf and serialization buffer to avoid allocating fresh
         // RepeatedField storage and a new std::string on every flushed key.
         IndexValuesWithVerPB& index_value_pb = _flush_pb_scratch;
@@ -187,6 +191,7 @@ Status KeyValueMerger::flush() {
         RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_flush_serialized_scratch)));
     }
     _current_value.reset();
+    _current_key_occurrences = 0;
 
     return Status::OK();
 }
