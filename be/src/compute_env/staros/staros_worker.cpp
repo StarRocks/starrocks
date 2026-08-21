@@ -55,7 +55,7 @@ std::optional<uint64_t> StarOSWorker::get_table_id(const ShardInfo& shard) {
     }
 
     uint64_t table_id = 0;
-    if (!safe_strtou64(iter->second, &table_id)) {
+    if (iter->second.find('\0') != std::string::npos || !safe_strtou64(iter->second, &table_id)) {
         LOG(WARNING) << "failed to parse tableId: " << iter->second;
         return std::nullopt;
     }

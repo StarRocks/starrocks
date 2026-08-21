@@ -189,6 +189,13 @@ TEST_F(StarOSWorkerTest, TableMetricsRejectOverflowingTableId) {
     expect_malformed_table_id("18446744073709551616", 105);
 }
 
+TEST_F(StarOSWorkerTest, TableMetricsRejectEmbeddedNullTableId) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+    expect_malformed_table_id(std::string("42\0junk", 7), 108);
+}
+
 TEST_F(StarOSWorkerTest, TableMetricsPreserveTableShardReferenceCounts) {
     const bool old_enable_table_metrics = config::enable_table_metrics;
     DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
