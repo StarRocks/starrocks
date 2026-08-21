@@ -427,19 +427,20 @@ public class Utils {
                     .flatMap(publishReq -> Optional.ofNullable(publishReq.getTabletIds())
                             .orElseGet(List::of).stream())
                     .collect(java.util.stream.Collectors.toSet());
-            List<ParentTabletPublishInfoPB> parentInfos = request.parentTabletPublishInfos == null
-                    ? new ArrayList<>() : new ArrayList<>(request.parentTabletPublishInfos);
-            Set<Long> existingParents = parentInfos.stream()
+            if (request.parentTabletPublishInfos == null) {
+                request.parentTabletPublishInfos = new ArrayList<>();
+            }
+            // aggregatePublishWithCarryForward fills one request from two batches, and a parent can be
+            // named by both, so later batches dedupe against what the earlier one already added.
+            Set<Long> existingParents = request.parentTabletPublishInfos.stream()
                     .map(ParentTabletPublishInfoPB::getParentTabletId)
                     .collect(java.util.stream.Collectors.toSet());
             for (ParentTabletPublishInfoPB parentInfo : GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
                     .collectParentPublishInfos(publishedTabletIds)) {
-                if (!existingParents.add(parentInfo.getParentTabletId())) {
-                    continue;
+                if (existingParents.add(parentInfo.getParentTabletId())) {
+                    request.parentTabletPublishInfos.add(parentInfo);
                 }
-                parentInfos.add(parentInfo);
             }
-            request.parentTabletPublishInfos = parentInfos;
         }
 
         if (nodeToTablets != null) {
