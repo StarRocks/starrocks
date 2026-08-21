@@ -54,6 +54,11 @@ class HttpSslContextBuilderTest {
         Config.enable_https = true;
         Config.ssl_keystore_password = "pass";
         Config.ssl_key_password = "pass";
+        Config.ssl_keystore_type = "";
+        Config.ssl_keystore_provider = "";
+        Config.ssl_security_provider_class = "";
+        Config.ssl_security_provider_name = "";
+        Config.ssl_security_provider_path = "";
         File f = File.createTempFile("keystore", ".jks");
         f.deleteOnExit();
         Config.ssl_keystore_location = f.getAbsolutePath();

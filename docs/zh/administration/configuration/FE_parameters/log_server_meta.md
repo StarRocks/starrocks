@@ -989,6 +989,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 HTTPS 服务器监听的端口。
 - 引入版本: v4.0
 
+### `ssl_keystore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: FE SSL 和 HTTPS 使用的 keystore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 keystore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_keystore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 SSL keystore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 keystore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: MySQL SSL 使用的 truststore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 truststore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 MySQL SSL truststore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 truststore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_security_provider_class`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: StarRocks 加载 SSL keystore 或 truststore 前注册的安全 provider 类。如果所需 provider 已由 JVM 注册，可以留空。
+- 引入版本: -
+
+### `ssl_security_provider_name`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 期望使用的安全 provider 名称。如果设置该值且同名 provider 已存在，StarRocks 会复用该 provider。如果 StarRocks 注册 `ssl_security_provider_class`，注册后的 provider 名称必须与该值匹配。
+- 引入版本: -
+
+### `ssl_security_provider_path`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 安全 provider JAR 的路径。多个路径可以使用系统路径分隔符分隔。如果 provider 类已在 FE classpath 中，可以留空。
+- 引入版本: -
+
 ### `max_mysql_service_task_threads_num`
 
 - 默认值: 4096

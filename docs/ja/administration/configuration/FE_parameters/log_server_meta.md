@@ -981,6 +981,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの HTTPS サーバーがリッスンするポート。
 - 導入時期：v4.0
 
+### `ssl_keystore_type`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：FE SSL および HTTPS で使用するキーストアタイプ。この値が空の場合、StarRocks は JVM デフォルトのキーストアタイプ、JKS、PKCS12 を自動的に試行します。BCFKS などの他のキーストア形式を使用する場合は、この値を明示的に設定します。
+- 導入時期：-
+
+### `ssl_keystore_provider`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：SSL キーストアのロードに使用するセキュリティ provider。空のままにすると、JVM が選択した provider を使用します。設定したキーストアタイプを `BCFIPS` などの特定 provider でロードする必要がある場合に設定します。
+- 導入時期：-
+
+### `ssl_truststore_type`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：MySQL SSL で使用するトラストストアタイプ。この値が空の場合、StarRocks は JVM デフォルトのキーストアタイプ、JKS、PKCS12 を自動的に試行します。BCFKS などの他のトラストストア形式を使用する場合は、この値を明示的に設定します。
+- 導入時期：-
+
+### `ssl_truststore_provider`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：MySQL SSL トラストストアのロードに使用するセキュリティ provider。空のままにすると、JVM が選択した provider を使用します。設定したトラストストアタイプを `BCFIPS` などの特定 provider でロードする必要がある場合に設定します。
+- 導入時期：-
+
+### `ssl_security_provider_class`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：StarRocks が SSL キーストアまたはトラストストアをロードする前に登録するセキュリティ provider クラス。必要な provider が JVM によってすでに登録されている場合は空のままにします。
+- 導入時期：-
+
+### `ssl_security_provider_name`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：期待されるセキュリティ provider 名。この値が設定され、同じ名前の provider がすでに存在する場合、StarRocks はそれを再利用します。StarRocks が `ssl_security_provider_class` を登録する場合、登録された provider 名はこの値と一致する必要があります。
+- 導入時期：-
+
+### `ssl_security_provider_path`
+
+- デフォルト：`""`
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：セキュリティ provider JAR のパス。複数のパスはシステムのパス区切り文字で区切ることができます。provider クラスがすでに FE classpath で利用可能な場合は空のままにします。
+- 導入時期：-
+
 ### `max_mysql_service_task_threads_num`
 
 - デフォルト：4096
