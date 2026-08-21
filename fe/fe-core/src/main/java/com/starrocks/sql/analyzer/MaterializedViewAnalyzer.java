@@ -668,6 +668,7 @@ public class MaterializedViewAnalyzer {
                         continue;
                     }
                     FeNameFormat.checkColumnName(colName);
+                    FeNameFormat.checkVirtualColumnNameNotUsed(colName);
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();

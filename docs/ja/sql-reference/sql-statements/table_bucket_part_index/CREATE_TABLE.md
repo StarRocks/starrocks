@@ -161,7 +161,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### `col_name`
 
-通常、`__op` または `__row` で始まる名前のカラムは作成できません。これらの名前形式はStarRocksで特別な目的のために予約されており、そのようなカラムを作成すると未定義の動作を引き起こす可能性があるためです。どうしてもそのようなカラムを作成する必要がある場合は、FE動的パラメータ[`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) を `TRUE` に設定してください。
+通常、`__op` または `__row` で始まる名前のカラムは作成できません。これらの名前形式はStarRocksで特別な目的のために予約されており、そのようなカラムを作成すると未定義の動作を引き起こす可能性があるためです。ネイティブテーブルでは、仮想カラムの名前（`_tablet_id_`、`_segment_id_`、`_rss_id_`、`_source_id_`、`_row_id_`、`_rowset_id_`、`_dynamic_rssid_`）も同様に予約されています。同名のテーブルカラムは仮想カラムを隠してしまい、クエリではどちらも参照できなくなるためです。外部テーブルは仮想カラムを公開しないため、この制限は適用されません。どうしてもそのようなカラムを作成する必要がある場合は、FE動的パラメータ[`allow_system_reserved_names`](../../../administration/configuration/FE_parameters/FE_parameters.md#allow_system_reserved_names) を `TRUE` に設定してください。
 
 ### `col_type`
 
