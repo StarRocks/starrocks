@@ -65,6 +65,32 @@ PROPERTIES (
   - `chinese`CJKアナライザー[をCLuceneで使用してトークン化します。](https://lucene.apache.org/core/6_6_1/analyzers-common/org/apache/lucene/analysis/cjk/package-summary.html): 多言語トークン化。このトークン化メソッドは、文法に基づいたトークン化（
   - `standard`Unicodeテキストセグメンテーションアルゴリズム[に基づく）を提供し、ほとんどの言語や中国語と英語のような混合言語の場合にうまく機能します。例えば、このトークン化メソッドは、中国語と英語が共存する場合に両者を区別できます。英語をトークン化した後、大文字の英字を小文字に変換します。したがって、全文転置インデックスを活用してデータ行を特定するには、クエリ条件のキーワードは大文字の英語ではなく小文字の英語である必要があります。](https://unicode.org/reports/tr29/)インデックス付き列のデータ型は、CHAR、VARCHAR、またはSTRINGである必要があります。
 - インデックス付き列のデータ型は、CHAR、VARCHAR、または STRING である必要があります。
+- `support_phrase` パラメータ（デフォルト `false`）は、ターム位置情報をディスクに書き出すかどうか（CLucene の `.prx` ファイル）を制御します。これは `MATCH_PHRASE` フレーズクエリをインデックスから処理するために必要です。該当列で `MATCH_PHRASE` を実行する場合は、インデックス作成時に `true` を指定する必要があります。注意事項:
+  - `imp_lib = clucene`（デフォルト）の場合にのみサポートされ、`imp_lib = builtin` との組み合わせはできません。
+  - `parser = none` との組み合わせはできません。`english`、`chinese`、`standard` のいずれかを使用してください。
+  - `support_phrase` を有効化するとインデックスファイルのサイズや書き込みオーバーヘッドが増加します。フレーズ検索が実際に必要な列にのみ有効化することを推奨します。
+
+  例:
+
+  ```SQL
+  CREATE TABLE `docs` (
+      `id` INT NOT NULL,
+      `content` VARCHAR(200) NOT NULL,
+      INDEX idx_content (`content`)
+          USING GIN("imp_lib" = "clucene", "parser" = "english", "support_phrase" = "true")
+  )
+  DUPLICATE KEY(`id`)
+  DISTRIBUTED BY HASH(`id`)
+  PROPERTIES ("replicated_storage" = "false");
+  ```
+
+  インデックス作成後、`MATCH_PHRASE` クエリを実行できます:
+
+  ```SQL
+  SELECT * FROM docs WHERE content MATCH_PHRASE 'inverted index';
+  ```
+
+  列に GIN インデックスがない場合、または GIN インデックスに `support_phrase = "true"` が設定されていない場合、`MATCH_PHRASE` は FE のセマンティック解析時に拒否されエラーとなります。本パラメータ導入前に作成された既存インデックスは、後方互換性のため `support_phrase = false` として扱われます。フレーズクエリが必要な場合はインデックスを再作成し `support_phrase = "true"` を指定してください。
 
 #### テーブル作成後に全文転置インデックスを追加する
 

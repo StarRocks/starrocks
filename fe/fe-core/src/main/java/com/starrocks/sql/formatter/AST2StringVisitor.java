@@ -1385,7 +1385,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     public String visitMatchExpr(MatchExpr node, Void context) {
         return printWithParentheses(node.getChild(0))
-                + " MATCH " + printWithParentheses(node.getChild(1));
+                + " " + node.getMatchOperator().getName() + " " + printWithParentheses(node.getChild(1));
     }
 
     @Override

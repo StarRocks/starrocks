@@ -101,6 +101,16 @@ bool is_tokenized_from_properties(const std::map<std::string, std::string>& prop
     return false;
 }
 
+bool get_support_phrase_from_properties(const std::map<std::string, std::string>& properties) {
+    auto it = properties.find(INVERTED_INDEX_SUPPORT_PHRASE_KEY);
+    if (it == properties.end()) {
+        // Backward compatibility: indexes created before this property existed do not have
+        // term positions on disk, so MATCH_PHRASE must remain disabled for them.
+        return false;
+    }
+    return boost::algorithm::to_lower_copy(it->second) == "true";
+}
+
 bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties) {
     for (const auto& prop : properties) {
         if (boost::to_lower_copy(prop.first) == INVERTED_INDEX_LOWER_CASE_KEY) {

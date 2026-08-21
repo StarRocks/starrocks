@@ -1268,6 +1268,9 @@ public class ExecExprTest {
         assertEquals(TExprOpcode.MATCH_ALL,
                 ExprOpcodeRegistry.getMatchOpcode(
                         com.starrocks.sql.ast.expression.MatchExpr.MatchOperator.MATCH_ALL));
+        assertEquals(TExprOpcode.MATCH_PHRASE,
+                ExprOpcodeRegistry.getMatchOpcode(
+                        com.starrocks.sql.ast.expression.MatchExpr.MatchOperator.MATCH_PHRASE));
     }
 
     // ======================================================================
@@ -1677,6 +1680,16 @@ public class ExecExprTest {
     }
 
     @Test
+    public void testExecMatchExprMatchPhrase() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test phrase");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_PHRASE,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals(MatchExpr.MatchOperator.MATCH_PHRASE, expr.getMatchOp());
+    }
+
+    @Test
     public void testExecMatchExprNullability() {
         ExecSlotRef nullable = makeSlotRef(1, 0, VarcharType.VARCHAR, true);
         ExecLiteral pattern = makeVarcharLiteral("test");
@@ -1707,6 +1720,18 @@ public class ExecExprTest {
         TExprNode node = new TExprNode();
         expr.toThrift(node);
         assertEquals(TExprOpcode.MATCH_ALL, node.opcode);
+    }
+
+    @Test
+    public void testExecMatchExprToThriftMatchPhrase() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test phrase");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_PHRASE,
+                new ArrayList<>(List.of(col, pattern)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        assertEquals(TExprOpcode.MATCH_PHRASE, node.opcode);
     }
 
     @Test
@@ -4115,6 +4140,8 @@ public class ExecExprTest {
         assertEquals(TExprOpcode.MATCH, ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH));
         assertEquals(TExprOpcode.MATCH_ANY, ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH_ANY));
         assertEquals(TExprOpcode.MATCH_ALL, ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH_ALL));
+        assertEquals(TExprOpcode.MATCH_PHRASE,
+                ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH_PHRASE));
     }
 
     // ======================================================================
@@ -4572,6 +4599,16 @@ public class ExecExprTest {
                 new ArrayList<>(List.of(col, pattern)));
 
         assertEquals("<slot 1> MATCH_ALL 'test'", ExecExprExplain.explain(match));
+    }
+
+    @Test
+    public void testExplainMatchExprPhrase() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test phrase");
+        ExecMatchExpr match = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_PHRASE,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals("<slot 1> MATCH_PHRASE 'test phrase'", ExecExprExplain.explain(match));
     }
 
     @Test

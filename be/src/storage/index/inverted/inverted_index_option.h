@@ -39,6 +39,11 @@ int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& p
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
 
+// Returns true when the GIN index is configured to keep term positions (prx file) so that
+// MATCH_PHRASE queries can be served. Missing key is treated as false, which preserves the
+// behavior of indexes created before this property existed.
+bool get_support_phrase_from_properties(const std::map<std::string, std::string>& properties);
+
 bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties);
 
 } // namespace starrocks

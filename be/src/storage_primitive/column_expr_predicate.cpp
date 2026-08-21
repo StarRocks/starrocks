@@ -30,6 +30,9 @@ std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool vali
     if (valid_match && op == TExprOpcode::MATCH_ALL) {
         return InvertedIndexQueryType::MATCH_ALL_QUERY;
     }
+    if (valid_match && op == TExprOpcode::MATCH_PHRASE) {
+        return InvertedIndexQueryType::MATCH_PHRASE_QUERY;
+    }
     // TODO: push LIKE patterns containing '_' down to the inverted index. For now we
     // fall back to the canonical LIKE engine (correct, just not accelerated): the
     // builtin index could match '_' with a custom matcher, but CLucene WildcardQuery

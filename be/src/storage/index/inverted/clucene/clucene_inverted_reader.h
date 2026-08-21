@@ -68,8 +68,10 @@ public:
 class FullTextCLuceneInvertedReader : public CLuceneInvertedReader {
 public:
     explicit FullTextCLuceneInvertedReader(std::string path, const uint32_t index_id,
-                                           InvertedIndexParserType parser_type)
-            : CLuceneInvertedReader(std::move(path), index_id), _parser_type(parser_type) {
+                                           InvertedIndexParserType parser_type, bool support_phrase)
+            : CLuceneInvertedReader(std::move(path), index_id),
+              _parser_type(parser_type),
+              _support_phrase(support_phrase) {
         lucene::search::BooleanQuery::setMaxClauseCount(INT_MAX);
     }
 
@@ -83,6 +85,9 @@ public:
 
 private:
     InvertedIndexParserType _parser_type;
+    // Mirrors the FE-side `support_phrase` GIN property. When false, MATCH_PHRASE is rejected at query
+    // time even if the FE-side validator did not catch it (older metadata, direct storage callers, etc.).
+    bool _support_phrase;
 };
 
 } // namespace starrocks
