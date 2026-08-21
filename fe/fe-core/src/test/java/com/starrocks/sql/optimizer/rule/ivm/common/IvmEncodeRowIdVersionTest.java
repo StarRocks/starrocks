@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
@@ -37,8 +38,8 @@ import java.util.List;
  * Tests for {@link IvmOpUtils#deduceEncodeRowIdVersion(List)}.
  *
  * <p>Which keys may use the order-preserving {@code encode_sort_key} is not just a size question: the
- * backend encoder rejects some fixed-length types outright and mis-encodes constants, and a row id that
- * cannot be encoded turns a slow refresh into a failing one.
+ * backend encoder rejects some fixed-length types outright, and a row id that cannot be encoded turns a
+ * slow refresh into a failing one.
  */
 public class IvmEncodeRowIdVersionTest {
 
@@ -124,15 +125,29 @@ public class IvmEncodeRowIdVersionTest {
         assertFingerprint(keys(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)));
     }
 
-    /**
-     * A constant reaches the backend as a ConstColumn, which encode_sort_key appends to the first row's
-     * buffer once per row in the chunk and to no other row: that key overflows primary_key_limit_size and
-     * every other row loses the constant, so two keys differing only in it would encode identically.
-     */
     @Test
-    public void constantKeysUseFingerprint() {
-        assertFingerprint(Lists.newArrayList(new IntLiteral(0), key(IntegerType.BIGINT)));
-        assertFingerprint(Lists.newArrayList(new IntLiteral(7)));
+    public void constantKeysCountAgainstTheBudget() {
+        // The union path's shape: a TINYINT branch ordinal ahead of the branch's own key.
+        assertSortKey(Lists.newArrayList(new IntLiteral(0), key(IntegerType.BIGINT)));
+        assertSortKey(Lists.newArrayList(new IntLiteral(7)));
+        // The ordinal is budgeted like any other key: 1 + 3 * 8 frames to exactly 32, one key more overflows.
+        assertSortKey(Lists.newArrayList(new IntLiteral(0), key(IntegerType.BIGINT), key(IntegerType.BIGINT),
+                key(IntegerType.BIGINT)));
+        assertFingerprint(Lists.newArrayList(new IntLiteral(0), key(IntegerType.BIGINT), key(IntegerType.BIGINT),
+                key(IntegerType.BIGINT), key(IntegerType.BIGINT)));
+        // Being constant does not override the type whitelist.
+        assertFingerprint(Lists.newArrayList(new LargeIntLiteral("170141183460469231731687303715884105727"),
+                key(IntegerType.BIGINT)));
+    }
+
+    @Test
+    public void unionShapesBudgetTheOrdinalWithTheBranchKeys() {
+        // A composite branch key: the ordinal plus (DATE, BIGINT) frames to 18.
+        assertSortKey(Lists.newArrayList(new IntLiteral(0), key(DateType.DATE), key(IntegerType.BIGINT)));
+        // Branch 128 no longer fits a TINYINT, so its ordinal costs two bytes instead of one.
+        assertSortKey(Lists.newArrayList(new IntLiteral(128), key(IntegerType.BIGINT)));
+        assertFingerprint(Lists.newArrayList(new IntLiteral(0),
+                keys(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)).get(0)));
     }
 
     @Test

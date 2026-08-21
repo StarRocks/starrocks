@@ -27,13 +27,20 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Tests for {@link IvmRowIdInjector#discriminateUnionBranchRowIds}: each retractable UNION ALL branch's
@@ -45,8 +52,10 @@ public class IvmRowIdInjectorTest {
 
     // The shape IVMAnalyzer leaves for a retractable branch: __ROW_ID__ = FROM_BINARY(ENCODE_ROW_ID(<keys>))
     // at index 0, then the branch's real outputs. discriminateUnionBranchRowIds reads the keys back out of it.
-    private static SelectList branchSelectList(String keyTable, String keyColumn) {
-        List<Expr> keys = Lists.newArrayList(new SlotRef(new TableName("db", keyTable), keyColumn));
+    private static SelectList branchSelectList(String keyTable, String keyColumn, Type keyType) {
+        SlotRef key = new SlotRef(new TableName("db", keyTable), keyColumn);
+        key.setType(keyType);
+        List<Expr> keys = Lists.<Expr>newArrayList(key);
         FunctionCallExpr rowId = IvmOpUtils.buildRowIdFuncExpr(IvmOpUtils.deduceEncodeRowIdVersion(keys), keys);
         SelectList selectList = new SelectList();
         selectList.addItem(new SelectListItem(rowId, IvmOpUtils.COLUMN_ROW_ID));
@@ -58,8 +67,8 @@ public class IvmRowIdInjectorTest {
     public void testDiscriminateUnionBranchRowIdsPrependsBranchOrdinal(
             @Mocked CreateMaterializedViewStatement statement,
             @Mocked SelectRelation branch0, @Mocked SelectRelation branch1) {
-        SelectList selectList0 = branchSelectList("a0", "id");
-        SelectList selectList1 = branchSelectList("a1", "id");
+        SelectList selectList0 = branchSelectList("a0", "id", IntegerType.BIGINT);
+        SelectList selectList1 = branchSelectList("a1", "id", IntegerType.BIGINT);
         new Expectations() {
             {
                 branch0.getSelectList();
@@ -107,6 +116,89 @@ public class IvmRowIdInjectorTest {
         Assertions.assertThrows(IllegalStateException.class,
                 () -> IvmRowIdInjector.discriminateUnionBranchRowIds(statement, Lists.newArrayList(branch0), null),
                 "a branch whose column 0 is not __ROW_ID__ must be rejected, not silently mis-keyed");
+    }
+
+
+    @ParameterizedTest(name = "{0} branch keys deduce {1}")
+    @MethodSource("branchKeyTypes")
+    public void testUnionBranchesDeduceFromOrdinalPlusKeys(Type keyType, String expectedEncode,
+                                                           @Mocked CreateMaterializedViewStatement statement,
+                                                           @Mocked SelectRelation branch0,
+                                                           @Mocked SelectRelation branch1) {
+        SelectList selectList0 = branchSelectList("a0", "id", keyType);
+        SelectList selectList1 = branchSelectList("a1", "id", keyType);
+        new Expectations() {
+            {
+                branch0.getSelectList();
+                result = selectList0;
+                minTimes = 0;
+                branch0.getOutputExpression();
+                result = Lists.newArrayList(selectList0.getItems().get(0).getExpr(), new IntLiteral(7));
+                minTimes = 0;
+
+                branch1.getSelectList();
+                result = selectList1;
+                minTimes = 0;
+                branch1.getOutputExpression();
+                result = Lists.newArrayList(selectList1.getItems().get(0).getExpr(), new IntLiteral(7));
+                minTimes = 0;
+            }
+        };
+
+        IvmRowIdInjector.discriminateUnionBranchRowIds(statement,
+                Lists.newArrayList((QueryRelation) branch0, (QueryRelation) branch1), null);
+
+        Assertions.assertEquals(expectedEncode, encodeFunctionName(selectList0));
+        Assertions.assertEquals(expectedEncode, encodeFunctionName(selectList1),
+                "both branches must share one encoding or their row ids are not comparable");
+    }
+
+    /**
+     * One encoding has to cover every branch, so a branch the deduction sends to the fingerprint takes the
+     * others with it -- row ids built by two different encodings would not be comparable under net-collapse.
+     */
+    @Test
+    public void testOneBranchOnTheFingerprintMovesThemAll(@Mocked CreateMaterializedViewStatement statement,
+                                                          @Mocked SelectRelation branch0,
+                                                          @Mocked SelectRelation branch1) {
+        SelectList narrow = branchSelectList("a0", "id", IntegerType.BIGINT);
+        SelectList wide = branchSelectList("a1", "id", TypeFactory.createVarcharType(32));
+        new Expectations() {
+            {
+                branch0.getSelectList();
+                result = narrow;
+                minTimes = 0;
+                branch0.getOutputExpression();
+                result = Lists.newArrayList(narrow.getItems().get(0).getExpr(), new IntLiteral(7));
+                minTimes = 0;
+
+                branch1.getSelectList();
+                result = wide;
+                minTimes = 0;
+                branch1.getOutputExpression();
+                result = Lists.newArrayList(wide.getItems().get(0).getExpr(), new IntLiteral(7));
+                minTimes = 0;
+            }
+        };
+
+        IvmRowIdInjector.discriminateUnionBranchRowIds(statement,
+                Lists.newArrayList((QueryRelation) branch0, (QueryRelation) branch1), null);
+
+        Assertions.assertEquals(FunctionSet.ENCODE_FINGERPRINT_SHA256, encodeFunctionName(narrow),
+                "the narrow branch must follow the wide one onto the fingerprint");
+        Assertions.assertEquals(FunctionSet.ENCODE_FINGERPRINT_SHA256, encodeFunctionName(wide));
+    }
+
+    private static Stream<Arguments> branchKeyTypes() {
+        return Stream.of(
+                // The ordinal is a TINYINT, so it leaves the narrow branch key inside the sort key's budget.
+                Arguments.of(IntegerType.BIGINT, FunctionSet.ENCODE_SORT_KEY),
+                Arguments.of(TypeFactory.createVarcharType(32), FunctionSet.ENCODE_FINGERPRINT_SHA256));
+    }
+
+    private static String encodeFunctionName(SelectList selectList) {
+        FunctionCallExpr fromBinary = (FunctionCallExpr) selectList.getItems().get(0).getExpr();
+        return ((FunctionCallExpr) fromBinary.getChild(0)).getFunctionName();
     }
 
     // encode(branch ordinal, <key read back from column 0>) wrapped in FROM_BINARY.

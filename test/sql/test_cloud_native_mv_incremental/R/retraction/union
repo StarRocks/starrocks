@@ -354,3 +354,85 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT id,v FROM uca UNI
 -- result:
 0
 -- !result
+
+-- name: test_ivm_pk_union_row_id_encoding @cloud
+CREATE TABLE ure_a (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+CREATE TABLE ure_b (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO ure_a VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO ure_b VALUES (1,10),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ure REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM ure_a UNION ALL SELECT id, v FROM ure_b;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ure WITH SYNC MODE;
+SELECT COUNT(DISTINCT LENGTH(__ROW_ID__)) AS n_len, MIN(LENGTH(__ROW_ID__)) AS len FROM mv_ure;
+-- result:
+1	12
+-- !result
+SELECT COUNT(*) AS rows_, COUNT(DISTINCT __ROW_ID__) AS distinct_row_ids FROM mv_ure;
+-- result:
+4	4
+-- !result
+UPDATE ure_b SET v = 10 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ure WITH SYNC MODE;
+SELECT COUNT(*) AS rows_, COUNT(DISTINCT __ROW_ID__) AS distinct_row_ids FROM mv_ure;
+-- result:
+4	4
+-- !result
+SELECT COUNT(DISTINCT LENGTH(__ROW_ID__)) AS n_len_after_refresh FROM mv_ure;
+-- result:
+1
+-- !result
+CREATE TABLE urs_a (sk VARCHAR(16) NOT NULL, v BIGINT) PRIMARY KEY(sk) DISTRIBUTED BY HASH(sk) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+CREATE TABLE urs_b (sk VARCHAR(16) NOT NULL, v BIGINT) PRIMARY KEY(sk) DISTRIBUTED BY HASH(sk) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO urs_a VALUES ('a',10);
+-- result:
+-- !result
+INSERT INTO urs_b VALUES ('a',10);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_urs REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT sk, v FROM urs_a UNION ALL SELECT sk, v FROM urs_b;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_urs WITH SYNC MODE;
+SELECT COUNT(DISTINCT LENGTH(__ROW_ID__)) AS n_len, MIN(LENGTH(__ROW_ID__)) AS len FROM mv_urs;
+-- result:
+1	44
+-- !result
+SELECT COUNT(*) AS rows_, COUNT(DISTINCT __ROW_ID__) AS distinct_row_ids FROM mv_urs;
+-- result:
+2	2
+-- !result
+DROP MATERIALIZED VIEW mv_ure;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW mv_urs;
+-- result:
+-- !result
+DROP TABLE ure_a;
+-- result:
+-- !result
+DROP TABLE ure_b;
+-- result:
+-- !result
+DROP TABLE urs_a;
+-- result:
+-- !result
+DROP TABLE urs_b;
+-- result:
+-- !result

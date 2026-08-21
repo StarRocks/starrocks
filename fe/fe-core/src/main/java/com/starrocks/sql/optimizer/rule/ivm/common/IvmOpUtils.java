@@ -112,12 +112,6 @@ public class IvmOpUtils {
     public static int deduceEncodeRowIdVersion(List<Expr> children) {
         int totalSize = 0;
         for (Expr child : children) {
-            // encode_sort_key mis-encodes a ConstColumn: the constant lands in the first row's buffer once
-            // per row in the chunk and never in the others, so that key overflows primary_key_limit_size and
-            // every other row silently loses it.
-            if (child.isConstant()) {
-                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
-            }
             Type type = child.getType();
             if (type == null || !type.isValid() || !type.isScalarType()) {
                 return ENCODE_ROW_ID_VERSION_FINGERPRINT;
