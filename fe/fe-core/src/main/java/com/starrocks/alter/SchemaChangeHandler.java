@@ -3072,6 +3072,15 @@ public class SchemaChangeHandler extends AlterHandler {
                             olapTable.getName(), enableFileBundling));
                     return null;
                 }
+                // Turning it off would strand this shape: CompactionScheduler drops an UNSHARE request
+                // for a table that is not file-bundling, so a split already in flight would wait on a
+                // rewrite that can never be scheduled -- the job never leaves CLEANING, the table never
+                // leaves TABLET_RESHARD, and queries stay pinned to the parent index for good. A later
+                // split would simply be refused by SplitTabletJobFactory. Refuse the property instead.
+                if (!enableFileBundling && isSeparateSortKeyRangePrimaryKey(olapTable)) {
+                    throw new DdlException("file_bundling cannot be disabled on a range-distributed primary key "
+                            + "table whose ORDER BY key differs from the primary key");
+                }
                 metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
                 compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,

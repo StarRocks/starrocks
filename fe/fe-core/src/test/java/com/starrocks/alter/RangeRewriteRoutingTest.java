@@ -471,4 +471,37 @@ public class RangeRewriteRoutingTest {
                 SchemaChangeHandler.isLakeIndexFastPathAdmissible(table("t_route_pk_nosidecar")),
                 "a sort key equal to the primary key leaves the fast path admissible");
     }
+
+    // (n) file_bundling is what makes this shape work at all: CompactionScheduler drops an UNSHARE
+    // request for a table that is not file-bundling, so disabling it mid-split would leave the job
+    // waiting on a rewrite that can never be scheduled. Refuse the property change.
+    @Test
+    public void testDisablingFileBundlingRejectedOnSeparateSortKeyPrimaryKeyRange() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_bundle (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        DdlException e = assertThrowsDdlException(() -> createJob("t_route_pk_bundle",
+                "alter table t_route_pk_bundle set ('file_bundling' = 'false')"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                e.getMessage().contains("file_bundling cannot be disabled"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    // (n') A range primary-key table whose sort key IS the primary key never needed the UNSHARE
+    // rewrite, so it keeps the property switchable.
+    @Test
+    public void testDisablingFileBundlingAllowedWhenSortKeyIsThePrimaryKey() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_bundle_ok (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        try {
+            createJob("t_route_pk_bundle_ok", "alter table t_route_pk_bundle_ok set ('file_bundling' = 'false')");
+        } catch (Exception e) {
+            org.junit.jupiter.api.Assertions.assertFalse(
+                    String.valueOf(e.getMessage()).contains("file_bundling cannot be disabled"),
+                    "must not hit the separate-sort-key refusal: " + e.getMessage());
+        }
+    }
 }
