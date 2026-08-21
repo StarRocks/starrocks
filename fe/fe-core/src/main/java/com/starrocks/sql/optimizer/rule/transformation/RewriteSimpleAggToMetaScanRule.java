@@ -349,7 +349,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         for (Partition partition : table.getVisiblePartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long visibleVersion = physicalPartition.getVisibleVersion();
-                for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
+                for (Tablet tablet : physicalPartition.getQueryableBaseIndex().getTablets()) {
                     long rowCount = tablet.getRowCountAtVersion(visibleVersion);
                     if (rowCount < 0) {
                         return Optional.empty();

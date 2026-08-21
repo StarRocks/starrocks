@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.Hashing;
 import com.google.gson.annotations.SerializedName;
@@ -33,6 +34,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
@@ -44,7 +46,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcessable {
@@ -163,6 +167,31 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         return reshardingTabletInfo.getReshardingTablet();
     }
 
+    /**
+     * Whether any split job could still owe a parent-view page. Publish consults this on every
+     * transaction, so it has to be the cheapest question that can end the enquiry: finished jobs stay in
+     * the map for tablet_reshard_history_job_keep_max_ms (3 days by default) and answer nothing, and a
+     * cluster that never splits answers nothing at all.
+     */
+    public boolean hasLiveSplitJob() {
+        for (TabletReshardJob job : tabletReshardJobs.values()) {
+            if (job instanceof SplitTabletJob && !job.getJobState().isFinalState()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public List<ParentTabletPublishInfoPB> collectParentPublishInfos(Set<Long> publishedTabletIds) {
+        List<ParentTabletPublishInfoPB> parentInfos = Lists.newArrayList();
+        for (TabletReshardJob job : tabletReshardJobs.values()) {
+            if (job instanceof SplitTabletJob splitJob) {
+                parentInfos.addAll(splitJob.collectParentPublishInfos(publishedTabletIds));
+            }
+        }
+        return parentInfos;
+    }
+
     public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
             throws StarRocksException {
         TabletReshardJob job = new SplitTabletJobFactory(db, table, splitTabletClause).createTabletReshardJob();
@@ -193,15 +222,50 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // suppressing it forever. murmur3 (matching ColocateChecker) avoids the 32-bit Objects.hash
     // collision that could hide a config change.
     @VisibleForTesting
-    static long splitPlanSignature(long maxTabletSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
+    static long splitPlanSignature(long maxTabletSize, long maxAdaptiveSplitTabletSize, int adaptiveBound,
+                                   int maxSplitCount) {
         return Hashing.murmur3_128().newHasher()
                 .putLong(Config.tablet_reshard_target_size)
                 .putInt(Config.tablet_reshard_max_split_count)
-                .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
+                .putInt(maxSplitCount)
+                .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size,
+                        maxSplitCount))
                 .putLong(Config.tablet_reshard_min_split_size)
                 .putLong(maxAdaptiveSplitTabletSize)
                 .putInt(adaptiveBound)
                 .hash().asLong();
+    }
+
+    /**
+     * Whether the quiet period after this table's previous reshard job has elapsed.
+     *
+     * <p>A split whose children must be UNSHARE-rewritten holds the partition's only compaction slot
+     * for the whole rewrite, during which size-tiered compaction cannot run and the small files from
+     * ongoing ingestion just pile up. Firing the next split the moment the previous one lands never
+     * gives that backlog a chance to drain. Finished jobs stay in {@code tabletReshardJobs} for
+     * tablet_reshard_history_job_keep_max_ms, so the previous finish time is read straight off them --
+     * no extra state to keep in sync, and it survives a leader switch.
+     *
+     * <p>That retention is therefore a lower bound on the interval this can enforce: configure
+     * tablet_reshard_orderby_split_interval_second beyond tablet_reshard_history_job_keep_max_ms (180s
+     * against 3 days by default) and the finished job is evicted before the period ends, leaving no
+     * timestamp and admitting the next split early. The failure is a shorter wait, never inconsistent
+     * metadata. Closing it means persisting a per-table completion timestamp -- journaled, replayed and
+     * garbage-collected on drop -- which is only worth it if the interval ever grows toward retention.
+     */
+    private boolean reshardQuietPeriodElapsed(long tableId) {
+        int waitSeconds = Config.tablet_reshard_orderby_split_interval_second;
+        if (waitSeconds <= 0) {
+            return true;
+        }
+        long newestFinishMs = 0;
+        for (TabletReshardJob job : tabletReshardJobs.values()) {
+            if (job instanceof SplitTabletJob splitJob && splitJob.getTableId() == tableId && job.isDone()) {
+                newestFinishMs = Math.max(newestFinishMs, job.getFinishedTimeMs());
+            }
+        }
+        return newestFinishMs == 0
+                || System.currentTimeMillis() - newestFinishMs >= waitSeconds * 1000L;
     }
 
     /**
@@ -228,8 +292,13 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             boolean normalSignal = TabletReshardUtils.needSplit(maxTabletSize);
             boolean adaptiveSignal = maxAdaptiveSplitTabletSize > 0;
             if (normalSignal || adaptiveSignal) {
+                if (TabletReshardUtils.splitRewritesEveryShard(table) && !reshardQuietPeriodElapsed(tableId)) {
+                    // Leave the latch untouched: this is a "not yet", not "no progress possible".
+                    return;
+                }
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
-                        splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize, adaptiveBound));
+                        splitPlanSignature(maxTabletSize, maxAdaptiveSplitTabletSize, adaptiveBound,
+                                TabletReshardUtils.effectiveMaxSplitCount(table)));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
                     try {

@@ -1120,7 +1120,7 @@ public class PlanFragmentBuilder {
                         }
                         selectedNonEmptyPartitionIds.add(partitionId);
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
-                        final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
+                        final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                         OlapScanNode.fillTabletId2BucketSeq(

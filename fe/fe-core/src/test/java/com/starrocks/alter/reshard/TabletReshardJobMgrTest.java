@@ -15,13 +15,16 @@
 package com.starrocks.alter.reshard;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -41,8 +44,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TabletReshardJobMgrTest {
     // A JMockit @Mock for a static method must itself be static, so it cannot capture a local of the
@@ -760,9 +769,9 @@ public class TabletReshardJobMgrTest {
                     "the old 32-bit Objects.hash fingerprint would have collided on these inputs");
 
             Config.tablet_reshard_target_size = targetA;
-            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
+            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8, Config.tablet_reshard_max_split_count);
             Config.tablet_reshard_target_size = targetB;
-            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8);
+            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8, Config.tablet_reshard_max_split_count);
             Assertions.assertNotEquals(sigA, sigB,
                     "the 64-bit murmur3 fingerprint must distinguish targets that collide under Objects.hash");
         } finally {
@@ -978,23 +987,24 @@ public class TabletReshardJobMgrTest {
         try {
             long max = Config.tablet_reshard_target_size * 4;
             long adaptive = Config.tablet_reshard_min_split_size * 4;
-            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8);
+            int cap = Config.tablet_reshard_max_split_count;
+            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8, cap);
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive, 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive, 8, cap),
                     "a larger max tablet changes the size rule's answer");
 
             Config.tablet_reshard_min_split_size = savedMin * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8, cap),
                     "min_split_size moves the adaptive target");
             Config.tablet_reshard_min_split_size = savedMin;
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8, 8),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8, 8, cap),
                     "a different adaptive-split tablet size");
 
             // The bound is a plan input, not just a scan input: an index the adaptive rule declined
             // to widen at four nodes may be worth widening at eight, so a resized warehouse has to
             // re-arm a suppressed table rather than leave it latched on the old bound's answer.
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 4),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 4, cap),
                     "a resized warehouse moves the bound");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;
@@ -1042,5 +1052,149 @@ public class TabletReshardJobMgrTest {
             reshardTable.setState(OlapTable.OlapTableState.NORMAL);
         }
         Assertions.assertEquals(0, NODE_COUNT_RESOLUTIONS.get(), "the NORMAL guard must run before the probe");
+    }
+
+    /**
+     * The ORDER BY split cadence gate. A split whose children must be UNSHARE-rewritten holds the
+     * partition's only compaction slot for the whole rewrite, during which size-tiered compaction cannot
+     * run, so the next split waits out tablet_reshard_orderby_split_interval_second. The previous finish
+     * time is read straight off the finished jobs still in the map, which is what lets it survive a
+     * leader switch.
+     */
+    @Test
+    public void quietPeriodCountsOnlyThisTablesFinishedSplits() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        long tableId = 770001L;
+        int savedInterval = Config.tablet_reshard_orderby_split_interval_second;
+        try {
+            // Disabled: nothing is ever held back.
+            Config.tablet_reshard_orderby_split_interval_second = 0;
+            Assertions.assertTrue(quietPeriodElapsed(jobMgr, tableId));
+
+            Config.tablet_reshard_orderby_split_interval_second = 3600;
+            // No previous job at all, so there is no clock to wait on.
+            Assertions.assertTrue(quietPeriodElapsed(jobMgr, tableId));
+
+            // A job still running carries a finish time of 0 and must not start one either.
+            SplitTabletJob running = new SplitTabletJob(770101L, reshardDb.getId(), tableId, Map.of());
+            running.jobState = TabletReshardJob.JobState.RUNNING;
+            jobMgr.tabletReshardJobs.put(770101L, running);
+            Assertions.assertTrue(quietPeriodElapsed(jobMgr, tableId));
+
+            // One that finished just now does.
+            SplitTabletJob justFinished = new SplitTabletJob(770102L, reshardDb.getId(), tableId, Map.of());
+            justFinished.jobState = TabletReshardJob.JobState.FINISHED;
+            justFinished.finishedTimeMs = System.currentTimeMillis();
+            jobMgr.tabletReshardJobs.put(770102L, justFinished);
+            Assertions.assertFalse(quietPeriodElapsed(jobMgr, tableId));
+            // ... and only for its own table.
+            Assertions.assertTrue(quietPeriodElapsed(jobMgr, tableId + 1));
+
+            // The newest finish is the one that counts: an older sibling must not talk the gate open.
+            SplitTabletJob longDone = new SplitTabletJob(770103L, reshardDb.getId(), tableId, Map.of());
+            longDone.jobState = TabletReshardJob.JobState.FINISHED;
+            longDone.finishedTimeMs = System.currentTimeMillis() - 7200_000L;
+            jobMgr.tabletReshardJobs.put(770103L, longDone);
+            Assertions.assertFalse(quietPeriodElapsed(jobMgr, tableId));
+
+            jobMgr.tabletReshardJobs.remove(770102L);
+            Assertions.assertTrue(quietPeriodElapsed(jobMgr, tableId));
+        } finally {
+            Config.tablet_reshard_orderby_split_interval_second = savedInterval;
+        }
+    }
+
+    private static boolean quietPeriodElapsed(TabletReshardJobMgr jobMgr, long tableId) {
+        return Deencapsulation.invoke(jobMgr, "reshardQuietPeriodElapsed", tableId);
+    }
+
+    /**
+     * While a split's children are being UNSHARE-rewritten the parent stays queryable, so every ordinary
+     * publish of those children has to carry a query-parent metadata page for it. This is what collects
+     * them, and the queryable-index pin is what says a parent still needs one.
+     */
+    @Test
+    public void parentPublishInfosTrackThePinnedParentUntilItsFamilyLands() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        PhysicalPartition physicalPartition =
+                reshardTable.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        long indexMetaId = reshardTable.getBaseIndexMetaId();
+        physicalPartition.pinQueryableIndex(indexMetaId, physicalPartition.getLatestBaseIndex().getId());
+        try {
+            long parentTabletId = 780001L;
+            List<Long> childTabletIds = List.of(780002L, 780003L);
+            ReshardingTablet family = mock(ReshardingTablet.class);
+            when(family.getOldTabletIds()).thenReturn(List.of(parentTabletId));
+            when(family.getNewTabletIds()).thenReturn(childTabletIds);
+            when(family.getFirstOldTabletId()).thenReturn(parentTabletId);
+
+            MaterializedIndex newIndex = mock(MaterializedIndex.class);
+            when(newIndex.getMetaId()).thenReturn(indexMetaId);
+            ReshardingMaterializedIndex reshardingIndex = mock(ReshardingMaterializedIndex.class);
+            when(reshardingIndex.getMaterializedIndex()).thenReturn(newIndex);
+            when(reshardingIndex.getReshardingTablets()).thenReturn(List.of(family));
+            ReshardingPhysicalPartition reshardingPartition = mock(ReshardingPhysicalPartition.class);
+            when(reshardingPartition.getPhysicalPartitionId()).thenReturn(physicalPartition.getId());
+            when(reshardingPartition.getReshardingIndexes()).thenReturn(Map.of(indexMetaId, reshardingIndex));
+
+            SplitTabletJob split = new SplitTabletJob(780101L, reshardDb.getId(), reshardTable.getId(),
+                    Map.of(physicalPartition.getId(), reshardingPartition));
+            split.jobState = TabletReshardJob.JobState.RUNNING;
+            jobMgr.tabletReshardJobs.put(780101L, split);
+            // A merge job keeps no parent view alive; the collector must skip it rather than ask it.
+            jobMgr.tabletReshardJobs.put(780102L,
+                    new MergeTabletJob(780102L, reshardDb.getId(), reshardTable.getId(), Map.of()));
+
+            List<ParentTabletPublishInfoPB> infos =
+                    jobMgr.collectParentPublishInfos(new HashSet<>(childTabletIds));
+            Assertions.assertEquals(1, infos.size());
+            Assertions.assertEquals(parentTabletId, (long) infos.get(0).getParentTabletId());
+
+            // Half a family is not a family: the page is owed only once every child has published.
+            Assertions.assertTrue(jobMgr.collectParentPublishInfos(Set.of(childTabletIds.get(0))).isEmpty());
+
+            // A job in a final state has handed its children over and stops reporting.
+            split.jobState = TabletReshardJob.JobState.FINISHED;
+            Assertions.assertTrue(jobMgr.collectParentPublishInfos(new HashSet<>(childTabletIds)).isEmpty());
+            split.jobState = TabletReshardJob.JobState.RUNNING;
+
+            // So does unpinning: with the parent view gone there is nothing left to serve from it.
+            Assertions.assertTrue(physicalPartition.finishUnshare());
+            Assertions.assertTrue(jobMgr.collectParentPublishInfos(new HashSet<>(childTabletIds)).isEmpty());
+        } finally {
+            physicalPartition.finishUnshare();
+        }
+    }
+
+
+    /**
+     * The publish path consults this before doing any per-batch work, so it has to be true exactly when
+     * collectParentPublishInfos could still answer something. That method early-returns on a final job
+     * state, so "a SplitTabletJob that is not in a final state" is precisely the condition -- getting it
+     * wrong in the false direction stops the parent-view pages without failing anything loudly.
+     */
+    @Test
+    public void hasLiveSplitJobMatchesWhatTheCollectorCanAnswer() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        Assertions.assertFalse(jobMgr.hasLiveSplitJob(), "an empty job map owes nothing");
+
+        // A merge job is not a split: it keeps no parent view alive.
+        jobMgr.tabletReshardJobs.put(9001L, new MergeTabletJob(9001L, reshardDb.getId(), -1L, Map.of()));
+        Assertions.assertFalse(jobMgr.hasLiveSplitJob(), "a merge job must not keep the publish path busy");
+
+        SplitTabletJob split = new SplitTabletJob(9002L, reshardDb.getId(), reshardTable.getId(), Map.of());
+        split.jobState = TabletReshardJob.JobState.RUNNING;
+        jobMgr.tabletReshardJobs.put(9002L, split);
+        Assertions.assertTrue(jobMgr.hasLiveSplitJob(), "a running split job may still owe a parent page");
+
+        // Finished jobs linger for tablet_reshard_history_job_keep_max_ms; they must not keep it true,
+        // which is the whole point of asking.
+        for (TabletReshardJob.JobState finalState :
+                List.of(TabletReshardJob.JobState.FINISHED, TabletReshardJob.JobState.ABORTED)) {
+            split.jobState = finalState;
+            Assertions.assertFalse(jobMgr.hasLiveSplitJob(), "a " + finalState + " split job owes nothing");
+            Assertions.assertTrue(jobMgr.collectParentPublishInfos(Set.of(1L, 2L)).isEmpty(),
+                    "and the collector agrees for " + finalState);
+        }
     }
 }

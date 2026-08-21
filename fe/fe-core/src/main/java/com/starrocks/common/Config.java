@@ -4857,6 +4857,26 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
+    @ConfField(mutable = true, comment = "Max number of new tablets one source tablet may be split into when the "
+            + "split drags a full UNSHARE rewrite behind it -- a range-distributed primary-key table whose ORDER BY "
+            + "key differs from the primary key. Such a split cannot range-filter the parent's shared segments, so "
+            + "every child is rewritten wholesale; a wide fan-out multiplies that read amplification. Further "
+            + "clamped by tablet_reshard_max_split_count. Values <= 1 disable this extra clamp.")
+    public static int tablet_reshard_orderby_max_split_count = 2;
+
+    @ConfField(mutable = true, comment = "Max number of source tablets one split job may SPLIT when the split drags "
+            + "a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note this bounds the split "
+            + "fan-out, not the rewrite: every untouched sibling still becomes an IdenticalTablet in the replacement "
+            + "index and the UNSHARE compaction is partition-wide, so it rewrites those too. Values <= 0 mean the "
+            + "warehouse's compute-node count.")
+    public static int tablet_reshard_orderby_max_split_tablets_per_job = 0;
+
+    @ConfField(mutable = true, comment = "Quiet period, in seconds, after the previous tablet reshard job on a table "
+            + "finishes before an auto split may trigger again, for tables whose split drags a full UNSHARE rewrite "
+            + "behind it. Gives size-tiered compaction a window to drain the small files that accumulated while the "
+            + "partition's compaction slot was held. Values <= 0 disable the wait.")
+    public static int tablet_reshard_orderby_split_interval_second = 180;
+
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
             + "INSERT INTO ... SELECT FROM FILES() loads. Default on as of v4.1.0 after the GA gate. "
             + "Set to false to disable cluster-wide. The session variable enable_tablet_pre_split "
