@@ -212,13 +212,13 @@ struct RuntimeColumnPredicateBuilder {
                         build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
                                 range, minmax, pool, {}, iter->second);
                     } else {
-                        build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool,
-                                                                                              {}, nullptr);
+                        build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, {},
+                                                                                              nullptr);
                     }
                 } else {
                     build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(
-                            range, minmax, pool, static_cast<typename RunTimeTypeTraits<limit_type>::CppType>(key_offset),
-                            nullptr);
+                            range, minmax, pool,
+                            static_cast<typename RunTimeTypeTraits<limit_type>::CppType>(key_offset), nullptr);
                 }
             }
 
