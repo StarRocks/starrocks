@@ -819,6 +819,7 @@ public class StatisticExecutor {
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
         context.setQueryId(UUIDUtil.genUUID());
+        context.setStartTime();
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
         }
@@ -854,6 +855,7 @@ public class StatisticExecutor {
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            context.setStartTime();
             executor.execute();
             AuditInternalLog.handleInternalLog(AuditInternalLog.InternalType.DML, DebugUtil.printId(context.getQueryId()),
                     sql, watch);
