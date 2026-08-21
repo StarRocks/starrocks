@@ -606,7 +606,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of new tablets one source tablet may be split into when the split drags a full UNSHARE rewrite behind it, that is, on a range-distributed PRIMARY KEY table whose `ORDER BY` key differs from its primary key. Such a split cannot range-filter the parent's shared segments, so every child is rewritten wholesale and a wide fan-out multiplies that read amplification. Further clamped by `tablet_reshard_max_split_count`. Values less than or equal to `1` disable this extra clamp.
-- Introduced in: v4.1.3
+- Introduced in: -
 
 ### `tablet_reshard_orderby_max_split_tablets_per_job`
 
@@ -615,7 +615,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of source tablets one split job may take when the split drags a full UNSHARE rewrite behind it. It bounds how much data a single UNSHARE compaction rewrites, and therefore how long that compaction holds the partition's only compaction slot away from size-tiered compaction. The largest tablets are chosen first. Values less than or equal to `0` mean the compute-node count of the warehouse.
-- Introduced in: v4.1.3
+- Introduced in: -
 
 ### `tablet_reshard_orderby_split_interval_second`
 
@@ -624,7 +624,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Second
 - Is mutable: Yes
 - Description: The quiet period after the previous tablet reshard job on a table finishes, before automatic splitting may trigger again, for tables whose split drags a full UNSHARE rewrite behind it. It gives size-tiered compaction a window to drain the small files that accumulated while the partition's compaction slot was held. Values less than or equal to `0` disable the wait. Note that the interval can only be enforced while the previous job is still retained, that is, up to `tablet_reshard_history_job_keep_max_ms`.
-- Introduced in: v4.1.3
+- Introduced in: -
 
 ### `tablet_reshard_min_split_size`
 

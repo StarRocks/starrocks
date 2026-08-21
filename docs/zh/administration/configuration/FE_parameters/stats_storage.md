@@ -606,7 +606,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 当分裂会附带一次完整的 UNSHARE 重写时（即 Range 分布的主键表，其 `ORDER BY` 键与主键不同），单个源 Tablet 最多可分裂成的新 Tablet 数量。此类分裂无法对父 Tablet 的共享 Segment 做 Range 过滤，每个子 Tablet 都会被整体重写，因此过大的扇出会成倍放大读放大。该值还会被 `tablet_reshard_max_split_count` 进一步限制。取值小于或等于 `1` 时禁用该额外限制。
-- 引入版本: v4.1.3
+- 引入版本: -
 
 ### `tablet_reshard_orderby_max_split_tablets_per_job`
 
@@ -615,7 +615,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 当分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可处理的源 Tablet 数量。用于限制单次 UNSHARE Compaction 重写的数据量，从而限制它占用该分区唯一 Compaction 槽位、阻塞 Size-tiered Compaction 的时长。优先选择最大的 Tablet。取值小于或等于 `0` 时表示使用该 Warehouse 的计算节点数量。
-- 引入版本: v4.1.3
+- 引入版本: -
 
 ### `tablet_reshard_orderby_split_interval_second`
 
@@ -624,7 +624,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 对于分裂会附带完整 UNSHARE 重写的表，上一个 Tablet Reshard 任务完成后，自动分裂再次触发前的静默期。用于给 Size-tiered Compaction 留出窗口，清理占用 Compaction 槽位期间累积的小文件。取值小于或等于 `0` 时禁用等待。注意该间隔仅在上一个任务仍被保留期间生效，即最长不超过 `tablet_reshard_history_job_keep_max_ms`。
-- 引入版本: v4.1.3
+- 引入版本: -
 
 ### `tablet_reshard_min_split_size`
 
