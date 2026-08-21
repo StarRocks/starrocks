@@ -582,28 +582,24 @@ public class MergeTabletJobColocateTest {
 
     /**
      * A registered colocate group whose range record has not been replayed yet reports an EMPTY range
-     * list. Classifying against it would call every tablet uncontained, which would fail every merge
-     * on the table -- worse than the pre-fix behavior. Empty must read as "no range topology": the
-     * merge plans normally and the shards are created SPREAD-only, leaving placement to the checker.
+     * list — a topology we cannot see. Merging anyway would create SPREAD-only shards with no boundary
+     * checks, and nothing would ever repair them: ColocateChecker only visits UNSTABLE groups, and a
+     * merge that never marked one leaves no trace. Refuse instead; merge is an optimization.
      */
     @Test
-    public void testEmptyColocateRangesTreatedAsNotColocate() throws Exception {
+    public void testMergeRefusedWhileColocateRangesUnavailable() throws Exception {
+        // Control: the fixture merges happily while the topology IS available, so the refusal below
+        // is attributable to the empty range list and not to the fixture being unmergeable.
+        Assertions.assertEquals(List.of(List.of(tabletB.getId(), tabletC.getId())),
+                mergedGroupsOf(buildAutoMergeJob()));
+
         GlobalStateMgr.getCurrentState().getColocateTableIndex().getColocateRangeMgr()
                 .setColocateRanges(groupId.grpId, List.of());
 
-        MergeTabletJob job = buildAutoMergeJob();
-        // With no range topology the boundary at 200 means nothing, so the run of small adjacent
-        // tablets merges as one group instead of stopping at tB..tC.
-        Assertions.assertEquals(1, mergedGroupsOf(job).size());
-        Assertions.assertTrue(mergedGroupsOf(job).get(0).containsAll(
-                        List.of(tabletA.getId(), tabletB.getId())),
-                "an empty range list must not constrain grouping");
-
-        long spreadGroup = newIndexOf(job).getShardGroupId();
-        for (List<Long> groupIds : captureCreatedShardGroupIds(job).values()) {
-            Assertions.assertEquals(List.of(spreadGroup), groupIds,
-                    "no usable range topology means SPREAD-only, not a hard failure");
-        }
+        StarRocksException thrown =
+                Assertions.assertThrows(StarRocksException.class, this::buildAutoMergeJob);
+        Assertions.assertTrue(thrown.getMessage().contains("colocate ranges are not available"),
+                "expected a ranges-unavailable refusal, got: " + thrown.getMessage());
     }
 
     // ---- post-publish backstop ----

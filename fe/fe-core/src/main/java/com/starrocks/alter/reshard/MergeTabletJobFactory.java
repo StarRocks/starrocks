@@ -85,6 +85,16 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             throw new StarRocksException("Cannot merge tablets for range-colocate group "
                     + myGroupId.grpId + ": group is unstable; wait for alignment to complete before retrying");
         }
+        // A registered range-colocate group whose range list is empty has a topology we cannot see --
+        // its OP_COLOCATE_RANGE_UPDATE has not been replayed yet. Refuse rather than treat it as
+        // not-colocate: merging without boundary knowledge would create SPREAD-only shards and, once
+        // the topology appears, nothing repairs them -- ColocateChecker only visits UNSTABLE groups,
+        // and a merge that never marked one leaves no trace. Merge is an optimization, so declining it
+        // costs nothing. This matches TabletStatMgr, which withholds the merge signal in the same state.
+        if (myGroupId != null && colocateTableIndex.getColocateRanges(myGroupId.grpId).isEmpty()) {
+            throw new StarRocksException("Cannot merge tablets for range-colocate group "
+                    + myGroupId.grpId + ": its colocate ranges are not available yet");
+        }
 
         // Compute the parallelism floor before acquiring the table lock — it touches warehouse / node
         // state and must not be coupled to the table READ lock held inside createReshardingPhysicalPartitions.
