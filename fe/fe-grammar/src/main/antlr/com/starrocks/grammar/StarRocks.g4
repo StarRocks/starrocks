@@ -252,6 +252,7 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
+    | dropSnapshotStatement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -2090,6 +2091,10 @@ createRepositoryStatement
 
 dropRepositoryStatement
     : DROP REPOSITORY identifier
+    ;
+
+dropSnapshotStatement
+    : DROP SNAPSHOT snapshotName=identifier ON repoName=identifier FORCE?
     ;
 
 // ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------

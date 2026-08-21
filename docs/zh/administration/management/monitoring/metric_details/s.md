@@ -351,6 +351,18 @@ description: "Alphabetical s"
 - 标签：`type`（`add_column`、`drop_column` 或 `modify_column`）、`is_leader`
 - 描述：ALTER TABLE 列操作的次数，按类型统计。一条语句可以包含多个操作——例如 `ADD COLUMN a, DROP COLUMN b`——每个操作按其类型分别计数。重命名、调整列顺序以及仅修改注释不计入。仅由 Leader FE 上报（`is_leader="true"`）。
 
+## `starrocks_fe_backup_snapshot_clean_failed`
+
+- 单位：计数
+- 类型：累计
+- 描述：删除备份快照失败的总次数，包括 TTL 自动清理和 DROP SNAPSHOT 两种来源。
+
+## `starrocks_fe_backup_snapshot_clean_success`
+
+- 单位：计数
+- 类型：累计
+- 描述：已从仓库中删除的备份快照总数，包括 TTL 自动清理和 DROP SNAPSHOT 两种来源。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 单位：字节
