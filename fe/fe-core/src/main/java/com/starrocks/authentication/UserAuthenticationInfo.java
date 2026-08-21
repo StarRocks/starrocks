@@ -76,7 +76,15 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
     }
 
     public boolean matchUser(String remoteUser) {
-        return isAnyUser || userPattern.match(remoteUser);
+        if (isAnyUser) {
+            return true;
+        }
+
+        if (CaseSensibility.USER.getCaseSensibility()) {
+            return origUser.equals(remoteUser);
+        } else {
+            return origUser.equalsIgnoreCase(remoteUser);
+        }
     }
 
     public boolean matchHost(String remoteHost) {
@@ -86,8 +94,14 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
     private void loadMysqlPattern() {
         isAnyUser = origUser.equals(ANY_USER);
         isAnyHost = origHost.equals(ANY_HOST);
-        userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
+
         hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
+
+        if (isAnyUser) {
+            userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
+        } else {
+            userPattern = null;
+        }
     }
 
     public byte[] getPassword() {
@@ -100,6 +114,14 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
 
     public String getOrigHost() {
         return origHost;
+    }
+
+    public String getOrigUser() {
+        return origUser;
+    }
+
+    public boolean isAnyUser() {
+        return isAnyUser;
     }
 
     public String getAuthString() {
