@@ -396,6 +396,20 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _num_rows_written = 0;
 
     size_t num_columns = _tablet_schema->num_columns();
+
+    // Gather the two indexes a cold scan cannot avoid -- the ordinal index of every accessed
+    // column and the page zone map of every predicate column -- into one contiguous run at the
+    // tail (see config::enable_segment_tail_index_region). Only possible when this writer holds
+    // every column in a single group: vertical compaction and partial-update rewrite call
+    // finalize_columns() once per column group, so group g's indexes would end up buried under
+    // group g+1's data pages rather than at the tail. Those writers keep the legacy interleaved
+    // layout, which every reader still understands.
+    //
+    // The larger optional indexes (bloom filter, bitmap, inverted, vector) deliberately stay
+    // inline: they are read only when a predicate needs them, and they are big enough that
+    // hoisting them would inflate the region past the point where reading it whole is a win.
+    const bool defer_small_index = config::enable_segment_tail_index_region && _column_indexes.size() == num_columns;
+
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
         uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
@@ -409,8 +423,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
         uint64_t index_offset = _wfile->size();
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
-        RETURN_IF_ERROR(column_writer->write_zone_map());
+        if (!defer_small_index) {
+            RETURN_IF_ERROR(column_writer->write_ordinal_index());
+            RETURN_IF_ERROR(column_writer->write_zone_map());
+        }
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
         RETURN_IF_ERROR(column_writer->write_inverted_index());
@@ -440,9 +456,33 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // check global dict valid
         _check_column_global_dict_valid(column_writer.get(), column_index);
 
-        // reset to release memory
-        column_writer.reset();
+        if (!defer_small_index) {
+            // reset to release memory
+            column_writer.reset();
+        }
     }
+
+    if (defer_small_index) {
+        // Second pass: every column's ordinal index and page zone map, back to back, right
+        // before the short key index and the footer.
+        //
+        // Holding all the column writers alive across pass one does not raise peak memory:
+        // every one of them was already live on entry to this function, each buffering all of
+        // its own data pages (ScalarColumnWriter accumulates pages until write_data()), and
+        // pass one released exactly those pages. What survives into this loop is only the
+        // ordinal-index and zone-map builders, which are orders of magnitude smaller than the
+        // page buffers that just went away. Peak is still at function entry, unchanged.
+        const uint64_t region_offset = _wfile->size();
+        for (auto& column_writer : _column_writers) {
+            RETURN_IF_ERROR(column_writer->write_ordinal_index());
+            RETURN_IF_ERROR(column_writer->write_zone_map());
+            // reset to release memory
+            column_writer.reset();
+        }
+        *index_size += _wfile->size() - region_offset;
+        _footer.set_small_index_region_offset(region_offset);
+    }
+
     _column_writers.clear();
     _column_indexes.clear();
 
@@ -452,6 +492,12 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
         _full_sort_key_index_builder.reset();
+    }
+
+    if (defer_small_index) {
+        // Closed last, so the short key index -- which a scan reads on the same critical path --
+        // is inside the region too.
+        _footer.set_small_index_region_size(_wfile->size() - _footer.small_index_region_offset());
     }
     return Status::OK();
 }

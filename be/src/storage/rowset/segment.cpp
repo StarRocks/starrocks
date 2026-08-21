@@ -79,6 +79,16 @@ bvar::Window<bvar::Adder<int>> g_open_segments_minute("starrocks", "open_segment
 // NOLINTNEXTLINE
 bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segments_io_minute", &g_open_segments_io,
                                                          60);
+bvar::Adder<int64_t> g_small_index_prefetch;       // NOLINT
+bvar::Adder<int64_t> g_small_index_prefetch_bytes; // NOLINT
+// How many small index regions were prefetched, and how many bytes that cost, in the last 60 seconds
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_minute("starrocks", "segment_small_index_prefetch_minute",
+                                                                 &g_small_index_prefetch, 60);
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_bytes_minute("starrocks",
+                                                                       "segment_small_index_prefetch_bytes_minute",
+                                                                       &g_small_index_prefetch_bytes, 60);
 
 namespace starrocks {
 
@@ -191,6 +201,37 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
     return footer_length + 12;
 }
 
+// Fetch the whole small index region (see SegmentFooterPB.small_index_region_offset) in one read,
+// so that the per-column ordinal index and page zone map loads that immediately follow are served
+// from the block cache instead of each going remote on its own. The bytes read here are dropped on
+// purpose: the cache in front of remote storage fills at block granularity, so what this call buys
+// is the fill, not the buffer.
+//
+// Best effort by design -- a failure must not fail the open. The per-column reads still work, they
+// just go remote one at a time as they did before.
+static void prefetch_small_index_region(RandomAccessFile* read_file, const SegmentFooterPB& footer) {
+    if (!footer.has_small_index_region_offset() || footer.small_index_region_size() == 0) {
+        // Legacy layout: the indexes are interleaved after each column's data pages, so there is
+        // no single range to fetch.
+        return;
+    }
+    const uint64_t size = footer.small_index_region_size();
+    if (size > static_cast<uint64_t>(config::segment_tail_index_prefetch_max_bytes)) {
+        // A very wide table can produce a region larger than any one query needs; reading it whole
+        // would trade the saved round trips back for wasted bytes.
+        VLOG(2) << "skip small index region prefetch of " << size << " bytes (over cap) for " << read_file->filename();
+        return;
+    }
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, size);
+    if (Status st = read_file->read_at_fully(footer.small_index_region_offset(), buff.data(), buff.size()); !st.ok()) {
+        VLOG(2) << "small index region prefetch failed for " << read_file->filename() << ": " << st;
+        return;
+    }
+    g_small_index_prefetch << 1;
+    g_small_index_prefetch_bytes << static_cast<int64_t>(size);
+}
+
 StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
                                                size_t* footer_length_hint,
                                                const FooterPointerPB* partial_rowset_footer) {
@@ -281,6 +322,12 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    // Only worth doing when this read populates the block cache: the prefetch pays off through the
+    // per-column index reads that follow hitting the cache, so with the fill disabled it would read
+    // the region remotely and still leave every one of those reads to go remote too.
+    if (config::enable_segment_tail_index_prefetch && lake_io_opts.fill_data_cache) {
+        prefetch_small_index_region(read_file.get(), footer);
+    }
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
