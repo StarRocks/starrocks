@@ -1607,4 +1607,89 @@ public class GlobalTransactionMgrTest {
             dbMgrs.remove(dbId);
         }
     }
+
+    // The test partition has logical id testPartitionId1 and physical id testPartitionId1 + 100, so this
+    // pins down that conflicting transactions are matched by physical partition id: a caller that passes a
+    // logical partition id used to silently match nothing, which let partition replacement drop the rows of
+    // a concurrent load while the load still reported success.
+    @Test
+    public void testGetConflictingTxnIdsMatchesPhysicalPartitionId() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long logicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1;
+        long physicalPartitionId = logicalPartitionId + 100;
+
+        long transactionId = beginTxnTargeting(physicalPartitionId);
+        Assertions.assertEquals(TransactionStatus.PREPARE, masterTransMgr
+                .getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId).getTransactionStatus());
+
+        Assertions.assertEquals(Lists.newArrayList(transactionId),
+                masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                        GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)));
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(logicalPartitionId)).isEmpty());
+    }
+
+    @Test
+    public void testGetConflictingTxnIdsIgnoresUnrelatedTargets() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+
+        beginTxnTargeting(physicalPartitionId);
+
+        // another partition of the same table must not be reported: ingestion into a partition that is not
+        // being replaced has to leave the replacement alone
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId + 1)).isEmpty());
+        // another table must not be reported either
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1 + 1, Sets.newHashSet(physicalPartitionId)).isEmpty());
+        // and neither must an empty target set
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet()).isEmpty());
+    }
+
+    // A transaction that already committed no longer carries loaded partition indexes only: its commit info
+    // is the authoritative source, and it must keep blocking the replacement until it is visible.
+    @Test
+    public void testGetConflictingTxnIdsDetectsCommittedTxn() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable1,
+                transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList(
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
+
+        TransactionState transactionState =
+                masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId);
+        Assertions.assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
+        Assertions.assertEquals(Lists.newArrayList(transactionId),
+                masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                        GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)));
+        // committed transactions are equally invisible to a logical partition id lookup
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIds(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1,
+                Sets.newHashSet(GlobalStateMgrTestUtil.testPartitionId1)).isEmpty());
+        Assertions.assertTrue(masterTransMgr.existCommittedTxns(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, physicalPartitionId));
+    }
+
+    /**
+     * Begin a transaction and register the given physical partition as a write target, which is what the
+     * tablet sink does when a load plan is built, before any row reaches a backend.
+     */
+    private long beginTxnTargeting(long physicalPartitionId) throws Exception {
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable1,
+                transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId)
+                .addPartitionLoadedIndexes(GlobalStateMgrTestUtil.testTableId1, physicalPartitionId,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testIndexId1));
+        return transactionId;
+    }
 }
