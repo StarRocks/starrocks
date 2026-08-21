@@ -41,6 +41,8 @@ public class SyntaxSugars {
                 .put(FunctionSet.DS_HLL_ACCUMULATE, SyntaxSugars::dsHllCountDistinctStateUnion)
                 .put(FunctionSet.DS_HLL_COMBINE, SyntaxSugars::dsHllCountDistinctUnion)
                 .put(FunctionSet.DS_HLL_ESTIMATE, SyntaxSugars::dsHllCountDistinctMerge)
+                .put(FunctionSet.DS_THETA_ACCUMULATE, SyntaxSugars::dsThetaCountDistinctStateUnion)
+                .put(FunctionSet.ENCODE_ROW_ID, SyntaxSugars::encodeRowId)
                 .build();
     }
 
@@ -103,5 +105,19 @@ public class SyntaxSugars {
     private static FunctionCallExpr dsHllCountDistinctMerge(FunctionCallExpr call) {
         return new FunctionCallExpr(AggStateUtils.aggStateMergeFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
                 call.getChildren());
+    }
+
+    private static FunctionCallExpr dsThetaCountDistinctStateUnion(FunctionCallExpr call) {
+        final FunctionCallExpr aggStateFuncExpr =
+                new FunctionCallExpr(AggStateUtils.aggStateFunctionName(FunctionSet.DS_THETA_COUNT_DISTINCT),
+                        call.getChildren());
+        return new FunctionCallExpr(AggStateUtils.aggStateUnionFunctionName(FunctionSet.DS_THETA_COUNT_DISTINCT),
+                Lists.newArrayList(aggStateFuncExpr));
+    }
+
+    private static FunctionCallExpr encodeRowId(FunctionCallExpr call) {
+        final String encodeRowIdFuncName = IvmOpUtils.getEncodeRowIdFunctionNameChecked(
+                call.getChildren());
+        return new FunctionCallExpr(encodeRowIdFuncName, call.getChildren());
     }
 }
