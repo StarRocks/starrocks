@@ -41,6 +41,7 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LogicalSinkMVMeta;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -175,6 +176,20 @@ public class AlterJobMgr {
                 }
             }
             if (table == null) {
+                // Not a sync MV (rollup index). It may be a CK-compatible logical sink (TO-table) MV,
+                // which is registered in OlapTable.logicalSinkMVs rather than as a rollup index.
+                for (Table t : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                    if (!(t instanceof OlapTable) || !((OlapTable) t).hasLogicalSinkMV()) {
+                        continue;
+                    }
+                    for (LogicalSinkMVMeta meta : ((OlapTable) t).getLogicalSinkMVs().values()) {
+                        if (meta.getMvName().equals(stmt.getMvName())) {
+                            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .dropLogicalSinkMaterializedView(db, (OlapTable) t, meta);
+                            return;
+                        }
+                    }
+                }
                 throw new MetaNotFoundException("Materialized view " + stmt.getMvName() + " is not found");
             }
             // check table type

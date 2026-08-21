@@ -449,6 +449,12 @@ public class InsertPlanner {
                     Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
                             ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    // CK-compatible TO-table MVs: build the secondary sinks here (DescriptorTable is in
+                    // scope) so the base load fans transformed rows out to each target table.
+                    if (olapTable.hasLogicalSinkMV()) {
+                        olapTableSink.setLogicalSinks(OlapTableSink.buildLogicalSinks(
+                                db.getId(), olapTable, tupleDesc, descriptorTable, session.getCurrentWarehouseId()));
+                    }
                     olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
