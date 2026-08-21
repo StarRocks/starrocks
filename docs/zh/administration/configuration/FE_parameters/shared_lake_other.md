@@ -247,6 +247,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否使用原生 SDK 访问 Azure Blob Storage，从而允许使用托管标识和服务主体进行身份验证。如果此项设置为 `false`，则仅允许使用共享密钥和 SAS Token 进行身份验证。
 - 引入版本: v3.4.4
 
+### `s3_use_native_sdk_for_glob`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 对于 S3 及兼容 S3 协议的对象存储（`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs` 和 `tos`），是否使用原生 AWS S3 SDK 解析 FILES() 表函数中的通配符路径。设置为 `true` 时，通配符前最长的字面前缀会被下推到 S3 `ListObjectsV2`，而不是通过 Hadoop `globStatus` 列举整个父前缀。当前缀下对象很多但匹配项很少时，前者要快得多。设置为 `false` 时回退到 Hadoop `globStatus` 路径。
+- 引入版本: v4.1.4
+
 ### `cloud_native_hdfs_url`
 
 - 默认值: 空字符串

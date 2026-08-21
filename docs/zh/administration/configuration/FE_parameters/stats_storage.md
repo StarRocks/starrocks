@@ -600,6 +600,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群下，Range Colocate 检查器在单次 `getShardInfo` 成员关系读取批量 RPC 中发送给 StarOS 的最大 Tablet 数量。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Range Colocate 检查器在单次 `queryShardGroupStable` 放置收敛批量 RPC 中发送给 StarOS 的最大 PACK Shard Group 数量。每个 Group 的稳定性检查在服务端计算，因此较小的批量可以限制单次 RPC 的延迟，完整结果通过多次调用累积得到。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: Range Colocate 检查器放置收敛负缓存的 TTL。在该时间窗口内，StarOS 上次报告为尚未收敛的 PACK Shard Group 不会被重新查询，从而在该 Group 仍在迁移期间降低每轮 `queryShardGroupStable` 的负载。仅缓存未收敛的结果，因此过期条目最多只会将该 Group 转为稳定状态的时间延迟一个时间窗口，而不会导致提前转为稳定。小于或等于 `0` 的值将禁用该缓存。
+- 引入版本: v4.1.3
+
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - 默认值: true
