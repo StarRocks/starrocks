@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -2039,12 +2040,16 @@ struct LegacySstableSourceRoutes {
 };
 
 StatusOr<LegacySstableSourceRoutes> build_legacy_sstable_source_routes(
-        const std::vector<TabletMergeContext>& merge_contexts, const TabletSchemaCSPtr& tablet_schema) {
+        const std::vector<TabletMergeContext>& merge_contexts, const std::vector<size_t>& old_tablet_indexes,
+        const TabletSchemaCSPtr& tablet_schema) {
     LegacySstableSourceRoutes result;
-    result.routes.reserve(merge_contexts.size());
+    result.routes.reserve(old_tablet_indexes.size());
     bool any_has_range = false;
     bool all_have_range = true;
-    for (size_t old_tablet_index = 0; old_tablet_index < merge_contexts.size(); ++old_tablet_index) {
+    for (size_t old_tablet_index : old_tablet_indexes) {
+        if (old_tablet_index >= merge_contexts.size()) {
+            return Status::InternalError("legacy SST source route has an invalid old tablet index");
+        }
         const auto& metadata = merge_contexts[old_tablet_index].metadata();
         LegacySstableSourceRoute route;
         route.old_tablet_index = old_tablet_index;
@@ -2299,23 +2304,40 @@ StatusOr<DelVectorPtr> load_merged_del_vector(TabletManager* tablet_manager, con
 
 StatusOr<bool> remap_legacy_entry_or_drop(const Slice& entry_key, IndexValuesWithVerPB* values_pb,
                                           int32_t source_rssid_offset, const LegacySstableSourceRoutes& routes,
+                                          const LegacySstableSourceRoutes& all_input_routes,
                                           const std::vector<size_t>& old_tablet_indexes,
                                           const std::vector<LegacyRssidLookupMaps>& lookup_maps,
                                           const std::function<StatusOr<DelVectorPtr>(uint32_t)>& load_del_vector) {
     const auto* route = find_legacy_sstable_source_route(entry_key, routes);
+    if (routes.use_key_ranges && route == nullptr) {
+        // A physical legacy SST can contain keys outside every tablet that
+        // still references its filename. If another merge input owns this
+        // key, those bytes were unreachable on every source read path and the
+        // sibling's flushed replacement SST is authoritative. Drop the whole
+        // key, including tombstones, instead of projecting it through the
+        // other tablet's colliding local RSSID namespace.
+        if (find_legacy_sstable_source_route(entry_key, all_input_routes) != nullptr) {
+            return false;
+        }
+        // No merge input owns the key. Preserve the existing tombstone-only
+        // behavior, but fail closed for data whose source namespace cannot be
+        // determined.
+        for (const auto& index_value : values_pb->values()) {
+            if (!is_index_tombstone(index_value)) {
+                return Status::Corruption(fmt::format(
+                        "legacy shared sstable data entry has no source tablet route: "
+                        "encoded_key_size={} encoded_key_hex={} stored_rssid={} stored_rowid={} "
+                        "source_rssid_offset={} source_route_count={}",
+                        entry_key.size, strings::b2a_hex(entry_key.data, static_cast<int>(entry_key.size)),
+                        index_value.rssid(), index_value.rowid(), source_rssid_offset, routes.routes.size()));
+            }
+        }
+    }
     IndexValuesWithVerPB retained_values;
     for (const auto& index_value : values_pb->values()) {
         if (is_index_tombstone(index_value)) {
             retained_values.add_values()->CopyFrom(index_value);
             continue;
-        }
-        if (routes.use_key_ranges && route == nullptr) {
-            return Status::Corruption(
-                    fmt::format("legacy shared sstable data entry has no source tablet route: encoded_key_size={} "
-                                "encoded_key_hex={} stored_rssid={} stored_rowid={} source_rssid_offset={} "
-                                "source_route_count={}",
-                                entry_key.size, strings::b2a_hex(entry_key.data, static_cast<int>(entry_key.size)),
-                                index_value.rssid(), index_value.rowid(), source_rssid_offset, routes.routes.size()));
         }
         const int64_t lifted_rssid = static_cast<int64_t>(index_value.rssid()) + source_rssid_offset;
         if (lifted_rssid < 0 || lifted_rssid > std::numeric_limits<uint32_t>::max()) {
@@ -2449,12 +2471,16 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
     source_read_options.fill_cache = false;
     std::unique_ptr<sstable::Iterator> source_iterator(source_sstable->new_iterator(source_read_options));
     auto merged_tablet_schema = TabletSchema::create(new_metadata.schema());
-    // Filename occurrences select and validate the physical SST, but they are
-    // not an ownership boundary: a split sibling may already have compacted
-    // the inherited filename away while the physical file still contains its
-    // key range. Route ranged entries through every merge input so that such a
-    // sibling's replacement rowsets can resolve the stored rssid.
-    ASSIGN_OR_RETURN(auto source_routes, build_legacy_sstable_source_routes(merge_contexts, merged_tablet_schema));
+    // Filename occurrences define where this physical SST is semantically
+    // visible. The all-input routes only distinguish an unreachable entry
+    // owned by another input (drop) from a genuine source-range gap (fail
+    // closed for data).
+    ASSIGN_OR_RETURN(auto source_routes,
+                     build_legacy_sstable_source_routes(merge_contexts, old_tablet_indexes, merged_tablet_schema));
+    std::vector<size_t> all_old_tablet_indexes(merge_contexts.size());
+    std::iota(all_old_tablet_indexes.begin(), all_old_tablet_indexes.end(), 0);
+    ASSIGN_OR_RETURN(auto all_input_routes,
+                     build_legacy_sstable_source_routes(merge_contexts, all_old_tablet_indexes, merged_tablet_schema));
     ASSIGN_OR_RETURN(auto seek_range,
                      TabletRangeHelper::create_sst_seek_range_from(new_metadata.range(), merged_tablet_schema));
     if (seek_range.seek_key.empty()) {
@@ -2525,8 +2551,9 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
         // decoded from the source data block's bytes, so it gets the same
         // drop-source-cache treatment as a block-level read failure; other error
         // kinds (e.g. delvec load failures) pass through the helper untouched.
-        auto keep_entry_or = remap_legacy_entry_or_drop(entry_key, &values_pb, source_rssid_offset, source_routes,
-                                                        old_tablet_indexes, lookup_maps, load_del_vector);
+        auto keep_entry_or =
+                remap_legacy_entry_or_drop(entry_key, &values_pb, source_rssid_offset, source_routes, all_input_routes,
+                                           old_tablet_indexes, lookup_maps, load_del_vector);
         if (!keep_entry_or.ok()) {
             if (delvec_load_failed) {
                 // The failure came from loading the merged delvec, not from the source
