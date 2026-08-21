@@ -2101,4 +2101,125 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
     }
 }
 
+// Helper: build a schema-inference scanner (schema_only=true) from a local file.
+static std::unique_ptr<JsonScanner> make_schema_scanner(RuntimeState* state, ObjectPool* pool, RuntimeProfile* profile,
+                                                        ScannerCounter* counter, const std::string& path,
+                                                        int64_t sample_rows = 100, bool sample_types = true,
+                                                        const std::string& json_root = "",
+                                                        bool strip_outer_array = false) {
+    TBrokerScanRangeParams* params = pool->add(new TBrokerScanRangeParams());
+    params->strict_mode = false;
+    params->json_file_size_limit = 64 * 1024 * 1024;
+    params->schema_sample_file_row_count = sample_rows;
+    params->schema_sample_types = sample_types;
+    params->__isset.schema_sample_file_row_count = true;
+    params->__isset.schema_sample_types = true;
+
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__set_path(path);
+    range.__isset.strip_outer_array = true;
+    range.strip_outer_array = strip_outer_array;
+    if (!json_root.empty()) {
+        range.__isset.json_root = true;
+        range.json_root = json_root;
+    } else {
+        range.__isset.json_root = false;
+    }
+    range.__isset.jsonpaths = false;
+
+    TBrokerScanRange* broker_scan_range = pool->add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = {range};
+
+    return std::make_unique<JsonScanner>(state, profile, *broker_scan_range, counter, /*schema_only=*/true);
+}
+
+// Infer schema from NDJSON: id(BIGINT), name(VARCHAR), score(DOUBLE), active(BOOLEAN), tags(JSON).
+TEST_F(JsonScannerTest, test_get_schema_ndjson) {
+    auto scanner = make_schema_scanner(_state.get(), &_pool, _profile, _counter,
+                                       "./be/test/exec/test_data/json_scanner/schema_ndjson.json");
+    ASSERT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    ASSERT_OK(scanner->get_schema(&schema));
+    ASSERT_EQ(5u, schema.size());
+
+    std::map<std::string, TypeDescriptor> by_name;
+    for (const auto& s : schema) by_name[s.col_name()] = s.type();
+
+    EXPECT_EQ(TYPE_BIGINT, by_name["id"].type);
+    EXPECT_EQ(TYPE_VARCHAR, by_name["name"].type);
+    EXPECT_EQ(TYPE_DOUBLE, by_name["score"].type);
+    EXPECT_EQ(TYPE_BOOLEAN, by_name["active"].type);
+    EXPECT_EQ(TYPE_JSON, by_name["tags"].type);
+}
+
+// Infer schema from a JSON array: id(BIGINT), name(VARCHAR), price(DOUBLE), enabled(BOOLEAN).
+TEST_F(JsonScannerTest, test_get_schema_array) {
+    auto scanner = make_schema_scanner(_state.get(), &_pool, _profile, _counter,
+                                       "./be/test/exec/test_data/json_scanner/schema_array.json");
+    ASSERT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    ASSERT_OK(scanner->get_schema(&schema));
+    ASSERT_EQ(4u, schema.size());
+
+    std::map<std::string, TypeDescriptor> by_name;
+    for (const auto& s : schema) by_name[s.col_name()] = s.type();
+
+    EXPECT_EQ(TYPE_BIGINT, by_name["id"].type);
+    EXPECT_EQ(TYPE_VARCHAR, by_name["name"].type);
+    EXPECT_EQ(TYPE_DOUBLE, by_name["price"].type);
+    EXPECT_EQ(TYPE_BOOLEAN, by_name["enabled"].type);
+}
+
+// Type promotion across rows: row1 has x=int, row2 has x=float → x should be DOUBLE.
+TEST_F(JsonScannerTest, test_get_schema_type_promotion) {
+    auto scanner = make_schema_scanner(_state.get(), &_pool, _profile, _counter,
+                                       "./be/test/exec/test_data/json_scanner/schema_type_promotion.json");
+    ASSERT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    ASSERT_OK(scanner->get_schema(&schema));
+    ASSERT_EQ(2u, schema.size());
+
+    std::map<std::string, TypeDescriptor> by_name;
+    for (const auto& s : schema) by_name[s.col_name()] = s.type();
+
+    EXPECT_EQ(TYPE_DOUBLE, by_name["x"].type); // promoted from BIGINT + DOUBLE
+    EXPECT_EQ(TYPE_BIGINT, by_name["y"].type);
+}
+
+// With json_root: navigate into "data" sub-object before collecting fields.
+TEST_F(JsonScannerTest, test_get_schema_json_root) {
+    auto scanner = make_schema_scanner(_state.get(), &_pool, _profile, _counter,
+                                       "./be/test/exec/test_data/json_scanner/schema_root.json",
+                                       /*sample_rows=*/100, /*sample_types=*/true, /*json_root=*/"$.data");
+    ASSERT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    ASSERT_OK(scanner->get_schema(&schema));
+    ASSERT_EQ(3u, schema.size());
+
+    std::map<std::string, TypeDescriptor> by_name;
+    for (const auto& s : schema) by_name[s.col_name()] = s.type();
+
+    EXPECT_EQ(TYPE_BIGINT, by_name["uid"].type);
+    EXPECT_EQ(TYPE_VARCHAR, by_name["label"].type);
+    EXPECT_EQ(TYPE_DOUBLE, by_name["ratio"].type);
+}
+
+// With sample_types=false every field should come back as VARCHAR.
+TEST_F(JsonScannerTest, test_get_schema_no_type_inference) {
+    auto scanner = make_schema_scanner(_state.get(), &_pool, _profile, _counter,
+                                       "./be/test/exec/test_data/json_scanner/schema_ndjson.json",
+                                       /*sample_rows=*/100, /*sample_types=*/false);
+    ASSERT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    ASSERT_OK(scanner->get_schema(&schema));
+    ASSERT_EQ(5u, schema.size());
+
+    for (const auto& s : schema) {
+        EXPECT_EQ(TYPE_VARCHAR, s.type().type) << "field " << s.col_name() << " should be VARCHAR";
+    }
+}
+
 } // namespace starrocks
