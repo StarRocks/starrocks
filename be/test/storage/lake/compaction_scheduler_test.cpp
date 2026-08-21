@@ -503,4 +503,75 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
     latch->wait();
 }
 
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved) {
+    CompactionScheduler::Limiter limiter(8);
+    // Two tasks finished with memory limit exceeded, two tokens get reserved.
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(6, limiter.concurrency());
+
+    // Shrink the total from 8 to 4: the reserved tokens are scaled down
+    // proportionally (2 * 4/8 = 1) instead of being inflated.
+    limiter.adapt_to_task_queue_size(4);
+    ASSERT_EQ(3, limiter.concurrency());
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_preserves_inflight_tokens) {
+    CompactionScheduler::Limiter limiter(8);
+    // Three tasks are running.
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+
+    limiter.adapt_to_task_queue_size(4);
+    ASSERT_EQ(4, limiter.concurrency());
+    // Only one more token can be granted while the three tasks are still running.
+    ASSERT_TRUE(limiter.acquire());
+    ASSERT_FALSE(limiter.acquire());
+
+    // After all running tasks finished, the concurrency is still bounded by the new total.
+    for (int i = 0; i < 4; i++) {
+        limiter.no_memory_limit_exceeded();
+    }
+    for (int i = 0; i < 4; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_keeps_one_token) {
+    CompactionScheduler::Limiter limiter(4);
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(2, limiter.concurrency());
+
+    // Shrinking to 1 must keep one grantable token instead of zeroing the concurrency.
+    limiter.adapt_to_task_queue_size(1);
+    ASSERT_EQ(1, limiter.concurrency());
+    ASSERT_TRUE(limiter.acquire());
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_grow) {
+    CompactionScheduler::Limiter limiter(4);
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(3, limiter.concurrency());
+
+    limiter.adapt_to_task_queue_size(8);
+    ASSERT_EQ(7, limiter.concurrency());
+    for (int i = 0; i < 7; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
 } // namespace starrocks::lake
