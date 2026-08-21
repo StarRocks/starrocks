@@ -31,25 +31,32 @@ public class FeNameFormat {
     private FeNameFormat() {
     }
 
+    public static final int MAX_DB_NAME_LENGTH = 256;
+    public static final int MAX_TABLE_NAME_LENGTH = 1024;
+    public static final int MAX_COLUMN_NAME_LENGTH = 1024;
+    public static final int MAX_COMMON_NAME_LENGTH = 64;
+
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
 
     public static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
             '%', '^', '&', '<', '>', '=', '+'};
     public static final char[] SPECIAL_CHARACTERS_IN_ICEBERG_NAMESPACE = new char[] {'-', '~', '!', '@', '#', '$',
             '%', '^', '&', '<', '>', '=', '+', '.'};
+    // Length stays encoded in this regex because checkRoleName matches against it directly without going through checkName.
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
-    // The length of db name is 256
+    // Length is enforced separately via the MAX_*_LENGTH constants (see checkName), so these regexes only describe
+    // character rules; over-length names report ERR_TOO_LONG_IDENT instead of the generic wrong-name error.
     public static String DB_NAME_REGEX = "";
-    public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
+    public static final String TABLE_NAME_REGEX = "^[^\0]+$";
     public static String ICEBERG_NAMESPACE_REGEX = "";
 
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
-    private static final String SHARED_NOTHING_COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
+    private static final String SHARED_NOTHING_COLUMN_NAME_REGEX = "^[^\0=<>!\\*]+$";
 
-    private static final String SHARED_DATE_COLUMN_NAME_REGEX = "^[^\0]{1,1024}$";
+    private static final String SHARED_DATE_COLUMN_NAME_REGEX = "^[^\0]+$";
 
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
@@ -69,42 +76,48 @@ public class FeNameFormat {
             allowedSpecialCharacters += c;
         }
 
-        DB_NAME_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
-                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
+        DB_NAME_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]*$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]*$";
 
         allowedSpecialCharacters = "";
         for (Character c : SPECIAL_CHARACTERS_IN_ICEBERG_NAMESPACE) {
             allowedSpecialCharacters += c;
         }
-        ICEBERG_NAMESPACE_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
-                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
+        ICEBERG_NAMESPACE_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]*$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]*$";
     }
 
-    // Shared validation for identifier names: rejects empty or characters not matching the format regex.
-    // The format regex also encodes the length bound, so callers do not pass a separate length.
-    // wrongNameArgs are the message args for wrongNameError.
-    private static void checkName(String name, String regex,
+    // Shared validation for identifier names: rejects empty, then over-length (ERR_TOO_LONG_IDENT),
+    // then characters not matching the format regex. wrongNameArgs are the message args for wrongNameError.
+    private static void checkName(String name, int maxLength, String regex,
                                   ErrorCode wrongNameError, Object... wrongNameArgs) {
-        if (Strings.isNullOrEmpty(name) || !name.matches(regex)) {
+        if (Strings.isNullOrEmpty(name)) {
+            ErrorReport.reportSemanticException(wrongNameError, wrongNameArgs);
+        }
+        if (name.length() > maxLength) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_LONG_IDENT, name, maxLength);
+        }
+        if (!name.matches(regex)) {
             ErrorReport.reportSemanticException(wrongNameError, wrongNameArgs);
         }
     }
 
     // The length of db name is 256.
     public static void checkDbName(String dbName) {
-        checkName(dbName, DB_NAME_REGEX, ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        checkName(dbName, MAX_DB_NAME_LENGTH, DB_NAME_REGEX, ErrorCode.ERR_WRONG_DB_NAME, dbName);
     }
 
     public static void checkNamespace(String dbName) {
-        checkName(dbName, ICEBERG_NAMESPACE_REGEX, ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        checkName(dbName, MAX_DB_NAME_LENGTH, ICEBERG_NAMESPACE_REGEX, ErrorCode.ERR_WRONG_DB_NAME, dbName);
     }
 
     public static void checkTableName(String tableName) {
-        checkName(tableName, TABLE_NAME_REGEX, ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
+        checkName(tableName, MAX_TABLE_NAME_LENGTH, TABLE_NAME_REGEX, ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
     }
 
     public static void checkPartitionName(String partitionName) throws AnalysisException {
-        checkName(partitionName, COMMON_NAME_REGEX, ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
+        checkName(partitionName, MAX_COMMON_NAME_LENGTH, COMMON_NAME_REGEX,
+                ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
 
         if (partitionName.startsWith(FORBIDDEN_PARTITION_NAME)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PARTITION_NAME, partitionName);
@@ -118,7 +131,7 @@ public class FeNameFormat {
     public static void checkColumnName(String columnName, boolean isPartitionColumn) {
         String pattern = RunMode.isSharedNothingMode()
                 ? SHARED_NOTHING_COLUMN_NAME_REGEX : SHARED_DATE_COLUMN_NAME_REGEX;
-        checkName(columnName, pattern, ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        checkName(columnName, MAX_COLUMN_NAME_LENGTH, pattern, ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
 
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
@@ -177,6 +190,6 @@ public class FeNameFormat {
     }
 
     public static void checkCommonName(String type, String name) {
-        checkName(name, COMMON_NAME_REGEX, ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);
+        checkName(name, MAX_COMMON_NAME_LENGTH, COMMON_NAME_REGEX, ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);
     }
 }
