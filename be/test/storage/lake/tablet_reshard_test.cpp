@@ -11139,8 +11139,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dead_reference_does_not_collid
 
 // A same-UID sibling copy is discarded by merge_rowsets, so its historical
 // references must not lower the later input's floor. Otherwise an ancient
-// reference on the discarded copy can force a positive lift that overflows a
-// high-ID rowset that is actually emitted.
+// reference on the discarded copy can force a positive lift that projects an
+// otherwise-valid high-ID rowset beyond the supported signed allocation domain.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_lower_rssid_floor) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -11155,7 +11155,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_l
     auto earlier_meta = std::make_shared<TabletMetadataPB>();
     earlier_meta->set_id(earlier_tablet);
     earlier_meta->set_version(base_version);
-    constexpr uint32_t kBaseRowsetId = std::numeric_limits<uint32_t>::max() - 101;
+    constexpr uint32_t kBaseRowsetId = std::numeric_limits<int32_t>::max() - 101;
     constexpr uint32_t kBaseNextRowsetId = kBaseRowsetId + 1;
     earlier_meta->set_next_rowset_id(kBaseNextRowsetId);
     set_primary_key_schema(earlier_meta.get(), 1001);
@@ -11165,13 +11165,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_l
     auto later_meta = std::make_shared<TabletMetadataPB>();
     later_meta->set_id(later_tablet);
     later_meta->set_version(base_version);
-    later_meta->set_next_rowset_id(std::numeric_limits<uint32_t>::max());
+    later_meta->set_next_rowset_id(std::numeric_limits<int32_t>::max());
     set_primary_key_schema(later_meta.get(), 1001);
     auto* duplicate = add_rowset(later_meta.get(), /*rowset_id=*/kBaseRowsetId,
                                  /*max_compact_input_rowset_id=*/0, /*del_origin_rowset_id=*/0);
     duplicate->mutable_uid()->CopyFrom(canonical->uid());
 
-    constexpr uint32_t kHighRowsetId = std::numeric_limits<uint32_t>::max() - 1;
+    constexpr uint32_t kHighRowsetId = std::numeric_limits<int32_t>::max() - 1;
     add_rowset(later_meta.get(), /*rowset_id=*/kHighRowsetId,
                /*max_compact_input_rowset_id=*/kHighRowsetId,
                /*del_origin_rowset_id=*/kHighRowsetId);
@@ -11218,9 +11218,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_l
 // merged namespace through the natural offset: merge_rowsets records a
 // shared_rssid_map entry for a discarded duplicate only when it is NOT a delete
 // predicate. So the floor must include it -- otherwise the middle sibling has no
-// floor at all, keeps offset 0, and its raw id (here 4.2e9) becomes the watermark
+// floor at all, keeps offset 0, and its raw id (here 2.1e9) becomes the watermark
 // the third sibling is lifted above, pushing the third sibling's own high-ID
-// rowset past UINT32_MAX even though the emitted namespace has room for it.
+// rowset past INT32_MAX even though the emitted namespace has room for it.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_inflate_later_sibling_ceiling) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -11246,7 +11246,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     // ctx[1]: the same v10 delete predicate, cross-published onto a sibling whose id
     // counter ran far ahead. Predicates dedup by version, so this is the whole tablet
     // and merge_rowsets emits nothing from it.
-    constexpr uint32_t kFarAheadPredicateId = 4'200'000'000;
+    constexpr uint32_t kFarAheadPredicateId = 2'100'000'000;
     TabletMetadataPB predicate_only_meta;
     predicate_only_meta.set_id(predicate_only_tablet);
     predicate_only_meta.set_version(base_version);
@@ -11255,7 +11255,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     ASSERT_OK(put_tablet_metadata(predicate_only_meta));
 
     // ctx[2]: two live rowsets ~1e8 ids apart. Lifting its floor (5) onto ctx[1]'s raw
-    // id would map the top one to 4'299'999'996 > UINT32_MAX.
+    // id would map the top one to 2'199'999'996 > INT32_MAX.
     constexpr uint32_t kWideSpanTopId = 100'000'000;
     TabletMetadataPB wide_meta;
     wide_meta.set_id(wide_tablet);
