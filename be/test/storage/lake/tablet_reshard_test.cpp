@@ -928,13 +928,11 @@ protected:
             const char* filename;
             int key_start;
         };
-        const SegmentSpec specs[] = {{2, "split_sst_low.dat", 0},
-                                     {10, "split_sst_middle.dat", 50},
-                                     {15, "split_sst_high.dat", 100}};
+        const SegmentSpec specs[] = {
+                {2, "split_sst_low.dat", 0}, {10, "split_sst_middle.dat", 50}, {15, "split_sst_high.dat", 100}};
         for (const auto& spec : specs) {
-            const uint64_t filesize =
-                    write_two_column_segment(parent_tablet, spec.filename, kRowsPerSegment,
-                                             [](int key) { return key * 10; }, spec.key_start);
+            const uint64_t filesize = write_two_column_segment(
+                    parent_tablet, spec.filename, kRowsPerSegment, [](int key) { return key * 10; }, spec.key_start);
             auto* rowset = metadata.add_rowsets();
             rowset->set_id(spec.rowset_id);
             rowset->set_version(1);
@@ -952,13 +950,10 @@ protected:
         DelVector low_delvec;
         const uint32_t deleted_rowid = 0;
         low_delvec.init(kBaseVersion, &deleted_rowid, 1);
-        add_delvec(&metadata, parent_tablet, kBaseVersion, /*segment_id=*/2, "split_sst_low.delvec",
-                   low_delvec.save());
-        write_c1_only_cols_file(parent_tablet, "split_sst_low.cols", kRowsPerSegment,
-                                [](int row) { return row * 10; });
+        add_delvec(&metadata, parent_tablet, kBaseVersion, /*segment_id=*/2, "split_sst_low.delvec", low_delvec.save());
+        write_c1_only_cols_file(parent_tablet, "split_sst_low.cols", kRowsPerSegment, [](int row) { return row * 10; });
         add_dcg_with_columns(&metadata, /*segment_id=*/2, "split_sst_low.cols", {1002}, kBaseVersion);
-        add_idg_with_key(&metadata, /*segment_id=*/2, "split_sst_low.idx", /*col_uid=*/1002, BITMAP,
-                         kBaseVersion);
+        add_idg_with_key(&metadata, /*segment_id=*/2, "split_sst_low.idx", /*col_uid=*/1002, BITMAP, kBaseVersion);
 
         std::vector<std::tuple<std::string, uint32_t, uint32_t>> sst_entries;
         sst_entries.reserve(kRowsPerSegment);
@@ -988,9 +983,8 @@ protected:
         txn_info.set_gtid(1);
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kBaseVersion,
-                                                        kSplitVersion, txn_info, false, tablet_metadatas,
-                                                        tablet_ranges));
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kBaseVersion, kSplitVersion,
+                                                        txn_info, false, tablet_metadatas, tablet_ranges));
 
         RealSplitSstOwnerFixture result;
         for (int64_t child_id : child_ids) {
@@ -1035,9 +1029,8 @@ protected:
         txn_info.set_gtid(2);
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kSplitVersion,
-                                                        kMergeVersion, txn_info, false, tablet_metadatas,
-                                                        tablet_ranges));
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kSplitVersion, kMergeVersion,
+                                                        txn_info, false, tablet_metadatas, tablet_ranges));
         auto merged_it = tablet_metadatas.find(*merged_tablet);
         if (merged_it == tablet_metadatas.end()) {
             return Status::InternalError(fmt::format("merged tablet {} metadata is missing", *merged_tablet));
@@ -1786,8 +1779,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_sst_reference_does_not_override_
     // Loading the real PK index is safe: this child only asks for keys in its own
     // [50,100) range, so it rebuilds key 60 from the retained middle segment and
     // never dereferences the inherited SST's out-of-range key 0..49 entries.
-    ASSIGN_OR_ABORT(auto value,
-                    load_index_value(pruning_child, fixture.middle_child, raw_int_primary_key(60)));
+    ASSIGN_OR_ABORT(auto value, load_index_value(pruning_child, fixture.middle_child, raw_int_primary_key(60)));
     EXPECT_EQ(IndexValue((static_cast<uint64_t>(10) << 32) | 10), value);
 }
 
@@ -1807,10 +1799,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_partial_merge_drops_o
         }
     }
 
-    ASSIGN_OR_ABORT(auto middle_value,
-                    load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
-    ASSIGN_OR_ABORT(auto high_value,
-                    load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
+    ASSIGN_OR_ABORT(auto middle_value, load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
+    ASSIGN_OR_ABORT(auto high_value, load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
     EXPECT_NE(NullIndexValue, middle_value.get_value());
     EXPECT_NE(NullIndexValue, high_value.get_value());
 }
@@ -1819,10 +1809,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_full_merge_uses_live_
     ASSIGN_OR_ABORT(auto fixture, publish_real_split_sst_owner_fixture());
 
     int64_t merged_tablet = 0;
-    ASSIGN_OR_ABORT(
-            auto merged,
-            publish_real_split_sst_owner_merge(
-                    {fixture.low_child, fixture.middle_child, fixture.high_child}, &merged_tablet));
+    ASSIGN_OR_ABORT(auto merged,
+                    publish_real_split_sst_owner_merge({fixture.low_child, fixture.middle_child, fixture.high_child},
+                                                       &merged_tablet));
 
     const PersistentIndexSstablePB* owner_sst = nullptr;
     for (const auto& sst : merged->sstable_meta().sstables()) {
@@ -1841,14 +1830,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_full_merge_uses_live_
     // rowid 0 was deleted before split. The owner child's delvec must survive
     // the full merge and filter key 0, while the next key in the same shared
     // SST and keys rebuilt from the other two ranges stay readable.
-    ASSIGN_OR_ABORT(auto deleted_value,
-                    load_index_value(merged, merged_tablet, raw_int_primary_key(0)));
-    ASSIGN_OR_ABORT(auto low_value,
-                    load_index_value(merged, merged_tablet, raw_int_primary_key(1)));
-    ASSIGN_OR_ABORT(auto middle_value,
-                    load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
-    ASSIGN_OR_ABORT(auto high_value,
-                    load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
+    ASSIGN_OR_ABORT(auto deleted_value, load_index_value(merged, merged_tablet, raw_int_primary_key(0)));
+    ASSIGN_OR_ABORT(auto low_value, load_index_value(merged, merged_tablet, raw_int_primary_key(1)));
+    ASSIGN_OR_ABORT(auto middle_value, load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
+    ASSIGN_OR_ABORT(auto high_value, load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
     EXPECT_EQ(NullIndexValue, deleted_value.get_value());
     EXPECT_NE(NullIndexValue, low_value.get_value());
     EXPECT_NE(NullIndexValue, middle_value.get_value());
@@ -9925,9 +9910,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_cache
     // range [0, 2] still contains id 1, the rebuild route is kept, and the first
     // entry (stored rssid 0, lifted to -1) trips the range guard.
     auto [overflow_status, overflow_drops] = run_scenario(
-            [this](const std::string& path) {
-                return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}});
-            },
+            [this](const std::string& path) { return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}}); },
             /*rssid_offset=*/-1, /*txn_id=*/204);
     ASSERT_FALSE(overflow_status.ok()) << "merge over an out-of-range stored rssid must fail";
     EXPECT_TRUE(overflow_status.is_corruption()) << overflow_status;
