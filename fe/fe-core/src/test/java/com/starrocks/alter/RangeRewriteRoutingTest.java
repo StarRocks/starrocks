@@ -436,6 +436,32 @@ public class RangeRewriteRoutingTest {
     }
 
 
+    // (l'') The same divergence reached through MODIFY COLUMN. A primary-key column cannot be demoted,
+    // but a value column can be promoted to one, so this path can route a primary-key table too. It
+    // must not: createRangeRewriteJob(List<Column>) passes sortKeyIdxes = null on the assumption that a
+    // routed keyness flip never has an explicit sort key pinning the column positions, so routing this
+    // shape would silently rewrite the table without its ORDER BY. Decline, and the existing keyness
+    // rejection stands.
+    @Test
+    public void testPrimaryKeyKeynessFlipOnSeparateSortKeyRejectedSynchronously() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_sep_flip"
+                + " (k1 int not null, k2 int not null, v1 int, v2 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable table = table("t_route_pk_sep_flip");
+        String sql = "alter table t_route_pk_sep_flip modify column v2 int key";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(
+                table, stmt.getAlterClauseList().get(0)),
+                "a sort key that differs from the primary key must not route a keyness flip");
+
+        DdlException e = assertThrowsDdlException(() -> createJob("t_route_pk_sep_flip", sql));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                e.getMessage().contains("MODIFY COLUMN that changes keyness is not supported"),
+                "unexpected message: " + e.getMessage());
+    }
+
     // (m) ADD INDEX on a range-distributed PRIMARY KEY table whose ORDER BY differs from the primary
     // key must SUCCEED, but on the regular schema-change path rather than the IDG fast path. The fast
     // path writes the index as a sidecar keyed to the segment it annotates, and a split hands the

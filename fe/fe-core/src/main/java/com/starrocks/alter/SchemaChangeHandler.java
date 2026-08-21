@@ -4910,8 +4910,11 @@ public class SchemaChangeHandler extends AlterHandler {
         // NOTE: PRIMARY_KEYS range-distribution tables are intentionally NOT excluded. The rewrite is
         // designed to support them -- the op_write->op_schema_change@W conversion plus version-ordered
         // vlog replay gives PK/UNIQUE/AGG-REPLACE newer-wins (see the P1b design's "PK flip at
-        // base_version = W" correctness obligation). PK column keyness is fixed (no MODIFY-COLUMN
-        // keyness flip is possible), so only the sort-key-reorder path can route a PK table.
+        // base_version = W" correctness obligation). A PK key column cannot be demoted
+        // (resolveModifyColumnKeyness keeps it a key), but a value column CAN be promoted to one, so
+        // the MODIFY COLUMN path can route a PK table too -- modifyColumnShiftsRangeSortKey turns that
+        // down for an index whose ORDER BY differs from its primary key, which is the only PK shape
+        // the rewrite cannot sample boundaries for.
         if (clause instanceof ReorderColumnsClause) {
             // A sort-key reorder (ALTER TABLE ... ORDER BY with fewer columns than the base schema)
             // always shifts the range sort key. A full-schema reorder is handled on a different path
@@ -5021,6 +5024,8 @@ public class SchemaChangeHandler extends AlterHandler {
      * modified column's key bit is flipped, then compared with the current sort key (mirroring how
      * {@link MetaUtils#getRangeDistributionColumns(OlapTable, long)} resolves the sort key from the
      * index's {@code sortKeyIdxes}, or from the key columns when no explicit sort key is set).
+     *
+     * <p>Always false for an index whose ORDER BY differs from its primary key -- see the guard below.
      */
     private static boolean modifyColumnShiftsRangeSortKey(OlapTable table, ModifyColumnClause clause) {
         long baseIndexMetaId = table.getBaseIndexMetaId();
@@ -5052,7 +5057,20 @@ public class SchemaChangeHandler extends AlterHandler {
             // bypassing those validations when a keyness flip is bundled with another change.
             return false;
         }
-        List<String> currentSortKeyNames = MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
+        if (MetaUtils.hasSeparateSortKey(table, baseIndexMetaId)) {
+            // This index routes by its primary key while its ORDER BY says something else, so a
+            // key-derived "after" sort key is not what routing would use, and the two sides below
+            // would be comparing ORDER BY names against primary-key names -- never equal, i.e. every
+            // pure keyness flip would look like a shift. Routing one here would be worse than the
+            // false positive: createRangeRewriteJob(List<Column>) passes sortKeyIdxes = null on the
+            // documented assumption that no explicit sort key pins the column positions, so the
+            // rewrite would silently drop the table's ORDER BY. Say no, and the caller's explicit
+            // "MODIFY COLUMN that changes keyness is not supported" reject stands -- the same answer
+            // reorderSeparatesSortKeyFromPrimaryKey gives for the reorder path, for the same reason.
+            return false;
+        }
+        // Past that guard the two resolvers agree, so this reads the same key space as the candidate.
+        List<String> currentSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
                 .map(Column::getName).collect(Collectors.toList());
         Map<String, Boolean> keynessOverride = Map.of(columnName, newIsKey);
         List<String> candidateSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId,
