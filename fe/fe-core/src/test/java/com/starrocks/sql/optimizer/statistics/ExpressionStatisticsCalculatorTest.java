@@ -153,6 +153,42 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testRowNumberFunctionCall() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.INT, "id", true);
+        CallOperator rowNumberCall =
+                new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
+
+        // With known input column statistics
+        Statistics statisticsWithKnownCols = Statistics.builder()
+                .addColumnStatistic(columnRefOperator,
+                        ColumnStatistic.builder().setMinValue(0).setMaxValue(100)
+                                .setDistinctValuesCount(100).setNullsFraction(0).setAverageRowSize(10).build())
+                .setOutputRowCount(1000)
+                .build();
+        ColumnStatistic columnStatistic =
+                ExpressionStatisticCalculator.calculate(rowNumberCall, statisticsWithKnownCols);
+        Assertions.assertFalse(columnStatistic.isUnknown());
+        Assertions.assertEquals(1, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1000, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(1000, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+
+        // When all input column stats are unknown, non-nullary calls hit deriveBasicColStats.
+        // ROW_NUMBER() must bypass that guard (nullary-first) because it only needs row count.
+        Statistics statisticsWithUnknownCols = Statistics.builder()
+                .addColumnStatistic(columnRefOperator, ColumnStatistic.unknown())
+                .setOutputRowCount(1000)
+                .build();
+        columnStatistic = ExpressionStatisticCalculator.calculate(rowNumberCall, statisticsWithUnknownCols);
+        Assertions.assertFalse(columnStatistic.isUnknown());
+        Assertions.assertFalse(columnStatistic.isInfiniteRange());
+        Assertions.assertEquals(1, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1000, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(1000, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
     public void testUnaryFunctionCall() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.INT, "id", true);
         CallOperator callOperator = new CallOperator(FunctionSet.MAX, IntegerType.INT, Lists.newArrayList(columnRefOperator));
