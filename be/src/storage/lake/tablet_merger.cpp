@@ -3347,37 +3347,35 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     return Status::OK();
 }
 
-void update_next_rowset_id(TabletMetadataPB* metadata) {
-    uint32_t max_end = 1; // invariant: next_rowset_id >= 1
-    for (const auto& rowset : metadata->rowsets()) {
-        max_end = std::max(max_end, rowset.id() + get_rowset_id_step(rowset));
-    }
-    // Also consider sstable_meta projected max_rss_rowid. merge_sstables advances
-    // each shared sstable's high word by ctx.rssid_offset (tablet_merger.cpp ~615),
-    // and the legacy non-shared_rssid branch can produce projected high words
-    // larger than any surviving rowset.id (e.g. when a delete-only sstable from an
-    // old tablet contributes a high rssid that has no corresponding rowset in the merged
-    // metadata). If next_rowset_id is set from rowset.id alone, future writes on
-    // this tablet — and on SPLIT new tablets that inherit this metadata — will assign
-    // rssids smaller than the projected sstable highs, producing sstables whose
-    // max_rss_rowid is LESS than existing entries and violating the ascending-order
-    // invariant that LakePersistentIndex::commit() (lake_persistent_index.cpp:881)
-    // enforces. The downstream symptom is the compaction publish failing with
-    // "sstables are not ordered, last_max_rss_rowid=A : max_rss_rowid=B" and the
-    // next reshard job parking in PREPARING because visibleVersion never catches
-    // up. Bound next_rowset_id by (max projected high word) + 1 so any new rssid
-    // is strictly greater than every projected sstable rssid.
-    if (metadata->has_sstable_meta()) {
-        for (const auto& sst : metadata->sstable_meta().sstables()) {
-            const uint32_t projected_high = extract_rss_rowid_high(sst.max_rss_rowid());
-            // Saturated UINT32_MAX would already break the rssid encoding, so
-            // bumping past it is meaningless — leave max_end alone there.
-            if (projected_high < std::numeric_limits<uint32_t>::max()) {
-                max_end = std::max(max_end, projected_high + 1);
+StatusOr<uint32_t> compute_supported_next_rowset_id(const TabletMetadataPB& metadata) {
+    uint64_t next = 1;
+    for (const auto& rowset : metadata.rowsets()) {
+        uint64_t end = static_cast<uint64_t>(rowset.id()) + 1;
+        if (rowset.segment_metas_size() > 0) {
+            uint32_t max_idx = 0;
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                max_idx = std::max(max_idx, get_segment_idx(rowset, i));
             }
+            end = static_cast<uint64_t>(rowset.id()) + static_cast<uint64_t>(max_idx) + 1;
         }
+        next = std::max(next, end);
     }
-    metadata->set_next_rowset_id(max_end);
+    for (const auto& sst : metadata.sstable_meta().sstables()) {
+        if (sst.max_rss_rowid() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            return Status::InvalidArgument("tablet merge SST watermark exceeds the supported signed domain");
+        }
+        next = std::max(next, static_cast<uint64_t>(extract_rss_rowid_high(sst.max_rss_rowid())) + 1);
+    }
+    if (next > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return Status::InvalidArgument("tablet merge exhausts the supported rssid allocation domain");
+    }
+    return static_cast<uint32_t>(next);
+}
+
+Status finalize_next_rowset_id(TabletMetadataPB* metadata) {
+    ASSIGN_OR_RETURN(uint32_t next_rowset_id, compute_supported_next_rowset_id(*metadata));
+    metadata->set_next_rowset_id(next_rowset_id);
+    return Status::OK();
 }
 
 void merge_schemas(const std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata) {
@@ -3568,7 +3566,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     }
 
     // Phase 4: Finalize
-    update_next_rowset_id(new_tablet_metadata.get());
+    RETURN_IF_ERROR(finalize_next_rowset_id(new_tablet_metadata.get()));
 
     // No re-share here: the merged tablet OWNS its segments via the same ownership-transfer
     // model that the identical-tablet and split paths already use. The source old tablets
