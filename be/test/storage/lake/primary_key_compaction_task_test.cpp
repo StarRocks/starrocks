@@ -37,6 +37,7 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/datum_variant.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
@@ -53,6 +54,8 @@
 #include "storage/rows_mapper.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks::lake {
 
@@ -437,6 +440,93 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_EQ(2, new_tablet_metadata->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
+}
+
+// The UNSHARE rewrite is the only place a tablet range is used as a row-level predicate, and it is
+// the cutover that makes a split child's data private. If the filter is not applied, the child keeps
+// its siblings' rows and serves them after cutover; if it is applied to the wrong rows, it drops its
+// own. Nothing else in this file drives it: the filter is gated on is_unshare AND a sort key that is
+// not the primary key, which is the shape whose rows are scattered through every segment.
+TEST_P(LakePrimaryKeyCompactionTest, test_unshare_compaction_keeps_only_the_rows_in_range) {
+    // c0 is the key, c1 the value; ORDER BY c1 makes the sort key separate from the primary key.
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
+    metadata->set_persistent_index_type(GetParam().persistent_index_type);
+    metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
+    metadata->mutable_schema()->add_sort_key_idxes(1);
+
+    // Keep [kRangeLow, kRangeHigh) of the key space. generate_data writes c0 = i + shift*kChunkSize,
+    // so two chunks cover [0, 2*kChunkSize).
+    constexpr int kRangeLow = 5;
+    constexpr int kRangeHigh = 17;
+    auto to_tuple = [](int value) {
+        VariantTuple tuple;
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
+        TuplePB tuple_pb;
+        tuple.to_proto(&tuple_pb);
+        return tuple_pb;
+    };
+    auto* range = metadata->mutable_range();
+    range->mutable_lower_bound()->CopyFrom(to_tuple(kRangeLow));
+    range->set_lower_bound_included(true);
+    range->mutable_upper_bound()->CopyFrom(to_tuple(kRangeHigh));
+    range->set_upper_bound_included(false);
+
+    const int64_t tablet_id = metadata->id();
+    auto tablet_schema = TabletSchema::create(metadata->schema());
+    ASSERT_TRUE(tablet_schema->has_separate_sort_key());
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (uint32_t i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    int64_t version = 1;
+    for (int shift = 0; shift < 2; ++shift) {
+        auto chunk = generate_data(kChunkSize, shift);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // What a split leaves behind: the children inherit the parent's files, so every segment is
+    // shared until the UNSHARE rewrite makes each child's copy private.
+    ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto shared = std::make_shared<TabletMetadataPB>(*before);
+    int64_t rows_before = 0;
+    for (auto& rowset : *shared->mutable_rowsets()) {
+        rows_before += rowset.num_rows();
+        for (auto& segment : *rowset.mutable_segment_metas()) {
+            segment.set_shared(true);
+        }
+    }
+    ASSERT_EQ(2 * kChunkSize, rows_before);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*shared));
+
+    auto txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr, 0 /* table_id */,
+                                                    0 /* partition_id */, true /* is_unshare */);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    ASSIGN_OR_ABORT(auto compaction_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(compaction_log->has_op_compaction());
+    EXPECT_EQ(kRangeHigh - kRangeLow, compaction_log->op_compaction().output_rowset().num_rows())
+            << "the rewrite must keep exactly the keys in [" << kRangeLow << ", " << kRangeHigh << ")";
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {

@@ -166,6 +166,7 @@ set(EXEC_FILES
 if (NOT APPLE)
     list(APPEND EXEC_FILES
         ./gutil/sysinfo-test.cc
+        ./service/lake_service_parent_view_test.cpp
         ./service/lake_service_test.cpp
     )
 endif ()
