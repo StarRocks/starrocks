@@ -34,6 +34,7 @@ import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.TabletRangePB;
 import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
@@ -422,11 +423,26 @@ public class Utils {
         // cluster with no split in flight there is nothing for it to answer. Finished jobs linger in the
         // job map for three days and would otherwise make every publish pay for them.
         if (!unsharePublish && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().hasLiveSplitJob()) {
-            Set<Long> publishedTabletIds = publishReqs.stream()
-                    .filter(java.util.Objects::nonNull)
-                    .flatMap(publishReq -> Optional.ofNullable(publishReq.getTabletIds())
-                            .orElseGet(List::of).stream())
-                    .collect(java.util.stream.Collectors.toSet());
+            // Both halves are needed. A cross publish carries its children in reshardingTabletInfos and
+            // NOT in tabletIds (PublishTabletsInfo#addReshardingTablet only fills the former), so reading
+            // tabletIds alone would never see a split family complete -- and the version that installs
+            // the children is exactly the one a query pinned to the parent still has to be able to read.
+            Set<Long> publishedTabletIds = new HashSet<>();
+            for (PublishVersionRequest publishReq : publishReqs) {
+                if (publishReq == null) {
+                    continue;
+                }
+                publishedTabletIds.addAll(Optional.ofNullable(publishReq.getTabletIds()).orElseGet(List::of));
+                for (ReshardingTabletInfoPB reshardingInfo :
+                        Optional.ofNullable(publishReq.getReshardingTabletInfos()).orElseGet(List::of)) {
+                    if (reshardingInfo.splittingTabletInfo != null
+                            && reshardingInfo.splittingTabletInfo.getNewTabletIds() != null) {
+                        publishedTabletIds.addAll(reshardingInfo.splittingTabletInfo.getNewTabletIds());
+                    } else if (reshardingInfo.identicalTabletInfo != null) {
+                        publishedTabletIds.add(reshardingInfo.identicalTabletInfo.getNewTabletId());
+                    }
+                }
+            }
             if (request.parentTabletPublishInfos == null) {
                 request.parentTabletPublishInfos = new ArrayList<>();
             }
