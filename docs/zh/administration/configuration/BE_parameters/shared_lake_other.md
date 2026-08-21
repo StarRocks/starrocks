@@ -191,6 +191,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
 - 引入版本：v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中主键表的 publish 在读取所需的基底 Segment 时，是否通过 Segment 元数据缓存读取，而不是每次都重新打开。该项同时覆盖行模式部分列更新和条件更新，二者都需要从相同的 Segment 重新读取旧值。打开一个 Segment 需要解析其 footer 并为表 Schema 的每一列创建一个列读取器，因此在宽表上，高频的部分列更新会在每次 publish 时对相同的基底 Segment 重复付出这份开销。通过缓存读取可以让后续的 publish 复用已经打开的 Segment。仅当该 tablet 的基底 Segment 能够容纳在 `lake_metadata_cache_limit` 之内时才使用缓存；超出之后，填充缓存会以与写入相同的速度淘汰条目，因此会退回原有行为。之所以按整个 tablet 而非单次 publish 计算，是因为相继的多次 publish 读取的是其中不同的子集。将该项设置为 `false` 可始终重新打开 Segment。
+- 引入版本：v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - 默认值：true

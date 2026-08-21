@@ -194,6 +194,15 @@ This topic introduces the following types of BE configurations:
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key table publish in a shared-data cluster reads the base segments it needs through the segment metadata cache instead of opening each of them from scratch. This covers both row-mode partial updates and condition updates, which re-read old values from the same segments. Opening a segment parses its footer and builds one column reader per column of the tablet schema, so on a wide table a frequent partial-update stream repeats that cost on every publish for the same base segments. Reading through the cache lets a later publish reuse an already-opened segment. The cache is only used while the tablet's base segments fit in `lake_metadata_cache_limit`; beyond that, filling the cache would evict entries as fast as it adds them, so the original behavior is used instead. The tablet's whole set is the relevant one because successive publishes read different subsets of it. Set this item to `false` to always open the segments from scratch.
+- Introduced in: v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - Default: true
