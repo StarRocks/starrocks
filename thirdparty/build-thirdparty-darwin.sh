@@ -777,18 +777,34 @@ build_leveldb() {
 }
 
 build_brpc() {
-    if [[ -f "${TP_INSTALL_DIR}/lib/libbrpc.a" && -f "${TP_INCLUDE_DIR}/brpc/server.h" ]]; then
+    local brpc_install_revision="${BRPC_STARROCKS_REVISION}"
+    local brpc_install_mark="${TP_INSTALL_DIR}/.brpc-install-revision"
+
+    if [[ "${CLEAN:-0}" -eq 0 &&
+          -f "${brpc_install_mark}" &&
+          "$(cat "${brpc_install_mark}")" == "${brpc_install_revision}" &&
+          -f "${TP_INSTALL_DIR}/lib/libbrpc.a" &&
+          -f "${TP_INCLUDE_DIR}/brpc/server.h" ]]; then
         return 0
     fi
 
+    if [[ -z "${TP_INSTALL_DIR:-}" || "${TP_INSTALL_DIR}" == "/" ||
+          "${TP_INCLUDE_DIR:-}" != "${TP_INSTALL_DIR}/include" ]]; then
+        echo "Refusing to clear bRPC install from an unsafe path"
+        return 1
+    fi
+    rm -rf "${TP_INCLUDE_DIR}/brpc" "${TP_INCLUDE_DIR}/bthread" "${TP_INCLUDE_DIR}/butil" \
+           "${TP_INCLUDE_DIR}/bvar" "${TP_INCLUDE_DIR}/json2pb" "${TP_INCLUDE_DIR}/mcpack2pb" \
+           "${TP_INSTALL_DIR}/lib/cmake/brpc" "${TP_INSTALL_DIR}/lib64/cmake/brpc"
+    rm -f "${TP_INCLUDE_DIR}/idl_options.proto" "${TP_INCLUDE_DIR}/idl_options.pb.h" \
+          "${TP_INSTALL_DIR}/bin/protoc-gen-mcpack" "${TP_INSTALL_DIR}/lib/pkgconfig/brpc.pc" \
+          "${TP_INSTALL_DIR}/lib64/pkgconfig/brpc.pc" "${TP_INSTALL_DIR}/lib/libbrpc.a" \
+          "${TP_INSTALL_DIR}/lib64/libbrpc.a" "${TP_INSTALL_DIR}"/lib/libbrpc*.dylib \
+          "${TP_INSTALL_DIR}"/lib64/libbrpc*.dylib \
+          "${brpc_install_mark}"
+
     check_if_source_exist "${BRPC_SOURCE}"
     cd "${TP_SOURCE_DIR}/${BRPC_SOURCE}"
-    if ! grep -q "Force C++17 for glog 0.7.1 compatibility on macOS" CMakeLists.txt; then
-        perl -0pi -e 's/set\(CMAKE_CXX_STANDARD_REQUIRED ON\)/set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n# Force C++17 for glog 0.7.1 compatibility on macOS\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)/' CMakeLists.txt
-    fi
-    if ! grep -q "Respect caller-provided OpenSSL root on macOS" CMakeLists.txt; then
-        perl -0pi -e 's/if\(CMAKE_SYSTEM_NAME STREQUAL "Darwin"\)\n        set\(OPENSSL_ROOT_DIR\n            "\/usr\/local\/opt\/openssl" # Homebrew installed OpenSSL\n        \)\n    endif\(\)/if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT OPENSSL_ROOT_DIR)\n        # Respect caller-provided OpenSSL root on macOS.\n        set(OPENSSL_ROOT_DIR\n            "\/usr\/local\/opt\/openssl" # Homebrew installed OpenSSL\n        )\n    endif()/' CMakeLists.txt
-    fi
 
     local old_path="${PATH}"
     local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
@@ -850,6 +866,12 @@ build_brpc() {
     restore_env_var CPLUS_INCLUDE_PATH "${old_cplus_include_path}"
     restore_env_var C_INCLUDE_PATH "${old_c_include_path}"
     sync_lib64_links
+    if [[ ! -f "${TP_INSTALL_DIR}/lib/libbrpc.a" ||
+          ! -f "${TP_INCLUDE_DIR}/brpc/server.h" ]]; then
+        echo "bRPC installation is incomplete"
+        return 1
+    fi
+    printf '%s\n' "${brpc_install_revision}" > "${brpc_install_mark}"
 }
 
 build_rocksdb() {
