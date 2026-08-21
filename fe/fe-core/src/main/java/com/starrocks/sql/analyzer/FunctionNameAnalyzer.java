@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
 
 import java.util.List;
@@ -67,12 +68,23 @@ public class FunctionNameAnalyzer {
             }
         }
 
-        List<Function> functionList = defaultDb.getFunctionsByName(functionName);
+        // When a DB qualifier is explicitly provided, look up that specific DB rather than
+        // always using defaultDb. This fixes false rejections when the function exists in
+        // the qualifier's DB but not in the BACKUP target DB.
+        Database lookupDb;
+        if (parts.size() == 2) {
+            lookupDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (lookupDb == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+        } else {
+            lookupDb = defaultDb;
+        }
+
+        List<Function> functionList = lookupDb.getFunctionsByName(functionName);
         if (functionList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "Invalid backup function(s), function name: " + functionName);
         }
     }
 }
-
-
