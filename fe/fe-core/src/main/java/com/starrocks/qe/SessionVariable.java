@@ -3118,6 +3118,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.annParams = annParams;
     }
 
+    public double getKFactor() {
+        return kFactor;
+    }
+
+    public void setKFactor(double kFactor) {
+        this.kFactor = kFactor;
+    }
+
+    public double getPqRefineFactor() {
+        return pqRefineFactor;
+    }
+
     public Map<String, String> getAnnParams() {
         if (Strings.isNullOrEmpty(annParams)) {
             return Maps.newHashMap();
