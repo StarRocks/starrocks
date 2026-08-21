@@ -434,7 +434,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         if (encryption_meta.empty()) {
             continue;
         }
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta_without_cache(encryption_meta));
         source_encryption_infos.emplace(filename, std::move(info));
     }
     std::unordered_set<std::string> shared_file_names;

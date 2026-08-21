@@ -2015,6 +2015,21 @@ protected:
         KeyCache::instance().add_key(kek);
     }
 
+    static FileEncryptionPair create_test_encryption_pair(const std::string& root_plain_key, int64_t kek_id) {
+        KeyCache source_cache;
+        EncryptionKeyPB root_pb;
+        root_pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        root_pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        root_pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        root_pb.set_plain_key(root_plain_key);
+        auto root_key = EncryptionKey::create_from_pb(root_pb).value();
+        auto kek = root_key->generate_key().value();
+        kek->set_id(kek_id);
+        source_cache.add_key(root_key);
+        source_cache.add_key(kek);
+        return source_cache.create_encryption_meta_pair_using_current_kek().value();
+    }
+
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_replication_remote";
 
@@ -2044,7 +2059,13 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSourceSegmentIsReencryp
     seed_test_encryption_keys();
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = true;
-    ASSIGN_OR_ABORT(auto source_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+    auto& target_key_cache = KeyCache::instance();
+    const auto target_cache_size = target_key_cache.size();
+    ASSIGN_OR_ABORT(auto target_pair_before, target_key_cache.create_encryption_meta_pair_using_current_kek());
+    EncryptionMetaPB target_meta_before;
+    ASSERT_TRUE(target_meta_before.ParseFromString(target_pair_before.encryption_meta));
+    ASSERT_EQ(3, target_meta_before.key_hierarchy_size());
+    auto source_pair = create_test_encryption_pair("source-root-key!", 100);
 
     const std::string plaintext = "independent-source-segment-plaintext";
     const std::string encrypted_source_path = lake::join_path(_test_dir, "encrypted-source-segment");
@@ -2099,6 +2120,16 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSourceSegmentIsReencryp
     ASSIGN_OR_ABORT(auto target_input, local_fs->new_random_access_file(target_read_opts, target_path));
     ASSIGN_OR_ABORT(auto target_plaintext, target_input->read_all());
     EXPECT_EQ(plaintext, target_plaintext);
+
+    EXPECT_EQ(target_cache_size, target_key_cache.size());
+    ASSIGN_OR_ABORT(auto target_pair_after, target_key_cache.create_encryption_meta_pair_using_current_kek());
+    EncryptionMetaPB target_meta_after;
+    ASSERT_TRUE(target_meta_after.ParseFromString(target_pair_after.encryption_meta));
+    ASSERT_EQ(3, target_meta_after.key_hierarchy_size());
+    EXPECT_EQ(target_meta_before.key_hierarchy(0).SerializeAsString(),
+              target_meta_after.key_hierarchy(0).SerializeAsString());
+    EXPECT_EQ(target_meta_before.key_hierarchy(1).SerializeAsString(),
+              target_meta_after.key_hierarchy(1).SerializeAsString());
 }
 
 TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSequentialSidecarsAreReencrypted) {
