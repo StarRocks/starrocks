@@ -539,15 +539,20 @@ void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chun
     }
 }
 
-bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
-                                            const size_t limit_size, PrimaryKeyEncodingType encoding_type) {
+int64_t PrimaryKeyEncoder::find_first_exceed_limit_index(const Schema& schema, const Chunk& chunk, size_t offset,
+                                                         size_t len, const size_t limit_size,
+                                                         PrimaryKeyEncodingType encoding_type) {
+    if (len == 0) {
+        return -1;
+    }
+
     int ncol = schema.num_key_fields();
     if (ncol == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         if (schema.field(0)->type()->type() == TYPE_VARCHAR) {
             const auto& keys = GetContainer<TYPE_VARCHAR>::get_data(chunk.get_column_by_index(0));
             for (size_t i = 0; i < len; i++) {
                 if (keys[offset + i].size > limit_size) {
-                    return true;
+                    return offset + i;
                 }
             }
         }
@@ -566,7 +571,7 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
                 size += TypeUtils::estimate_field_size(t, 0);
             }
             if (size > limit_size) {
-                return true;
+                return offset;
             }
         }
 
@@ -584,12 +589,12 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
                 }
             }
             if (size > limit_size) {
-                return true;
+                return offset + i;
             }
         }
     }
 
-    return false;
+    return -1;
 }
 
 template <LogicalType LT>
