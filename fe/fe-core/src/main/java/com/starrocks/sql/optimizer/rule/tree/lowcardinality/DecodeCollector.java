@@ -1171,6 +1171,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             if (!expressions.isEmpty()) {
                 // predicate only translate to string expression
                 stringExpressions.computeIfAbsent(c, l -> Lists.newArrayList()).addAll(expressions);
+                info.usedStringColumns.union(c);
             }
         });
 
