@@ -418,7 +418,10 @@ public class Utils {
         // published by a new FE leader.
         boolean unsharePublish = txnInfos.stream()
                 .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
-        if (!unsharePublish) {
+        // Cheapest question first: building publishedTabletIds walks every tablet in the batch, and on a
+        // cluster with no split in flight there is nothing for it to answer. Finished jobs linger in the
+        // job map for three days and would otherwise make every publish pay for them.
+        if (!unsharePublish && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().hasLiveSplitJob()) {
             Set<Long> publishedTabletIds = publishReqs.stream()
                     .filter(java.util.Objects::nonNull)
                     .flatMap(publishReq -> Optional.ofNullable(publishReq.getTabletIds())

@@ -167,6 +167,21 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         return reshardingTabletInfo.getReshardingTablet();
     }
 
+    /**
+     * Whether any split job could still owe a parent-view page. Publish consults this on every
+     * transaction, so it has to be the cheapest question that can end the enquiry: finished jobs stay in
+     * the map for tablet_reshard_history_job_keep_max_ms (3 days by default) and answer nothing, and a
+     * cluster that never splits answers nothing at all.
+     */
+    public boolean hasLiveSplitJob() {
+        for (TabletReshardJob job : tabletReshardJobs.values()) {
+            if (job instanceof SplitTabletJob && !job.getJobState().isFinalState()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<ParentTabletPublishInfoPB> collectParentPublishInfos(Set<Long> publishedTabletIds) {
         List<ParentTabletPublishInfoPB> parentInfos = Lists.newArrayList();
         for (TabletReshardJob job : tabletReshardJobs.values()) {

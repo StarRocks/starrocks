@@ -1166,4 +1166,35 @@ public class TabletReshardJobMgrTest {
         }
     }
 
+
+    /**
+     * The publish path consults this before doing any per-batch work, so it has to be true exactly when
+     * collectParentPublishInfos could still answer something. That method early-returns on a final job
+     * state, so "a SplitTabletJob that is not in a final state" is precisely the condition -- getting it
+     * wrong in the false direction stops the parent-view pages without failing anything loudly.
+     */
+    @Test
+    public void hasLiveSplitJobMatchesWhatTheCollectorCanAnswer() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        Assertions.assertFalse(jobMgr.hasLiveSplitJob(), "an empty job map owes nothing");
+
+        // A merge job is not a split: it keeps no parent view alive.
+        jobMgr.tabletReshardJobs.put(9001L, new MergeTabletJob(9001L, reshardDb.getId(), -1L, Map.of()));
+        Assertions.assertFalse(jobMgr.hasLiveSplitJob(), "a merge job must not keep the publish path busy");
+
+        SplitTabletJob split = new SplitTabletJob(9002L, reshardDb.getId(), reshardTable.getId(), Map.of());
+        split.jobState = TabletReshardJob.JobState.RUNNING;
+        jobMgr.tabletReshardJobs.put(9002L, split);
+        Assertions.assertTrue(jobMgr.hasLiveSplitJob(), "a running split job may still owe a parent page");
+
+        // Finished jobs linger for tablet_reshard_history_job_keep_max_ms; they must not keep it true,
+        // which is the whole point of asking.
+        for (TabletReshardJob.JobState finalState :
+                List.of(TabletReshardJob.JobState.FINISHED, TabletReshardJob.JobState.ABORTED)) {
+            split.jobState = finalState;
+            Assertions.assertFalse(jobMgr.hasLiveSplitJob(), "a " + finalState + " split job owes nothing");
+            Assertions.assertTrue(jobMgr.collectParentPublishInfos(Set.of(1L, 2L)).isEmpty(),
+                    "and the collector agrees for " + finalState);
+        }
+    }
 }
