@@ -609,15 +609,11 @@ under the License.
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+        <!-- Transitively supplies cos_api-bundle, chdfs_hadoop_plugin_network,
+             cos-sts-java and ofs-sdk-definition; do not redeclare them. -->
         <dependency>
             <groupId>com.qcloud.cos</groupId>
             <artifactId>hadoop-cos</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
-        <dependency>
-            <groupId>com.qcloud</groupId>
-            <artifactId>chdfs_hadoop_plugin_network</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-azure-datalake -->
