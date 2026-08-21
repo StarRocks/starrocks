@@ -878,7 +878,23 @@ public class MergeTabletJob extends TabletReshardJob {
                             MetaUtils.getRangeDistributionColumns(olapTable, newIndex.getMetaId()),
                             colocateColumnCount);
                     for (Tablet tablet : newIndex.getTablets()) {
-                        if (classifier.indexOf(tablet) < 0) {
+                        int colocateRangeIndex;
+                        try {
+                            colocateRangeIndex = classifier.indexOf(tablet);
+                        } catch (Exception e) {
+                            // A mixed-version or faulty BE can publish a range whose lower tuple is
+                            // shorter than the colocate prefix, which trips extractColocatePrefix's
+                            // precondition. Such a tablet IS misaligned, so classify it as crossing
+                            // rather than letting the exception escape: this runs after
+                            // updateNextVersions crossed the no-abort boundary, so run() would catch
+                            // it, canAbort() is PENDING-only and cannot abort a RUNNING job, and the
+                            // scheduler would re-enter runRunningJob every cycle -- pinning the table
+                            // in TABLET_RESHARD indefinitely and blocking all DDL on it.
+                            LOG.warn("Cannot classify tablet {} of table {} against colocate group {}; "
+                                    + "treating it as misaligned.", tablet.getId(), tableId, grpId, e);
+                            colocateRangeIndex = -1;
+                        }
+                        if (colocateRangeIndex < 0) {
                             crossingTabletId = tablet.getId();
                             crossingRange = tablet.getRange() == null ? null : tablet.getRange().getRange();
                             break scan;

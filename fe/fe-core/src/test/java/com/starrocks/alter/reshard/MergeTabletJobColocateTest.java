@@ -616,6 +616,31 @@ public class MergeTabletJobColocateTest {
         return GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId);
     }
 
+    /**
+     * A mixed-version or faulty BE can publish a range whose lower tuple is shorter than the colocate
+     * prefix, which trips extractColocatePrefix's precondition inside Classifier.indexOf. The backstop
+     * runs AFTER updateNextVersions crossed the no-abort boundary, so an escaping exception cannot
+     * abort the job -- canAbort() is PENDING-only -- and the scheduler would re-enter runRunningJob
+     * every cycle, pinning the table in TABLET_RESHARD forever. It must be classified as misaligned
+     * instead.
+     */
+    @Test
+    public void testUnclassifiableRangeIsTreatedAsMisalignedNotThrown() throws Exception {
+        MergeTabletJob job = buildAutoMergeJob();
+        // A one-column lower bound where the colocate prefix needs one value but the sort key has two:
+        // extractColocatePrefix asserts values.size() >= colocateColumnCount against the FULL tuple,
+        // so an empty tuple is the shape that trips it.
+        MaterializedIndex newIndex = newIndexOf(job);
+        newIndex.getTablet(mergedNewTabletId(job))
+                .setRange(new TabletRange(Range.ge(new Tuple(List.of()))));
+
+        Assertions.assertFalse(groupUnstable());
+        // Must not throw: an exception here cannot abort a RUNNING merge job.
+        Assertions.assertDoesNotThrow(() -> invokeBackstop(job));
+        Assertions.assertTrue(groupUnstable(),
+                "an unclassifiable published range must mark the group unstable, not escape");
+    }
+
     /** A published merged range that straddles a boundary must re-arm the colocate checker. */
     @Test
     public void testCrossingMergedTabletMarksGroupUnstable() throws Exception {
