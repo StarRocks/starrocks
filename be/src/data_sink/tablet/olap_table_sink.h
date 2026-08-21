@@ -111,17 +111,28 @@ private:
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, Chunk* chunk);
 
+    // Recursively validates a nested (ARRAY/MAP/STRUCT) column and marks failed rows in _validate_selection.
+    // row_of[i] is the row that the i-th value of `column` belongs to, because the sub-columns of
+    // ARRAY/MAP are flattened and their i-th value does not correspond to the i-th row.
+    // `path` names the sub-column in error messages, e.g. "arr[]" or "m{}.value".
+    void _validate_nested_column(RuntimeState* state, Chunk* chunk, const TypeDescriptor& type, const Column* column,
+                                 const std::vector<uint32_t>& row_of, const std::string& path);
+
+    template <LogicalType LT>
+    void _validate_nested_decimal(RuntimeState* state, Chunk* chunk, const TypeDescriptor& type, const Column* column,
+                                  const uint8_t* nulls, const std::vector<uint32_t>& row_of, const std::string& path);
+
     Status _init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map);
 
     // When compute buckect hash, we should use real string for char column.
     // So we need to pad char column after compute buckect hash.
     void _padding_char_column(Chunk* chunk);
 
-    void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,
-                                  int32_t row_index);
-
-    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
+    static void _print_varchar_error_msg(RuntimeState* state, const Slice& str, std::string_view col_name, int max_len,
                                          Chunk* chunk, int32_t row_index);
+
+    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, const TypeDescriptor& type,
+                                         std::string_view col_name, Chunk* chunk, int32_t row_index);
 
     Status _fill_auto_increment_id(Chunk* chunk);
 
