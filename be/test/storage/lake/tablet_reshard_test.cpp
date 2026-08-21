@@ -9910,7 +9910,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_cache
     // range [0, 2] still contains id 1, the rebuild route is kept, and the first
     // entry (stored rssid 0, lifted to -1) trips the range guard.
     auto [overflow_status, overflow_drops] = run_scenario(
-            [this](const std::string& path) { return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}}); },
+            [this](const std::string& path) {
+                return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}});
+            },
             /*rssid_offset=*/-1, /*txn_id=*/204);
     ASSERT_FALSE(overflow_status.ok()) << "merge over an out-of-range stored rssid must fail";
     EXPECT_TRUE(overflow_status.is_corruption()) << overflow_status;
