@@ -57,6 +57,7 @@ public final class PreSplitProfile {
     private static final int MAX_INFO_VALUES = 20;
     private static final Scope NOOP_SCOPE = () -> { };
     private static final ThreadLocal<PreSplitProfile> ACTIVE_PROFILE = new ThreadLocal<>();
+    private static final ThreadLocal<AttemptState> ACTIVE_ATTEMPT = new ThreadLocal<>();
 
     enum Phase {
         SOURCE_SAMPLING,
@@ -70,6 +71,15 @@ public final class PreSplitProfile {
     public interface Scope extends AutoCloseable {
         @Override
         void close();
+    }
+
+    private static final class AttemptState {
+        private final PreSplitProfile profile;
+        private final AtomicLong estimatedInputBytes = new AtomicLong();
+
+        private AttemptState(PreSplitProfile profile) {
+            this.profile = profile;
+        }
     }
 
     private final LongSupplier nanoTime;
@@ -115,16 +125,28 @@ public final class PreSplitProfile {
         profile.attempts.increment();
         profile.addInfoValue(profile.loadKinds, loadKind.displayName());
         PreSplitProfile previous = ACTIVE_PROFILE.get();
+        AttemptState previousAttempt = ACTIVE_ATTEMPT.get();
+        AttemptState attempt = new AttemptState(profile);
         ACTIVE_PROFILE.set(profile);
+        ACTIVE_ATTEMPT.set(attempt);
         Scope timer = profile.startTimer(profile.totalTimeNs);
         return () -> {
             try {
                 timer.close();
+                // A single table attempt may sample the same source once per materialized index.
+                // Deduplicate those estimates within the attempt, then add distinct table attempts
+                // to the load-level total.
+                profile.estimatedInputBytes.addAndGet(attempt.estimatedInputBytes.get());
             } finally {
                 if (previous == null) {
                     ACTIVE_PROFILE.remove();
                 } else {
                     ACTIVE_PROFILE.set(previous);
+                }
+                if (previousAttempt == null) {
+                    ACTIVE_ATTEMPT.remove();
+                } else {
+                    ACTIVE_ATTEMPT.set(previousAttempt);
                 }
             }
         };
@@ -190,10 +212,16 @@ public final class PreSplitProfile {
         currentProfile(profile -> {
             profile.sampleRows.add(sampleSet.getTuples().size());
             if (sampleSet.getEstimates() != null) {
-                // One load can sample the same input once per materialized index. Keep the
-                // load-level estimate instead of multiplying it by the number of indexes.
-                profile.estimatedInputBytes.accumulateAndGet(
-                        sampleSet.getEstimates().totalBytes(), Math::max);
+                AttemptState attempt = ACTIVE_ATTEMPT.get();
+                if (attempt != null && attempt.profile == profile) {
+                    attempt.estimatedInputBytes.accumulateAndGet(
+                            sampleSet.getEstimates().totalBytes(), Math::max);
+                } else {
+                    // Preserve the old best-effort behavior for package-local diagnostic callers
+                    // that record a sample without an explicit attempt scope.
+                    profile.estimatedInputBytes.accumulateAndGet(
+                            sampleSet.getEstimates().totalBytes(), Math::max);
+                }
             }
         });
     }

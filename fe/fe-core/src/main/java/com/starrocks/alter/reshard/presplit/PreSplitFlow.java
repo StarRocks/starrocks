@@ -206,7 +206,6 @@ final class PreSplitFlow {
         // any shape the footer path cannot serve.
         SampleSet samples = runMetaTierMultiPartitionSampler(table, prepared, loadKind);
         if (samples != null) {
-            PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_META_TIER);
             PreSplitProfile.recordSample(samples);
             LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) served by META tier "
                     + "(row-group footer stats, no data scan) for table {}", loadKind, table.getName());
@@ -274,6 +273,7 @@ final class PreSplitFlow {
     }
 
     static SampleSet runDataTierSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
+        PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_DATA_TIER);
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
                 PreSplitProfile.Phase.SOURCE_SAMPLING)) {
             SampleRequest request = new SampleRequest(
@@ -282,7 +282,6 @@ final class PreSplitFlow {
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
             Sampler sampler = new ReservoirSampler(DefaultPreSplitPipeline.sampleSubqueryExecutorFor(loadKind));
             SampleSet sampleSet = sampler.sample(request);
-            PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_DATA_TIER);
             PreSplitProfile.recordSample(sampleSet);
             return sampleSet;
         } catch (StarRocksException sampleFailure) {
@@ -340,6 +339,9 @@ final class PreSplitFlow {
             }
             partitionSourceIndexInSortKey[i] = indexInSortKey;
         }
+        // Capability checks above do not touch the source. Once footer fetching starts, retain the
+        // attempted tier even if unusable statistics force a data-tier fallback.
+        PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_META_TIER);
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
                 PreSplitProfile.Phase.SOURCE_SAMPLING)) {
             SampleRequest request = new SampleRequest(

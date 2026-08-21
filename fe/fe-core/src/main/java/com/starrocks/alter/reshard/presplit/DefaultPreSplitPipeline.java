@@ -229,10 +229,6 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                     request.getSampleByteLimit(), request.getSeed());
             TierOutcome outcome = planBoundariesWithFallback(
                     indexRequest, requestedTabletCount, activeComputeNodeCount, deadline);
-            // Record every tier that actually ran, even when it concluded that the source has no
-            // useful cut. Otherwise a NO_SPLIT attempt reports an outcome but hides whether footer
-            // metadata or row sampling produced it.
-            PreSplitProfile.recordSourceTier(outcome.tier());
             if (outcome.result().isNoSplit()) {
                 continue;
             }
@@ -347,6 +343,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     private TierOutcome runMetaTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
+        // Record the tier when it starts so a later fallback still exposes the footer work that
+        // contributed to the phase timers.
+        PreSplitProfile.recordSourceTier(TIER_LABEL_META_TIER);
         // The production metadata sampler instruments footer-statistics fetch and boundary
         // planning separately. Keeping a scope around this combined interface would double-count
         // the fetch and incorrectly attribute planning work to SourceSamplingTime.
@@ -359,6 +358,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                                     int activeComputeNodeCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         checkDeadline(deadline);
+        PreSplitProfile.recordSourceTier(TIER_LABEL_DATA_TIER);
         // Cap the sample at the remaining budget (see class doc); an over-budget
         // sample is cancelled by the BE → SAMPLE_FAILED → the load proceeds.
         SampleRequest budgetedRequest = request.withQueryTimeoutSeconds(remainingBudgetSeconds(deadline));

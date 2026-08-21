@@ -171,6 +171,7 @@ public class DefaultPreSplitPipelineTest {
         Sampler dataTier = request -> new SampleSet(
                 List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
                 new Estimates(FILE_TOTAL_BYTES, 4L));
+        PreSplitProfile profile = new PreSplitProfile();
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
@@ -178,10 +179,16 @@ public class DefaultPreSplitPipelineTest {
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
-            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
-                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+            try (PreSplitProfile.Scope ignored =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
 
             Assertions.assertTrue(prepared.isPresent());
+            Assertions.assertEquals("meta_tier, data_tier",
+                    profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                    "fallback profiles must retain both attempted tiers");
         }
     }
 

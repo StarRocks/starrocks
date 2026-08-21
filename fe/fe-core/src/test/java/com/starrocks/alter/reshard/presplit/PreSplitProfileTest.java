@@ -95,4 +95,28 @@ public class PreSplitProfileTest {
         PreSplitProfile.appendTo(root, new PreSplitProfile());
         Assertions.assertNull(root.getChild(PreSplitProfile.PROFILE_NAME));
     }
+
+    @Test
+    public void testEstimatedInputBytesDeduplicatesWithinAttemptAndSumsAcrossAttempts() {
+        PreSplitProfile profile = new PreSplitProfile();
+
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+            PreSplitProfile.recordSample(sampleWithEstimatedBytes(10L));
+            PreSplitProfile.recordSample(sampleWithEstimatedBytes(10L));
+            PreSplitProfile.recordSample(sampleWithEstimatedBytes(8L));
+        }
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+            PreSplitProfile.recordSample(sampleWithEstimatedBytes(20L));
+            PreSplitProfile.recordSample(sampleWithEstimatedBytes(15L));
+        }
+
+        Assertions.assertEquals(30L,
+                profile.toRuntimeProfile().getCounter(PreSplitProfile.ESTIMATED_INPUT_BYTES).getValue());
+    }
+
+    private static SampleSet sampleWithEstimatedBytes(long estimatedBytes) {
+        return new SampleSet(List.of(new Tuple(List.of())), new Estimates(estimatedBytes, 1L));
+    }
 }
