@@ -22,6 +22,7 @@
 
 #include "column/const_column.h"
 #include "column/map_column.h"
+#include "exprs/array_size_limit.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 
@@ -6679,6 +6680,32 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_microsecond_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
     delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, max_array_size_unlimited_by_default) {
+    ASSERT_FALSE(reject_if_array_too_large(&_ctx, "array_concat", 1000000));
+    ASSERT_FALSE(_ctx.has_error());
+}
+
+TEST_F(ArrayFunctionsTest, max_array_size_negative_limit_means_unlimited) {
+    _ctx.set_max_array_size(-1);
+    ASSERT_FALSE(reject_if_array_too_large(&_ctx, "array_concat", 1000000));
+    ASSERT_FALSE(_ctx.has_error());
+}
+
+TEST_F(ArrayFunctionsTest, max_array_size_accepts_an_array_of_exactly_the_limit) {
+    _ctx.set_max_array_size(4);
+    ASSERT_FALSE(reject_if_array_too_large(&_ctx, "array_concat", 4));
+    ASSERT_FALSE(_ctx.has_error());
+}
+
+TEST_F(ArrayFunctionsTest, max_array_size_rejects_an_oversized_array) {
+    _ctx.set_max_array_size(4);
+
+    ASSERT_TRUE(reject_if_array_too_large(&_ctx, "array_concat", 5));
+    ASSERT_TRUE(_ctx.has_error());
+    ASSERT_NE(std::string(_ctx.error_msg()).find("array_concat"), std::string::npos);
+    ASSERT_NE(std::string(_ctx.error_msg()).find("max_array_size"), std::string::npos);
 }
 
 } // namespace starrocks
