@@ -153,6 +153,14 @@ Rowset::~Rowset() {
 }
 
 StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
+    // Range-distributed PK tablets with ORDER BY != PK persist their tablet/rowset
+    // boundaries in PK space while segment pages are ordered by the independent sort key.
+    // Such a boundary is not a contiguous segment seek range. Parent-tablet reads therefore
+    // read a deduplicated shared segment in full; UNSHARE applies the PK range row-by-row.
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _tablet_schema->has_separate_sort_key()) {
+        return std::optional<SeekRange>{};
+    }
+
     const TabletRangePB* range_pb = nullptr;
     if (_metadata->has_range()) {
         range_pb = &_metadata->range();
@@ -715,8 +723,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    seg_options.delvec_loader =
-            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts);
+    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
+    // for delvec lookup instead of reading the same version back from object storage. This is
+    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
+    // new-version bundle has been persisted, so that version exists only in the RPC response here.
+    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
+                                                                   seg_options.lake_io_opts, _tablet_metadata);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;
