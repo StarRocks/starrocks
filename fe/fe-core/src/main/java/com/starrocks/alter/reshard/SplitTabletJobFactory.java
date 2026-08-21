@@ -341,9 +341,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     private static void validateTableLevel(Database db, OlapTable table) throws StarRocksException {
         validateTableDistribution(db, table);
         if (hasSeparatePrimaryKeySortKey(table)) {
-            if (!Config.tablet_reshard_enable_pk_order_by) {
-                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key is disabled");
-            }
             if (!table.isFileBundling()) {
                 throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key requires "
                         + "file_bundling=true");

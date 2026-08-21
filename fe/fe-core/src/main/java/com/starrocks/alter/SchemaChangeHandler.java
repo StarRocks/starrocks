@@ -2524,6 +2524,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
         }
+        rejectSidecarChangeOnSeparateSortKeyRange(olapTable, alterClauses);
         // Lake-only ADD/DROP INDEX fast path. The classifier filters the
         // alter set; on a match we short-circuit into the dedicated Job
         // (LakeTableAddIndexJob / LakeTableDropIndexJob) that builds IDG
@@ -4908,9 +4909,9 @@ public class SchemaChangeHandler extends AlterHandler {
             // boundaries over the NEW sort key, so a reorder that leaves the sort key differing from
             // the primary key would store ranges in sort-key space while every writer and pruner
             // resolves them in primary-key space, misrouting writes and pruning away live rows.
-            // Fall through to the range-distribution rejection below instead. Creating such a table
-            // outright is likewise gated (CreateTableAnalyzer, tablet_reshard_enable_pk_order_by);
-            // admitting it through ALTER would be the same shape by the back door.
+            // Fall through to the range-distribution rejection below instead. Reaching that shape means
+            // creating the table that way, where CreateTableAnalyzer settles the sort key against a
+            // freshly sampled layout; ALTER would instead reinterpret ranges already on disk.
             return !reorderSeparatesSortKeyFromPrimaryKey(table, (ReorderColumnsClause) clause);
         }
         if (clause instanceof ModifyColumnClause) {
@@ -4932,6 +4933,45 @@ public class SchemaChangeHandler extends AlterHandler {
                     .anyMatch(columnDef -> addTouchesKeyDerivedRangeSortKey(table, columnDef));
         }
         return false;
+    }
+
+    /**
+     * Whether this is a range-distributed primary-key table whose ORDER BY key differs from its primary
+     * key. Range distribution is part of the test on purpose: a HASH-distributed primary-key table has
+     * always been allowed a separate ORDER BY and is not affected by any of this.
+     */
+    private static boolean isSeparateSortKeyRangePrimaryKey(OlapTable olapTable) {
+        return olapTable.isRangeDistribution()
+                && olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                && MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId());
+    }
+
+    /**
+     * Such a table cannot carry the sidecar file kinds yet. An added index writes an IDG and a bloom
+     * filter the same, each keyed to the segment it annotates -- and a split's UNSHARE compaction
+     * rewrites every segment wholesale without carrying them across, so the index would quietly stop
+     * covering the data it was built for. Reject the statement instead of building something that
+     * disappears at the next split.
+     */
+    private static void rejectSidecarChangeOnSeparateSortKeyRange(OlapTable olapTable,
+                                                                  List<AlterClause> alterClauses)
+            throws DdlException {
+        if (alterClauses == null || !isSeparateSortKeyRangePrimaryKey(olapTable)) {
+            return;
+        }
+        for (AlterClause alterClause : alterClauses) {
+            if (alterClause instanceof CreateIndexClause) {
+                throw new DdlException("ADD INDEX is not supported on a range-distributed primary key table "
+                        + "whose ORDER BY key differs from the primary key");
+            }
+            if (alterClause instanceof ModifyTablePropertiesClause
+                    && ((ModifyTablePropertiesClause) alterClause).getProperties() != null
+                    && ((ModifyTablePropertiesClause) alterClause).getProperties()
+                            .containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+                throw new DdlException("Changing bloom filter columns is not supported on a range-distributed "
+                        + "primary key table whose ORDER BY key differs from the primary key");
+            }
+        }
     }
 
     /**

@@ -494,10 +494,6 @@ public class CreateTableAnalyzer {
                 }
 
                 if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
-                    if (!Config.tablet_reshard_enable_pk_order_by) {
-                        throw new SemanticException("The sort columns must be same with primary key columns " +
-                                                    "and the order must be consistent");
-                    }
                     Map<String, String> properties = stmt.getProperties();
                     boolean fileBundling = properties == null ? Config.enable_file_bundling
                             : Boolean.parseBoolean(properties.getOrDefault(

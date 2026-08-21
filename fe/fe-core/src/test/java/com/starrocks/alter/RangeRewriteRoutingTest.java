@@ -399,8 +399,8 @@ public class RangeRewriteRoutingTest {
     // when it would leave the sort key different from the primary key. A primary-key table routes by
     // its primary key (MetaUtils#getRangeDistributionColumns), but the rewrite samples the new tablet
     // boundaries over the NEW sort key -- routing it would store ranges in sort-key space that every
-    // writer and pruner then reads as primary-key space. Creating the same shape outright is gated
-    // behind tablet_reshard_enable_pk_order_by; ALTER must not be the back door.
+    // writer and pruner then reads as primary-key space. Such a table has to be created that way, so
+    // its boundaries are sampled in primary-key space from the start.
     @Test
     public void testPrimaryKeyReorderSeparatingSortKeyRejectedSynchronously() throws Exception {
         starRocksAssert.withTable("create table t_route_pk_sep (k1 int not null, k2 int not null, v1 int)\n"
@@ -433,6 +433,50 @@ public class RangeRewriteRoutingTest {
         org.junit.jupiter.api.Assertions.assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(
                 table, stmt.getAlterClauseList().get(0)),
                 "a sort key equal to the primary key leaves range routing unchanged");
+    }
+
+
+    // (m) A range-distributed PRIMARY KEY table whose ORDER BY differs from the primary key cannot yet
+    // carry the sidecar file kinds: an added index writes an IDG keyed to the segment it annotates, and
+    // a split's UNSHARE compaction rewrites every segment wholesale without carrying it across. Both
+    // spellings -- ADD INDEX and a bloom-filter property change -- must be rejected up front rather
+    // than build an index that quietly stops covering its data at the next split.
+    @Test
+    public void testSidecarChangeRejectedOnSeparateSortKeyPrimaryKeyRange() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_sidecar (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        DdlException addIndex = assertThrowsDdlException(() -> createJob("t_route_pk_sidecar",
+                "alter table t_route_pk_sidecar add index idx_v1 (v1) using bitmap"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                addIndex.getMessage().contains("ADD INDEX is not supported"),
+                "unexpected message: " + addIndex.getMessage());
+
+        DdlException bloomFilter = assertThrowsDdlException(() -> createJob("t_route_pk_sidecar",
+                "alter table t_route_pk_sidecar set ('bloom_filter_columns' = 'v1')"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                bloomFilter.getMessage().contains("bloom filter columns is not supported"),
+                "unexpected message: " + bloomFilter.getMessage());
+    }
+
+    // (m') The same statements on a range table whose sort key IS its primary key are untouched -- the
+    // rejection is about the two key spaces diverging, not about primary-key tables.
+    @Test
+    public void testSidecarChangeAllowedWhenSortKeyIsThePrimaryKey() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_nosidecar (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        // Reaches the regular ADD INDEX handling instead of the new rejection; whatever it decides, it
+        // must not be the separate-sort-key refusal.
+        try {
+            createJob("t_route_pk_nosidecar", "alter table t_route_pk_nosidecar add index idx_v1 (v1) using bitmap");
+        } catch (Exception e) {
+            org.junit.jupiter.api.Assertions.assertFalse(
+                    String.valueOf(e.getMessage()).contains("ORDER BY key differs from the primary key"),
+                    "must not hit the separate-sort-key rejection: " + e.getMessage());
+        }
     }
 
 }

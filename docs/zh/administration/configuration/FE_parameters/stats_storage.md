@@ -644,14 +644,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Range Colocate 检查器放置收敛负缓存的 TTL。在该时间窗口内，StarOS 上次报告为尚未收敛的 PACK Shard Group 不会被重新查询，从而在该 Group 仍在迁移期间降低每轮 `queryShardGroupStable` 的负载。仅缓存未收敛的结果，因此过期条目最多只会将该 Group 转为稳定状态的时间延迟一个时间窗口，而不会导致提前转为稳定。小于或等于 `0` 的值将禁用该缓存。
 - 引入版本: v4.1.3
 
-### `tablet_reshard_enable_pk_order_by`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: Range 分布的主键表是否允许声明与主键不同的 `ORDER BY` 键。关闭时，此类表在建表阶段被拒绝，已存在的此类表不会被 Reshard。这种表分裂时边界仍位于主键空间，而数据文件按排序键排列，因此在 UNSHARE Compaction 将各子 Tablet 的数据改写为私有之前，读请求由父 Tablet 提供服务。当前实现要求 `file_bundling=true`，并在 Reshard 期间拒绝 DCG/IDG Sidecar。
-- 引入版本: v4.1.3
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - 默认值: true

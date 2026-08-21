@@ -527,11 +527,12 @@ public class CreateTableAnalyzerTest {
     public void testPkTableSortKeyOrder() {
         // Force range distribution via the session variable (ungated by run mode) so the range
         // sort-key-order validation is exercised regardless of the suite's ambient run mode.
-        boolean oldEnablePkOrderBy = Config.tablet_reshard_enable_pk_order_by;
         connectContext.getSessionVariable().setEnableRangeDistribution(true);
         try {
-            // PK columns: (v1, v2), Sort keys: (v2, v1) -> Should fail
-            String sql1 = "CREATE TABLE test_create_table_db.pk_table_wrong_order\n" +
+            // PK columns: (v1, v2), Sort keys: (v2, v1). A permutation of the primary key is still a
+            // sort key that differs from it, so this is the supported ORDER BY != PK shape rather than a
+            // mistake -- file_bundling defaults on, which is the only remaining requirement.
+            String sql1 = "CREATE TABLE test_create_table_db.pk_table_permuted_order\n" +
                     "(\n" +
                     "    v1 int not null,\n" +
                     "    v2 int not null,\n" +
@@ -539,7 +540,7 @@ public class CreateTableAnalyzerTest {
                     ") PRIMARY KEY(v1, v2)\n" +
                     "ORDER BY(v2, v1)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
-            analyzeFail(sql1, "The sort columns must be same with primary key columns and the order must be consistent");
+            analyzeSuccess(sql1);
 
             // PK columns: (v1, v2), Sort keys: (v1, v2) -> Should pass
             String sql2 = "CREATE TABLE test_create_table_db.pk_table_correct_order\n" +
@@ -552,7 +553,6 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql2);
 
-            Config.tablet_reshard_enable_pk_order_by = true;
             String sqlWithSeparateSortKey = "CREATE TABLE test_create_table_db.pk_table_separate_sort_key\n" +
                     "(v1 int not null, v2 int not null, v3 int) PRIMARY KEY(v1, v2)\n" +
                     "ORDER BY(v3) PROPERTIES (\"replication_num\" = \"1\", \"file_bundling\" = \"true\");";
@@ -576,7 +576,6 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql3);
         } finally {
-            Config.tablet_reshard_enable_pk_order_by = oldEnablePkOrderBy;
             connectContext.getSessionVariable().setEnableRangeDistribution(false);
         }
     }

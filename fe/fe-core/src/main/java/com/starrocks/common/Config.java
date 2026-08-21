@@ -4857,11 +4857,6 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
-    @ConfField(mutable = true, comment = "Whether range-distributed primary-key tables may use an ORDER BY key "
-            + "different from the primary key. The initial implementation requires file_bundling=true and rejects "
-            + "DCG/IDG sidecars during tablet resharding.")
-    public static boolean tablet_reshard_enable_pk_order_by = false;
-
     @ConfField(mutable = true, comment = "Max number of new tablets one source tablet may be split into when the "
             + "split drags a full UNSHARE rewrite behind it -- a range-distributed primary-key table whose ORDER BY "
             + "key differs from the primary key. Such a split cannot range-filter the parent's shared segments, so "
