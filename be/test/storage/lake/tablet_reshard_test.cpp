@@ -184,6 +184,10 @@ protected:
         return down_cast<BinaryColumn*>(encoded.get())->get_slice(0).to_string();
     }
 
+    static std::string raw_int_primary_key(int32_t value) {
+        return std::string(reinterpret_cast<const char*>(&value), sizeof(value));
+    }
+
     void add_historical_schema(TabletMetadataPB* metadata, int64_t schema_id) {
         auto& schema = (*metadata->mutable_historical_schemas())[schema_id];
         schema.set_id(schema_id);
@@ -453,7 +457,7 @@ protected:
     // Returns the segment file size on disk. The file is placed under
     // tablet_id's segment directory as |segment_name|.
     uint64_t write_two_column_segment(int64_t tablet_id, const std::string& segment_name, int num_rows,
-                                      const std::function<int(int)>& source_value_of) {
+                                      const std::function<int(int)>& source_value_of, int key_start = 0) {
         TabletSchemaPB schema_pb;
         schema_pb.set_keys_type(PRIMARY_KEYS);
         schema_pb.set_id(2001);
@@ -488,8 +492,8 @@ protected:
         auto col1 = Int32Column::create();
         std::vector<int> v0(num_rows), v1(num_rows);
         for (int i = 0; i < num_rows; ++i) {
-            v0[i] = i;
-            v1[i] = source_value_of(i);
+            v0[i] = key_start + i;
+            v1[i] = source_value_of(v0[i]);
         }
         col0->append_numbers(v0.data(), v0.size() * sizeof(int));
         col1->append_numbers(v1.data(), v1.size() * sizeof(int));
@@ -880,8 +884,8 @@ protected:
         return it->second;
     }
 
-    StatusOr<IndexValue> load_merged_index_value(const TabletMetadataPtr& metadata, int64_t tablet_id,
-                                                 const std::string& key) {
+    StatusOr<IndexValue> load_index_value(const TabletMetadataPtr& metadata, int64_t tablet_id,
+                                          const std::string& key) {
         auto index = std::make_unique<lake::LakePersistentIndex>(_tablet_manager.get(), tablet_id);
         RETURN_IF_ERROR(index->init(metadata));
         lake::Tablet tablet(_tablet_manager.get(), tablet_id);
@@ -892,6 +896,153 @@ protected:
         IndexValue value;
         RETURN_IF_ERROR(index->get(/*n=*/1, &key_slice, &value));
         return value;
+    }
+
+    struct RealSplitSstOwnerFixture {
+        int64_t low_child = 0;
+        int64_t middle_child = 0;
+        int64_t high_child = 0;
+        TabletMetadataPtr middle_metadata;
+    };
+
+    StatusOr<RealSplitSstOwnerFixture> publish_real_split_sst_owner_fixture() {
+        constexpr int64_t kBaseVersion = 2;
+        constexpr int64_t kSplitVersion = 3;
+        constexpr int kRowsPerSegment = 50;
+        const int64_t parent_tablet = next_id();
+        const int64_t child_ids[] = {next_id(), next_id(), next_id()};
+
+        prepare_tablet_dirs(parent_tablet);
+        for (int64_t child_id : child_ids) prepare_tablet_dirs(child_id);
+
+        TabletMetadataPB metadata;
+        metadata.set_id(parent_tablet);
+        metadata.set_version(kBaseVersion);
+        metadata.set_next_rowset_id(20);
+        set_two_column_pk_schema(&metadata, /*schema_id=*/4001);
+        metadata.set_enable_persistent_index(true);
+        metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+        struct SegmentSpec {
+            uint32_t rowset_id;
+            const char* filename;
+            int key_start;
+        };
+        const SegmentSpec specs[] = {{2, "split_sst_low.dat", 0},
+                                     {10, "split_sst_middle.dat", 50},
+                                     {15, "split_sst_high.dat", 100}};
+        for (const auto& spec : specs) {
+            const uint64_t filesize =
+                    write_two_column_segment(parent_tablet, spec.filename, kRowsPerSegment,
+                                             [](int key) { return key * 10; }, spec.key_start);
+            auto* rowset = metadata.add_rowsets();
+            rowset->set_id(spec.rowset_id);
+            rowset->set_version(1);
+            rowset->set_num_rows(kRowsPerSegment);
+            rowset->set_data_size(filesize);
+            rowset->set_overlapped(false);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(spec.filename);
+            segment->set_size(filesize);
+            segment->set_num_rows(kRowsPerSegment);
+            segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(spec.key_start));
+            segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(spec.key_start + kRowsPerSegment - 1));
+        }
+
+        DelVector low_delvec;
+        const uint32_t deleted_rowid = 0;
+        low_delvec.init(kBaseVersion, &deleted_rowid, 1);
+        add_delvec(&metadata, parent_tablet, kBaseVersion, /*segment_id=*/2, "split_sst_low.delvec",
+                   low_delvec.save());
+        write_c1_only_cols_file(parent_tablet, "split_sst_low.cols", kRowsPerSegment,
+                                [](int row) { return row * 10; });
+        add_dcg_with_columns(&metadata, /*segment_id=*/2, "split_sst_low.cols", {1002}, kBaseVersion);
+        add_idg_with_key(&metadata, /*segment_id=*/2, "split_sst_low.idx", /*col_uid=*/1002, BITMAP,
+                         kBaseVersion);
+
+        std::vector<std::tuple<std::string, uint32_t, uint32_t>> sst_entries;
+        sst_entries.reserve(kRowsPerSegment);
+        for (uint32_t rowid = 0; rowid < kRowsPerSegment; ++rowid) {
+            sst_entries.emplace_back(raw_int_primary_key(static_cast<int32_t>(rowid)), /*rssid=*/2, rowid);
+        }
+        const std::string sst_filename = "split_sst_low.sst";
+        const uint64_t sst_filesize =
+                write_legacy_pk_sstable(_tablet_manager->sst_location(parent_tablet, sst_filename), sst_entries);
+        auto* sst = metadata.mutable_sstable_meta()->add_sstables();
+        sst->set_filename(sst_filename);
+        sst->set_filesize(sst_filesize);
+        sst->set_shared_rssid(2);
+        sst->set_shared_version(1);
+        sst->set_max_rss_rowid((static_cast<uint64_t>(2) << 32) | (kRowsPerSegment - 1));
+        sst->mutable_delvec()->CopyFrom(metadata.delvec_meta().delvecs().at(2));
+
+        RETURN_IF_ERROR(put_tablet_metadata(metadata));
+
+        ReshardingTabletInfoPB resharding;
+        auto& splitting = *resharding.mutable_splitting_tablet_info();
+        splitting.set_old_tablet_id(parent_tablet);
+        for (int64_t child_id : child_ids) splitting.add_new_tablet_ids(child_id);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kBaseVersion,
+                                                        kSplitVersion, txn_info, false, tablet_metadatas,
+                                                        tablet_ranges));
+
+        RealSplitSstOwnerFixture result;
+        for (int64_t child_id : child_ids) {
+            auto metadata_it = tablet_metadatas.find(child_id);
+            if (metadata_it == tablet_metadatas.end()) {
+                return Status::InternalError(fmt::format("split child {} metadata is missing", child_id));
+            }
+            const auto& child = metadata_it->second;
+            for (const auto& rowset : child->rowsets()) {
+                for (const auto& segment : rowset.segment_metas()) {
+                    if (segment.filename() == specs[0].filename) {
+                        result.low_child = child_id;
+                    } else if (segment.filename() == specs[1].filename) {
+                        result.middle_child = child_id;
+                        result.middle_metadata = child;
+                    } else if (segment.filename() == specs[2].filename) {
+                        result.high_child = child_id;
+                    }
+                }
+            }
+        }
+        if (result.low_child == 0 || result.middle_child == 0 || result.high_child == 0) {
+            return Status::InternalError("split did not produce one owner child per real segment");
+        }
+        return result;
+    }
+
+    StatusOr<TabletMetadataPtr> publish_real_split_sst_owner_merge(const std::vector<int64_t>& source_tablets,
+                                                                   int64_t* merged_tablet) {
+        constexpr int64_t kSplitVersion = 3;
+        constexpr int64_t kMergeVersion = 4;
+        *merged_tablet = next_id();
+        prepare_tablet_dirs(*merged_tablet);
+
+        ReshardingTabletInfoPB resharding;
+        auto& merging = *resharding.mutable_merging_tablet_info();
+        for (int64_t source_tablet : source_tablets) merging.add_old_tablet_ids(source_tablet);
+        merging.set_new_tablet_id(*merged_tablet);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(2);
+        txn_info.set_commit_time(2);
+        txn_info.set_gtid(2);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kSplitVersion,
+                                                        kMergeVersion, txn_info, false, tablet_metadatas,
+                                                        tablet_ranges));
+        auto merged_it = tablet_metadatas.find(*merged_tablet);
+        if (merged_it == tablet_metadatas.end()) {
+            return Status::InternalError(fmt::format("merged tablet {} metadata is missing", *merged_tablet));
+        }
+        return merged_it->second;
     }
 
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
@@ -1617,96 +1768,91 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_delete_predicate_rowset) {
 // are unreachable by that child's PK lookup. The SST reference must not override the
 // range-derived ownership of its data segment and sidecars.
 TEST_F(LakeTabletReshardTest, test_tablet_split_sst_reference_does_not_override_range_ownership) {
-    starrocks::TabletMetadata metadata;
-    auto tablet_id = next_id();
-    metadata.set_id(tablet_id);
-    metadata.set_version(2);
-    metadata.set_next_rowset_id(20);
-
-    auto* rs_a = metadata.add_rowsets(); // [0,49], rssid 2
-    rs_a->set_id(2);
-    {
-        auto* ma = rs_a->add_segment_metas();
-        ma->set_filename("a_seg.dat");
-        ma->set_size(512);
-        ma->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        ma->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-        ma->set_num_rows(50);
-    }
-    rs_a->set_data_size(512);
-    rs_a->set_num_rows(50);
-
-    auto* rs_b = metadata.add_rowsets(); // [50,99], rssid 10
-    rs_b->set_id(10);
-    {
-        auto* mb = rs_b->add_segment_metas();
-        mb->set_filename("b_seg.dat");
-        mb->set_size(512);
-        mb->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        mb->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-        mb->set_num_rows(50);
-    }
-    rs_b->set_data_size(512);
-    rs_b->set_num_rows(50);
-
-    add_delvec(&metadata, tablet_id, 1, /*segment_id=*/2, "dv_a.dat", "aa");
-    add_dcg_with_columns(&metadata, /*segment_id=*/2, "dcg_a.col", {101}, 1);
-    add_idg_with_key(&metadata, /*segment_id=*/2, "idx_a.idx", /*col_uid=*/101, BITMAP, 1);
-    // A surviving modern sstable that projects rssid 2 (rs_a's segment).
-    auto* sstable = metadata.mutable_sstable_meta()->add_sstables();
-    sstable->set_filename("idx.sst");
-    sstable->set_shared_rssid(2);
-
-    EXPECT_OK(put_tablet_metadata(metadata));
-
-    ReshardingTabletInfoPB resharding;
-    auto& splitting = *resharding.mutable_splitting_tablet_info();
-    splitting.set_old_tablet_id(tablet_id);
-    const int64_t child0 = next_id();
-    const int64_t child1 = next_id();
-    splitting.add_new_tablet_ids(child0);
-    splitting.add_new_tablet_ids(child1);
-
-    TxnInfoPB txn_info;
-    txn_info.set_commit_time(1);
-    txn_info.set_gtid(1);
-
-    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, metadata.version(),
-                                              metadata.version() + 1, txn_info, false, tablet_metadatas,
-                                              tablet_ranges));
-
-    // Find the child that fully prunes rs_a (the one whose range is [50,..)).
-    const TabletMetadataPB* pruning_child = nullptr;
-    for (int64_t child : {child0, child1}) {
-        auto c = tablet_metadatas.at(child);
-        bool has_a_segment = false;
-        for (const auto& r : c->rowsets()) {
-            for (const auto& s : r.segment_metas()) {
-                if (s.filename() == "a_seg.dat") has_a_segment = true;
-            }
-        }
-        if (!has_a_segment) pruning_child = c.get();
-    }
-    ASSERT_NE(nullptr, pruning_child) << "one child must fully prune rs_a";
+    ASSIGN_OR_ABORT(auto fixture, publish_real_split_sst_owner_fixture());
+    const auto& pruning_child = fixture.middle_metadata;
 
     // Geometry owns the data: the fully-pruned data-only rowset and every rssid-keyed
-    // sidecar disappear even though the inherited SST PB remains shared.
-    bool found_rs_a = false;
+    // sidecar disappear even though a real inherited SST PB remains shared.
     for (const auto& r : pruning_child->rowsets()) {
-        if (r.id() == 2) {
-            found_rs_a = true;
-            ADD_FAILURE() << "out-of-range data-only rowset must be removed";
-        }
+        EXPECT_NE(2u, r.id()) << "out-of-range data-only rowset must be removed";
     }
-    EXPECT_FALSE(found_rs_a);
     EXPECT_FALSE(pruning_child->delvec_meta().delvecs().contains(2));
     EXPECT_FALSE(pruning_child->dcg_meta().dcgs().contains(2));
     EXPECT_FALSE(pruning_child->idg_meta().idgs().contains(2));
     ASSERT_EQ(1, pruning_child->sstable_meta().sstables_size());
-    EXPECT_EQ("idx.sst", pruning_child->sstable_meta().sstables(0).filename());
+    EXPECT_EQ("split_sst_low.sst", pruning_child->sstable_meta().sstables(0).filename());
     EXPECT_TRUE(pruning_child->sstable_meta().sstables(0).shared());
+
+    // Loading the real PK index is safe: this child only asks for keys in its own
+    // [50,100) range, so it rebuilds key 60 from the retained middle segment and
+    // never dereferences the inherited SST's out-of-range key 0..49 entries.
+    ASSIGN_OR_ABORT(auto value,
+                    load_index_value(pruning_child, fixture.middle_child, raw_int_primary_key(60)));
+    EXPECT_EQ(IndexValue((static_cast<uint64_t>(10) << 32) | 10), value);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_partial_merge_drops_ownerless_data) {
+    ASSIGN_OR_ABORT(auto fixture, publish_real_split_sst_owner_fixture());
+
+    // Merge only the two adjacent children whose ranges do not own rssid 2. Both
+    // still inherit the shared SST file, but all its data keys are below this
+    // partial merge's range and no source metadata contains its real segment owner.
+    int64_t merged_tablet = 0;
+    ASSIGN_OR_ABORT(auto merged,
+                    publish_real_split_sst_owner_merge({fixture.middle_child, fixture.high_child}, &merged_tablet));
+    EXPECT_EQ(0, merged->sstable_meta().sstables_size()) << "ownerless data SST must be dropped";
+    for (const auto& rowset : merged->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            EXPECT_NE("split_sst_low.dat", segment.filename());
+        }
+    }
+
+    ASSIGN_OR_ABORT(auto middle_value,
+                    load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
+    ASSIGN_OR_ABORT(auto high_value,
+                    load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
+    EXPECT_NE(NullIndexValue, middle_value.get_value());
+    EXPECT_NE(NullIndexValue, high_value.get_value());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_full_merge_uses_live_owner_sidecars) {
+    ASSIGN_OR_ABORT(auto fixture, publish_real_split_sst_owner_fixture());
+
+    int64_t merged_tablet = 0;
+    ASSIGN_OR_ABORT(
+            auto merged,
+            publish_real_split_sst_owner_merge(
+                    {fixture.low_child, fixture.middle_child, fixture.high_child}, &merged_tablet));
+
+    const PersistentIndexSstablePB* owner_sst = nullptr;
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        if (sst.filename() == "split_sst_low.sst") {
+            owner_sst = &sst;
+            break;
+        }
+    }
+    ASSERT_NE(nullptr, owner_sst) << "full merge must retain the SST through its real owner child";
+    ASSERT_TRUE(owner_sst->has_shared_rssid());
+    const uint32_t owner_rssid = owner_sst->shared_rssid();
+    EXPECT_TRUE(merged->delvec_meta().delvecs().contains(owner_rssid));
+    EXPECT_TRUE(merged->dcg_meta().dcgs().contains(owner_rssid));
+    EXPECT_TRUE(merged->idg_meta().idgs().contains(owner_rssid));
+
+    // rowid 0 was deleted before split. The owner child's delvec must survive
+    // the full merge and filter key 0, while the next key in the same shared
+    // SST and keys rebuilt from the other two ranges stay readable.
+    ASSIGN_OR_ABORT(auto deleted_value,
+                    load_index_value(merged, merged_tablet, raw_int_primary_key(0)));
+    ASSIGN_OR_ABORT(auto low_value,
+                    load_index_value(merged, merged_tablet, raw_int_primary_key(1)));
+    ASSIGN_OR_ABORT(auto middle_value,
+                    load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
+    ASSIGN_OR_ABORT(auto high_value,
+                    load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
+    EXPECT_EQ(NullIndexValue, deleted_value.get_value());
+    EXPECT_NE(NullIndexValue, low_value.get_value());
+    EXPECT_NE(NullIndexValue, middle_value.get_value());
+    EXPECT_NE(NullIndexValue, high_value.get_value());
 }
 
 // Regression for the crash discovered during SSB SF100 testing: FE requests
@@ -7851,7 +7997,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_materializes_uncovered_index_t
     EXPECT_EQ(static_cast<uint64_t>(3) << 32, merged->sstable_meta().sstables(0).max_rss_rowid());
     EXPECT_EQ(static_cast<uint64_t>(3) << 32, merged->sstable_meta().sstables().rbegin()->max_rss_rowid());
 
-    ASSIGN_OR_ABORT(auto value, load_merged_index_value(merged, merged_tablet, key_zero));
+    ASSIGN_OR_ABORT(auto value, load_index_value(merged, merged_tablet, key_zero));
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), value);
 }
 
@@ -7882,7 +8028,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_index_tail_uses_zero_point_for
     ASSIGN_OR_ABORT(auto merged, publish_index_tail_merge(/*delete_old_row=*/true, &merged_tablet, &key_zero,
                                                           /*include_left_sst=*/false, /*include_right_sst=*/true));
     ASSERT_EQ(2, merged->sstable_meta().sstables_size());
-    ASSIGN_OR_ABORT(auto value, load_merged_index_value(merged, merged_tablet, key_zero));
+    ASSIGN_OR_ABORT(auto value, load_index_value(merged, merged_tablet, key_zero));
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), value);
 }
 
@@ -7899,7 +8045,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_index_tail_defers_when_no_proj
     ASSIGN_OR_ABORT(auto merged, publish_index_tail_merge(/*delete_old_row=*/true, &merged_tablet, &key_zero,
                                                           /*include_left_sst=*/false, /*include_right_sst=*/false));
     EXPECT_EQ(0, merged->sstable_meta().sstables_size());
-    ASSIGN_OR_ABORT(auto value, load_merged_index_value(merged, merged_tablet, key_zero));
+    ASSIGN_OR_ABORT(auto value, load_index_value(merged, merged_tablet, key_zero));
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), value);
 }
 
