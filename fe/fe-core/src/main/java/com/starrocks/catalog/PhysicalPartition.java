@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -91,9 +92,13 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * children). Queries stay pinned to the superseded parent index until the atomic UNSHARE
      * compaction becomes visible. Empty means queries use the latest (writable) layout, preserving the
      * historical behavior for every other table and partition.
+     *
+     * <p>Concurrent because the publish thread reads it (Utils#createSubRequestForAggregatePublish
+     * -> SplitTabletJob#collectParentPublishInfos) after PublishVersionDaemon has released the table
+     * read lock, while a split job pins and clears entries under the write lock.
      */
     @SerializedName(value = "queryIndexMetaIdToIndexId")
-    private Map<Long, Long> queryIndexMetaIdToIndexId = Maps.newHashMap();
+    private Map<Long, Long> queryIndexMetaIdToIndexId = new ConcurrentHashMap<>();
 
     /**
      * Visible indexes are indexes which are visible to user.
@@ -927,9 +932,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (queryIndexMetaIdToIndexId == null) {
-            queryIndexMetaIdToIndexId = Maps.newHashMap();
-        }
+        // GSON rebuilds the field as a plain map whatever the initializer said, so restore the
+        // concurrent one on replay.
+        queryIndexMetaIdToIndexId = (queryIndexMetaIdToIndexId == null)
+                ? new ConcurrentHashMap<>() : new ConcurrentHashMap<>(queryIndexMetaIdToIndexId);
         if (dataVersion == 0) {
             dataVersion = visibleVersion;
         }

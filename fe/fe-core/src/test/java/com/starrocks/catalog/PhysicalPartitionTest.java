@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class PhysicalPartitionTest {
@@ -625,6 +626,10 @@ public class PhysicalPartitionTest {
         PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
         Assertions.assertTrue(restored.isUnsharing());
         Assertions.assertEquals(parent.getId(), restored.getQueryableBaseIndex().getId());
+        // The publish thread reads the pins without the table lock, so replay must not quietly hand
+        // the field back as the plain map GSON builds.
+        Assertions.assertInstanceOf(ConcurrentHashMap.class,
+                Deencapsulation.getField(restored, "queryIndexMetaIdToIndexId"));
 
         Assertions.assertTrue(partition.finishUnshare());
         Assertions.assertFalse(partition.finishUnshare());
