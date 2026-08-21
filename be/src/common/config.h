@@ -410,6 +410,34 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+// Write-time gate for the segment "small index region" layout. When true, a horizontally
+// written segment (one column group covering all columns) emits every column's ordinal index
+// and page zone map as one contiguous run immediately before the short key index and the
+// footer, instead of interleaving each column's indexes after that column's data pages. Both
+// layouts are readable by any binary -- indexes are always located through absolute
+// PagePointers -- so this can be flipped at any time and mixed within a tablet.
+//
+// The point is cold-read latency on shared-data: the reader must load the ordinal index of
+// every accessed column, and the page zone map of every predicate column, before it can read
+// any data. In the legacy layout those live at N scattered offsets, so they cost N serial
+// round trips to remote storage, each pulling a whole cache block. Gathered at the tail they
+// cost one. Vertical compaction and partial-update rewrites call finalize_columns() once per
+// column group and so cannot form a tail region; they keep the legacy layout regardless.
+CONF_mBool(enable_segment_tail_index_region, "false");
+
+// Read-time gate for the matching prefetch. When true, opening a segment whose footer carries
+// a small index region issues ONE read covering the whole region, so that the per-column index
+// loads that immediately follow are served from the block cache instead of going remote one at
+// a time. Segments without the footer fields are unaffected. Set false to measure the layout
+// change without the prefetch, or as a rollback valve.
+CONF_mBool(enable_segment_tail_index_prefetch, "true");
+
+// Upper bound on the small index region prefetch. A very wide table can produce a region far
+// larger than any query needs, and reading it whole would trade the round trips back for
+// wasted bytes. Regions above this size are not prefetched; their indexes are read per column
+// as in the legacy layout.
+CONF_mInt64(segment_tail_index_prefetch_max_bytes, "16777216");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
