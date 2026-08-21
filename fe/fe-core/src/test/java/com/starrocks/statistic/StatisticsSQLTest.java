@@ -235,17 +235,10 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
-            sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
-            String plan = getFragmentPlan(sql);
-            assertCContains(plan, "AGGREGATE (update finalize)\n" +
-                    "  |  output: histogram");
-
             String querySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildQueryHistogram",
                     db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
-            plan = getFragmentPlan(querySql);
+            String plan = getFragmentPlan(querySql);
             assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
         }
@@ -272,24 +265,17 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
-            sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
-            String plan = getFragmentPlan(sql);
-            assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
-                    "  |  output: histogram");
-
             String querySql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildQueryHistogram",
                     db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
-            plan = getFragmentPlan(querySql);
+            String plan = getFragmentPlan(querySql);
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
         }
     }
 
     // The external placeholder-bucket SQL for char-family columns is asserted end-to-end in
-    // ExternalHistogramStatisticsCollectJobTest#testLegacyInsertUsesDefaultBucketSqlForStringColumns,
+    // ExternalHistogramStatisticsCollectJobTest#testBatchInsertCalculatesMcvsAndHistogramsForMultipleColumnTypes,
     // which drives collect() rather than a private builder.
 
     @Test
