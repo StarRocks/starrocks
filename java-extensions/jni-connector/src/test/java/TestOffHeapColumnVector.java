@@ -178,7 +178,7 @@ public class TestOffHeapColumnVector {
             // variant vector produced the same address chain a 2-field struct vector would.
             // (table.checkNullsLength() is intentionally not exercised here: it hits a pre-existing,
             // variant-unrelated gap where OffHeapColumnVector#checkNullsLength has no `case BYTE`
-            // for a BINARY/STRING column's underlying data child - see task-7-report.md.)
+            // for a BINARY/STRING column's underlying data child.)
             table.getMetaNativeAddress();
             table.checkTableMeta(false);
         } finally {

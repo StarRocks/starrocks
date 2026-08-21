@@ -188,7 +188,7 @@ When data is read from Parquet files with variant encoding, the following type c
 ## Limitations and Considerations
 
 - VARIANT is supported for reading data from Iceberg tables in Parquet format with variant encoding, and for writing Parquet files using StarRocks file writers (unshredded variant encoding).
-- VARIANT is also supported for reading data from Paimon tables (Paimon requires Parquet for variant columns), regardless of table type or compaction state — both the native reader and the JNI reader support VARIANT columns.
+- VARIANT is also supported for reading data from Paimon tables (Paimon requires Parquet for variant columns), regardless of table type or compaction state. Both the native reader and the JNI reader support VARIANT columns.
 - The size of a VARIANT value is limited to 16 MB.
 - Currently only unshredded variant values are supported for both read and write.
 - VARIANT can be created by casting from JSON values or supported SQL types (including ARRAY, MAP, and STRUCT).

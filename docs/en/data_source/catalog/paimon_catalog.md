@@ -52,7 +52,7 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 | `VARIANT`             | `VARIANT`                   |
 
 :::note
-`VARIANT` is supported from v4.2 onwards for reading, regardless of table type or compaction state — both the native reader and the JNI reader can read `VARIANT` columns.
+`VARIANT` is supported from v4.2 onwards for reading, regardless of table type or compaction state. Both the native reader and the JNI reader can read `VARIANT` columns.
 :::
 
 ## Integration preparations
