@@ -2030,6 +2030,34 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_rebuild_point_overrid
     EXPECT_EQ(IndexValue((static_cast<uint64_t>(1) << 32) | 2), override_values[2]);
 }
 
+TEST_F(LakePersistentIndexTest, test_rebuild_point_override_checks_inactive_memtables) {
+    const int64_t base_version = 2;
+    auto metadata = make_varchar_pk_metadata();
+    metadata->set_version(base_version);
+    metadata->set_next_rowset_id(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    std::vector<std::string> keys;
+    append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/1, /*rowset_id=*/2, &keys);
+    ASSERT_EQ(1u, keys.size());
+
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    Slice key(keys[0]);
+    const IndexValue inactive_value(static_cast<uint64_t>(1) << 32);
+    ASSERT_OK(index->insert(/*n=*/1, &key, &inactive_value, /*version=*/1));
+    ASSERT_OK(index->flush_memtable(/*force=*/true));
+    ASSERT_EQ(1u, index->_inactive_memtables.size());
+
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    auto metadata_copy = std::make_shared<TabletMetadata>(*metadata);
+    MetaFileBuilder builder(tablet, metadata_copy);
+    const Status status = index->load_from_lake_tablet(_tablet_mgr.get(), metadata, base_version, &builder,
+                                                       /*rebuild_rss_rowid_point_override=*/uint64_t{0});
+    EXPECT_TRUE(status.is_already_exist()) << status;
+    ASSERT_OK(index->sync_flush_all_memtables(10 * 1000 * 1000));
+}
+
 TEST_F(LakePersistentIndexTest, test_flush_pk_memtable_reloads_for_rebuild_point_override) {
     const int64_t base_version = 2;
     auto metadata = make_varchar_pk_metadata();

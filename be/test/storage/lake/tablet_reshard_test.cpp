@@ -766,7 +766,8 @@ protected:
 
     StatusOr<TabletMetadataPtr> publish_index_tail_merge(bool delete_old_row, int64_t* merged_tablet,
                                                          std::string* key_zero, bool include_left_sst = true,
-                                                         bool include_right_sst = true) {
+                                                         bool include_right_sst = true,
+                                                         bool include_new_rowset = true) {
         const int64_t base_version = 1;
         const int64_t new_version = 2;
         const int64_t child_a = next_id();
@@ -781,8 +782,6 @@ protected:
         const std::string new_segment = "index_tail_new.dat";
         const uint64_t old_segment_size =
                 write_two_column_segment(child_a, old_segment, /*num_rows=*/1, [](int) { return 100; });
-        const uint64_t new_segment_size =
-                write_two_column_segment(child_a, new_segment, /*num_rows=*/1, [](int) { return 200; });
         const int32_t raw_key_zero = 0;
         key_zero->assign(reinterpret_cast<const char*>(&raw_key_zero), sizeof(raw_key_zero));
 
@@ -811,7 +810,11 @@ protected:
             segment->set_num_rows(1);
         };
         add_data_rowset(/*rowset_id=*/1, /*version=*/1, old_segment, old_segment_size);
-        add_data_rowset(/*rowset_id=*/2, /*version=*/2, new_segment, new_segment_size);
+        if (include_new_rowset) {
+            const uint64_t new_segment_size =
+                    write_two_column_segment(child_a, new_segment, /*num_rows=*/1, [](int) { return 200; });
+            add_data_rowset(/*rowset_id=*/2, /*version=*/2, new_segment, new_segment_size);
+        }
 
         if (delete_old_row) {
             DelVector old_delvec;
@@ -8015,6 +8018,24 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_index_tail_uses_zero_point_for
     ASSERT_EQ(2, merged->sstable_meta().sstables_size());
     ASSIGN_OR_ABORT(auto value, load_index_value(merged, merged_tablet, key_zero));
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), value);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_index_tail_ignores_empty_source_without_sst) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    int64_t merged_tablet = 0;
+    std::string key_zero;
+    ASSIGN_OR_ABORT(auto merged, publish_index_tail_merge(/*delete_old_row=*/false, &merged_tablet, &key_zero,
+                                                          /*include_left_sst=*/true, /*include_right_sst=*/false,
+                                                          /*include_new_rowset=*/false));
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size())
+            << "a truly empty source must not force materialization of the covered source";
+    EXPECT_EQ("index_tail_stale.sst", merged->sstable_meta().sstables(0).filename());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_index_tail_defers_when_no_projected_sst) {

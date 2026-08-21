@@ -1814,12 +1814,15 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             for (size_t i = 0; i < batch.keys.size(); ++i) {
                 key_indexes.insert(i);
             }
-            RETURN_IF_ERROR(get_from_sstables(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
-                                              existing_values.data(), &key_indexes, /*version=*/-1));
+            const auto* keys = reinterpret_cast<const Slice*>(batch.keys.data());
+            RETURN_IF_ERROR(get_from_inactive_memtables(batch.keys.size(), keys, existing_values.data(), &key_indexes,
+                                                        /*version=*/-1));
+            RETURN_IF_ERROR(get_from_sstables(batch.keys.size(), keys, existing_values.data(), &key_indexes,
+                                              /*version=*/-1));
             for (size_t i = 0; i < batch.keys.size(); ++i) {
                 if (existing_values[i].get_value() != NullIndexValue && existing_values[i] != batch.values[i]) {
                     return Status::AlreadyExist(
-                            fmt::format("merge tail rebuild found duplicate live key, sst_value={} tail_value={}",
+                            fmt::format("merge tail rebuild found duplicate live key, existing_value={} tail_value={}",
                                         existing_values[i].get_value(), batch.values[i].get_value()));
                 }
             }

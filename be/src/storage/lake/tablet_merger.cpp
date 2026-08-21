@@ -3103,7 +3103,15 @@ StatusOr<uint64_t> compute_safe_merged_rebuild_point(const std::vector<TabletMer
     std::optional<uint64_t> safe_point;
     for (const auto& ctx : merge_contexts) {
         const auto& source_sstables = ctx.metadata()->sstable_meta().sstables();
-        if (source_sstables.empty()) return uint64_t{0};
+        if (source_sstables.empty()) {
+            // A source without persisted SSTs only forces a full rebuild when it
+            // contributes segment or del-file work. A genuinely empty source has
+            // no uncovered keys and therefore does not constrain the minimum.
+            const auto rebuild_counts = LakePersistentIndex::need_rebuild_counts(
+                    *ctx.metadata(), ctx.metadata()->sstable_meta(), uint64_t{0});
+            if (rebuild_counts.first == 0) continue;
+            return uint64_t{0};
+        }
 
         const uint64_t source_point = source_sstables.rbegin()->max_rss_rowid();
         if (source_point == 0) return uint64_t{0};
