@@ -261,8 +261,10 @@ public class ConnectContext {
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
 
-    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. Keep its
-    // per-statement timings here so the eventual INSERT/Broker Load profile can attach them.
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
+    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
+    // uses a job-owned collector because its asynchronous work must not depend on this context's
+    // statement-level reset or on a reused client context.
     private volatile PreSplitProfile preSplitProfile;
 
     // Query source to distinguish different types of queries

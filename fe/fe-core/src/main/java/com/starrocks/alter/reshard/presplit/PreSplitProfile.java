@@ -32,9 +32,11 @@ import java.util.function.LongSupplier;
  * Per-load observability for Sample-Based Tablet Pre-Split.
  *
  * <p>The pre-split work runs before the load coordinator exists, so it cannot naturally report
- * through a BE fragment profile. This collector lives on the outer load's {@link ConnectContext},
- * accumulates the FE-side phases, and is snapshotted as a top-level {@code PreSplit} profile node
- * when the normal INSERT or Broker Load profile is built. The internal sample query temporarily
+ * through a BE fragment profile. INSERT keeps this collector on the outer load's
+ * {@link ConnectContext}; Broker Load instead keeps a job-owned
+ * {@code BrokerLoadJob.preSplitProfile} and threads it through asynchronous task creation. The
+ * collector accumulates the FE-side phases and is snapshotted as a top-level {@code PreSplit}
+ * profile node when the normal load profile is built. The internal sample query temporarily
  * installs its own context; callers therefore keep the timer's collector reference in the returned
  * {@link Scope} instead of looking up the thread-local context again when the scope closes.
  */

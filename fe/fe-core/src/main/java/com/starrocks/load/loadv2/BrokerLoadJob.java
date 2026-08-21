@@ -525,6 +525,13 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    private PreSplitProfile getOrCreatePreSplitProfile() {
+        if (preSplitProfile == null) {
+            preSplitProfile = new PreSplitProfile();
+        }
+        return preSplitProfile;
+    }
+
     /**
      * Fire the Sample-Based Tablet Pre-Split hook for each per-table input
      * snapshot. The hook sync-awaits the reshard daemon's FINISHED transition
@@ -546,13 +553,6 @@ public class BrokerLoadJob extends BulkLoadJob {
      * it directly without standing up the full {@code createLoadingTask}
      * fixture.
      */
-    private PreSplitProfile getOrCreatePreSplitProfile() {
-        if (preSplitProfile == null) {
-            preSplitProfile = new PreSplitProfile();
-        }
-        return preSplitProfile;
-    }
-
     static void firePreSplitHooks(
             ConnectContext context, Database db, BrokerDesc brokerDesc, ComputeResource computeResource,
             List<PreSplitHookInput> preSplitInputs, Map<String, String> sessionVariables,
