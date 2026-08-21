@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.catalog.VirtualColumnRegistry;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -58,12 +59,17 @@ public class FeNameFormat {
 
     public static final Set<String> FORBIDDEN_COLUMN_NAMES;
 
+    // Only native tables expose the virtual columns, so only their columns can shadow one.
+    private static final Set<String> VIRTUAL_COLUMN_NAMES;
+
     static {
         FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
         // see RewriteSimpleAggToHDFSScanRule
         FORBIDDEN_COLUMN_NAMES.add("___count___");
+        VIRTUAL_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        VirtualColumnRegistry.getAllDefinitions().forEach(def -> VIRTUAL_COLUMN_NAMES.add(def.getName()));
         String allowedSpecialCharacters = "";
         for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
             allowedSpecialCharacters += c;
@@ -135,6 +141,14 @@ public class FeNameFormat {
                         "Column name [" + columnName + "] starts with " + FeConstants.GENERATED_PARTITION_COLUMN_PREFIX +
                                 " is a system reserved name. Please choose a different one.");
             }
+        }
+    }
+
+    // A real column of that name shadows the virtual one, which leaves every reference to either ambiguous.
+    public static void checkVirtualColumnNameNotUsed(String columnName) {
+        if (!Config.allow_system_reserved_names && VIRTUAL_COLUMN_NAMES.contains(columnName)) {
+            throw new SemanticException(
+                    "Column name [" + columnName + "] is a system reserved name. Please choose a different one.");
         }
     }
 
