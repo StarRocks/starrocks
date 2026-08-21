@@ -58,7 +58,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     @Test
     public void testBatchInsertCombinesMultipleColumnTypesAndCompletesCollection() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
 
             NativeAnalyzeStatus status = fixture.collect();
 
@@ -78,7 +78,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     @Test
     public void testBatchInsertPreservesNullForEmptyBuckets() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.returnEmptyV2Histogram();
 
             fixture.collect();
@@ -97,7 +97,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     @Test
     public void testBatchInsertCalculatesMcvsAndHistogramsForMultipleColumnTypes() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
 
             fixture.collect();
 
@@ -150,7 +150,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     @Test
     public void testBatchInsertFlushesRowsAtBufferLimit() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(1);
+            fixture.withBufferSize(1);
 
             fixture.collect();
 
@@ -173,7 +173,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     @Test
     public void testBatchInsertFlushesCompletedRowsBeforeCollectionFailure() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.failOnSecondColumn();
 
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
@@ -188,7 +188,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     @Test
     public void testCollectionFailureRemainsPrimaryWhenEmergencyFlushFails() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.failOnSecondColumn();
             fixture.failBatchInsert();
 
@@ -202,21 +202,9 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     }
 
     @Test
-    public void testUsesLegacyInsertWhenBatchDisabled() throws Exception {
-        try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.disableBatch();
-
-            fixture.collect();
-
-            Assertions.assertTrue(fixture.batchInsertSql().isEmpty());
-            Assertions.assertEquals(2, fixture.legacyInsertCount(), "one legacy INSERT per column");
-        }
-    }
-
-    @Test
     public void testBatchInsertCreatesFreshStatementForRetry() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.withBufferSize(20L * 1024 * 1024);
             fixture.collect();
 
             Assertions.assertEquals(1, fixture.batchInsertSql().size());
@@ -240,8 +228,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         private final List<StatementBase> batchInsertStatements = new ArrayList<>();
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
         private final List<String> capturedBatchInsertSql = new ArrayList<>();
-        private final List<String> legacyInsertSql = new ArrayList<>();
-        private final boolean originalEnableBatch = Config.enable_batch_insert_histogram_statistics;
         private final long originalBufferSize = Config.histogram_batch_insert_buffer_size;
 
         private NativeHistogramBatchFixture(ConnectContext context) {
@@ -295,21 +281,11 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                     retryBatchInsertStatements.add(statementSupplier.get());
                     capturedBatchInsertSql.add(statement.getOrigStmt().getOrigStmt());
                 }
-
-                @Mock
-                public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
-                    legacyInsertSql.add(sql);
-                }
             };
         }
 
-        private void enableBatch(long bufferSize) {
-            Config.enable_batch_insert_histogram_statistics = true;
+        private void withBufferSize(long bufferSize) {
             Config.histogram_batch_insert_buffer_size = bufferSize;
-        }
-
-        private void disableBatch() {
-            Config.enable_batch_insert_histogram_statistics = false;
         }
 
         private void returnEmptyV2Histogram() {
@@ -346,10 +322,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
             return statisticsQueries;
         }
 
-        private int legacyInsertCount() {
-            return legacyInsertSql.size();
-        }
-
         private StatementBase firstBatchInsertStatement() {
             return batchInsertStatements.get(0);
         }
@@ -360,7 +332,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
 
         @Override
         public void close() {
-            Config.enable_batch_insert_histogram_statistics = originalEnableBatch;
             Config.histogram_batch_insert_buffer_size = originalBufferSize;
         }
     }

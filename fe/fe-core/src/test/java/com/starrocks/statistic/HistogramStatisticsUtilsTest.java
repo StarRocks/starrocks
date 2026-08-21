@@ -51,7 +51,7 @@ public class HistogramStatisticsUtilsTest {
     // Touches every key buildDefaultBucketSql populates: if one stops being set, Velocity leaks the
     // literal "$key" into the rendered SQL and the assertions below catch it.
     private static final String IDENTITY_TEMPLATE =
-            "SELECT $tableId, '$columnNameStr', $dbId, '$catalogName', '$tableUUID', $bucketExpr, $mcv" +
+            "SELECT $tableId, '$columnNameStr', $dbId, '$catalogName', '$tableUUID', $bucketExpr" +
                     " FROM `$dbName`.`$tableName`$sampleClause$randFilter";
 
     @Test
@@ -229,8 +229,8 @@ public class HistogramStatisticsUtilsTest {
         Assertions.assertEquals(
                 "SELECT 2, 'v1', 1, 'hive0', '" + StatisticUtils.hashTableUuidForPkStorage("2") + "', " +
                         "concat('[[\"Infinity\",\"Infinity\",', " +
-                        "cast(cast(greatest(0, count(`v1`) - 10) as bigint) as varchar), ',0]]'), " +
-                        "'[[\"a\",\"10\"]]' FROM `test`.`t0`",
+                        "cast(cast(greatest(0, count(`v1`) - 10) as bigint) as varchar), ',0]]')" +
+                        " FROM `test`.`t0`",
                 sql);
     }
 
