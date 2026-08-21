@@ -2524,7 +2524,6 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
         }
-        rejectSidecarChangeOnSeparateSortKeyRange(olapTable, alterClauses);
         // Lake-only ADD/DROP INDEX fast path. The classifier filters the
         // alter set; on a match we short-circuit into the dedicated Job
         // (LakeTableAddIndexJob / LakeTableDropIndexJob) that builds IDG
@@ -3961,7 +3960,14 @@ public class SchemaChangeHandler extends AlterHandler {
         return olapTable.getState() == OlapTable.OlapTableState.NORMAL
                 && !GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr()
                         .hasRunningOverwriteJob(olapTable.getId())
-                && !olapTable.existTempPartitions();
+                && !olapTable.existTempPartitions()
+                // The fast path writes the index as an IDG sidecar keyed to the segment it annotates. A
+                // split of an ORDER BY != PK range table hands its children the parent's segments and
+                // then has UNSHARE compaction rewrite them wholesale, which does not carry sidecars
+                // across -- the index would quietly stop covering its data. Declining here falls back to
+                // the regular schema-change path, which rebuilds the index into the data itself, so
+                // ADD INDEX still succeeds; it just does not take the sidecar shortcut.
+                && !isSeparateSortKeyRangePrimaryKey(olapTable);
     }
 
     /**
@@ -4944,34 +4950,6 @@ public class SchemaChangeHandler extends AlterHandler {
         return olapTable.isRangeDistribution()
                 && olapTable.getKeysType() == KeysType.PRIMARY_KEYS
                 && MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId());
-    }
-
-    /**
-     * Such a table cannot carry the sidecar file kinds yet. An added index writes an IDG and a bloom
-     * filter the same, each keyed to the segment it annotates -- and a split's UNSHARE compaction
-     * rewrites every segment wholesale without carrying them across, so the index would quietly stop
-     * covering the data it was built for. Reject the statement instead of building something that
-     * disappears at the next split.
-     */
-    private static void rejectSidecarChangeOnSeparateSortKeyRange(OlapTable olapTable,
-                                                                  List<AlterClause> alterClauses)
-            throws DdlException {
-        if (alterClauses == null || !isSeparateSortKeyRangePrimaryKey(olapTable)) {
-            return;
-        }
-        for (AlterClause alterClause : alterClauses) {
-            if (alterClause instanceof CreateIndexClause) {
-                throw new DdlException("ADD INDEX is not supported on a range-distributed primary key table "
-                        + "whose ORDER BY key differs from the primary key");
-            }
-            if (alterClause instanceof ModifyTablePropertiesClause
-                    && ((ModifyTablePropertiesClause) alterClause).getProperties() != null
-                    && ((ModifyTablePropertiesClause) alterClause).getProperties()
-                            .containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
-                throw new DdlException("Changing bloom filter columns is not supported on a range-distributed "
-                        + "primary key table whose ORDER BY key differs from the primary key");
-            }
-        }
     }
 
     /**

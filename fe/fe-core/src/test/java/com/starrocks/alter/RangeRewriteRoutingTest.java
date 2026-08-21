@@ -436,47 +436,39 @@ public class RangeRewriteRoutingTest {
     }
 
 
-    // (m) A range-distributed PRIMARY KEY table whose ORDER BY differs from the primary key cannot yet
-    // carry the sidecar file kinds: an added index writes an IDG keyed to the segment it annotates, and
-    // a split's UNSHARE compaction rewrites every segment wholesale without carrying it across. Both
-    // spellings -- ADD INDEX and a bloom-filter property change -- must be rejected up front rather
-    // than build an index that quietly stops covering its data at the next split.
+    // (m) ADD INDEX on a range-distributed PRIMARY KEY table whose ORDER BY differs from the primary
+    // key must SUCCEED, but on the regular schema-change path rather than the IDG fast path. The fast
+    // path writes the index as a sidecar keyed to the segment it annotates, and a split hands the
+    // children the parent's segments before UNSHARE compaction rewrites them wholesale -- sidecars are
+    // not carried across, so the index would quietly stop covering its data. The regular path builds
+    // the index into the data itself and survives that rewrite.
     @Test
-    public void testSidecarChangeRejectedOnSeparateSortKeyPrimaryKeyRange() throws Exception {
+    public void testAddIndexUsesRegularPathOnSeparateSortKeyPrimaryKeyRange() throws Exception {
         starRocksAssert.withTable("create table t_route_pk_sidecar (k1 int not null, k2 int not null, v1 int)\n"
                 + "primary key(k1, k2)\n"
                 + "order by(v1)\n"
                 + "properties('replication_num' = '1', 'file_bundling' = 'true');");
-        DdlException addIndex = assertThrowsDdlException(() -> createJob("t_route_pk_sidecar",
-                "alter table t_route_pk_sidecar add index idx_v1 (v1) using bitmap"));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                addIndex.getMessage().contains("ADD INDEX is not supported"),
-                "unexpected message: " + addIndex.getMessage());
+        OlapTable table = table("t_route_pk_sidecar");
+        assertFalse(SchemaChangeHandler.isLakeIndexFastPathAdmissible(table),
+                "the IDG fast path must decline a table whose sort key differs from its primary key");
 
-        DdlException bloomFilter = assertThrowsDdlException(() -> createJob("t_route_pk_sidecar",
-                "alter table t_route_pk_sidecar set ('bloom_filter_columns' = 'v1')"));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                bloomFilter.getMessage().contains("bloom filter columns is not supported"),
-                "unexpected message: " + bloomFilter.getMessage());
+        AlterJobV2 job = createJob("t_route_pk_sidecar",
+                "alter table t_route_pk_sidecar add index idx_v1 (v1) using bitmap");
+        org.junit.jupiter.api.Assertions.assertNotNull(job, "ADD INDEX must still produce a job");
+        org.junit.jupiter.api.Assertions.assertFalse(job instanceof LakeTableAddIndexJob,
+                "ADD INDEX must not take the sidecar fast path here, got " + job.getClass().getSimpleName());
     }
 
-    // (m') The same statements on a range table whose sort key IS its primary key are untouched -- the
-    // rejection is about the two key spaces diverging, not about primary-key tables.
+    // (m') The same table with its sort key equal to the primary key keeps the fast path: the guard is
+    // about the two key spaces diverging, not about primary-key tables as such.
     @Test
-    public void testSidecarChangeAllowedWhenSortKeyIsThePrimaryKey() throws Exception {
+    public void testAddIndexKeepsFastPathWhenSortKeyIsThePrimaryKey() throws Exception {
         starRocksAssert.withTable("create table t_route_pk_nosidecar (k1 int not null, k2 int not null, v1 int)\n"
                 + "primary key(k1, k2)\n"
                 + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1', 'file_bundling' = 'true');");
-        // Reaches the regular ADD INDEX handling instead of the new rejection; whatever it decides, it
-        // must not be the separate-sort-key refusal.
-        try {
-            createJob("t_route_pk_nosidecar", "alter table t_route_pk_nosidecar add index idx_v1 (v1) using bitmap");
-        } catch (Exception e) {
-            org.junit.jupiter.api.Assertions.assertFalse(
-                    String.valueOf(e.getMessage()).contains("ORDER BY key differs from the primary key"),
-                    "must not hit the separate-sort-key rejection: " + e.getMessage());
-        }
+        org.junit.jupiter.api.Assertions.assertTrue(
+                SchemaChangeHandler.isLakeIndexFastPathAdmissible(table("t_route_pk_nosidecar")),
+                "a sort key equal to the primary key leaves the fast path admissible");
     }
-
 }
