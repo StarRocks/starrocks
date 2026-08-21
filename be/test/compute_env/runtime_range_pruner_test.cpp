@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <vector>
 
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
@@ -35,6 +36,7 @@ class RuntimeRangePrunerTest : public ::testing::Test {
 protected:
     StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> _gen_runtime_filter_desc();
     StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> _gen_runtime_filter_desc(const TExpr& probe_expr);
+    static TExpr _arithmetic_probe_expr(TExprOpcode::type opcode, int32_t literal_value);
 
     using Int32Decoder = detail::RuntimeColumnPredicateBuilder::DummyDecoder<int32_t>;
     using Int32RuntimeFilter = ComposedRuntimeBloomFilter<TYPE_INT>;
@@ -69,6 +71,34 @@ StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> RuntimeRangePrunerTest::
     return runtime_filter_desc;
 }
 
+// `c0 <opcode> <literal_value>`, flagged monotonic the way the FE flags arithmetic: from the shape
+// of the expression alone, ignoring that the BE evaluates it in wrapping arithmetic.
+TExpr RuntimeRangePrunerTest::_arithmetic_probe_expr(TExprOpcode::type opcode, int32_t literal_value) {
+    TExprNode arithmetic_node;
+    arithmetic_node.node_type = TExprNodeType::ARITHMETIC_EXPR;
+    arithmetic_node.num_children = 2;
+    arithmetic_node.type = TYPE_INT_DESC.to_thrift();
+    arithmetic_node.__set_opcode(opcode);
+    arithmetic_node.__set_child_type(TPrimitiveType::INT);
+    arithmetic_node.__set_is_nullable(true);
+    arithmetic_node.__set_is_monotonic(true);
+
+    TExprNode literal_node;
+    literal_node.node_type = TExprNodeType::INT_LITERAL;
+    literal_node.num_children = 0;
+    literal_node.type = TYPE_INT_DESC.to_thrift();
+    literal_node.__set_is_nullable(false);
+    TIntLiteral literal;
+    literal.value = literal_value;
+    literal_node.__set_int_literal(literal);
+
+    TExpr probe_expr;
+    probe_expr.nodes.emplace_back(arithmetic_node);
+    probe_expr.nodes.emplace_back(ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(0, true).nodes[0]);
+    probe_expr.nodes.emplace_back(literal_node);
+    return probe_expr;
+}
+
 TEST_F(RuntimeRangePrunerTest, min_max_parser) {
     Int32Decoder decoder(nullptr);
 
@@ -99,35 +129,14 @@ TEST_F(RuntimeRangePrunerTest, min_max_parser_for_decimal) {
     ASSERT_EQ(max_column->debug_string(), "CONST: 0.0020 Size : 1");
 }
 
-TEST_F(RuntimeRangePrunerTest, monotonic_expr_builds_two_column_expr_predicates) {
+// The bounds go onto the column, not onto the expression: `c0 + 1` in [10, 20] means `c0` in [9, 19].
+TEST_F(RuntimeRangePrunerTest, additive_probe_expr_inverts_bounds_onto_the_column) {
     SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot};
     ConnectorPredicateParser predicate_parser(&slot_descs);
 
-    TExprNode add_node;
-    add_node.node_type = TExprNodeType::ARITHMETIC_EXPR;
-    add_node.num_children = 2;
-    add_node.type = TYPE_INT_DESC.to_thrift();
-    add_node.__set_opcode(TExprOpcode::ADD);
-    add_node.__set_child_type(TPrimitiveType::INT);
-    add_node.__set_is_nullable(true);
-    add_node.__set_is_monotonic(true);
-
-    TExpr slot_expr = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(0, true);
-    TExprNode literal_node;
-    literal_node.node_type = TExprNodeType::INT_LITERAL;
-    literal_node.num_children = 0;
-    literal_node.type = TYPE_INT_DESC.to_thrift();
-    literal_node.__set_is_nullable(false);
-    TIntLiteral literal;
-    literal.value = 1;
-    literal_node.__set_int_literal(literal);
-
-    TExpr probe_expr;
-    probe_expr.nodes.emplace_back(add_node);
-    probe_expr.nodes.emplace_back(slot_expr.nodes[0]);
-    probe_expr.nodes.emplace_back(literal_node);
-    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc, _gen_runtime_filter_desc(probe_expr));
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc,
+                          _gen_runtime_filter_desc(_arithmetic_probe_expr(TExprOpcode::ADD, 1)));
     ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->prepare(&_runtime_state));
     ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->open(&_runtime_state));
 
@@ -141,29 +150,90 @@ TEST_F(RuntimeRangePrunerTest, monotonic_expr_builds_two_column_expr_predicates)
     RuntimeScanRangePruner pruner(&predicate_parser, unarrived_runtime_filters);
 
     std::vector<PredicateType> predicate_types;
-    std::vector<TExprOpcode::type> predicate_opcodes;
-    std::vector<std::string> predicate_bounds;
+    std::vector<std::string> predicate_strings;
     ASSERT_OK(pruner.update_range_if_arrived(
             nullptr,
             [&](auto, const PredicateList& predicates) {
                 for (const auto* predicate : predicates) {
                     predicate_types.emplace_back(predicate->type());
-                    const auto* expr_predicate = down_cast<const ColumnExprPredicate*>(predicate);
-                    Expr* root = expr_predicate->get_expr_ctxs()[0]->root();
-                    predicate_opcodes.emplace_back(root->op());
-                    const auto* literal = down_cast<const VectorizedLiteral*>(root->get_child(1));
-                    predicate_bounds.emplace_back(literal->value()->debug_string());
+                    predicate_strings.emplace_back(predicate->debug_string());
                 }
                 return Status::OK();
             },
             false, 200000));
     ASSERT_EQ(2, predicate_types.size());
-    EXPECT_EQ(PredicateType::kExpr, predicate_types[0]);
-    EXPECT_EQ(PredicateType::kExpr, predicate_types[1]);
-    EXPECT_EQ(TExprOpcode::GE, predicate_opcodes[0]);
-    EXPECT_EQ(TExprOpcode::LE, predicate_opcodes[1]);
-    EXPECT_EQ("CONST: 10 Size : 1", predicate_bounds[0]);
-    EXPECT_EQ("CONST: 20 Size : 1", predicate_bounds[1]);
+    EXPECT_EQ(PredicateType::kGE, predicate_types[0]);
+    EXPECT_EQ(PredicateType::kLE, predicate_types[1]);
+    EXPECT_EQ("(columnId(0)>=9)", predicate_strings[0]);
+    EXPECT_EQ("(columnId(0)<=19)", predicate_strings[1]);
+
+    runtime_filter_desc->close(&_runtime_state);
+}
+
+// An overflowing inversion emits nothing, never an empty range: the preimage wraps around the type
+// and is no longer an interval, and pruning on it would drop rows the join wanted.
+TEST_F(RuntimeRangePrunerTest, inversion_that_overflows_emits_no_predicate) {
+    SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
+    std::vector<SlotDescriptor*> slot_descs{&slot};
+    ConnectorPredicateParser predicate_parser(&slot_descs);
+
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc,
+                          _gen_runtime_filter_desc(_arithmetic_probe_expr(TExprOpcode::ADD, 1)));
+    ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->prepare(&_runtime_state));
+    ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->open(&_runtime_state));
+
+    MinMaxRuntimeFilter<TYPE_INT> rf;
+    rf.insert(std::numeric_limits<int32_t>::min());
+    rf.insert(20);
+    runtime_filter_desc->set_runtime_filter(&rf);
+
+    UnarrivedRuntimeFilterList unarrived_runtime_filters;
+    unarrived_runtime_filters.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
+    RuntimeScanRangePruner pruner(&predicate_parser, unarrived_runtime_filters);
+
+    size_t predicates_built = 0;
+    ASSERT_OK(pruner.update_range_if_arrived(
+            nullptr,
+            [&](auto, const PredicateList& predicates) {
+                predicates_built += predicates.size();
+                return Status::OK();
+            },
+            false, 200000));
+    EXPECT_EQ(0, predicates_built);
+
+    runtime_filter_desc->close(&_runtime_state);
+}
+
+// Multiplication is not invertible under wrapping -- wrap(2 * c0) puts two column values on every
+// key -- so the pruner declines it even though the FE marked it monotonic.
+TEST_F(RuntimeRangePrunerTest, multiplicative_probe_expr_emits_no_predicate) {
+    SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
+    std::vector<SlotDescriptor*> slot_descs{&slot};
+    ConnectorPredicateParser predicate_parser(&slot_descs);
+
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc,
+                          _gen_runtime_filter_desc(_arithmetic_probe_expr(TExprOpcode::MULTIPLY, 2)));
+    ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->prepare(&_runtime_state));
+    ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->open(&_runtime_state));
+
+    MinMaxRuntimeFilter<TYPE_INT> rf;
+    rf.insert(10);
+    rf.insert(20);
+    runtime_filter_desc->set_runtime_filter(&rf);
+
+    UnarrivedRuntimeFilterList unarrived_runtime_filters;
+    unarrived_runtime_filters.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
+    RuntimeScanRangePruner pruner(&predicate_parser, unarrived_runtime_filters);
+
+    size_t predicates_built = 0;
+    ASSERT_OK(pruner.update_range_if_arrived(
+            nullptr,
+            [&](auto, const PredicateList& predicates) {
+                predicates_built += predicates.size();
+                return Status::OK();
+            },
+            false, 200000));
+    EXPECT_EQ(0, predicates_built);
 
     runtime_filter_desc->close(&_runtime_state);
 }
