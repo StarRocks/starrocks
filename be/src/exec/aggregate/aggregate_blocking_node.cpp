@@ -18,6 +18,7 @@
 #include <type_traits>
 
 #include "base/simd/simd.h"
+#include "exec/aggregate/agg_state_bounded.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
@@ -181,8 +182,12 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
         // disable spill when group by with a small limit
         // having clause filters rows after aggregation, so a small limit does not bound the
         // aggregation input size; only disable spill when there is no having clause.
+        // a small limit only bounds the number of groups, not the size of a single aggregate
+        // state: collect-style states (array_agg/group_concat/multi_distinct_count/...) can grow
+        // unboundedly within one group, so only disable spill when every aggregate state is bounded.
         bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
-        if (limit() != -1 && limit() < runtime_state()->chunk_size() && _tnode.conjuncts.empty()) {
+        if (limit() != -1 && limit() < runtime_state()->chunk_size() && _tnode.conjuncts.empty() &&
+            all_agg_states_bounded(_tnode.agg_node.aggregate_functions, runtime_state()->func_version())) {
             enable_agg_spill = false;
         }
         if (enable_agg_spill && has_group_by_keys) {
