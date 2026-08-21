@@ -1053,6 +1053,51 @@ public class ExpressionStatisticCalculator {
 
         }
 
+        private ColumnStatistic calcConvertTzStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            ColumnStatistic childStat = inputs.get(0);
+            ColumnStatistic fromTzStat = inputs.get(1);
+            ColumnStatistic toTzStat = inputs.get(2);
+
+            final double distinctValues = Math.min(rowCount,
+                    childStat.getDistinctValuesCount()
+                            * fromTzStat.getDistinctValuesCount()
+                            * toTzStat.getDistinctValuesCount());
+
+            final double nullsFraction = 1.0
+                    - (1.0 - childStat.getNullsFraction())
+                    * (1.0 - fromTzStat.getNullsFraction())
+                    * (1.0 - toTzStat.getNullsFraction());
+
+            double minValue = childStat.getMinValue() - ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+            double maxValue = childStat.getMaxValue() + ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
+
+            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
+            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
+            if (fromTz.isPresent() && toTz.isPresent()
+                    && !childStat.hasNaNValue() && !childStat.isInfiniteRange()
+                    && !ConvertTzStatisticUtils.hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),
+                            fromTz.get(), toTz.get())) {
+                OptionalDouble convertedMin =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
+                OptionalDouble convertedMax =
+                        ConvertTzStatisticUtils.convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
+                if (convertedMin.isPresent() && convertedMax.isPresent()) {
+                    minValue = Math.min(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                    maxValue = Math.max(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                }
+            }
+
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues)
+                    .setHistogram(ConvertTzStatisticUtils.transformHistogram(
+                            callOperator, childStat, minValue, maxValue, rowCount).orElse(null))
+                    .build();
+        }
+
         private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
             double nullsFraction = inputs.stream()
                     .mapToDouble(ColumnStatistic::getNullsFraction)
@@ -1299,6 +1344,8 @@ public class ExpressionStatisticCalculator {
             double averageRowSize;
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.CONVERT_TZ:
+                    return calcConvertTzStats(childColumnStatisticList, callOperator);
                 case FunctionSet.COALESCE:
                     return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
