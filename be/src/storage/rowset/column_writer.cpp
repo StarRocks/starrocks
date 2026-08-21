@@ -501,6 +501,11 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
         size += _inverted_index_builder->size();
     }
 #endif
+    // The retained dictionary sample is pending output like everything above: write_data()
+    // persists it as the dictionary page (whose size the sample bounds). Leaving it out lets a
+    // wide table pass the flush checks and then overshoot max_segment_file_size by roughly one
+    // dictionary page per nominated column.
+    size += _zstd_compression_dict_sample.size();
     return size;
 }
 

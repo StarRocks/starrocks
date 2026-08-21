@@ -678,7 +678,7 @@ PROPERTIES (
 
 - 该列最终必须是 plain 编码。StarRocks 会根据数据自行选择编码，取值种类很少的列会被选为
   字典编码——那本身就已经把它压得比这里的任何手段都好。在这类列上设置该属性不会有任何效果。
-- 行数不超过 256 的列会直接被判为字典编码，因此很小的表也拿不到内部字典。
+- 行数不超过 256 的 CHAR/VARCHAR/STRING 列会直接被判为字典编码，因此很小的表也拿不到内部字典。JSON 列没有这条行数下限——它本来就是 plain 编码。
 - 该列在一个 Segment 内必须写满 9 个以上的数据页。第一页用来采样字典，接下来 8 页用来实测
   它是否划算；这 9 页都不带字典写出，字典从第 10 页起才真正启用。写不到这个长度的列不会用上
   字典——这对它也是对的：字典自身要占一个页，摊在寥寥几页上根本回不了本。
@@ -686,7 +686,7 @@ PROPERTIES (
   `zstd_compression_dict_min_gain`。否则字典被丢弃，该列余下部分不带字典写出。
 
 以上都不是错误，也不改变该列用什么压缩：被指定的列仍然是 ZSTD。
-`zstd_compression_dict_pages_written` 数的是最终拿到字典的列，
+`zstd_compression_dict_pages_written` 数的是最终拿到字典的列 writer（打平 JSON 列的每个打平子列各算一个），
 `zstd_compression_dict_build_fallback` 数的是没拿到的。
 
 该属性也可以在建表后通过 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` 修改。这是一次 Schema Change：它会重写每一个 Tablet，因此存量数据也会按新设置重新编码，代价与同等规模表上的其他 Schema Change 相当，可用 `SHOW ALTER TABLE COLUMN` 跟踪进度。整个过程中表都可读，两种方式写出的 Segment 也都可读，因为每个 Segment 都记录了自己是怎么写的。

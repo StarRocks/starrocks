@@ -669,8 +669,9 @@ data, not by the property:
   data, and a column with few distinct values is dictionary-encoded instead, which
   already compresses it far better than anything here would. Setting the property
   on such a column has no effect.
-- A column holding 256 rows or fewer is dictionary-encoded outright, so very small
-  tables never get an internal dictionary either.
+- A CHAR/VARCHAR/STRING column holding 256 rows or fewer is dictionary-encoded
+  outright, so very small tables never get an internal dictionary either. JSON
+  columns have no such row floor -- they are plain-encoded to begin with.
 - The column has to fill more than nine data pages in one segment. The first page
   is what the dictionary is sampled from and the next eight measure whether it
   pays; all nine are written without it, and the dictionary is used from the tenth
@@ -684,7 +685,7 @@ data, not by the property:
 
 None of this is an error and none of it changes what the column is compressed
 with: the nominated columns are still ZSTD. `zstd_compression_dict_pages_written`
-counts the columns that ended up with a dictionary and
+counts the column writers that ended up with a dictionary (a flat JSON column has one writer per flattened sub-column) and
 `zstd_compression_dict_build_fallback` the ones that did not.
 
 The property can also be changed later with

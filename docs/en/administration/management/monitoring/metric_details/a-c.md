@@ -447,7 +447,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 ## `zstd_compression_dict_build_fallback`
 
 - Unit: Count
-- Description: Cumulative number of times a column that was eligible for the compression dictionary ended up without one and was written as plain ZSTD, either because the trial pages did not come out enough smaller with the dictionary (see `zstd_compression_dict_min_gain`) or because building it failed. Counted once per column per segment. A page too small to be sampled is not counted here: the next page is tried instead. A high value relative to `zstd_compression_dict_pages_written` means that the compression dictionary rarely takes effect for the columns designated by the table property `zstd_compression_columns`.
+- Description: Cumulative number of times a column that was eligible for the compression dictionary ended up without one and was written as plain ZSTD, either because the trial pages did not come out enough smaller with the dictionary (see `zstd_compression_dict_min_gain`) or because building it failed. Counted once per column writer per segment; as with `zstd_compression_dict_pages_written`, a flat JSON column has one writer per flattened sub-column. A page too small to be sampled is not counted here: the next page is tried instead. A high value relative to `zstd_compression_dict_pages_written` means that the compression dictionary rarely takes effect for the columns designated by the table property `zstd_compression_columns`.
 
 ## `zstd_compression_dict_bytes`
 
