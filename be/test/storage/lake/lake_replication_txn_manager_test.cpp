@@ -32,6 +32,7 @@
 #include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 #include "util/failpoint/fail_point.h"
+#include "util/threadpool.h"
 #ifdef USE_STAROS
 #include <fslib/file.h>
 #include <fslib/file_system.h>
@@ -42,20 +43,9 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "common/config_lake_fwd.h"
-#include "common/config_rowset_fwd.h"
-#include "common/config_starlet_fwd.h"
-#include "common/thread/threadpool.h"
-#include "compute_env/staros/starlet_filesystem.h"
-#include "compute_env/staros/staros_worker.h"
-#include "compute_env/staros/staros_worker_runtime.h"
-#include "exec/exec_env.h"
 #include "fs/bundle_file.h"
-#include "fs/fs_factory.h"
->>>>>>> 399af05e1d ([BugFix] Re-encrypt source lake files during replication (#78080))
+#include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
@@ -83,10 +73,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/failpoint/fail_point.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -824,393 +810,6 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
     EXPECT_TRUE(result.status().is_not_found()) << result.status();
 }
 
-class LakeReplicationMetadataConversionTest : public testing::Test {
-protected:
-    void SetUp() override {
-        (void)fs::remove_all(_test_dir);
-        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
-        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
-        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
-        _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
-    }
-
-    void TearDown() override {
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-        ASSERT_OK(fs::remove_all(_test_dir));
-    }
-
-    std::shared_ptr<TabletMetadata> make_metadata(int64_t tablet_id, int64_t version, bool range_table = false) {
-        auto metadata = std::make_shared<TabletMetadata>();
-        metadata->set_id(tablet_id);
-        metadata->set_version(version);
-        metadata->set_next_rowset_id(1);
-        auto* schema = metadata->mutable_schema();
-        schema->set_keys_type(DUP_KEYS);
-        schema->set_id(1);
-        schema->set_num_short_key_columns(1);
-        auto* column = schema->add_column();
-        column->set_unique_id(1);
-        column->set_name("c0");
-        column->set_type("INT");
-        column->set_is_key(true);
-        column->set_is_nullable(false);
-        if (range_table) {
-            metadata->mutable_range();
-        }
-        return metadata;
-    }
-
-    static std::string file_name(int id, std::string_view extension) {
-        return fmt::format("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-{:012d}.{}", id, extension);
-    }
-
-    static void add_file_set(TabletMetadata* metadata, int base, bool shared) {
-        auto* rowset = metadata->add_rowsets();
-        rowset->set_id(base + 1);
-        rowset->set_overlapped(false);
-        auto* segment = rowset->add_segment_metas();
-        segment->set_filename(file_name(base + 1, "dat"));
-        segment->set_size(11);
-        segment->set_shared(shared);
-        auto* del = rowset->add_del_files();
-        del->set_name(file_name(base + 2, "del"));
-        del->set_shared(shared);
-
-        auto* sst = metadata->mutable_sstable_meta()->add_sstables();
-        sst->set_filename(file_name(base + 3, "sst"));
-        sst->set_shared(shared);
-
-        auto& delvec = (*metadata->mutable_delvec_meta()->mutable_version_to_file())[base + 4];
-        delvec.set_name(file_name(base + 4, "delvec"));
-        delvec.set_shared(shared);
-
-        auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[base + 5];
-        dcg.add_column_files(file_name(base + 5, "cols"));
-        dcg.add_shared_files(shared);
-    }
-
-    static void expect_file_set_shared(const TabletMetadataPB& metadata, int set_index, int base, bool shared) {
-        EXPECT_EQ(shared, metadata.rowsets(set_index).segment_metas(0).shared());
-        EXPECT_EQ(shared, metadata.rowsets(set_index).del_files(0).shared());
-        EXPECT_EQ(shared, metadata.sstable_meta().sstables(set_index).shared());
-        EXPECT_EQ(shared, metadata.delvec_meta().version_to_file().at(base + 4).shared());
-        EXPECT_EQ(shared, metadata.dcg_meta().dcgs().at(base + 5).shared_files(0));
-    }
-
-    static void set_file_set_encryption_meta(TabletMetadata* metadata, int set_index, int base,
-                                             std::string_view prefix) {
-        auto* rowset = metadata->mutable_rowsets(set_index);
-        rowset->mutable_segment_metas(0)->set_encryption_meta(fmt::format("{}-segment", prefix));
-        rowset->mutable_del_files(0)->set_encryption_meta(fmt::format("{}-del", prefix));
-        metadata->mutable_sstable_meta()->mutable_sstables(set_index)->set_encryption_meta(
-                fmt::format("{}-sst", prefix));
-        (*metadata->mutable_delvec_meta()->mutable_version_to_file())[base + 4].set_encryption_meta(
-                fmt::format("{}-delvec", prefix));
-        auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[base + 5];
-        dcg.clear_encryption_metas();
-        dcg.add_encryption_metas(fmt::format("{}-dcg", prefix));
-    }
-
-    static std::array<std::string, 5> file_set_encryption_meta(const TabletMetadataPB& metadata, int set_index,
-                                                               int base) {
-        return {metadata.rowsets(set_index).segment_metas(0).encryption_meta(),
-                metadata.rowsets(set_index).del_files(0).encryption_meta(),
-                metadata.sstable_meta().sstables(set_index).encryption_meta(),
-                metadata.delvec_meta().version_to_file().at(base + 4).encryption_meta(),
-                metadata.dcg_meta().dcgs().at(base + 5).encryption_metas(0)};
-    }
-
-    static void seed_test_encryption_keys() {
-        EncryptionKeyPB pb;
-        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-        pb.set_plain_key("0000000000000000");
-        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-        auto val_st = root_encryption_key->generate_key();
-        ASSERT_TRUE(val_st.ok());
-        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
-        encryption_key->set_id(2);
-        KeyCache::instance().add_key(root_encryption_key);
-        KeyCache::instance().add_key(encryption_key);
-    }
-
-    StatusOr<std::shared_ptr<TabletMetadataPB>> convert(
-            const TabletMetadataPtr& source, const TabletMetadataPtr& target, int64_t data_version,
-            const std::string& source_data_dir, std::unordered_map<std::string, size_t>* segment_sizes = nullptr,
-            std::map<std::string, std::string>* file_locations_out = nullptr,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map_out = nullptr) {
-        std::unordered_map<std::string, size_t> local_segment_sizes;
-        std::map<std::string, std::string> local_file_locations;
-        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> local_filename_map;
-        return _replication_txn_manager->convert_and_build_new_tablet_meta(
-                source, target, source->id(), target->id(), 70001, data_version, source_data_dir,
-                segment_sizes != nullptr ? *segment_sizes : local_segment_sizes,
-                file_locations_out != nullptr ? *file_locations_out : local_file_locations,
-                filename_map_out != nullptr ? *filename_map_out : local_filename_map);
-    }
-
-    static Status write_file(const std::string& path, std::string_view content) {
-        ASSIGN_OR_RETURN(auto local_fs, FileSystem::CreateSharedFromString(path));
-        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-        ASSIGN_OR_RETURN(auto output, local_fs->new_writable_file(opts, path));
-        RETURN_IF_ERROR(output->append(content));
-        return output->close();
-    }
-
-    static StatusOr<std::string> read_file(const std::string& path) {
-        ASSIGN_OR_RETURN(auto local_fs, FileSystem::CreateSharedFromString(path));
-        ASSIGN_OR_RETURN(auto input, local_fs->new_random_access_file(path));
-        ASSIGN_OR_RETURN(auto size, input->get_size());
-        std::string content(size, '\0');
-        RETURN_IF_ERROR(input->read_at_fully(0, content.data(), size));
-        return content;
-    }
-
-    static constexpr const char* kTestDirectory = "test_lake_replication_metadata_conversion";
-    std::string _test_dir = kTestDirectory;
-    std::shared_ptr<lake::FixedLocationProvider> _location_provider;
-    std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
-    std::unique_ptr<lake::TabletManager> _tablet_mgr;
-    std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
-};
-
-TEST_F(LakeReplicationMetadataConversionTest, target_split_child_without_data_version_metadata) {
-    auto source = make_metadata(51001, 3);
-    auto target = make_metadata(51002, 2, true);
-    const std::string source_filename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000081.dat";
-    const std::string target_filename = "00000000000000ff_aaaaaaaa-bbbb-cccc-dddd-000000000081.dat";
-    auto* source_rowset = source->add_rowsets();
-    source_rowset->set_id(1);
-    source_rowset->add_segment_metas()->set_filename(source_filename);
-    auto* target_rowset = target->add_rowsets();
-    target_rowset->set_id(1);
-    auto* target_segment = target_rowset->add_segment_metas();
-    target_segment->set_filename(target_filename);
-    target_segment->set_shared(true);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    std::map<std::string, std::string> file_locations;
-    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, &file_locations,
-                          &filename_map);
-    ASSERT_OK(result.status());
-    ASSERT_EQ(1, (*result)->rowsets_size());
-    ASSERT_EQ(1, (*result)->rowsets(0).segment_metas_size());
-    EXPECT_EQ(target_filename, (*result)->rowsets(0).segment_metas(0).filename());
-    EXPECT_TRUE((*result)->rowsets(0).segment_metas(0).shared());
-    EXPECT_TRUE(file_locations.empty());
-    EXPECT_TRUE(filename_map.empty());
-}
-
-TEST_F(LakeReplicationMetadataConversionTest,
-       target_split_child_without_data_version_metadata_current_version_not_newer) {
-    auto source = make_metadata(51101, 3);
-    auto target = make_metadata(51102, 1, true);
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_not_found()) << result.status();
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, target_hash_tablet_without_data_version_metadata) {
-    auto source = make_metadata(52001, 3);
-    auto target = make_metadata(52002, 2);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_not_found()) << result.status();
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix) {
-    auto source = make_metadata(53001, 2);
-    auto target = make_metadata(53002, 1);
-    add_file_set(target.get(), 0, true);
-    add_file_set(target.get(), 20, false);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    // Reuse two destination file sets with opposite ownership, then add a source-shared set
-    // that must become private because it is copied into this destination for the first time.
-    add_file_set(source.get(), 0, false);
-    add_file_set(source.get(), 20, true);
-    add_file_set(source.get(), 40, true);
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_OK(result.status());
-    expect_file_set_shared(**result, 0, 0, true);
-    expect_file_set_shared(**result, 1, 20, false);
-    expect_file_set_shared(**result, 2, 40, false);
-    EXPECT_TRUE((*result)->sstable_meta().sstables(2).filename().ends_with(".sst"));
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, range_shared_files_remain_shared_after_copy) {
-    auto source = make_metadata(53011, 2, true);
-    auto target = make_metadata(53012, 1, true);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    // A split range tablet can reference only a slice of a physical segment. The shared bit
-    // also tells the reader to apply the tablet range, so clearing it after copying the file
-    // would make every split child read the complete physical segment.
-    add_file_set(source.get(), 0, true);
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_OK(result.status());
-    expect_file_set_shared(**result, 0, 0, true);
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, range_new_shared_files_with_tde_are_rejected) {
-    seed_test_encryption_keys();
-    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
-    config::enable_transparent_data_encryption = true;
-
-    auto source = make_metadata(53021, 2, true);
-    auto target = make_metadata(53022, 1, true);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-    add_file_set(source.get(), 0, true);
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_not_supported()) << result.status();
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, new_bundled_segments_with_tde_are_rejected) {
-    seed_test_encryption_keys();
-    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
-    config::enable_transparent_data_encryption = true;
-
-    for (bool range_table : {true, false}) {
-        auto source = make_metadata(range_table ? 53025 : 53027, 2, range_table);
-        auto target = make_metadata(range_table ? 53026 : 53028, 1, range_table);
-        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-        auto* rowset = source->add_rowsets();
-        rowset->set_id(1);
-        auto* segment = rowset->add_segment_metas();
-        segment->set_filename(file_name(25, "dat"));
-        segment->set_size(11);
-        segment->set_bundle_file_offset(0);
-        segment->set_shared(false);
-
-        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-        ASSERT_FALSE(result.ok()) << "range_table=" << range_table;
-        EXPECT_TRUE(result.status().is_not_supported()) << result.status();
-    }
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, range_existing_shared_files_with_tde_reuse_encryption_meta) {
-    seed_test_encryption_keys();
-    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
-    config::enable_transparent_data_encryption = true;
-
-    auto source = make_metadata(53031, 2, true);
-    auto target = make_metadata(53032, 1, true);
-    add_file_set(target.get(), 0, true);
-    set_file_set_encryption_meta(target.get(), 0, 0, "target-reused");
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    add_file_set(source.get(), 0, true);
-    set_file_set_encryption_meta(source.get(), 0, 0, "source-reused");
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_OK(result.status());
-    const std::array<std::string, 5> expected_reused = {"target-reused-segment", "target-reused-del",
-                                                        "target-reused-sst", "target-reused-delvec",
-                                                        "target-reused-dcg"};
-    EXPECT_EQ(expected_reused, file_set_encryption_meta(**result, 0, 0));
-    expect_file_set_shared(**result, 0, 0, true);
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_metadata) {
-    seed_test_encryption_keys();
-    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
-    config::enable_transparent_data_encryption = true;
-
-    auto source = make_metadata(53101, 2);
-    auto target = make_metadata(53102, 1);
-    add_file_set(target.get(), 0, true);
-    set_file_set_encryption_meta(target.get(), 0, 0, "target-reused");
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    add_file_set(source.get(), 0, false);
-    set_file_set_encryption_meta(source.get(), 0, 0, "source-reused");
-    add_file_set(source.get(), 40, true);
-    set_file_set_encryption_meta(source.get(), 1, 40, "source-new");
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_OK(result.status());
-    const std::array<std::string, 5> expected_reused = {"target-reused-segment", "target-reused-del",
-                                                        "target-reused-sst", "target-reused-delvec",
-                                                        "target-reused-dcg"};
-    EXPECT_EQ(expected_reused, file_set_encryption_meta(**result, 0, 0));
-
-    const auto new_encryption_meta = file_set_encryption_meta(**result, 1, 40);
-    const std::array<std::string, 5> source_encryption_meta = {"source-new-segment", "source-new-del", "source-new-sst",
-                                                               "source-new-delvec", "source-new-dcg"};
-    for (size_t i = 0; i < new_encryption_meta.size(); ++i) {
-        EXPECT_FALSE(new_encryption_meta[i].empty());
-        EXPECT_NE(source_encryption_meta[i], new_encryption_meta[i]);
-    }
-    expect_file_set_shared(**result, 0, 0, true);
-    expect_file_set_shared(**result, 1, 40, false);
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
-    auto source = make_metadata(54001, 2);
-    auto target = make_metadata(54002, 1);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
-
-    const std::string bundle_name = file_name(61, "dat");
-    auto* rowset = source->add_rowsets();
-    rowset->set_id(1);
-    for (const auto [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
-        auto* segment = rowset->add_segment_metas();
-        segment->set_filename(bundle_name);
-        segment->set_size(logical_size);
-        segment->set_bundle_file_offset(offset);
-        segment->set_shared(true);
-    }
-
-    const std::string source_data_dir = lake::join_path(_test_dir, "source_data");
-    ASSERT_OK(fs::create_directories(source_data_dir));
-    const std::string source_path = lake::join_path(source_data_dir, bundle_name);
-    const std::string physical_contents = "AAAAABBBBBBB-physical-tail";
-    ASSERT_OK(write_file(source_path, physical_contents));
-
-    std::unordered_map<std::string, size_t> segment_sizes;
-    std::map<std::string, std::string> file_locations;
-    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
-    auto result = convert(source, target, 1, source_data_dir, &segment_sizes, &file_locations, &filename_map);
-    ASSERT_OK(result.status());
-    ASSERT_EQ(1, filename_map.size());
-    ASSERT_EQ(1, file_locations.size());
-    EXPECT_EQ(5, (*result)->rowsets(0).segment_metas(0).size());
-    EXPECT_EQ(0, (*result)->rowsets(0).segment_metas(0).bundle_file_offset());
-    EXPECT_EQ(7, (*result)->rowsets(0).segment_metas(1).size());
-    EXPECT_EQ(5, (*result)->rowsets(0).segment_metas(1).bundle_file_offset());
-
-    const size_t source_size_for_copy = segment_sizes.contains(bundle_name) ? segment_sizes.at(bundle_name) : 0;
-    ASSIGN_OR_ABORT(auto source_fs, FileSystem::CreateSharedFromString(source_path));
-    const auto& target_path = file_locations.begin()->second;
-    FileConverterCreatorFunc converter = [target_path](
-                                                 const std::string& file_name,
-                                                 uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
-        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-        ASSIGN_OR_RETURN(auto output, fs::new_writable_file(opts, target_path));
-        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output));
-    };
-    size_t copied_size = 0;
-    ASSERT_OK(ReplicationUtils::download_lake_file_with_converter(source_path, bundle_name, source_size_for_copy,
-                                                                  source_fs, converter, &copied_size));
-    EXPECT_EQ(physical_contents.size(), copied_size);
-    ASSIGN_OR_ABORT(auto copied_contents, read_file(target_path));
-    EXPECT_EQ(physical_contents, copied_contents);
-}
-
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_source_tablet_from_bundle) {
     ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
     std::map<int64_t, TabletMetadataPB> tablet_metas;
@@ -1425,8 +1024,6 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasse
     EXPECT_EQ(101, cached->gtid());
 }
 
-<<<<<<< HEAD
-=======
 class LakeReplicationMetadataConversionTest : public testing::Test {
 protected:
     void SetUp() override {
@@ -1442,7 +1039,7 @@ protected:
     }
 
     void TearDown() override {
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         ASSERT_OK(fs::remove_all(_test_dir));
     }
 
@@ -1494,11 +1091,6 @@ protected:
         auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[base + 5];
         dcg.add_column_files(file_name(base + 5, "cols"));
         dcg.add_shared_files(shared);
-
-        auto& idg = (*metadata->mutable_idg_meta()->mutable_idgs())[base + 6];
-        auto* entry = idg.add_entries();
-        entry->set_index_file(file_name(base + 6, "idx"));
-        entry->set_shared_file(shared);
     }
 
     static void expect_file_set_shared(const TabletMetadataPB& metadata, int set_index, int base, bool shared) {
@@ -1507,7 +1099,6 @@ protected:
         EXPECT_EQ(shared, metadata.sstable_meta().sstables(set_index).shared());
         EXPECT_EQ(shared, metadata.delvec_meta().version_to_file().at(base + 4).shared());
         EXPECT_EQ(shared, metadata.dcg_meta().dcgs().at(base + 5).shared_files(0));
-        EXPECT_EQ(shared, metadata.idg_meta().idgs().at(base + 6).entries(0).shared_file());
     }
 
     static void set_file_set_encryption_meta(TabletMetadata* metadata, int set_index, int base,
@@ -1522,18 +1113,15 @@ protected:
         auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[base + 5];
         dcg.clear_encryption_metas();
         dcg.add_encryption_metas(fmt::format("{}-dcg", prefix));
-        (*metadata->mutable_idg_meta()->mutable_idgs())[base + 6].mutable_entries(0)->set_encryption_meta(
-                fmt::format("{}-idg", prefix));
     }
 
-    static std::array<std::string, 6> file_set_encryption_meta(const TabletMetadataPB& metadata, int set_index,
+    static std::array<std::string, 5> file_set_encryption_meta(const TabletMetadataPB& metadata, int set_index,
                                                                int base) {
         return {metadata.rowsets(set_index).segment_metas(0).encryption_meta(),
                 metadata.rowsets(set_index).del_files(0).encryption_meta(),
                 metadata.sstable_meta().sstables(set_index).encryption_meta(),
                 metadata.delvec_meta().version_to_file().at(base + 4).encryption_meta(),
-                metadata.dcg_meta().dcgs().at(base + 5).encryption_metas(0),
-                metadata.idg_meta().idgs().at(base + 6).entries(0).encryption_meta()};
+                metadata.dcg_meta().dcgs().at(base + 5).encryption_metas(0)};
     }
 
     static void seed_test_encryption_keys() {
@@ -1570,7 +1158,7 @@ protected:
     }
 
     static Status write_file(const std::string& path, std::string_view content) {
-        ASSIGN_OR_RETURN(auto local_fs, FileSystemFactory::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(auto local_fs, FileSystem::CreateSharedFromString(path));
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto output, local_fs->new_writable_file(opts, path));
         RETURN_IF_ERROR(output->append(content));
@@ -1578,7 +1166,7 @@ protected:
     }
 
     static StatusOr<std::string> read_file(const std::string& path) {
-        ASSIGN_OR_RETURN(auto local_fs, FileSystemFactory::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(auto local_fs, FileSystem::CreateSharedFromString(path));
         ASSIGN_OR_RETURN(auto input, local_fs->new_random_access_file(path));
         ASSIGN_OR_RETURN(auto size, input->get_size());
         std::string content(size, '\0');
@@ -1676,17 +1264,17 @@ TEST_F(LakeReplicationMetadataConversionTest, records_exact_private_source_encry
     auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, nullptr,
                           &source_encryption_metas);
     ASSERT_OK(result.status());
-    ASSERT_EQ(12, source_encryption_metas.size());
-    const std::array<std::string, 6> encrypted_metas = {"source-segment", "source-del", "source-sst",
-                                                        "source-delvec",  "source-dcg", "source-idg"};
-    const std::array<std::string, 6> encrypted_filenames = {file_name(1, "dat"),  file_name(2, "del"),
-                                                            file_name(3, "sst"),  file_name(4, "delvec"),
-                                                            file_name(5, "cols"), file_name(6, "idx")};
+    ASSERT_EQ(10, source_encryption_metas.size());
+    const std::array<std::string, 5> encrypted_metas = {"source-segment", "source-del", "source-sst", "source-delvec",
+                                                        "source-dcg"};
+    const std::array<std::string, 5> encrypted_filenames = {file_name(1, "dat"), file_name(2, "del"),
+                                                            file_name(3, "sst"), file_name(4, "delvec"),
+                                                            file_name(5, "cols")};
     for (size_t i = 0; i < encrypted_filenames.size(); ++i) {
         EXPECT_EQ(encrypted_metas[i], source_encryption_metas.at(encrypted_filenames[i]));
     }
     for (const auto& filename : {file_name(21, "dat"), file_name(22, "del"), file_name(23, "sst"),
-                                 file_name(24, "delvec"), file_name(25, "cols"), file_name(26, "idx")}) {
+                                 file_name(24, "delvec"), file_name(25, "cols")}) {
         EXPECT_EQ("", source_encryption_metas.at(filename));
     }
 }
@@ -1905,9 +1493,9 @@ TEST_F(LakeReplicationMetadataConversionTest, range_existing_encrypted_shared_fi
     ASSERT_OK(result.status());
     EXPECT_TRUE(filename_map.empty());
     EXPECT_TRUE(source_encryption_metas.empty());
-    const std::array<std::string, 6> expected_reused = {"target-reused-segment", "target-reused-del",
-                                                        "target-reused-sst",     "target-reused-delvec",
-                                                        "target-reused-dcg",     "target-reused-idg"};
+    const std::array<std::string, 5> expected_reused = {"target-reused-segment", "target-reused-del",
+                                                        "target-reused-sst", "target-reused-delvec",
+                                                        "target-reused-dcg"};
     EXPECT_EQ(expected_reused, file_set_encryption_meta(**result, 0, 0));
     expect_file_set_shared(**result, 0, 0, true);
 }
@@ -2019,7 +1607,7 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_p
     EXPECT_EQ(target_pair0.encryption_meta, output_segments.Get(0).encryption_meta());
     EXPECT_EQ(target_pair1.encryption_meta, output_segments.Get(1).encryption_meta());
 
-    ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_bundle_path));
+    ASSIGN_OR_ABORT(auto target_fs, FileSystem::CreateSharedFromString(target_bundle_path));
     for (int i = 0; i < 2; ++i) {
         ASSIGN_OR_ABORT(auto output_info,
                         KeyCache::instance().unwrap_encryption_meta(output_segments.Get(i).encryption_meta()));
@@ -2091,15 +1679,14 @@ TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_m
 
     auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
     ASSERT_OK(result.status());
-    const std::array<std::string, 6> expected_reused = {"target-reused-segment", "target-reused-del",
-                                                        "target-reused-sst",     "target-reused-delvec",
-                                                        "target-reused-dcg",     "target-reused-idg"};
+    const std::array<std::string, 5> expected_reused = {"target-reused-segment", "target-reused-del",
+                                                        "target-reused-sst", "target-reused-delvec",
+                                                        "target-reused-dcg"};
     EXPECT_EQ(expected_reused, file_set_encryption_meta(**result, 0, 0));
 
     const auto new_encryption_meta = file_set_encryption_meta(**result, 1, 40);
-    const std::array<std::string, 6> source_encryption_meta = {"source-new-segment", "source-new-del",
-                                                               "source-new-sst",     "source-new-delvec",
-                                                               "source-new-dcg",     "source-new-idg"};
+    const std::array<std::string, 5> source_encryption_meta = {"source-new-segment", "source-new-del", "source-new-sst",
+                                                               "source-new-delvec", "source-new-dcg"};
     for (size_t i = 0; i < new_encryption_meta.size(); ++i) {
         EXPECT_FALSE(new_encryption_meta[i].empty());
         EXPECT_NE(source_encryption_meta[i], new_encryption_meta[i]);
@@ -2143,7 +1730,7 @@ TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
     EXPECT_EQ(5, (*result)->rowsets(0).segment_metas(1).bundle_file_offset());
 
     const size_t source_size_for_copy = segment_sizes.contains(bundle_name) ? segment_sizes.at(bundle_name) : 0;
-    ASSIGN_OR_ABORT(auto source_fs, FileSystemFactory::CreateSharedFromString(source_path));
+    ASSIGN_OR_ABORT(auto source_fs, FileSystem::CreateSharedFromString(source_path));
     const auto& target_path = file_locations.begin()->second;
     FileConverterCreatorFunc converter = [target_path](
                                                  const std::string& file_name,
@@ -2160,7 +1747,6 @@ TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
     EXPECT_EQ(physical_contents, copied_contents);
 }
 
->>>>>>> 399af05e1d ([BugFix] Re-encrypt source lake files during replication (#78080))
 #ifdef USE_STAROS
 class InMemoryStarletInputStreamForReplication : public staros::starlet::fslib::InputStream {
 public:
@@ -2469,7 +2055,7 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSourceSegmentIsReencryp
 
     const std::string plaintext = "independent-source-segment-plaintext";
     const std::string encrypted_source_path = lake::join_path(_test_dir, "encrypted-source-segment");
-    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(encrypted_source_path));
+    ASSIGN_OR_ABORT(auto local_fs, FileSystem::CreateSharedFromString(encrypted_source_path));
     WritableFileOptions source_write_opts{.sync_on_close = true,
                                           .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                           .encryption_info = source_pair.info};
@@ -2507,7 +2093,7 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSourceSegmentIsReencryp
     ASSERT_TRUE(update_master_info(active_master_info));
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 81);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     (void)update_master_info(original_master_info);
     ASSERT_OK(status);
 
@@ -2540,7 +2126,7 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSequentialSidecarsAreRe
 
     const std::string plaintext = "encrypted-private-sequential-plaintext";
     const std::string encrypted_source_path = lake::join_path(_test_dir, "encrypted-source-sidecar");
-    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(encrypted_source_path));
+    ASSIGN_OR_ABORT(auto local_fs, FileSystem::CreateSharedFromString(encrypted_source_path));
     WritableFileOptions source_write_opts{.sync_on_close = true,
                                           .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                           .encryption_info = source_pair.info};
@@ -2573,7 +2159,7 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSequentialSidecarsAreRe
     ASSERT_TRUE(update_master_info(active_master_info));
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 82);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     (void)update_master_info(original_master_info);
     ASSERT_OK(status);
 
@@ -2621,7 +2207,7 @@ TEST_F(LakeReplicationRemoteStorageTest, UnencryptedPrivateSourceIsEncryptedAtTa
     ASSERT_TRUE(update_master_info(active_master_info));
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 84);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     (void)update_master_info(original_master_info);
     ASSERT_OK(status);
 
@@ -2631,7 +2217,7 @@ TEST_F(LakeReplicationRemoteStorageTest, UnencryptedPrivateSourceIsEncryptedAtTa
     ASSIGN_OR_ABORT(auto target_info, KeyCache::instance().unwrap_encryption_meta(target_segment.encryption_meta()));
     RandomAccessFileOptions target_read_opts{.encryption_info = target_info};
     const auto target_path = _tablet_mgr->segment_location(_target_tablet_id, target_segment.filename());
-    ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_path));
+    ASSIGN_OR_ABORT(auto target_fs, FileSystem::CreateSharedFromString(target_path));
     ASSIGN_OR_ABORT(auto target_input, target_fs->new_random_access_file(target_read_opts, target_path));
     ASSIGN_OR_ABORT(auto target_plaintext, target_input->read_all());
     EXPECT_EQ(plaintext, target_plaintext);
@@ -2658,7 +2244,7 @@ TEST_F(LakeReplicationRemoteStorageTest, MalformedSourceEncryptionMetadataFailsB
 
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 85);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     EXPECT_FALSE(status.ok());
     EXPECT_EQ(0, mock_fs->open_count());
     const auto target_path =
@@ -2703,7 +2289,7 @@ TEST_F(LakeReplicationRemoteStorageTest, MissingParentSourceEncryptionKeyFailsBe
 
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 86);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     EXPECT_FALSE(status.ok());
     EXPECT_EQ(0, mock_fs->open_count());
     const auto target_path =
@@ -2732,11 +2318,11 @@ TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialSourceReadFailureClean
     ASSERT_TRUE(update_master_info(active_master_info));
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 87);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     (void)update_master_info(original_master_info);
     EXPECT_FALSE(status.ok());
 
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     const auto target_path =
             _tablet_mgr->segment_location(_target_tablet_id, gen_filename_from(_transaction_id, source_sst));
     EXPECT_FALSE(fs::path_exist(target_path));
@@ -2764,12 +2350,12 @@ TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialTargetCloseFailureClea
     ASSERT_TRUE(update_master_info(active_master_info));
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 88);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     (void)update_master_info(original_master_info);
     TEST_DISABLE_ERROR_POINT("PosixFileSystem::close");
     EXPECT_FALSE(status.ok());
 
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     const auto target_path =
             _tablet_mgr->segment_location(_target_tablet_id, gen_filename_from(_transaction_id, source_sst));
     EXPECT_FALSE(fs::path_exist(target_path));
@@ -2799,13 +2385,13 @@ TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialCopyIsCleanedWhenTxnLo
     ASSERT_TRUE(update_master_info(active_master_info));
     auto request = build_request(false /* with_full_path */);
     request.__set_virtual_tablet_id(_virtual_tablet_id + 89);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     (void)update_master_info(original_master_info);
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
     EXPECT_TRUE(status.is_internal_error()) << status;
 
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     const auto target_path =
             _tablet_mgr->segment_location(_target_tablet_id, gen_filename_from(_transaction_id, source_sst));
     EXPECT_FALSE(fs::path_exist(target_path));

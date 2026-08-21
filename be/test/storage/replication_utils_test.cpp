@@ -16,10 +16,10 @@
 
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
-#include "fs/fs_factory.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "platform/key_cache.h"
+#include "fs/key_cache.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -81,8 +81,8 @@ TEST_F(ReplicationUtilsTest, EncryptedSourceConverterDecryptsBeforeTargetEncrypt
     const std::string plaintext = "source-plaintext-payload";
     const std::string source_path = _test_dir + "/converter-source";
     const std::string target_path = _test_dir + "/converter-target";
-    ASSIGN_OR_ABORT(auto source_fs, FileSystemFactory::CreateSharedFromString(source_path));
-    ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_path));
+    ASSIGN_OR_ABORT(auto source_fs, FileSystem::CreateSharedFromString(source_path));
+    ASSIGN_OR_ABORT(auto target_fs, FileSystem::CreateSharedFromString(target_path));
 
     WritableFileOptions source_write_opts{.sync_on_close = true,
                                           .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
@@ -113,7 +113,7 @@ TEST_F(ReplicationUtilsTest, EncryptedSourceConverterDecryptsBeforeTargetEncrypt
     ASSIGN_OR_ABORT(auto default_target_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
     EXPECT_NE(source_pair.info.key, default_target_pair.info.key);
     const std::string default_target_path = _test_dir + "/converter-default-source-options-target";
-    ASSIGN_OR_ABORT(auto default_target_fs, FileSystemFactory::CreateSharedFromString(default_target_path));
+    ASSIGN_OR_ABORT(auto default_target_fs, FileSystem::CreateSharedFromString(default_target_path));
     WritableFileOptions default_target_write_opts{.sync_on_close = true,
                                                   .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                                   .encryption_info = default_target_pair.info};
@@ -145,8 +145,8 @@ TEST_F(ReplicationUtilsTest, EncryptedSourceSequentialCopyDecryptsBeforeTargetEn
     const std::string plaintext = "source-plaintext-payload";
     const std::string source_path = _test_dir + "/sequential-source";
     const std::string target_path = _test_dir + "/sequential-target";
-    ASSIGN_OR_ABORT(auto source_fs, FileSystemFactory::CreateSharedFromString(source_path));
-    ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_path));
+    ASSIGN_OR_ABORT(auto source_fs, FileSystem::CreateSharedFromString(source_path));
+    ASSIGN_OR_ABORT(auto target_fs, FileSystem::CreateSharedFromString(target_path));
 
     WritableFileOptions source_write_opts{.sync_on_close = true,
                                           .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
@@ -169,7 +169,7 @@ TEST_F(ReplicationUtilsTest, EncryptedSourceSequentialCopyDecryptsBeforeTargetEn
     ASSIGN_OR_ABORT(auto default_target_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
     EXPECT_NE(source_pair.info.key, default_target_pair.info.key);
     const std::string default_target_path = _test_dir + "/sequential-default-source-options-target";
-    ASSIGN_OR_ABORT(auto default_target_fs, FileSystemFactory::CreateSharedFromString(default_target_path));
+    ASSIGN_OR_ABORT(auto default_target_fs, FileSystem::CreateSharedFromString(default_target_path));
     WritableFileOptions default_target_write_opts{.sync_on_close = true,
                                                   .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                                   .encryption_info = default_target_pair.info};
