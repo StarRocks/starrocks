@@ -226,6 +226,18 @@ public class CompactionMgr implements MemoryTrackable {
                 .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
     }
 
+    /**
+     * Drop a partition's compaction priority back to DEFAULT. Needed when a priority-carrying request is
+     * abandoned before it starts: the scheduler's own reset only covers partitions that reached
+     * runningCompactions, and ScoreSelector admits a non-DEFAULT priority unconditionally.
+     */
+    void resetPriority(PartitionIdentifier partition) {
+        partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
+            v.resetPriority();
+            return v;
+        });
+    }
+
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.

@@ -383,6 +383,16 @@ public class CompactionScheduler extends Daemon {
             }
             if (unshare && (table.getState() != OlapTable.OlapTableState.TABLET_RESHARD
                     || !partition.isUnsharing() || !table.isFileBundling())) {
+                // Clear the marker before dropping the request. Priority is otherwise only reset for
+                // partitions that made it into runningCompactions, and this one never will -- while
+                // ScoreSelector admits any non-DEFAULT priority regardless of score or cooldown, so the
+                // partition would be reselected and refused every cycle and its ordinary compaction
+                // would never resume. Reachable across a leader switch: a new leader can retrigger
+                // UNSHARE while the committed transaction is still becoming visible, and the cutover
+                // returns the table to NORMAL before this request is served.
+                compactionManager.resetPriority(partitionIdentifier);
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
                 LOG.warn("Ignore stale UNSHARE compaction request for partition {}", partitionIdentifier);
                 return null;
             }
