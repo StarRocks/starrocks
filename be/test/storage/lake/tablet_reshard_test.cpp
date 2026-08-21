@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <set>
 
@@ -31,6 +32,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -55,8 +57,12 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/seek_range.h"
+#include "storage/sstable/block.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/options.h"
+#include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
 
@@ -8681,6 +8687,489 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_with_delvec
     EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
 }
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+// Overwrite the 1-byte compression-type trailer of the first data block with an
+// invalid value, emulating a corrupted local cache copy of the sstable. The
+// block is located through the footer -> index block, so the footer and index
+// block near the file tail stay intact and opening the sstable still succeeds;
+// only reading the data block fails with Corruption ("bad block type"; once
+// block-checksum verification lands the same read fails as a checksum
+// mismatch -- still Corruption).
+static void corrupt_first_data_block_type_byte(const std::string& path) {
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
+    ASSERT_GT(file_size, sstable::Footer::kEncodedLength);
+    std::string content(file_size, '\0');
+    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
+
+    sstable::Footer footer;
+    Slice footer_input(content.data() + file_size - sstable::Footer::kEncodedLength, sstable::Footer::kEncodedLength);
+    ASSERT_OK(footer.DecodeFrom(&footer_input));
+    sstable::BlockContents index_contents;
+    index_contents.data = Slice(content.data() + footer.index_handle().offset(), footer.index_handle().size());
+    index_contents.cachable = false;
+    index_contents.heap_allocated = false;
+    sstable::Block index_block(index_contents);
+    std::unique_ptr<sstable::Iterator> iter(index_block.NewIterator(sstable::BytewiseComparator()));
+    iter->SeekToFirst();
+    ASSERT_TRUE(iter->Valid());
+    Slice handle_value = iter->value();
+    sstable::BlockHandle first_block;
+    ASSERT_OK(first_block.DecodeFrom(&handle_value));
+    // The compression-type byte sits right after the block payload.
+    size_t type_offset = first_block.offset() + first_block.size();
+    ASSERT_LT(type_offset, content.size());
+    content[type_offset] = 0x7f;
+
+    WritableFileOptions wf_opts;
+    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
+    ASSERT_OK(wf->append(Slice(content)));
+    ASSERT_OK(wf->close());
+}
+
+// Regression test for the legacy shared-sstable rebuild reading a corrupted
+// source sstable (usually a bad local cache copy): the merge must fail with
+// Corruption AND drop the source sstable's local cache, so a retried merge
+// scheduled onto this node re-reads from remote storage instead of hitting the
+// same bad blocks forever.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_rebuild_drops_corrupted_source_cache) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string legacy_filename = "corrupted_cache.sst";
+    const auto legacy_path = _tablet_manager->sst_location(child_a, legacy_filename);
+    const uint64_t legacy_filesize =
+            write_legacy_pk_sstable(legacy_path, {{"k1", /*rssid=*/1, /*rowid=*/0}, {"k2", /*rssid=*/2, /*rowid=*/0}});
+    corrupt_first_data_block_type_byte(legacy_path);
+
+    auto make_child = [&](int64_t tablet_id, uint32_t live_rowset_id, const std::string& seg_filename) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(live_rowset_id + 1);
+        set_primary_key_schema(meta.get(), 1001);
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(live_rowset_id);
+        rowset->set_version(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(seg_filename);
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
+        auto* sst = meta->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(legacy_filename);
+        sst->set_filesize(legacy_filesize);
+        sst->set_shared(true);
+        sst->set_max_rss_rowid((static_cast<uint64_t>(2) << 32) | 0);
+        return meta;
+    };
+
+    EXPECT_OK(put_tablet_metadata(make_child(child_a, /*live_rowset_id=*/1, "seg_a.dat")));
+    EXPECT_OK(put_tablet_metadata(make_child(child_b, /*live_rowset_id=*/2, "seg_b.dat")));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(99);
+
+    bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    int drop_cnt = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+
+    ASSERT_FALSE(status.ok()) << "merge over a corrupted source sstable must fail";
+    EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
+    // The failing source sstable's local cache must have been dropped exactly
+    // once (opening succeeds — footer and index block are intact — so only the
+    // rebuild's cleanup handler fires).
+    EXPECT_EQ(1, drop_cnt);
+}
+
+// Same corruption scenario through the non-shared legacy rebuild route
+// (rebuild_non_shared_legacy_sstable). The metadata layout mirrors
+// test_tablet_merging_non_shared_sstable_mixed_refs_routes_to_rebuild: ctx_b's
+// non-shared sstable mixes refs to the shared-ancestor rowset and a child-local
+// rowset with a non-zero offset gap, so dispatch takes the per-entry rebuild
+// (a pure-projection layout would never read the file and the corruption would
+// go unnoticed). Corruption surfaces at the initial SeekToFirst, and the early
+// status check must drop the source cache too.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_corrupted_source_cache) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string ns_filename = "ns_corrupted_cache.sst";
+    const auto ns_path = _tablet_manager->sst_location(child_b, ns_filename);
+    const uint64_t ns_filesize = write_legacy_pk_sstable(
+            ns_path, {{"k_shared", /*rssid=*/1, /*rowid=*/0}, {"k_local", /*rssid=*/2, /*rowid=*/0}});
+    corrupt_first_data_block_type_byte(ns_path);
+
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(3);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rs_a1 = meta_a->add_rowsets();
+    rs_a1->set_id(1);
+    rs_a1->set_version(1);
+    rs_a1->set_num_rows(10);
+    rs_a1->set_data_size(100);
+    {
+        auto* sm = rs_a1->add_segment_metas();
+        sm->set_filename("shared.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
+    stamp_physical_identity_uid(rs_a1, "shared.dat");
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(3);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rs_b1 = meta_b->add_rowsets();
+    rs_b1->set_id(1);
+    rs_b1->set_version(1);
+    rs_b1->set_num_rows(10);
+    rs_b1->set_data_size(100);
+    {
+        auto* sm = rs_b1->add_segment_metas();
+        sm->set_filename("shared.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+    }
+    stamp_physical_identity_uid(rs_b1, "shared.dat");
+    auto* rs_b2 = meta_b->add_rowsets();
+    rs_b2->set_id(2);
+    rs_b2->set_version(1);
+    rs_b2->set_num_rows(5);
+    rs_b2->set_data_size(50);
+    {
+        auto* sm = rs_b2->add_segment_metas();
+        sm->set_filename("ctx_b_local.dat");
+        sm->set_size(50);
+        sm->set_shared(false);
+    }
+    auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
+    sst_b->set_filename(ns_filename);
+    sst_b->set_filesize(ns_filesize);
+    sst_b->set_shared(false);
+    sst_b->set_max_rss_rowid((static_cast<uint64_t>(2) << 32) | 0);
+
+    EXPECT_OK(put_tablet_metadata(meta_a));
+    EXPECT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(100);
+
+    bool old_cfg = config::lake_clear_corrupted_cache_data;
+    config::lake_clear_corrupted_cache_data = true;
+    int drop_cnt = 0;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::lake_clear_corrupted_cache_data = old_cfg;
+
+    ASSERT_FALSE(status.ok()) << "merge over a corrupted non-shared source sstable must fail";
+    EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
+    EXPECT_EQ(1, drop_cnt);
+}
+
+// Build a real, structurally intact sstable whose single entry carries value bytes
+// that cannot be parsed as IndexValuesWithVerPB (0x00 is an invalid protobuf tag).
+// Blocks and checksums are valid, so opening and iterating succeed and the
+// corruption only surfaces when the rebuild parses the value.
+static uint64_t write_garbage_value_pk_sstable(const std::string& path) {
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto wf_or = fs::new_writable_file(opts, path);
+    CHECK_OK(wf_or.status());
+    auto wf = std::move(wf_or.value());
+    sstable::Options options;
+    sstable::TableBuilder builder(options, wf.get());
+    CHECK_OK(builder.Add(Slice("garbage_key"), Slice("\x00garbage", 8)));
+    CHECK_OK(builder.Finish());
+    const uint64_t filesize = builder.FileSize();
+    CHECK_OK(wf->close());
+    return filesize;
+}
+
+// The drop-source-cache handling must also cover "semantic" corruption: bytes that
+// keep the block structure (and its checksum) intact but carry impossible content.
+// Two forms, through the legacy shared rebuild route:
+//   (a) entry value bytes that fail IndexValuesWithVerPB parsing;
+//   (b) a parseable entry whose stored rssid plus the PB-level rssid_offset
+//       overflows uint32 (the per-entry remap guard reports Corruption).
+// Both must fail the merge as Corruption AND drop the source sstable's cache.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_legacy_rebuild_drops_cache_on_semantic_corruption) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+
+    auto run_scenario = [&](const std::function<uint64_t(const std::string&)>& write_sst, int32_t rssid_offset,
+                            int64_t txn_id) -> std::pair<Status, int> {
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        const std::string filename = fmt::format("semantic_shared_{}.sst", txn_id);
+        const uint64_t filesize = write_sst(_tablet_manager->sst_location(child_a, filename));
+
+        auto make_child = [&](int64_t tablet_id, uint32_t live_rowset_id, const std::string& seg_filename) {
+            auto meta = std::make_shared<TabletMetadataPB>();
+            meta->set_id(tablet_id);
+            meta->set_version(base_version);
+            meta->set_next_rowset_id(live_rowset_id + 1);
+            set_primary_key_schema(meta.get(), 1001);
+            auto* rowset = meta->add_rowsets();
+            rowset->set_id(live_rowset_id);
+            rowset->set_version(1);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            {
+                auto* sm = rowset->add_segment_metas();
+                sm->set_filename(seg_filename);
+                sm->set_size(100);
+                sm->set_shared(true);
+            }
+            auto* sst = meta->mutable_sstable_meta()->add_sstables();
+            sst->set_filename(filename);
+            sst->set_filesize(filesize);
+            sst->set_shared(true);
+            sst->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | 0);
+            if (rssid_offset != 0) {
+                sst->set_rssid_offset(rssid_offset);
+            }
+            return meta;
+        };
+
+        EXPECT_OK(put_tablet_metadata(make_child(child_a, /*live_rowset_id=*/1, "seg_a.dat")));
+        EXPECT_OK(put_tablet_metadata(make_child(child_b, /*live_rowset_id=*/2, "seg_b.dat")));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(child_a);
+        merging_info.add_old_tablet_ids(child_b);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+
+        bool old_cfg = config::lake_clear_corrupted_cache_data;
+        config::lake_clear_corrupted_cache_data = true;
+        int drop_cnt = 0;
+        SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
+                                              [&](void*) { ++drop_cnt; });
+        SyncPoint::GetInstance()->EnableProcessing();
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
+                                                      new_version, txn_info, false, tablet_metadatas, tablet_ranges);
+
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::lake_clear_corrupted_cache_data = old_cfg;
+        return {status, drop_cnt};
+    };
+
+    // (a) value bytes that fail protobuf parsing.
+    auto [parse_status, parse_drops] =
+            run_scenario([](const std::string& path) { return write_garbage_value_pk_sstable(path); },
+                         /*rssid_offset=*/0, /*txn_id=*/201);
+    ASSERT_FALSE(parse_status.ok()) << "merge over an unparseable source value must fail";
+    EXPECT_TRUE(parse_status.is_corruption()) << parse_status;
+    EXPECT_EQ(1, parse_drops);
+
+    // (b) parseable entry whose stored rssid + rssid_offset overflows uint32
+    // (rowid stays 0 so the entry is not a tombstone sentinel).
+    auto [overflow_status, overflow_drops] = run_scenario(
+            [this](const std::string& path) {
+                return write_legacy_pk_sstable(path, {{"k_overflow", std::numeric_limits<uint32_t>::max(), 0}});
+            },
+            /*rssid_offset=*/1, /*txn_id=*/202);
+    ASSERT_FALSE(overflow_status.ok()) << "merge over an out-of-range stored rssid must fail";
+    EXPECT_TRUE(overflow_status.is_corruption()) << overflow_status;
+    EXPECT_EQ(1, overflow_drops);
+}
+
+// Same two semantic-corruption forms through the non-shared rebuild route
+// (mixed-refs metadata layout, see
+// test_tablet_merging_non_shared_rebuild_drops_corrupted_source_cache).
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_cache_on_semantic_corruption) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+
+    auto run_scenario = [&](const std::function<uint64_t(const std::string&)>& write_sst, int32_t rssid_offset,
+                            int64_t txn_id) -> std::pair<Status, int> {
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(merged_tablet);
+
+        const std::string filename = fmt::format("semantic_ns_{}.sst", txn_id);
+        const uint64_t filesize = write_sst(_tablet_manager->sst_location(child_b, filename));
+
+        auto meta_a = std::make_shared<TabletMetadataPB>();
+        meta_a->set_id(child_a);
+        meta_a->set_version(base_version);
+        meta_a->set_next_rowset_id(3);
+        set_primary_key_schema(meta_a.get(), 1001);
+        auto* rs_a1 = meta_a->add_rowsets();
+        rs_a1->set_id(1);
+        rs_a1->set_version(1);
+        rs_a1->set_num_rows(10);
+        rs_a1->set_data_size(100);
+        {
+            auto* sm = rs_a1->add_segment_metas();
+            sm->set_filename("shared.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
+        stamp_physical_identity_uid(rs_a1, "shared.dat");
+
+        auto meta_b = std::make_shared<TabletMetadataPB>();
+        meta_b->set_id(child_b);
+        meta_b->set_version(base_version);
+        meta_b->set_next_rowset_id(3);
+        set_primary_key_schema(meta_b.get(), 1001);
+        auto* rs_b1 = meta_b->add_rowsets();
+        rs_b1->set_id(1);
+        rs_b1->set_version(1);
+        rs_b1->set_num_rows(10);
+        rs_b1->set_data_size(100);
+        {
+            auto* sm = rs_b1->add_segment_metas();
+            sm->set_filename("shared.dat");
+            sm->set_size(100);
+            sm->set_shared(true);
+        }
+        stamp_physical_identity_uid(rs_b1, "shared.dat");
+        auto* rs_b2 = meta_b->add_rowsets();
+        rs_b2->set_id(2);
+        rs_b2->set_version(1);
+        rs_b2->set_num_rows(5);
+        rs_b2->set_data_size(50);
+        {
+            auto* sm = rs_b2->add_segment_metas();
+            sm->set_filename("ctx_b_local.dat");
+            sm->set_size(50);
+            sm->set_shared(false);
+        }
+        auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
+        sst_b->set_filename(filename);
+        sst_b->set_filesize(filesize);
+        sst_b->set_shared(false);
+        sst_b->set_max_rss_rowid((static_cast<uint64_t>(2) << 32) | 0);
+        if (rssid_offset != 0) {
+            sst_b->set_rssid_offset(rssid_offset);
+        }
+
+        EXPECT_OK(put_tablet_metadata(meta_a));
+        EXPECT_OK(put_tablet_metadata(meta_b));
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(child_a);
+        merging_info.add_old_tablet_ids(child_b);
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+
+        bool old_cfg = config::lake_clear_corrupted_cache_data;
+        config::lake_clear_corrupted_cache_data = true;
+        int drop_cnt = 0;
+        SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
+                                              [&](void*) { ++drop_cnt; });
+        SyncPoint::GetInstance()->EnableProcessing();
+
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
+                                                      new_version, txn_info, false, tablet_metadatas, tablet_ranges);
+
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::lake_clear_corrupted_cache_data = old_cfg;
+        return {status, drop_cnt};
+    };
+
+    // (a) value bytes that fail protobuf parsing. The routing predicate is
+    // metadata-only, so the mixed-refs layout still dispatches to the rebuild.
+    auto [parse_status, parse_drops] =
+            run_scenario([](const std::string& path) { return write_garbage_value_pk_sstable(path); },
+                         /*rssid_offset=*/0, /*txn_id=*/203);
+    ASSERT_FALSE(parse_status.ok()) << "merge over an unparseable source value must fail";
+    EXPECT_TRUE(parse_status.is_corruption()) << parse_status;
+    EXPECT_EQ(1, parse_drops);
+
+    // (b) parseable entry whose stored rssid + rssid_offset falls below zero.
+    // A negative offset is used because the routing range is
+    // [max(0, offset + 1), max_rss_rowid.high]: a positive offset would lift the
+    // lower bound past the disagreeing rowset id 1 and dispatch would take the
+    // metadata-only projection without ever reading the file; with offset=-1 the
+    // range [0, 2] still contains id 1, the rebuild route is kept, and the first
+    // entry (stored rssid 0, lifted to -1) trips the range guard.
+    auto [overflow_status, overflow_drops] = run_scenario(
+            [this](const std::string& path) {
+                return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}});
+            },
+            /*rssid_offset=*/-1, /*txn_id=*/204);
+    ASSERT_FALSE(overflow_status.ok()) << "merge over an out-of-range stored rssid must fail";
+    EXPECT_TRUE(overflow_status.is_corruption()) << overflow_status;
+    EXPECT_EQ(1, overflow_drops);
+}
+
+#endif // USE_STAROS && !BUILD_FORMAT_LIB
+
 // TODO(round-3 follow-up): test_tablet_merging_legacy_sstable_rebuild_filters_outside_tablet_range
 // This test would set up real INT-typed PK columns + tablet ranges with
 // PrimaryKeyEncoder-encoded sstable keys to verify the rebuild's tablet-range
@@ -11805,6 +12294,32 @@ TEST_F(LakeTabletReshardTest, test_reshard_flush_stamps_fresh_sstable_with_new_v
     EXPECT_EQ(new_version, flushed->sstable_meta().sstables(0).generation_version())
             << "a freshly-flushed reshard sstable must carry the reshard publish version, else an "
                "incremental snapshot keyed on version>pre_version would skip it (data loss)";
+}
+
+// Aggregate publish builds query-parent metadata before persisting the new-version bundle. Its
+// child metadata therefore exists only in memory while merge_sstables flushes each child's PK
+// index. The rebuild must use that supplied metadata for delvec lookup instead of trying to read
+// the not-yet-created bundle from object storage.
+TEST_F(LakeTabletReshardTest, test_reshard_flush_uses_unpersisted_in_memory_metadata) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    const int64_t in_memory_version = 11;
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+
+    constexpr int kNumRows = 16;
+    const std::string seg_name = "seg_unpersisted_bundle.dat";
+    const uint64_t seg_size = write_two_column_segment(tablet_id, seg_name, kNumRows, [](int r) { return r * 10; });
+    auto meta = make_single_segment_pk_tablet(tablet_id, in_memory_version, seg_name, seg_size, kNumRows);
+
+    // Deliberately do not call put_tablet_metadata(meta): this models the metadata returned by the
+    // per-tablet aggregate-publish RPC before the coordinator writes the partition bundle.
+    ASSERT_TRUE(_tablet_manager->get_tablet_metadata(tablet_id, in_memory_version).status().is_not_found());
+
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, in_memory_version));
+    ASSERT_NE(flushed, nullptr);
+    EXPECT_EQ(in_memory_version, flushed->version());
+    ASSERT_EQ(1, flushed->sstable_meta().sstables_size());
+    EXPECT_EQ(in_memory_version, flushed->sstable_meta().sstables(0).generation_version());
 }
 
 // Same rebuild-from-segment source, driven through the real split publish path,

@@ -4831,10 +4831,18 @@ public class Config extends ConfigBase {
      * The minimum size of a tablet produced by pre-split. Bounds the compute-node alignment
      * during pre-split so that splitting a small load across many compute nodes does not
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
+     *
+     * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
+     * fewer tablets than the bound aims at one tablet per slot in it, but never at less than this --
+     * so raising this to tune pre-split also delays that split. The bound is the warehouse's
+     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
+     * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
+     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
+     * the size rule it does not produce children below the target it aimed at.
      */
-    @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
-            + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
-            + "Should be no larger than tablet_reshard_target_size.")
+    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
+            + "bound on the target an under-provisioned index splits at. Should be no larger than "
+            + "tablet_reshard_target_size; setting it at or above that disables the adaptive split.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "
@@ -4867,6 +4875,13 @@ public class Config extends ConfigBase {
             + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
             + "enable_tablet_pre_split must also be true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
+
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "
+            + "refresh of a range-distributed incremental materialized view. Such a view is keyed by a "
+            + "hidden row-id column whose value domain is known, so its boundaries are derived rather "
+            + "than sampled and no data is read. Set to false to disable cluster-wide. The session "
+            + "variable enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_mv_refresh = true;
 
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
@@ -5017,4 +5032,12 @@ public class Config extends ConfigBase {
             "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
             "or equal to 0 are treated as 0, which truncates the list entirely.")
     public static int explain_dict_column_size = 5;
+
+    @ConfField(mutable = true, comment = "Safety net for the failpoint pause mode. A thread parked " +
+            "at a failpoint armed with ADMIN ENABLE FAILPOINT ... WITH PAUSE resumes after this many " +
+            "seconds even if ADMIN DISABLE FAILPOINT is never issued, so a forgotten pause cannot " +
+            "wedge a node until it is restarted. Values below 1 are clamped to 1. The value is also " +
+            "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
+            "timeout.")
+    public static int failpoint_pause_timeout_second = 300;
 }

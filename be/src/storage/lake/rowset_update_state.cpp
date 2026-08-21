@@ -36,6 +36,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
+#include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
@@ -235,6 +236,8 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
     auto& iter = _segment_iters[segment_id];
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
+    // Before init(), which eagerly loads the first chunk: the selection is built inside _load().
+    result->set_row_selector(_row_selector.get());
     RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
@@ -493,13 +496,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    // Segments count as "there is something to rewrite" alongside num_rows. On a split cross
-    // publish that count is apportioned per sibling, so a row-mode partial update whose segments
-    // hold this tablet's rows can still arrive with num_rows == 0; returning on the count alone
-    // would leave the partial segment (only the updated columns) attached without its unmodified
-    // columns rewritten in.
+    // Whether there is anything to rewrite is exactly "does this rowset hold rows", so ask the shared
+    // predicate rather than either count on its own. The rowset counter is apportioned per sibling on
+    // a split cross publish, so a row-mode partial update whose segments hold this tablet's rows can
+    // arrive with num_rows == 0; returning on it alone would leave the partial segment (only the
+    // updated columns) attached without its unmodified columns rewritten in. Merely counting segments
+    // is not enough either: a DELETE-only write is also a "partial update" (its write schema is just
+    // the primary key columns) and it emits one segment per flush that is empty by construction --
+    // the segment exists only to reserve the del file's op_offset. Rewriting those is pointless IO,
+    // and fatal once ORDER BY puts value columns into a primary key table's sort key, because the
+    // rewrite writes the unmodified (value-only) column set and SegmentWriter::init then demands the
+    // whole sort key be present in it.
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
-        (rowset_meta.num_rows() == 0 && rowset_meta.segment_metas_size() == 0)) {
+        !rowset_holds_rows(rowset_meta)) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
@@ -874,6 +883,11 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
             pk_columns.push_back((uint32_t)i);
         }
         _pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
+        // Only a SPLIT child's cross publish gets one; it is nullptr on every ordinary publish and
+        // costs nothing there. Built once per rowset and reused by every segment's iterator, which
+        // is what lets it hold its encode buffer across chunks.
+        ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(
+                                                *params.metadata, params.tablet_schema, params.op_write.rowset()));
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
@@ -1020,10 +1034,9 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
         }
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
-    ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     // Verify before decoding: a corrupt del file that still deserializes cleanly would erase the
-    // wrong primary keys.
-    RETURN_IF_ERROR(verify_del_file_crc32c(del_meta, params.tablet->id(), read_buffer));
+    // wrong primary keys. Drops the local data cache and re-reads once on a checksum mismatch.
+    ASSIGN_OR_RETURN(auto read_buffer, read_and_verify_del_file(read_file.get(), del_meta, params.tablet->id()));
     auto col = pk_column->clone();
     using Serd = serde::ColumnArraySerde;
     const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());

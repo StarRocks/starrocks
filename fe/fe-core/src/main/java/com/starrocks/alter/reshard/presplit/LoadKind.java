@@ -25,7 +25,13 @@ package com.starrocks.alter.reshard.presplit;
 public enum LoadKind {
     INSERT_FROM_FILES("INSERT-from-FILES"),
     INSERT_FROM_TABLE("INSERT-from-table"),
-    BROKER_LOAD("Broker Load");
+    BROKER_LOAD("Broker Load"),
+    /**
+     * An incremental materialized view's refresh. Its boundaries come from the derived tier — the
+     * hidden row-id key's domain is known, so no sampler runs — which is why this kind never reaches
+     * {@code DefaultPreSplitPipeline}'s sampler factories.
+     */
+    MV_REFRESH("incremental MV refresh");
 
     private final String displayName;
 

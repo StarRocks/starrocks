@@ -368,6 +368,187 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
     }
 }
 
+TEST_F(MergeIteratorTest, mask_merge_with_selection) {
+    auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 3, 5}));
+    auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{2, 4, 6}));
+
+    std::vector<RowSourceMask> source_masks;
+    for (uint16_t source : std::vector<uint16_t>{0, 1, 0, 1, 0, 1}) {
+        source_masks.emplace_back(source, false);
+    }
+    std::vector<RowSourceMask> selections;
+    for (uint16_t selected : std::vector<uint16_t>{0, 1, 1, 0, 0, 1}) {
+        selections.emplace_back(selected, false);
+    }
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    std::vector<int32_t> actual;
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    while (iter->get_next(chunk.get()).ok()) {
+        const auto& column = chunk->get_column_by_index(0);
+        for (size_t i = 0; i < column->size(); ++i) {
+            actual.push_back(column->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    EXPECT_EQ((std::vector<int32_t>{2, 3, 6}), actual);
+}
+
+// Regression for the branch the mixed-selection case above cannot reach. With every row selected,
+// max_same_source_count equals the whole chunk, so do_get_next takes the `swap_chunk` shortcut and
+// returns `fill(child)` -- the call that also observes the child's EOF. MaskMergeIterator::fill
+// swallows that EOF and returns OK, so the swapped rows must still be delivered on this call and the
+// EOF must surface only on the next one. Getting that wrong silently truncates the last chunk of an
+// UNSHARE rewrite.
+TEST_F(MergeIteratorTest, mask_merge_single_child_all_selected_defers_eof) {
+    auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 2, 3, 4}));
+    std::vector<RowSourceMask> source_masks(4, RowSourceMask{0, false});
+    std::vector<RowSourceMask> selections(4, RowSourceMask{1, false});
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    auto st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(4, chunk->num_rows()) << "the whole-chunk swap must deliver its rows, not drop them with the EOF";
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(i + 1, chunk->get_column_by_index(0)->get(i).get_int32());
+    }
+
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).is_end_of_file()) << "EOF belongs to the call after the last rows";
+    EXPECT_EQ(0, chunk->num_rows());
+}
+
+// The two buffers are read in lockstep, one entry per row. If they disagree on how many rows remain,
+// the merge would silently pair a row with another row's verdict, so it must fail instead. This is
+// the check on entry; the one below covers the same disagreement discovered mid-skip.
+TEST_F(MergeIteratorTest, mask_merge_rejects_selection_shorter_than_mask) {
+    auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 2, 3, 4}));
+    std::vector<RowSourceMask> source_masks(4, RowSourceMask{0, false});
+    std::vector<RowSourceMask> selections(2, RowSourceMask{1, false}); // two rows short
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+
+    Status st = Status::OK();
+    for (int i = 0; i < 4 && st.ok(); ++i) {
+        chunk->reset();
+        st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) break;
+    }
+    ASSERT_FALSE(st.ok()) << "a truncated selection stream must not merge silently";
+    EXPECT_TRUE(st.message().find("different lengths") != std::string::npos) << st.to_string();
+}
+
+// Every row unselected: the skip path runs to the end of the chunk, and the iterator must report EOF
+// rather than emit an empty chunk as if it were data.
+TEST_F(MergeIteratorTest, mask_merge_all_rows_unselected_yields_eof) {
+    auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 2, 3, 4}));
+    std::vector<RowSourceMask> source_masks(4, RowSourceMask{0, false});
+    std::vector<RowSourceMask> selections(4, RowSourceMask{0, false});
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    auto st = iter->get_next(chunk.get());
+    ASSERT_TRUE(st.is_end_of_file()) << st.to_string();
+    EXPECT_EQ(0, chunk->num_rows());
+}
+
+// The unselected rows sit at the END of the chunk, so the skip loop is what exhausts it. The rows
+// before them must still come out, and the exhaustion must not be mistaken for a failure.
+TEST_F(MergeIteratorTest, mask_merge_trailing_unselected_rows_still_emit_the_prefix) {
+    auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 2, 3, 4}));
+    std::vector<RowSourceMask> source_masks(4, RowSourceMask{0, false});
+    std::vector<RowSourceMask> selections{RowSourceMask{1, false}, RowSourceMask{1, false}, RowSourceMask{0, false},
+                                          RowSourceMask{0, false}};
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(1, chunk->get_column_by_index(0)->get(0).get_int32());
+    EXPECT_EQ(2, chunk->get_column_by_index(0)->get(1).get_int32());
+
+    chunk->reset();
+    EXPECT_TRUE(iter->get_next(chunk.get()).is_end_of_file());
+}
+
+TEST_F(MergeIteratorTest, mask_merge_single_child_with_selection) {
+    auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 2, 3, 4}));
+    std::vector<RowSourceMask> source_masks(4, RowSourceMask{0, false});
+    std::vector<RowSourceMask> selections{RowSourceMask{0, false}, RowSourceMask{1, false}, RowSourceMask{0, false},
+                                          RowSourceMask{1, false}};
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(2, chunk->get_column_by_index(0)->get(0).get_int32());
+    EXPECT_EQ(4, chunk->get_column_by_index(0)->get(1).get_int32());
+}
+
 TEST_F(MergeIteratorTest, mask_merge_exhausted_iterator) {
     std::vector<int32_t> v1{1, 2}; // Only 2 elements
     std::vector<int32_t> v2{10, 11};
