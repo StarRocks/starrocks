@@ -435,13 +435,12 @@ void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool
     if (_small_index_region_size > static_cast<uint64_t>(config::segment_tail_index_prefetch_max_bytes)) {
         // A very wide table can produce a region larger than any one query needs; fetching it
         // whole would trade the saved round trips back for wasted bytes.
-        VLOG(2) << "skip small index region prefetch of " << _small_index_region_size
-                << " bytes (over cap) for " << read_file->filename();
+        VLOG(2) << "skip small index region prefetch of " << _small_index_region_size << " bytes (over cap) for "
+                << read_file->filename();
         return;
     }
     std::call_once(_small_index_prefetch_once, [&] {
-        if (Status st = read_file->touch_cache(_small_index_region_offset, _small_index_region_size);
-            !st.ok()) {
+        if (Status st = read_file->touch_cache(_small_index_region_offset, _small_index_region_size); !st.ok()) {
             VLOG(2) << "small index region prefetch failed for " << read_file->filename() << ": " << st;
             return;
         }
