@@ -444,6 +444,16 @@ public class LoadMgr implements MemoryTrackable {
                 } catch (StarRocksException e) {
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
+            } else if (state.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                // The transaction was already committed and visible, but the
+                // OP_END_LOAD_JOB_V2 journal was not written before FE crashed.
+                // Finish the job so it does not remain permanently stuck in QUEUEING.
+                try {
+                    recordFinishedOrCancelledLoadJob(job.getId(), EtlJobType.INSERT, "", "");
+                    LOG.warn("finish job: {}-{} since transaction is already visible", job.getLabel(), job.getId());
+                } catch (StarRocksException e) {
+                    LOG.warn("failed to finish job: {}", job.getLabel(), e);
+                }
             }
         });
     }
