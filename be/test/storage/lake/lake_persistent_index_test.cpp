@@ -17,6 +17,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -33,6 +37,7 @@
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
@@ -44,12 +49,70 @@
 #include "storage/sstable/format.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/options.h"
+#include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "test_util.h"
 #include "types/datum.h"
 
 namespace starrocks::lake {
+
+class KeyValueMergerTestIterator final : public sstable::Iterator {
+public:
+    KeyValueMergerTestIterator(std::string key, int64_t version, IndexValue value, uint64_t max_rss_rowid,
+                               DelVectorPtr delvec = nullptr)
+            : _key(std::move(key)), _max_rss_rowid(max_rss_rowid), _delvec(std::move(delvec)) {
+        IndexValuesWithVerPB value_pb;
+        auto* entry = value_pb.add_values();
+        entry->set_version(version);
+        entry->set_rssid(value.get_rssid());
+        entry->set_rowid(value.get_rowid());
+        _value = value_pb.SerializeAsString();
+    }
+
+    bool Valid() const override { return true; }
+    void SeekToFirst() override {}
+    void SeekToLast() override {}
+    void Seek(const Slice& /*target*/) override {}
+    void Next() override {}
+    void Prev() override {}
+    Slice key() const override { return Slice(_key); }
+    Slice value() const override { return Slice(_value); }
+    Status status() const override { return Status::OK(); }
+    uint64_t max_rss_rowid() const override { return _max_rss_rowid; }
+    DelVectorPtr delvec() const override { return _delvec; }
+
+private:
+    std::string _key;
+    std::string _value;
+    uint64_t _max_rss_rowid;
+    DelVectorPtr _delvec;
+};
+
+void read_key_value_merger_outputs(TabletManager* tablet_mgr, int64_t tablet_id,
+                                   const std::vector<KeyValueMerger::KeyValueMergerOutput>& outputs,
+                                   std::vector<std::pair<std::string, IndexValueWithVer>>* entries) {
+    for (const auto& output : outputs) {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(tablet_mgr->sst_location(tablet_id, output.filename)));
+        sstable::Options options;
+        std::unique_ptr<sstable::Table> table;
+        ASSERT_OK(sstable::Table::Open(options, rf.get(), output.filesize, table));
+        sstable::ReadOptions read_options;
+        std::unique_ptr<sstable::Iterator> iter(table->NewIterator(read_options));
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            ASSERT_OK(iter->status());
+            IndexValuesWithVerPB value_pb;
+            ASSERT_TRUE(value_pb.ParseFromArray(iter->value().data, iter->value().size));
+            ASSERT_EQ(1, value_pb.values_size());
+            const auto& value = value_pb.values(0);
+            entries->emplace_back(
+                    iter->key().to_string(),
+                    IndexValueWithVer{value.version(),
+                                      IndexValue((static_cast<uint64_t>(value.rssid()) << 32) | value.rowid())});
+        }
+        ASSERT_OK(iter->status());
+    }
+}
 
 class LakePersistentIndexTest : public TestBase {
 public:
@@ -259,6 +322,90 @@ protected:
         ASSERT_OK(wf->close());
     }
 };
+
+TEST_F(LakePersistentIndexTest, test_key_value_merger_duplicate_only_emits_newer_live) {
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), false,
+                          KeyValueMergerOutputMode::kDuplicateKeysOnly);
+    KeyValueMergerTestIterator unique("unique", 1, IndexValue((static_cast<uint64_t>(1) << 32) | 1), 1);
+    KeyValueMergerTestIterator older("duplicate", 7, IndexValue((static_cast<uint64_t>(2) << 32) | 7), 7);
+    KeyValueMergerTestIterator newer("duplicate", 9, IndexValue((static_cast<uint64_t>(3) << 32) | 9), 9);
+
+    ASSERT_OK(merger.merge(&unique));
+    ASSERT_OK(merger.merge(&older));
+    ASSERT_OK(merger.merge(&newer));
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+
+    std::vector<std::pair<std::string, IndexValueWithVer>> entries;
+    read_key_value_merger_outputs(_tablet_mgr.get(), _tablet_metadata->id(), outputs, &entries);
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ("duplicate", entries[0].first);
+    EXPECT_EQ(9, entries[0].second.first);
+    EXPECT_EQ((static_cast<uint64_t>(3) << 32) | 9, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_key_value_merger_duplicate_only_keeps_newer_tombstone) {
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), false,
+                          KeyValueMergerOutputMode::kDuplicateKeysOnly);
+    KeyValueMergerTestIterator older("deleted", 7, IndexValue((static_cast<uint64_t>(2) << 32) | 7), 7);
+    KeyValueMergerTestIterator tombstone("deleted", 9, IndexValue(NullIndexValue), 9);
+
+    ASSERT_OK(merger.merge(&older));
+    ASSERT_OK(merger.merge(&tombstone));
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+
+    std::vector<std::pair<std::string, IndexValueWithVer>> entries;
+    read_key_value_merger_outputs(_tablet_mgr.get(), _tablet_metadata->id(), outputs, &entries);
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ("deleted", entries[0].first);
+    EXPECT_EQ(9, entries[0].second.first);
+    EXPECT_EQ(NullIndexValue, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_key_value_merger_duplicate_only_counts_after_delvec) {
+    auto delvec = std::make_shared<DelVector>();
+    const uint32_t deleted_rowid = 5;
+    delvec->init(1, &deleted_rowid, 1);
+
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), false,
+                          KeyValueMergerOutputMode::kDuplicateKeysOnly);
+    KeyValueMergerTestIterator deleted("filtered", 7, IndexValue((static_cast<uint64_t>(2) << 32) | deleted_rowid), 7,
+                                       delvec);
+    KeyValueMergerTestIterator surviving("filtered", 9, IndexValue((static_cast<uint64_t>(3) << 32) | 6), 9);
+    KeyValueMergerTestIterator older("duplicate", 7, IndexValue((static_cast<uint64_t>(4) << 32) | 7), 7);
+    KeyValueMergerTestIterator newer("duplicate", 9, IndexValue((static_cast<uint64_t>(5) << 32) | 9), 9);
+
+    ASSERT_OK(merger.merge(&deleted));
+    ASSERT_OK(merger.merge(&surviving));
+    ASSERT_OK(merger.merge(&older));
+    ASSERT_OK(merger.merge(&newer));
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+
+    std::vector<std::pair<std::string, IndexValueWithVer>> entries;
+    read_key_value_merger_outputs(_tablet_mgr.get(), _tablet_metadata->id(), outputs, &entries);
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ("duplicate", entries[0].first);
+    EXPECT_EQ(9, entries[0].second.first);
+    EXPECT_EQ((static_cast<uint64_t>(5) << 32) | 9, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_key_value_merger_duplicate_only_normalizes_identical_values) {
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), false,
+                          KeyValueMergerOutputMode::kDuplicateKeysOnly);
+    constexpr uint64_t value = (static_cast<uint64_t>(7) << 32) | 11;
+    KeyValueMergerTestIterator first("same", 9, IndexValue(value), 11);
+    KeyValueMergerTestIterator second("same", 9, IndexValue(value), 11);
+
+    ASSERT_OK(merger.merge(&first));
+    ASSERT_OK(merger.merge(&second));
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+
+    std::vector<std::pair<std::string, IndexValueWithVer>> entries;
+    read_key_value_merger_outputs(_tablet_mgr.get(), _tablet_metadata->id(), outputs, &entries);
+    ASSERT_EQ(1, entries.size());
+    EXPECT_EQ("same", entries[0].first);
+    EXPECT_EQ(9, entries[0].second.first);
+    EXPECT_EQ(value, entries[0].second.second.get_value());
+}
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
