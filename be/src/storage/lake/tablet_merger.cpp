@@ -2192,20 +2192,17 @@ std::optional<uint64_t> project_source_max_rss_rowid(const PersistentIndexSstabl
     return projected;
 }
 
+void update_optional_max(uint64_t candidate, std::optional<uint64_t>* current) {
+    *current = current->has_value() ? std::max(**current, candidate) : candidate;
+}
+
 // Walk |values_pb|'s non-tombstone entries and update |*max_encoded| with
 // the encoded `(rssid<<32)|rowid` if larger.
 void update_max_encoded_rss_rowid_from(const IndexValuesWithVerPB& values_pb, std::optional<uint64_t>* max_encoded) {
     for (const auto& index_value : values_pb.values()) {
         if (is_index_tombstone(index_value)) continue;
-        const uint64_t encoded = encode_rss_rowid(index_value.rssid(), index_value.rowid());
-        if (!max_encoded->has_value() || encoded > max_encoded->value()) {
-            *max_encoded = encoded;
-        }
+        update_optional_max(encode_rss_rowid(index_value.rssid(), index_value.rowid()), max_encoded);
     }
-}
-
-void update_optional_max(uint64_t candidate, std::optional<uint64_t>* current) {
-    *current = current->has_value() ? std::max(**current, candidate) : candidate;
 }
 
 // Remap stored rssids on each non-tombstone value via the data map (lifted by
