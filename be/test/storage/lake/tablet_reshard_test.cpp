@@ -401,6 +401,83 @@ protected:
         write_file(_tablet_manager->delvec_location(tablet_id, file_name), content);
     }
 
+    void add_encrypted_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
+                              const std::string& file_name, const std::string& content) {
+        ensure_kek_in_key_cache();
+        ASSIGN_OR_ABORT(auto encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+
+        FileMetaPB file_meta;
+        file_meta.set_name(file_name);
+        file_meta.set_size(content.size());
+        file_meta.set_encryption_meta(encryption_pair.encryption_meta);
+        (*metadata->mutable_delvec_meta()->mutable_version_to_file())[version] = file_meta;
+
+        DelvecPagePB page;
+        page.set_version(version);
+        page.set_offset(0);
+        page.set_size(content.size());
+        (*metadata->mutable_delvec_meta()->mutable_delvecs())[segment_id] = page;
+
+        WritableFileOptions options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        options.encryption_info = encryption_pair.info;
+        ASSIGN_OR_ABORT(auto writer,
+                        fs::new_writable_file(options, _tablet_manager->delvec_location(tablet_id, file_name)));
+        ASSERT_OK(writer->append(Slice(content)));
+        ASSERT_OK(writer->close());
+    }
+
+    std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id,
+                                                                const std::vector<std::string>& segment_filenames) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(segment_filenames.size() + 1);
+        set_primary_key_schema(metadata.get(), 1001);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10 * segment_filenames.size());
+        rowset->set_data_size(100 * segment_filenames.size());
+        for (const auto& segment_filename : segment_filenames) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(segment_filename);
+            segment->set_size(100);
+            segment->set_shared(true);
+        }
+        stamp_physical_identity_uid(rowset, segment_filenames.front());
+        return metadata;
+    }
+
+    StatusOr<TabletMetadataPtr> merge_delvec_sources(const std::vector<TabletMetadataPtr>& sources,
+                                                     int64_t merged_tablet, int64_t new_version = 2,
+                                                     int64_t txn_id = 10) {
+        for (const auto& source : sources) {
+            RETURN_IF_ERROR(put_tablet_metadata(source));
+        }
+
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        for (const auto& source : sources) {
+            merging_info.add_old_tablet_ids(source->id());
+        }
+        merging_info.set_new_tablet_id(merged_tablet);
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, /*base_version=*/1,
+                                                        new_version, txn_info, false, tablet_metadatas, tablet_ranges));
+        auto merged_it = tablet_metadatas.find(merged_tablet);
+        if (merged_it == tablet_metadatas.end()) {
+            return Status::InternalError("merged delvec test metadata is missing");
+        }
+        return merged_it->second;
+    }
+
     void add_sstable(TabletMetadataPB* metadata, const std::string& filename, uint64_t max_rss_rowid,
                      bool with_delvec) {
         auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
@@ -878,6 +955,16 @@ protected:
             files.emplace(name);
             return true;
         }));
+        return files;
+    }
+
+    StatusOr<std::set<std::string>> delvec_inventory(int64_t tablet_id) {
+        ASSIGN_OR_RETURN(auto files, directory_inventory(_location_provider->segment_root_location(tablet_id)));
+        std::erase_if(files, [](const std::string& file) {
+            constexpr std::string_view kSuffix = ".delvec";
+            return file.size() < kSuffix.size() ||
+                   file.compare(file.size() - kSuffix.size(), kSuffix.size(), kSuffix) != 0;
+        });
         return files;
     }
 
@@ -2657,6 +2744,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_sst_reference_does_not_override_
 
 TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_partial_merge_drops_ownerless_data) {
     ASSIGN_OR_ABORT(auto fixture, publish_real_split_sst_owner_fixture());
+    ASSIGN_OR_ABORT(auto delvecs_before, delvec_inventory(fixture.middle_child));
 
     // Merge only the two adjacent children whose ranges do not own rssid 2. Both
     // still inherit the shared SST file, but all its data keys are below this
@@ -2670,6 +2758,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_partial_merge_drops_o
             EXPECT_NE("split_sst_low.dat", segment.filename());
         }
     }
+    EXPECT_EQ(0, merged->delvec_meta().delvecs_size());
+    EXPECT_EQ(0, merged->delvec_meta().version_to_file_size());
+    ASSIGN_OR_ABORT(auto delvecs_after, delvec_inventory(merged_tablet));
+    EXPECT_EQ(delvecs_before, delvecs_after) << "ownerless delvec metadata must not create an output file";
 
     ASSIGN_OR_ABORT(auto middle_value, load_index_value(merged, merged_tablet, raw_int_primary_key(60)));
     ASSIGN_OR_ABORT(auto high_value, load_index_value(merged, merged_tablet, raw_int_primary_key(110)));
@@ -6166,6 +6258,263 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_dcg_dedup) {
     ASSERT_TRUE(dcg_it != merged->dcg_meta().dcgs().end());
     ASSERT_EQ(1, dcg_it->second.column_files_size());
     EXPECT_EQ("shared_dcg.cols", dcg_it->second.column_files(0));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_selects_only_final_single_source_files) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    auto meta_a = make_shared_delvec_source(child_a, {"consumer_shared_segment.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"consumer_shared_segment.dat"});
+
+    DelVector live_delvec;
+    const uint32_t live_deleted_rowids[] = {3, 9};
+    live_delvec.init(/*version=*/10, live_deleted_rowids, std::size(live_deleted_rowids));
+    const std::string live_content = live_delvec.save();
+    const std::string live_filename = "consumer_live.delvec";
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, live_filename, live_content);
+
+    const std::string stale_content = "stale-delvec-record-with-no-page";
+    FileMetaPB stale_file;
+    stale_file.set_name("consumer_stale.delvec");
+    stale_file.set_size(stale_content.size());
+    (*meta_a->mutable_delvec_meta()->mutable_version_to_file())[20] = stale_file;
+    write_file(_tablet_manager->delvec_location(child_a, stale_file.name()), stale_content);
+
+    bool selected_callback_seen = false;
+    std::vector<lake::DelvecFileInfo> selected_source_files;
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:selected_source_files", [&](void* arg) {
+        selected_callback_seen = true;
+        selected_source_files = *static_cast<std::vector<lake::DelvecFileInfo>*>(arg);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
+    ASSERT_EQ(1, merged->rowsets_size());
+    const uint32_t target_rssid = merged->rowsets(0).id();
+    ASSERT_EQ(1, merged->delvec_meta().delvecs_size());
+    const auto& output_page = merged->delvec_meta().delvecs().at(target_rssid);
+    ASSERT_EQ(1, merged->delvec_meta().version_to_file_size());
+    const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
+
+    EXPECT_TRUE(selected_callback_seen);
+    ASSERT_EQ(1, selected_source_files.size());
+    EXPECT_EQ(live_filename, selected_source_files[0].delvec_file.name());
+    EXPECT_EQ(static_cast<int64_t>(live_content.size()), output_file.size());
+    EXPECT_EQ(0, output_page.offset());
+    EXPECT_EQ(live_content.size(), output_page.size());
+
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, target_rssid, false, io_options, &loaded));
+    ASSERT_NE(nullptr, loaded.roaring());
+    EXPECT_EQ(2, loaded.cardinality());
+    EXPECT_TRUE(loaded.roaring()->contains(3));
+    EXPECT_TRUE(loaded.roaring()->contains(9));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_only_uses_encrypted_buffer_output) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    auto meta_a = make_shared_delvec_source(child_a, {"encrypted_union_segment.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"encrypted_union_segment.dat"});
+
+    DelVector delvec_a;
+    const uint32_t deleted_a = 4;
+    delvec_a.init(/*version=*/10, &deleted_a, 1);
+    add_encrypted_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "encrypted_union_a.delvec",
+                         delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_b = 7;
+    delvec_b.init(/*version=*/11, &deleted_b, 1);
+    add_encrypted_delvec(meta_b.get(), child_b, /*version=*/11, /*segment_id=*/1, "encrypted_union_b.delvec",
+                         delvec_b.save());
+
+    DelVector expected_union;
+    const uint32_t expected_deleted[] = {4, 7};
+    expected_union.init(kNewVersion, expected_deleted, std::size(expected_deleted));
+    const std::string expected_union_content = expected_union.save();
+
+    bool selected_callback_seen = false;
+    std::vector<lake::DelvecFileInfo> selected_source_files;
+    bool encryption_callback_seen = false;
+    bool output_requires_encryption = false;
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:selected_source_files", [&](void* arg) {
+        selected_callback_seen = true;
+        selected_source_files = *static_cast<std::vector<lake::DelvecFileInfo>*>(arg);
+    });
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:output_requires_encryption", [&](void* arg) {
+        encryption_callback_seen = true;
+        output_requires_encryption = *static_cast<bool*>(arg);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
+    ASSERT_EQ(1, merged->rowsets_size());
+    const uint32_t target_rssid = merged->rowsets(0).id();
+    const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
+
+    // Pre-refactor TDE baseline: current raw-file concatenation already encrypts,
+    // unwraps, and loads the merged page successfully.
+    EXPECT_FALSE(output_file.encryption_meta().empty());
+    ASSERT_OK(KeyCache::instance().unwrap_encryption_meta(output_file.encryption_meta()).status());
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, target_rssid, false, io_options, &loaded));
+    ASSERT_NE(nullptr, loaded.roaring());
+    EXPECT_EQ(2, loaded.cardinality());
+    EXPECT_TRUE(loaded.roaring()->contains(4));
+    EXPECT_TRUE(loaded.roaring()->contains(7));
+
+    EXPECT_TRUE(selected_callback_seen);
+    EXPECT_TRUE(selected_source_files.empty());
+    EXPECT_TRUE(encryption_callback_seen);
+    EXPECT_TRUE(output_requires_encryption);
+    EXPECT_EQ(static_cast<int64_t>(expected_union_content.size()), output_file.size());
+    EXPECT_EQ(0, merged->delvec_meta().delvecs().at(target_rssid).offset());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_plain_single_plus_encrypted_merged_stays_encrypted) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    auto meta_a = make_shared_delvec_source(child_a, {"mixed_segment_0.dat", "mixed_segment_1.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"mixed_segment_0.dat", "mixed_segment_1.dat"});
+
+    DelVector plain_single;
+    const uint32_t plain_deleted = 2;
+    plain_single.init(/*version=*/10, &plain_deleted, 1);
+    const std::string plain_content = plain_single.save();
+    const std::string plain_filename = "mixed_plain_single.delvec";
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, plain_filename, plain_content);
+
+    DelVector encrypted_a;
+    const uint32_t encrypted_deleted_a = 5;
+    encrypted_a.init(/*version=*/11, &encrypted_deleted_a, 1);
+    add_encrypted_delvec(meta_a.get(), child_a, /*version=*/11, /*segment_id=*/2, "mixed_encrypted_a.delvec",
+                         encrypted_a.save());
+    DelVector encrypted_b;
+    const uint32_t encrypted_deleted_b = 8;
+    encrypted_b.init(/*version=*/12, &encrypted_deleted_b, 1);
+    add_encrypted_delvec(meta_b.get(), child_b, /*version=*/12, /*segment_id=*/2, "mixed_encrypted_b.delvec",
+                         encrypted_b.save());
+
+    DelVector expected_union;
+    const uint32_t expected_encrypted_deleted[] = {5, 8};
+    expected_union.init(kNewVersion, expected_encrypted_deleted, std::size(expected_encrypted_deleted));
+    const std::string expected_union_content = expected_union.save();
+
+    bool selected_callback_seen = false;
+    std::vector<lake::DelvecFileInfo> selected_source_files;
+    bool encryption_callback_seen = false;
+    bool output_requires_encryption = false;
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:selected_source_files", [&](void* arg) {
+        selected_callback_seen = true;
+        selected_source_files = *static_cast<std::vector<lake::DelvecFileInfo>*>(arg);
+    });
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:output_requires_encryption", [&](void* arg) {
+        encryption_callback_seen = true;
+        output_requires_encryption = *static_cast<bool*>(arg);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
+    ASSERT_EQ(1, merged->rowsets_size());
+    const uint32_t single_target_rssid = merged->rowsets(0).id();
+    const uint32_t merged_target_rssid = single_target_rssid + 1;
+    const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
+
+    // Pre-refactor TDE baseline: copying the encrypted raw inputs already keeps
+    // the output encrypted and both logical pages load.
+    EXPECT_FALSE(output_file.encryption_meta().empty());
+    ASSERT_OK(KeyCache::instance().unwrap_encryption_meta(output_file.encryption_meta()).status());
+    DelVector loaded_single;
+    DelVector loaded_merged;
+    LakeIOOptions io_options;
+    ASSERT_OK(
+            lake::get_del_vec(_tablet_manager.get(), *merged, single_target_rssid, false, io_options, &loaded_single));
+    ASSERT_OK(
+            lake::get_del_vec(_tablet_manager.get(), *merged, merged_target_rssid, false, io_options, &loaded_merged));
+    ASSERT_NE(nullptr, loaded_single.roaring());
+    ASSERT_NE(nullptr, loaded_merged.roaring());
+    EXPECT_TRUE(loaded_single.roaring()->contains(2));
+    EXPECT_TRUE(loaded_merged.roaring()->contains(5));
+    EXPECT_TRUE(loaded_merged.roaring()->contains(8));
+
+    EXPECT_TRUE(selected_callback_seen);
+    ASSERT_EQ(1, selected_source_files.size());
+    EXPECT_EQ(plain_filename, selected_source_files[0].delvec_file.name());
+    EXPECT_TRUE(encryption_callback_seen);
+    EXPECT_TRUE(output_requires_encryption);
+    EXPECT_EQ(static_cast<int64_t>(plain_content.size() + expected_union_content.size()), output_file.size());
+    EXPECT_EQ(0, merged->delvec_meta().delvecs().at(single_target_rssid).offset());
+    EXPECT_EQ(plain_content.size(), merged->delvec_meta().delvecs().at(merged_target_rssid).offset());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_zero_target_writes_nothing) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    auto meta_a = make_shared_delvec_source(child_a, {"zero_target_segment.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"zero_target_segment.dat"});
+    const std::string stale_content = "stale-zero-target-data";
+    FileMetaPB stale_file;
+    stale_file.set_name("zero_target_stale.delvec");
+    stale_file.set_size(stale_content.size());
+    (*meta_a->mutable_delvec_meta()->mutable_version_to_file())[17] = stale_file;
+    write_file(_tablet_manager->delvec_location(child_a, stale_file.name()), stale_content);
+    ASSIGN_OR_ABORT(auto delvecs_before, delvec_inventory(merged_tablet));
+
+    int writer_callback_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:writer_invocations", [&](void* arg) {
+        ++writer_callback_count;
+        EXPECT_EQ(1, *static_cast<int*>(arg));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
+    EXPECT_EQ(0, writer_callback_count);
+    EXPECT_EQ(0, merged->delvec_meta().delvecs_size());
+    EXPECT_EQ(0, merged->delvec_meta().version_to_file_size());
+    ASSIGN_OR_ABORT(auto delvecs_after, delvec_inventory(merged_tablet));
+    EXPECT_EQ(delvecs_before, delvecs_after) << "zero final consumers must not create a delvec file";
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
