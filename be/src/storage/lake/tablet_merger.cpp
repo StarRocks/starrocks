@@ -1792,6 +1792,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     // Phase 1: Scan pages, build TargetDelvecState for each target rssid.
     // File name is resolved inline via each old tablet's version_to_file map.
     std::map<uint32_t, TargetDelvecState> target_states;
+    std::unordered_map<std::string, DelvecFileInfo> actual_page_source_files;
     bool output_requires_encryption = false;
     bool saw_source_page = false;
 
@@ -1808,6 +1809,20 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 return Status::InvalidArgument("Delvec file not found for page version");
             }
             const std::string& file_name = file_it->second.name();
+            auto [canonical_file_it, inserted] =
+                    actual_page_source_files.emplace(file_name, DelvecFileInfo{ctx.metadata()->id(), file_it->second});
+            if (!inserted) {
+                const auto& canonical_file = canonical_file_it->second.delvec_file;
+                const auto& incoming_file = file_it->second;
+                if (canonical_file.size() != incoming_file.size() ||
+                    canonical_file.encryption_meta() != incoming_file.encryption_meta() ||
+                    canonical_file.shared() != incoming_file.shared()) {
+                    return Status::Corruption(
+                            fmt::format("Delvec actual page source metadata mismatch for file {} between tablets {} "
+                                        "and {}",
+                                        file_name, canonical_file_it->second.tablet_id, ctx.metadata()->id()));
+                }
+            }
             saw_source_page = true;
             output_requires_encryption |= !file_it->second.encryption_meta().empty();
 
