@@ -615,6 +615,169 @@ protected:
         return fixture;
     }
 
+    enum class InvalidRangeMixedTrigger { kDeadOwner, kMergedDelvec };
+
+    struct InvalidRangeMixedLegacyFixture {
+        int64_t source_tablet = 0;
+        int64_t empty_tablet = 0;
+        int64_t merged_tablet = 0;
+        int32_t tail_key_value = 40;
+        std::string source_filename;
+        std::string source_path;
+        std::string live_key;
+        std::string dropped_key;
+        std::string tail_key;
+        std::shared_ptr<TabletMetadataPB> source_metadata;
+        std::shared_ptr<TabletMetadataPB> empty_metadata;
+    };
+
+    InvalidRangeMixedLegacyFixture make_invalid_range_mixed_legacy_fixture(const std::string& source_filename,
+                                                                           InvalidRangeMixedTrigger trigger) {
+        InvalidRangeMixedLegacyFixture fixture;
+        fixture.source_tablet = next_id();
+        fixture.empty_tablet = next_id();
+        fixture.merged_tablet = next_id();
+        fixture.source_filename = source_filename;
+        fixture.source_path = _tablet_manager->sst_location(fixture.source_tablet, source_filename);
+        fixture.live_key = encode_int_primary_key(20);
+        fixture.dropped_key = encode_int_primary_key(trigger == InvalidRangeMixedTrigger::kDeadOwner ? 30 : 21);
+        fixture.tail_key = encode_int_primary_key(fixture.tail_key_value);
+        prepare_tablet_dirs(fixture.source_tablet);
+        prepare_tablet_dirs(fixture.empty_tablet);
+        prepare_tablet_dirs(fixture.merged_tablet);
+
+        const int data_num_rows = trigger == InvalidRangeMixedTrigger::kDeadOwner ? 1 : 2;
+        const std::string segment_filename = source_filename + ".dat";
+        const uint64_t segment_size = write_two_column_segment(
+                fixture.source_tablet, segment_filename, data_num_rows, [](int key) { return key * 10; },
+                /*key_start=*/20);
+        const std::string tail_segment_filename = source_filename + ".tail.dat";
+        const uint64_t tail_segment_size = write_two_column_segment(
+                fixture.source_tablet, tail_segment_filename, /*num_rows=*/1, [](int key) { return key * 10; },
+                fixture.tail_key_value);
+        const uint32_t dropped_stored_rssid = trigger == InvalidRangeMixedTrigger::kDeadOwner ? 2 : 0;
+        const uint32_t dropped_rowid = trigger == InvalidRangeMixedTrigger::kDeadOwner ? 0 : 1;
+        const auto source_file = write_raw_pk_sstable(
+                fixture.source_path,
+                {{fixture.live_key, serialize_index_values({{/*version=*/201, /*rssid=*/0, /*rowid=*/0}})},
+                 {fixture.dropped_key,
+                  serialize_index_values({{/*version=*/200, dropped_stored_rssid, dropped_rowid}})}});
+
+        auto make_metadata = [&](int64_t tablet_id) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(1);
+            set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+            metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+            metadata->set_enable_persistent_index(true);
+            metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+            return metadata;
+        };
+
+        fixture.source_metadata = make_metadata(fixture.source_tablet);
+        fixture.source_metadata->set_next_rowset_id(7);
+        auto* rowset = fixture.source_metadata->add_rowsets();
+        rowset->set_id(5);
+        rowset->set_version(1);
+        rowset->set_num_rows(data_num_rows);
+        rowset->set_data_size(segment_size);
+        rowset->set_overlapped(false);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(segment_size);
+        segment->set_num_rows(data_num_rows);
+        auto* tail_rowset = fixture.source_metadata->add_rowsets();
+        tail_rowset->set_id(6);
+        tail_rowset->set_version(1);
+        tail_rowset->set_num_rows(1);
+        tail_rowset->set_data_size(tail_segment_size);
+        tail_rowset->set_overlapped(false);
+        auto* tail_segment = tail_rowset->add_segment_metas();
+        tail_segment->set_filename(tail_segment_filename);
+        tail_segment->set_size(tail_segment_size);
+        tail_segment->set_num_rows(1);
+
+        auto* source_pb = fixture.source_metadata->mutable_sstable_meta()->add_sstables();
+        source_pb->set_filename(source_filename);
+        source_pb->set_filesize(source_file.filesize);
+        source_pb->set_shared(false);
+        source_pb->set_rssid_offset(5);
+        source_pb->set_max_rss_rowid((static_cast<uint64_t>(5) << 32) | 9);
+        source_pb->mutable_range()->CopyFrom(source_file.range);
+        source_pb->mutable_fileset_id()->set_hi(0xA5A5);
+        source_pb->mutable_fileset_id()->set_lo(0xB6B6);
+        source_pb->set_generation_version(1);
+
+        if (trigger == InvalidRangeMixedTrigger::kMergedDelvec) {
+            DelVector delvec;
+            const uint32_t deleted_rowid = 1;
+            delvec.init(/*version=*/1, &deleted_rowid, 1);
+            add_delvec(fixture.source_metadata.get(), fixture.source_tablet, /*version=*/1, /*segment_id=*/5,
+                       source_filename + ".dv", delvec.save());
+        }
+
+        fixture.empty_metadata = make_metadata(fixture.empty_tablet);
+        fixture.empty_metadata->set_next_rowset_id(1);
+        return fixture;
+    }
+
+    void verify_invalid_range_mixed_legacy_rebuild(const InvalidRangeMixedLegacyFixture& fixture) {
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+        DeferOp restore_flush_failpoints([&] {
+            set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+            set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+        });
+
+        auto merged_or =
+                merge_modern_shared_occurrences(fixture.source_metadata, fixture.empty_metadata, fixture.merged_tablet);
+        ASSERT_OK(merged_or);
+        auto merged = std::move(merged_or).value();
+
+        const PersistentIndexSstablePB* rebuilt = nullptr;
+        const PersistentIndexSstablePB* tail = nullptr;
+        for (const auto& sstable : merged->sstable_meta().sstables()) {
+            EXPECT_NE(fixture.source_filename, sstable.filename()) << "invalid metadata must use replacement files";
+            ASSIGN_OR_ABORT(auto entries, read_raw_pk_sstable(fixture.merged_tablet, merged, sstable));
+            for (const auto& [key, values] : entries) {
+                ASSERT_EQ(1, values.values_size());
+                if (key == fixture.live_key && values.values(0).version() == 201) {
+                    rebuilt = &sstable;
+                    EXPECT_EQ(5, values.values(0).rssid());
+                    EXPECT_EQ(0, values.values(0).rowid());
+                } else if (key == fixture.tail_key) {
+                    tail = &sstable;
+                    EXPECT_EQ(6, values.values(0).rssid());
+                    EXPECT_EQ(0, values.values(0).rowid());
+                }
+                EXPECT_NE(fixture.dropped_key, key) << "dead/delvec value must not survive rebuild or tail";
+            }
+        }
+
+        ASSERT_NE(nullptr, rebuilt) << "retained live value must be rewritten to its final owner";
+        const uint64_t expected_rebuilt_max = static_cast<uint64_t>(5) << 32;
+        EXPECT_EQ(expected_rebuilt_max, rebuilt->max_rss_rowid())
+                << "invalid PB seed (5,9) must not overstate retained coverage beyond exact live (5,0)";
+        EXPECT_EQ(0, rebuilt->rssid_offset());
+        EXPECT_EQ(2, merged->sstable_meta().sstables_size())
+                << "coverage through rssid 5 must materialize the uncovered rssid-6 tail";
+        EXPECT_NE(nullptr, tail);
+
+        const std::vector<std::string> lookup_keys = {fixture.live_key, fixture.dropped_key, fixture.tail_key};
+        ASSIGN_OR_ABORT(auto lookup_values, load_index_values(merged, fixture.merged_tablet, lookup_keys));
+        ASSERT_EQ(3, lookup_values.size());
+        EXPECT_EQ(IndexValue(expected_rebuilt_max), lookup_values[0]);
+        EXPECT_EQ(IndexValue(NullIndexValue), lookup_values[1]);
+        EXPECT_EQ(IndexValue(static_cast<uint64_t>(6) << 32), lookup_values[2]);
+
+        ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(fixture.merged_tablet, /*base_version=*/2,
+                                                                       /*upsert_key=*/10, /*upsert_value=*/1010,
+                                                                       /*delete_key=*/fixture.tail_key_value));
+        ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+        EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}, {20, 200}}), rows);
+        ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+    }
+
     StatusOr<std::vector<std::pair<std::string, IndexValuesWithVerPB>>> read_raw_pk_sstable(
             int64_t tablet_id, const TabletMetadataPtr& metadata, const PersistentIndexSstablePB& sstable_pb) {
         ASSIGN_OR_RETURN(
@@ -8756,8 +8919,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_wr
     auto merged = tablet_metadatas.at(merged_tablet);
     ASSERT_EQ(std::numeric_limits<int32_t>::max(), merged->next_rowset_id());
 
-    const uint64_t write_segment_size =
-            write_two_column_segment(merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
+    const uint64_t write_segment_size = write_two_column_segment(
+            merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
     TxnLogPB write_log;
     write_log.set_tablet_id(merged_tablet);
     write_log.set_txn_id(2);
@@ -9703,10 +9866,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dropped_non_shared_modern_wate
 
     const std::string segment_a = "retained_coverage_non_shared_a.dat";
     const std::string segment_b = "retained_coverage_non_shared_b.dat";
-    const uint64_t segment_a_size =
-            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_size = write_two_column_segment(
+            child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string dead_sst_filename = "retained_coverage_non_shared_dead.sst";
     const uint64_t dead_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, dead_sst_filename),
@@ -9801,10 +9964,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_modern_live_occurrence_
 
     const std::string segment_a = "retained_coverage_shared_modern_a.dat";
     const std::string segment_b = "retained_coverage_shared_modern_b.dat";
-    const uint64_t segment_a_size =
-            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_size = write_two_column_segment(
+            child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string shared_sst_filename = "retained_coverage_shared_modern.sst";
     const uint64_t shared_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
@@ -9895,12 +10058,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_legacy_global_max_does_
     const std::string segment_a_covered = "retained_coverage_shared_legacy_a_covered.dat";
     const std::string segment_a_tail = "retained_coverage_shared_legacy_a_tail.dat";
     const std::string segment_b = "retained_coverage_shared_legacy_b.dat";
-    const uint64_t segment_a_covered_size =
-            write_two_column_segment(child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_a_tail_size =
-            write_two_column_segment(child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_covered_size = write_two_column_segment(
+            child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_a_tail_size = write_two_column_segment(
+            child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string shared_sst_filename = "retained_coverage_shared_legacy.sst";
     const uint64_t shared_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
@@ -12029,7 +12192,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_cache
     // range [0, 2] still contains id 1, the rebuild route is kept, and the first
     // entry (stored rssid 0, lifted to -1) trips the range guard.
     auto [overflow_status, overflow_drops] = run_scenario(
-            [this](const std::string& path) { return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}}); },
+            [this](const std::string& path) {
+                return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}});
+            },
             /*rssid_offset=*/-1, /*txn_id=*/204);
     ASSERT_FALSE(overflow_status.ok()) << "merge over an out-of-range stored rssid must fail";
     EXPECT_TRUE(overflow_status.is_corruption()) << overflow_status;
@@ -12562,6 +12727,20 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_invalid_legacy_range_live_data
     ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
     EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
     ASSERT_OK(FileSystem::Default()->path_exists(source_path));
+}
+
+TEST_F(LakeTabletReshardTest,
+       test_tablet_merging_invalid_legacy_range_mixed_live_dead_derives_exact_watermark_and_tail) {
+    auto fixture = make_invalid_range_mixed_legacy_fixture("invalid_range_mixed_live_dead.sst",
+                                                           InvalidRangeMixedTrigger::kDeadOwner);
+    verify_invalid_range_mixed_legacy_rebuild(fixture);
+}
+
+TEST_F(LakeTabletReshardTest,
+       test_tablet_merging_invalid_legacy_range_mixed_live_delvec_derives_exact_watermark_and_tail) {
+    auto fixture = make_invalid_range_mixed_legacy_fixture("invalid_range_mixed_live_delvec.sst",
+                                                           InvalidRangeMixedTrigger::kMergedDelvec);
+    verify_invalid_range_mixed_legacy_rebuild(fixture);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_valid_nonnegative_legacy_fast_path_skips_exact_classifier) {
