@@ -85,4 +85,48 @@ TEST_F(LakeScanBufferSizeTest, negative_config_defers_to_starlet) {
     EXPECT_LT(lake_scan_buffer_size(opts), 0);
 }
 
+class ShouldEnableIoCoalesceLakeReadTest : public testing::Test {
+public:
+    void SetUp() override {
+        _saved = config::io_coalesce_lake_read_enable;
+        config::io_coalesce_lake_read_enable = false;
+    }
+    void TearDown() override { config::io_coalesce_lake_read_enable = _saved; }
+
+private:
+    bool _saved = false;
+};
+
+// The reads whose size is ours to choose are the ones worth merging, and they are the same
+// reads lake_scan_min_remote_read_bytes shrinks -- so coalescing is on for them by default.
+TEST_F(ShouldEnableIoCoalesceLakeReadTest, on_where_the_read_size_is_ours) {
+    LakeIOOptions skip_cache;
+    skip_cache.skip_disk_cache = true;
+    skip_cache.fill_data_cache = true;
+    EXPECT_TRUE(should_enable_io_coalesce_lake_read(skip_cache));
+
+    LakeIOOptions no_fill;
+    ASSERT_FALSE(no_fill.fill_data_cache);
+    ASSERT_FALSE(no_fill.skip_disk_cache);
+    EXPECT_TRUE(should_enable_io_coalesce_lake_read(no_fill));
+}
+
+// A read cachefs serves from whole blocks has its size dictated by the block layout, so
+// merging page ranges cannot change what reaches the object store. Leave it off.
+TEST_F(ShouldEnableIoCoalesceLakeReadTest, off_for_block_aligned_reads) {
+    LakeIOOptions opts;
+    opts.fill_data_cache = true;
+    opts.skip_disk_cache = false;
+    EXPECT_FALSE(should_enable_io_coalesce_lake_read(opts));
+}
+
+// The config still forces it on everywhere, including the block-aligned case.
+TEST_F(ShouldEnableIoCoalesceLakeReadTest, config_forces_it_on_everywhere) {
+    config::io_coalesce_lake_read_enable = true;
+    LakeIOOptions opts;
+    opts.fill_data_cache = true;
+    opts.skip_disk_cache = false;
+    EXPECT_TRUE(should_enable_io_coalesce_lake_read(opts));
+}
+
 } // namespace starrocks

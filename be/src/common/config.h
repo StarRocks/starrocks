@@ -1325,6 +1325,9 @@ CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn
 CONF_mBool(s3_use_list_objects_v1, "false");
 
 // Lake
+// Force page-range coalescing on for every cloud-native scan read. Off, coalescing is still
+// used wherever the size of the read is ours to choose rather than dictated by the datacache's
+// block layout -- see should_enable_io_coalesce_lake_read().
 CONF_mBool(io_coalesce_lake_read_enable, "false");
 
 // orc reader
