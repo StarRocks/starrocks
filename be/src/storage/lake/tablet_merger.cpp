@@ -2957,12 +2957,7 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, co
 // Sstables with no fileset_id remain singletons and close any open run;
 // they are not grouped with anything.
 void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<PersistentIndexSstablePB>* dest) {
-    std::vector<PersistentIndexSstablePB> sorted;
-    sorted.reserve(dest->size());
-    for (const auto& sst : *dest) {
-        sorted.emplace_back(sst);
-    }
-    std::stable_sort(sorted.begin(), sorted.end(),
+    std::stable_sort(dest->begin(), dest->end(),
                      [](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
                          return static_cast<int64_t>(a.max_rss_rowid()) < static_cast<int64_t>(b.max_rss_rowid());
                      });
@@ -2971,7 +2966,7 @@ void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<Pe
     UniqueId current_run_orig;
     UniqueId current_run_emitted;
     bool has_run = false;
-    for (auto& sst : sorted) {
+    for (auto& sst : *dest) {
         if (!sst.has_fileset_id()) {
             // No fileset_id (legacy / standalone): cannot be grouped. Close
             // any open run so a same-FID sstable after this one will be
@@ -2998,11 +2993,6 @@ void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<Pe
         current_run_orig = orig;
         current_run_emitted = emitted;
         has_run = true;
-    }
-
-    dest->Clear();
-    for (auto& sst : sorted) {
-        *dest->Add() = std::move(sst);
     }
 }
 
