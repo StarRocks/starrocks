@@ -14,8 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.StarRocksAssert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -96,6 +99,114 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         String sql = "select 1 from tpcds_100g_date_dim as ref_0 where ref_0.d_day_name=\"dd\" limit 137";
         String plan = getThriftPlan(sql);
         assertContains(plan, "unused_output_column_name:[]");
+    }
+
+    @Test
+    public void testRowIdCarrierWhenEveryPredicateColumnIsWide() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean prevDict = sv.isEnableLowCardinalityOptimize();
+        // UtFrameUtils turns virtual columns off for every FE unit test, while production defaults them on.
+        boolean prevVirtual = Config.enable_virtual_columns;
+        try {
+            // A dict-encoded string is a cheap carrier, so drop the dict to model a high-cardinality column.
+            sv.setEnableLowCardinalityOptimize(false);
+            Config.enable_virtual_columns = true;
+            String sql = "select count(*) from tpcds_100g_date_dim where d_day_name = 'dd'";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[d_day_name]");
+            assertContains(getDescTbl(sql), "colName:_row_id_");
+        } finally {
+            Config.enable_virtual_columns = prevVirtual;
+            sv.setEnableLowCardinalityOptimize(prevDict);
+        }
+    }
+
+    @Test
+    public void testCheapPredicateColumnPreferredOverRowIdCarrier() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean prevDict = sv.isEnableLowCardinalityOptimize();
+        boolean prevVirtual = Config.enable_virtual_columns;
+        try {
+            sv.setEnableLowCardinalityOptimize(false);
+            Config.enable_virtual_columns = true;
+            String sql = "select count(*) from tpcds_100g_date_dim where d_dow > 1 and d_day_name = 'dd'";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[d_day_name]");
+            Assertions.assertFalse(getDescTbl(sql).contains("colName:_row_id_"));
+        } finally {
+            Config.enable_virtual_columns = prevVirtual;
+            sv.setEnableLowCardinalityOptimize(prevDict);
+        }
+    }
+
+    @Test
+    public void testRowIdCarrierGatedByVirtualColumnsConfig() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean prevDict = sv.isEnableLowCardinalityOptimize();
+        boolean prevVirtual = Config.enable_virtual_columns;
+        try {
+            sv.setEnableLowCardinalityOptimize(false);
+            Config.enable_virtual_columns = false;
+            String sql = "select count(*) from tpcds_100g_date_dim where d_day_name = 'dd'";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[]");
+            Assertions.assertFalse(getDescTbl(sql).contains("colName:_row_id_"));
+        } finally {
+            Config.enable_virtual_columns = prevVirtual;
+            sv.setEnableLowCardinalityOptimize(prevDict);
+        }
+    }
+
+    @Test
+    public void testDeterministicCarrierWithoutVirtualColumns() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean prevDict = sv.isEnableLowCardinalityOptimize();
+        boolean prevVirtual = Config.enable_virtual_columns;
+        try {
+            sv.setEnableLowCardinalityOptimize(false);
+            // Without a synthesized carrier the cheapest predicate column still wins, so t1a stays unread.
+            Config.enable_virtual_columns = false;
+            String sql = "select count(1) from test_all_type where t1a='a' and t1b=1 and t1c=2";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[t1a, t1c]");
+            Assertions.assertFalse(getDescTbl(sql).contains("colName:_row_id_"));
+        } finally {
+            Config.enable_virtual_columns = prevVirtual;
+            sv.setEnableLowCardinalityOptimize(prevDict);
+        }
+    }
+
+    @Test
+    public void testDictEncodedPredicateColumnCarriesRows() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean prevDict = sv.isEnableLowCardinalityOptimize();
+        boolean prevVirtual = Config.enable_virtual_columns;
+        try {
+            // A dict-encoded string is read as fixed-width codes, so it carries the rows and no carrier is added.
+            sv.setEnableLowCardinalityOptimize(true);
+            Config.enable_virtual_columns = true;
+            String sql = "select count(*) from test_all_type where t1a = 'a'";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[]");
+            Assertions.assertFalse(getDescTbl(sql).contains("colName:_row_id_"));
+        } finally {
+            Config.enable_virtual_columns = prevVirtual;
+            sv.setEnableLowCardinalityOptimize(prevDict);
+        }
+    }
+
+    @Test
+    public void testRowIdCarrierGatedByQueryCache() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean prevDict = sv.isEnableLowCardinalityOptimize();
+        boolean prevCache = sv.isEnableQueryCache();
+        boolean prevVirtual = Config.enable_virtual_columns;
+        try {
+            sv.setEnableLowCardinalityOptimize(false);
+            Config.enable_virtual_columns = true;
+            sv.setEnableQueryCache(true);
+            String sql = "select count(*) from tpcds_100g_date_dim where d_day_name = 'dd'";
+            assertContains(getThriftPlan(sql), "unused_output_column_name:[]");
+        } finally {
+            Config.enable_virtual_columns = prevVirtual;
+            sv.setEnableQueryCache(prevCache);
+            sv.setEnableLowCardinalityOptimize(prevDict);
+        }
     }
 
     @Test
@@ -248,9 +359,10 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             assertContains(plan, "unused_output_column_name:[]");
         }
         {
+            // Nothing above the scan needs a value, so the cheapest predicate column (t1b) carries the rows.
             String sql = "select count(1) from test_all_type where t1a='a' and t1b=1 and t1c=2";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
+            assertContains(plan, "unused_output_column_name:[t1a, t1c]");
         }
 
         {
@@ -266,7 +378,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         {
             String sql = "select 1 from test_all_type where t1a='a' and t1b=1 and t1c=2";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
+            assertContains(plan, "unused_output_column_name:[t1a, t1c]");
         }
     }
 
@@ -275,12 +387,12 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         {
             String sql = "select count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2)";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
+            assertContains(plan, "unused_output_column_name:[t1a, t1c]");
         }
         {
             String sql = "select count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2 and t1a='b')";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
+            assertContains(plan, "unused_output_column_name:[t1a, t1c]");
         }
         {
             String sql = "select count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2 and t1d+t1a=3)";
@@ -321,13 +433,13 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             String sql = "select /*+SET_VAR(enable_pushdown_or_predicate=false)*/ " +
                     "count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2)";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
+            assertContains(plan, "unused_output_column_name:[t1a, t1c]");
         }
         {
             String sql = "select /*+SET_VAR(enable_pushdown_or_predicate=false)*/ " +
                     "count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2 and t1a='b')";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
+            assertContains(plan, "unused_output_column_name:[t1a, t1c]");
         }
     }
 }

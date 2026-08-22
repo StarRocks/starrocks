@@ -95,9 +95,13 @@ public:
     void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
         _total_read_local_cnt += read_local_cnt;
         _total_read_remote_cnt += read_remote_cnt;
+        _delta_read_local_cnt += read_local_cnt;
+        _delta_read_remote_cnt += read_remote_cnt;
     }
     int64_t get_read_local_cnt() const { return _total_read_local_cnt.load(); }
     int64_t get_read_remote_cnt() const { return _total_read_remote_cnt.load(); }
+    int64_t consume_delta_read_local_cnt() { return _delta_read_local_cnt.exchange(0); }
+    int64_t consume_delta_read_remote_cnt() { return _delta_read_remote_cnt.exchange(0); }
 
     void set_enable_profile() { _enable_profile.store(true, std::memory_order_relaxed); }
     bool get_enable_profile_flag() const { return _enable_profile.load(std::memory_order_relaxed); }
@@ -248,6 +252,8 @@ private:
     std::atomic<int64_t> _delta_scan_bytes = 0;
     std::atomic<int64_t> _total_read_local_cnt = 0;
     std::atomic<int64_t> _total_read_remote_cnt = 0;
+    std::atomic<int64_t> _delta_read_local_cnt = 0;
+    std::atomic<int64_t> _delta_read_remote_cnt = 0;
 
     // @TODO(silverbullet233):
     // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,

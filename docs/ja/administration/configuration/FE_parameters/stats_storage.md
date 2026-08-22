@@ -605,7 +605,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Bytes
 - 変更可能：Yes
-- 説明：タブレットのプリスプリットで生成されるタブレットの最小サイズ。プリスプリット時のコンピュートノード数へのアライメントを制限し、ノード数の多いクラスターで小さなロードが多数の極小タブレットに分割されないようにします。`tablet_reshard_target_size` 以下にする必要があります。
+- 説明：タブレットのプリスプリットで生成されるタブレットの最小サイズ。この値は自動分割が用いるターゲットサイズの下限でもあります。マテリアライズドインデックスのタブレット数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されます）を下回っている間、分割はそのスロットごとに 1 タブレットに相当するサイズを目標とし、この値を下限とします。タブレットはその目標の 2 倍に達した時点で分割されます。したがってこの値を大きくすると当該分割も遅くなり、`tablet_reshard_target_size` 以上に設定すると当該動作は無効になり、サイズベースの分割のみが残ります。また、プリスプリット時のコンピュートノード数へのアライメントを制限し、ノード数の多いクラスターで小さなロードが多数の極小タブレットに分割されないようにします。`tablet_reshard_target_size` 以下にする必要があります。
 - 導入時期：v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
@@ -668,8 +668,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込み（INSERT-from-OLAP-table）に対して、サンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
+- 説明：ソースが内部 OLAP テーブルまたは外部 Iceberg テーブルである `INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
 - 導入時期：v4.1.0
+
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Range 分散の増分マテリアライズドビュー（incremental materialized view）のリフレッシュに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。この種のビューは隠し row-id 列をキーとし、その値域が事前に分かっているため、境界はサンプリングではなく導出によって求められ、データは一切読み取られません。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
+- 導入時期：v4.2.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
@@ -725,11 +734,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：1 回のサンプリングベースのタブレット事前分割で対象とする予測パーティション数の上限。上限を超えた予測パーティション（サンプル数が最も少ないもの）は破棄され、ランタイムの自動パーティション作成にフォールバックして事前分割は行われません。多パーティション取り込みでフック実行時間が暴走するのを防ぎます。0 または負値を指定するとこの上限は無効化されます。
 - 導入時期：v4.1.0
 
+### `tablet_pre_split_target_size`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：サンプリングベースのタブレット事前分割が取り込みの分割数を決める際に基準とするタブレットサイズ。既定値 `0` は `tablet_reshard_target_size` を継承します。この値を小さくすると、クラスタ内の他のタブレットを小さくすることなく、その取り込みの書き込み並列度だけを上げられます。バックグラウンドのタブレット分割／マージデーモンは引き続き `tablet_reshard_target_size` を基準に判定するため、取り込み完了後に細かくなったタブレットをまとめ直します。これは新規の Range 分散パーティション（たとえば `INSERT OVERWRITE` の置き換えパーティション）に書き込む取り込みで特に重要です。そうしたパーティションは全域をカバーする単一タブレットから始まるため、そのままでは 1 つの BE ノードだけが書き込むことになります。
+
 #### サンプリングベースのタブレット事前分割のロールバック
 
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
-1. 3 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`。新規取り込みは即座に事前分割をスキップします。
+1. 4 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`、`enable_tablet_pre_split_for_mv_refresh`。新規取り込みは即座に事前分割をスキップします。
 2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 

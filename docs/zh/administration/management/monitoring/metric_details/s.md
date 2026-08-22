@@ -580,8 +580,8 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。
-- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。
+- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。推导层（derived tier，即 Range 分布的增量物化视图刷新，其边界由推导得出而非采样得出）取值：`materialized_view_target`（目标是推导层无法取键的物化视图 —— 不是增量物化视图、可见 index 多于一个、排序键不是那唯一一列隐藏 row-id 列，或 row-id 的种类还没有边界来源支持）、`row_id_span_too_small`（预估输出太小，row-id 键空间无法被有效切分 —— 单个 tablet 分到的行数无法避开各计算节点缓存 id 区间留下的空洞，切出来的分裂会不均衡而非有帮助）、`row_id_space_not_pristine`（目标表的自增计数器已经发放过 id，计算节点可能仍持有规划器无法计入的缓存 id 区间；只有全新未使用的 id 空间才允许推导边界）、`multiple_temporary_partitions`（该次刷新写入多个替换分区；Row ID 由整表共用的一个计数器分配，因此单个分区的 id 会成连续带，跨整个 id 空间的切分会让每个分区的大多数 Tablet 为空——开启该特性也不会改变这一点，因此与 `disabled_by_config` 分开上报）、`estimate_unavailable`（没有可用的输出大小估计，无法据此选定 tablet 数量）、`derivation_failed`（边界来源抛错，或推导出的边界未通过校验。与属于采样层的 `tablet_pre_split_sampler_failed{reason=sample_failed}` 相区分）、`stale_catalog_state`（推导层含义：切分点推导完成到构建作业之间，目标的可见 index 集合发生了变化 —— 与上文多分区路径同一类快照失效竞争，只是发生在另一个快照上）、`submit_failed`（推导层含义：推导出的切分点未能变成一个被接纳的作业 —— 或是 reshard 作业工厂拒绝构建，或是 `TabletReshardJobMgr` 拒绝接纳。与 `derivation_failed` 相区分，后者指切分点本身没能产出。采样层的同名取值记在 `tablet_pre_split_sampler_failed` 下，因为那里采样器确实运行过）。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。推导层的跳过同样记在本计数器上，而不是 `tablet_pre_split_sampler_failed`：推导层完全不读取数据，因此采样器从未运行 —— `derivation_failed` 也是如此。
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -593,15 +593,15 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳）、`pre_create_failed`（多分区路径：`LocalMetastore.addPartitions` 在预建目标分区时抛错 —— 该单个分区会被踢出合并提交并回退到 BE 运行时自动建分区，同载入中的其他分区继续推进，同时计入 `tablet_pre_split_sampler_failed{reason=pre_create_failed}`）。
+- 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳 —— 仅限采样层；推导层的同一次拒绝记在 `tablet_pre_split_eligibility_skipped` 下，因为采样器从未运行）、`pre_create_failed`（多分区路径：`LocalMetastore.addPartitions` 在预建目标分区时抛错 —— 该单个分区会被踢出合并提交并回退到 BE 运行时自动建分区，同载入中的其他分区继续推进，同时计入 `tablet_pre_split_sampler_failed{reason=pre_create_failed}`）。
 - 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。meta-tier → data-tier 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=data_tier}` 跟踪。
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
 
 - 单位：计数
 - 类型：累计
-- 标签：`tier` — `meta_tier`（边界由 Parquet/ORC row-group 统计算出，不读取行数据）或 `data_tier`（边界由 FILES 子查询采样的实际行算出，包含直接 data-tier 调用与 meta-tier → data-tier 回退两种来源）。
-- 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的采样器层级细分。
+- 标签：`tier` — `meta_tier`（边界由 Parquet/ORC row-group 统计算出，不读取行数据）、`data_tier`（边界由 FILES 子查询采样的实际行算出，包含直接 data-tier 调用与 meta-tier → data-tier 回退两种来源）或 `derived_tier`（边界由排序键自身取值域的已知信息推导得出，既不读文件统计也不采样任何行，完全不读取数据；用于排序键是隐藏 row-id 列、其取值分布由 id 的产生方式而非数据决定的场景）。
+- 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的层级细分。
 
 ## `starrocks_fe_tablet_pre_split_boundaries_planned`
 
@@ -638,13 +638,15 @@ description: "Alphabetical s"
 
 - 单位：毫秒
 - 类型：直方图
-- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。在所有生产导入类型上均触发 —— INSERT-from-FILES 与 INSERT-from-table（均经由 `InsertPreSplitHook`，在 `StmtExecutor` 中、`StatementPlanner.plan` 打开导入 txn 之前调用）以及 Broker Load（经由 `BrokerLoadPreSplitHook`，在 `BrokerLoadJob.createLoadingTask` 中、`beginTxn` 打开 `T_load` 之前调用），三者均通过共享的 `PreSplitFlow` 同步等待；测试用的 `runPreSplit` 同步包装路径也触发。所有路径下触发导入本身均按分裂后的 tablet 布局做计划。
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。在所有生产导入类型上均触发 —— INSERT-from-FILES 与 INSERT-from-table（均经由 `InsertPreSplitHook`，在 `StmtExecutor` 中、`StatementPlanner.plan` 打开导入 txn 之前调用）、Broker Load（经由 `BrokerLoadPreSplitHook`，在 `BrokerLoadJob.createLoadingTask` 中、`beginTxn` 打开 `T_load` 之前调用），以及 Range 分布增量物化视图的刷新（经由 `InsertPreSplitHook`，作用于该次覆盖写的替换分区），均通过共享的 `PreSplitFlow` 同步等待；测试用的 `runPreSplit` 同步包装路径也触发。所有路径下触发导入本身均按分裂后的 tablet 布局做计划。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 单位：计数
 - 类型：累计
-- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。所有生产导入类型超时后均会触发 —— INSERT-from-FILES、INSERT-from-table 与 Broker Load（三者均通过共享的 `PreSplitFlow` 同步等待）；测试用的 `runPreSplit` 同步包装路径也会触发。导入此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局，若守护线程在放弃等待之后才完成则可能已部分／完全分裂）；**不**递增 `tablet_pre_split_load_abort`，因为导入本身未被中止。
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。所有生产导入类型超时后均会触发 —— INSERT-from-FILES、INSERT-from-table、Broker Load 与 Range 分布增量物化视图的刷新（均通过共享的 `PreSplitFlow` 同步等待）；测试用的 `runPreSplit` 同步包装路径也会触发。导入此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局，若守护线程在放弃等待之后才完成则可能已部分／完全分裂）；**不**递增 `tablet_pre_split_load_abort`，因为导入本身未被中止。
+
+  但对以替换分区收尾的两条路径 —— INSERT OVERWRITE 与增量物化视图刷新 —— 继续执行并不等于最终成功：它们只在表处于 `NORMAL` 状态时才做分区替换，因此提交前会等待 reshard 作业结束，若在语句剩余超时内仍未结束则该语句失败。因此这两条路径上本计数器持续增长值得排查，而不应忽略。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 

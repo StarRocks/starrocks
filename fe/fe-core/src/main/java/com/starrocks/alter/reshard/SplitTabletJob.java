@@ -550,7 +550,6 @@ public class SplitTabletJob extends TabletReshardJob {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             item.setDb_name("");
-            LOG.warn("Failed to get database name for tablet reshard job. {}", this);
         } else {
             item.setDb_name(db.getFullName());
         }
@@ -559,7 +558,6 @@ public class SplitTabletJob extends TabletReshardJob {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) {
             item.setTable_name("");
-            LOG.warn("Failed to get table name for tablet reshard job. {}", this);
         } else {
             item.setTable_name(table.getName());
         }

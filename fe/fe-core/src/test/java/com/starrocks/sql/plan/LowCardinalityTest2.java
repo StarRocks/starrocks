@@ -2857,8 +2857,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [14: c_user, VARCHAR, true]\n" +
                     "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [15: c_dept, VARCHAR, true]\n" +
                     "  |  build runtime filters:\n" +
-                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = false\n" +
-                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = false\n" +
+                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = true\n" +
+                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = true\n" +
                     "  |  output columns: 2, 15\n" +
                     "  |  cardinality: 1\n" +
                     "  |  \n" +
@@ -2914,14 +2914,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  analytic partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "  |  offset: 0\n" +
                     "  |  cardinality: 1\n" +
-                    "  |  probe runtime filters:\n" +
-                    "  |  - filter_id = 0, probe_expr = (2: c_user)\n" +
-                    "  |  - filter_id = 1, probe_expr = (3: c_dept)\n" +
                     "  |  \n" +
                     "  1:EXCHANGE\n" +
                     "     distribution type: SHUFFLE\n" +
                     "     partition exprs: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "     cardinality: 1");
+            // Both filters now cross the exchange and land on the scan, which is what actually
+            // evaluates them; the probe columns are exactly the analytic partition-by columns,
+            // so pruning here removes whole window partitions and cannot change a surviving row.
+            assertContains(plan, "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (2: c_user), partition_exprs = (2: c_user,3: c_dept)\n" +
+                    "     - filter_id = 1, probe_expr = (3: c_dept), partition_exprs = (2: c_user,3: c_dept)");
 
         } finally {
             FeConstants.runningUnitTest = false;
@@ -3137,6 +3140,53 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
                 "  |      [34: expr, INT, true] | [35: expr, INT, false] | [36: expr, INT, true]", plan);
+    }
+
+    @Test
+    public void testUnionSameChildColumnPartiallyMergeable() throws Exception {
+        // C_USER feeds BOTH union output positions:
+        //   position 0: C_USER / C_DEPT     -> both have a dictionary, the merge succeeds
+        //   position 1: C_USER / CAST(int)  -> the cast has no dictionary, the merge fails
+        // The failed position forces C_USER to be decoded before the union, so position 0 must not
+        // stay dictionary encoded either - otherwise the left branch feeds a VARCHAR into an INT
+        // dict-code slot and the BE aborts in FixedLengthColumnBase<int>::append.
+        // Both sides of every position use the same type on purpose: any type mismatch makes the
+        // planner wrap the children in casts, which gives each position its own column ref.
+        String sql = """
+                  SELECT * FROM (
+                    SELECT C_USER a, C_USER b FROM low_card_t1
+                    UNION ALL
+                    SELECT C_DEPT, CAST(cpc AS VARCHAR(50)) FROM low_card_t1
+                  ) t
+                  """;
+        String plan = getVerboseExplain(sql);
+        // Neither position is dictionary encoded, and both branches feed the union strings.
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [24, VARCHAR(50), true] | [25, VARCHAR(50), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: c_user, VARCHAR(50), true] | [2: c_user, VARCHAR(50), true]\n" +
+                "  |      [14: c_dept, VARCHAR(50), true] | [23: cast, VARCHAR(50), true]", plan);
+    }
+
+    @Test
+    public void testUnionSameChildColumnFullyMergeable() throws Exception {
+        // Same shape as testUnionSameChildColumnPartiallyMergeable, except that every position can
+        // merge its dictionaries. Giving up on a position must not spread when nothing failed.
+        String sql = """
+                  SELECT * FROM (
+                    SELECT C_USER a, C_USER b FROM low_card_t1
+                    UNION ALL
+                    SELECT C_DEPT, C_PAR FROM low_card_t1
+                  ) t
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [28, INT, true] | [29, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: c_user, INT, true] | [25: c_user, INT, true]\n" +
+                "  |      [26: c_dept, INT, true] | [27: c_par, INT, true]", plan);
     }
 
     @Test
@@ -3409,5 +3459,30 @@ public class LowCardinalityTest2 extends PlanTestBase {
         } finally {
             Config.push_down_non_grouped_aggregate_below_union = prevConfig;
         }
+    }
+
+    @Test
+    void testPredicateOnlyDictDecodeWithProjection() throws Exception {
+        String sql = """
+              WITH T1 AS ( SELECT C_USER, C_DEPT FROM low_card_t1) [MATERIALIZED]
+              SELECT C_DEPT FROM T1 WHERE C_USER = "str"
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    16: DictDefine(14: c_user, [<place-holder>])\n" +
+                "    17: DictDefine(15: c_dept, [<place-holder>])\n" +
+                "\n" +
+                "  5:Decode\n" +
+                "  |  <dict id 17> : <string id 13>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  17 <-> [17: c_dept, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  3:SELECT\n" +
+                "  |  predicates: DictDecode(16: c_user, [<place-holder> = 'str'])\n" +
+                "  |  cardinality: 1", plan);
     }
 }

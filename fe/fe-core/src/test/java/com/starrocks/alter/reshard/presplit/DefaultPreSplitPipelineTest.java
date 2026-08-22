@@ -25,12 +25,15 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -714,6 +717,236 @@ public class DefaultPreSplitPipelineTest {
         SampleSubqueryExecutor executor = DefaultPreSplitPipeline.sampleSubqueryExecutorFor(LoadKind.INSERT_FROM_TABLE);
         Assertions.assertInstanceOf(InsertFromTableSampleSubqueryExecutor.class, executor,
                 "INSERT_FROM_TABLE load kind must produce an InsertFromTableSampleSubqueryExecutor");
+    }
+
+    @Test
+    public void samplerFactoriesRejectMvRefresh() {
+        // An incremental MV refresh is served by the derived tier, which is chosen before any sampler is
+        // built, so reaching either factory with that load kind means the routing broke. Both factories
+        // switch exhaustively over LoadKind, so this also pins that neither grew a silent default branch.
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> DefaultPreSplitPipeline.sampleSubqueryExecutorFor(LoadKind.MV_REFRESH),
+                "MV_REFRESH must never resolve a sample sub-query executor");
+    }
+
+    // ---------- preSubmit: derived tier ----------
+
+    /**
+     * A derived pipeline whose sampler tiers fail the test if reached: the derived path must never
+     * consult one, so a routing regression surfaces here rather than as a silent sample.
+     */
+    private DefaultPreSplitPipeline newDerivedPipeline(List<IndexPreSplitTarget> indexTargets,
+            DerivedBoundarySource derivedBoundarySource) {
+        return new DefaultPreSplitPipeline(
+                (request, requestedTabletCount) -> {
+                    throw new AssertionError("meta tier must not be invoked on the derived path");
+                },
+                request -> {
+                    throw new AssertionError("data tier must not be invoked on the derived path");
+                },
+                tabletReshardJobManager, database, table, indexTargets, FILE_TOTAL_BYTES,
+                POLL_INTERVAL, Clock.systemUTC(), null, derivedBoundarySource);
+    }
+
+    @Test
+    public void preSubmit_derivedSource_buildsJobFromItsCuts() throws Exception {
+        // The source's cuts must reach the job verbatim: the derived tier has no sample to re-sort or
+        // re-quantile, so anything that reshaped them here would silently move rows between tablets.
+        DerivedBoundarySource derived = (indexTarget, requestedTabletCount) -> DerivedBoundarySource.Result.of(
+                new BoundaryPlannerResult(List.of(bigintTuple(100), bigintTuple(200))));
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newDerivedPipeline(singleBaseTarget(), derived);
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isPresent());
+            Assertions.assertSame(fakeJob, prepared.get().payload());
+            List<TabletRange> ranges = mapCaptor.getValue().get(OLD_TABLET_ID);
+            Assertions.assertEquals(3, ranges.size(), "two cuts carve three tablets");
+            Assertions.assertTrue(ranges.get(0).getRange().isMinimum());
+            Assertions.assertEquals(bigintTuple(100), ranges.get(1).getRange().getLowerBound());
+            Assertions.assertEquals(bigintTuple(200), ranges.get(1).getRange().getUpperBound());
+            Assertions.assertTrue(ranges.get(2).getRange().isMaximum());
+        }
+    }
+
+    @Test
+    public void preSubmit_derivedSource_recordsDerivedTierWithoutSamplerInvocation() throws Exception {
+        // The derived tier reads nothing, so counting it as a sampler invocation would make that metric
+        // (and any sampler-failure ratio taken against it) describe runs that never sampled.
+        DerivedBoundarySource derived = (indexTarget, requestedTabletCount) -> DerivedBoundarySource.Result.of(
+                new BoundaryPlannerResult(List.of(bigintTuple(100), bigintTuple(200))));
+
+        withTestLocalPreSplitMetrics("records_derived_tier", () -> {
+            String tierLabel = DefaultPreSplitPipeline.TIER_LABEL_DERIVED_TIER;
+            long baselineTierCount = MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue();
+
+            TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
+                        .thenReturn(fakeJob);
+
+                newDerivedPipeline(singleBaseTarget(), derived)
+                        .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
+
+            Assertions.assertEquals(0L, MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS.getValue().longValue(),
+                    "a derived plan must not count as a sampler invocation");
+            Assertions.assertEquals(baselineTierCount + 1,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue().longValue(),
+                    "the derived tier must still report which tier produced the boundaries");
+            Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount());
+            Assertions.assertEquals(2, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getSnapshot().getMax());
+        });
+    }
+
+    @Test
+    public void preSubmit_derivedSourceSkips_recordsTheSourcesOwnReason() throws Exception {
+        // Losing the source's reason would leave the operator with the coordinator's generic
+        // "no useful cuts" for a span that was measured and found too small to carve.
+        DerivedBoundarySource derived = (indexTarget, requestedTabletCount) ->
+                DerivedBoundarySource.Result.skipped(SkipReason.ROW_ID_SPAN_TOO_SMALL);
+
+        withTestLocalPreSplitMetrics("source_skips", () -> {
+            long baselineSkip = eligibilitySkipCount(SkipReason.ROW_ID_SPAN_TOO_SMALL);
+            long baselineNoUsefulCuts = eligibilitySkipCount(SkipReason.NO_USEFUL_CUTS);
+            long baselineSamplerFailed = samplerFailedCount(SkipReason.SAMPLE_FAILED);
+
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                        newDerivedPipeline(singleBaseTarget(), derived)
+                                .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+                Assertions.assertTrue(prepared.isEmpty());
+                mocked.verifyNoInteractions();
+            }
+
+            Assertions.assertEquals(baselineSkip + 1, eligibilitySkipCount(SkipReason.ROW_ID_SPAN_TOO_SMALL));
+            Assertions.assertEquals(baselineNoUsefulCuts, eligibilitySkipCount(SkipReason.NO_USEFUL_CUTS),
+                    "the source's reason must not degrade into the coordinator's generic one");
+            Assertions.assertEquals(baselineSamplerFailed, samplerFailedCount(SkipReason.SAMPLE_FAILED),
+                    "no sampler ran, so nothing belongs in the sampler-failure family");
+        });
+    }
+
+    @Test
+    public void preSubmit_derivedSourceThrows_recordsDerivationFailed() throws Exception {
+        DerivedBoundarySource derived = (indexTarget, requestedTabletCount) -> {
+            throw new IllegalStateException("simulated boundary-source failure");
+        };
+
+        withTestLocalPreSplitMetrics("source_throws", () -> {
+            long baselineSkip = eligibilitySkipCount(SkipReason.DERIVATION_FAILED);
+            long baselineSamplerFailed = samplerFailedCount(SkipReason.DERIVATION_FAILED);
+
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                        newDerivedPipeline(singleBaseTarget(), derived)
+                                .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+                Assertions.assertTrue(prepared.isEmpty(), "a throwing source must not fail the load");
+                mocked.verifyNoInteractions();
+            }
+
+            Assertions.assertEquals(baselineSkip + 1, eligibilitySkipCount(SkipReason.DERIVATION_FAILED));
+            Assertions.assertEquals(baselineSamplerFailed, samplerFailedCount(SkipReason.DERIVATION_FAILED),
+                    "a derived-tier throw is not a sampler failure");
+        });
+    }
+
+    @Test
+    public void preSubmit_derivedCutTypeMismatch_rejectedBeforeRangesAreBuilt() throws Exception {
+        // The BE comparator orders boundaries against the stored key, so a cut of the wrong type would
+        // mis-place rows. Nothing upstream sorts or type-checks derived cuts, hence the check here.
+        Tuple varcharCut = new Tuple(List.of(Variant.of(VarcharType.VARCHAR, "100")));
+        DerivedBoundarySource derived = (indexTarget, requestedTabletCount) ->
+                DerivedBoundarySource.Result.of(new BoundaryPlannerResult(List.of(varcharCut)));
+
+        assertDerivedCutsRejected("type_mismatch", derived);
+    }
+
+    @Test
+    public void preSubmit_derivedCutsNotStrictlyIncreasing_rejectedBeforeRangesAreBuilt() throws Exception {
+        // BoundaryPlannerResult only collapses ADJACENT duplicates, so a descending pair survives it and
+        // would reach the job as an empty tablet wedged between two overlapping ones.
+        DerivedBoundarySource derived = (indexTarget, requestedTabletCount) -> DerivedBoundarySource.Result.of(
+                new BoundaryPlannerResult(List.of(bigintTuple(200), bigintTuple(100))));
+
+        assertDerivedCutsRejected("not_increasing", derived);
+    }
+
+    /**
+     * Asserts that {@code derived}'s cuts are rejected as unusable before any tablet range is built:
+     * no job is assembled, no tier/boundary metric is recorded (both of which the pipeline writes only
+     * once an index's ranges exist), and the skip is reported as a failed derivation.
+     */
+    private void assertDerivedCutsRejected(String metricNameSuffix, DerivedBoundarySource derived) throws Exception {
+        withTestLocalPreSplitMetrics(metricNameSuffix, () -> {
+            long baselineSkip = eligibilitySkipCount(SkipReason.DERIVATION_FAILED);
+
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                        newDerivedPipeline(singleBaseTarget(), derived)
+                                .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+                Assertions.assertTrue(prepared.isEmpty());
+                mocked.verifyNoInteractions();
+            }
+
+            Assertions.assertEquals(baselineSkip + 1, eligibilitySkipCount(SkipReason.DERIVATION_FAILED));
+            Assertions.assertEquals(0, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount(),
+                    "validation must reject the cuts before the pipeline builds and records any range");
+        });
+    }
+
+    private static long eligibilitySkipCount(SkipReason reason) {
+        return MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                .getMetric(reason.name().toLowerCase()).getValue();
+    }
+
+    private static long samplerFailedCount(SkipReason reason) {
+        return MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
+                .getMetric(reason.name().toLowerCase()).getValue();
+    }
+
+    /**
+     * Runs {@code assertion} with metric recording switched on and the two mutable pre-split metrics
+     * the pipeline writes replaced by test-local instances. {@code MetricRepo.init()} never runs in this
+     * bare test, so those globals are null and would NPE as soon as {@code hasInit} is forced true; the
+     * test-local instances also start at zero, which is what makes "the sampler was never invoked"
+     * observable.
+     */
+    private void withTestLocalPreSplitMetrics(String metricNameSuffix, MetricAssertion assertion) throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        Histogram savedHistogram = MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+        LongCounterMetric savedSamplerInvocations = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+        MetricRepo.hasInit = true;
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED =
+                new MetricRegistry().histogram("derived_tier_" + metricNameSuffix + "_test");
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = new LongCounterMetric(
+                "derived_tier_" + metricNameSuffix + "_test_invocations",
+                MetricUnit.REQUESTS, "test-local sampler invocations");
+        try {
+            assertion.run();
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = savedHistogram;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = savedSamplerInvocations;
+        }
+    }
+
+    /** Assertion body run by {@link #withTestLocalPreSplitMetrics}. */
+    @FunctionalInterface
+    private interface MetricAssertion {
+        void run() throws Exception;
     }
 
     /** A test-only {@link Clock} whose "now" advances only when callers say so. */

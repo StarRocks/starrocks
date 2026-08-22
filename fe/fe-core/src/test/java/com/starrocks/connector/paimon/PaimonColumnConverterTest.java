@@ -155,6 +155,14 @@ public class PaimonColumnConverterTest {
     }
 
     @Test
+    public void testConvertVariant() {
+        org.apache.paimon.types.VariantType paimonType = org.apache.paimon.types.DataTypes.VARIANT();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assertions.assertEquals(com.starrocks.type.VariantType.VARIANT, result);
+        Assertions.assertEquals(paimonType, ColumnTypeConverter.toPaimonDataType(result));
+    }
+
+    @Test
     public void testConvertArray() {
         org.apache.paimon.types.ArrayType paimonType =
                 new org.apache.paimon.types.ArrayType(new org.apache.paimon.types.SmallIntType());

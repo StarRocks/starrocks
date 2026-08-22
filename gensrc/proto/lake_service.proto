@@ -102,6 +102,17 @@ message ComputeNodePB {
 message AggregatePublishVersionRequest {
     repeated ComputeNodePB compute_nodes = 1;
     repeated PublishVersionRequest publish_reqs = 2;
+    // Transitional read metadata for an ORDER BY range-tablet split. The aggregator
+    // rebuilds each parent from the already-published child metadata and stores the
+    // result in the same bundle. Omitted by the final unshare-compaction publish,
+    // which is the atomic cutover to reading the children directly.
+    repeated ParentTabletPublishInfoPB parent_tablet_publish_infos = 3;
+}
+
+message ParentTabletPublishInfoPB {
+    optional int64 parent_tablet_id = 1;
+    // One child means an identical-tablet replacement; multiple children mean a split family.
+    repeated int64 child_tablet_ids = 2;
 }
 
 message AbortTxnRequest {
@@ -168,6 +179,9 @@ message CompactRequest {
     
     // Configuration for per-tablet parallel compaction
     optional TabletParallelConfig parallel_config = 13;
+    // Rewrites every complete rowset containing at least one explicitly shared
+    // segment. Used once after a range-tablet split to make all child files private.
+    optional bool unshare_segments = 14 [default = false];
 }
 
 message AggregateCompactRequest {

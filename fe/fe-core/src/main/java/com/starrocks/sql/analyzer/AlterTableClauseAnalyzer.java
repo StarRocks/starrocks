@@ -1130,6 +1130,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         FeNameFormat.checkColumnName(clause.getNewColName());
+        if (table != null && table.isNativeTableOrMaterializedView()) {
+            FeNameFormat.checkVirtualColumnNameNotUsed(clause.getNewColName());
+        }
         return null;
     }
 

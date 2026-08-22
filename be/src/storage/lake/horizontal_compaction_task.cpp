@@ -27,6 +27,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -133,6 +134,12 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
+    // Built once: only the encode-and-compare depends on the chunk.
+    std::optional<PrimaryKeyRangeFilter> pk_range_filter;
+    if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
+        ASSIGN_OR_RETURN(pk_range_filter, PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
+    }
+
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
@@ -164,6 +171,26 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         {
             SCOPED_RAW_TIMER(&_context->stats->chunk_transform_ns);
             ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+
+            if (pk_range_filter.has_value()) {
+                ASSIGN_OR_RETURN(auto filter, pk_range_filter->build(*chunk));
+                if (!rssid_rowids.empty()) {
+                    DCHECK_EQ(rssid_rowids.size(), filter.size());
+                    size_t output_index = 0;
+                    for (size_t i = 0; i < rssid_rowids.size(); ++i) {
+                        if (filter[i]) {
+                            rssid_rowids[output_index++] = rssid_rowids[i];
+                        }
+                    }
+                    rssid_rowids.resize(output_index);
+                }
+                chunk->filter(filter);
+            }
+        }
+        if (chunk->num_rows() == 0) {
+            chunk->reset();
+            rssid_rowids.clear();
+            continue;
         }
         {
             SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);

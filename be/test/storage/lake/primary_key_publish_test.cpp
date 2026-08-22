@@ -871,6 +871,81 @@ TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_detects_corruption) {
     EXPECT_TRUE(meta_v3.status().is_not_found()) << meta_v3.status();
 }
 
+// A checksum mismatch is most plausibly a corrupted block in the local data cache, not in remote
+// storage, so the read drops that cache and tries once more. Simulate exactly that: corrupt the del
+// file, then have the cache-drop hook restore the original bytes -- standing in for the retry reading
+// through to an intact remote object -- and the publish must then succeed instead of failing.
+TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_retries_after_dropping_cache) {
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_one_txn(make_op_chunk(n, 0, true, _slot_cid_map))).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    auto delete_txn = write_one_txn(make_op_chunk(n, 0, /*upsert=*/false, _slot_cid_map));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, delete_txn));
+    ASSERT_GE(txn_log->op_write().dels_meta_size(), 1);
+    const std::string del_path = _tablet_mgr->del_location(tablet_id, txn_log->op_write().dels_meta(0).name());
+
+    // Keep the good bytes, then corrupt the file in place (length-preserving, as in the sibling test).
+    std::string good_bytes;
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(del_path));
+        ASSIGN_OR_ABORT(good_bytes, rf->read_all());
+        ASSERT_FALSE(good_bytes.empty());
+        auto corrupted = good_bytes;
+        corrupted[corrupted.size() - 1] = static_cast<char>(corrupted[corrupted.size() - 1] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, del_path));
+        ASSERT_OK(wf->append(Slice(corrupted)));
+        ASSERT_OK(wf->close());
+    }
+
+    // The drop is a no-op on a non-shared-data build, so force it to report success and, at the same
+    // moment, restore the file -- that is what dropping a corrupt cached block achieves in production.
+    int drop_calls = 0;
+    const std::string sync_point = "lake::drop_corrupted_del_file_cache";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        ++drop_calls;
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, del_path));
+        CHECK_OK(wf->append(Slice(good_bytes)));
+        CHECK_OK(wf->close());
+        *(Status*)arg = Status::OK();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack(sync_point);
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, delete_txn).status());
+    EXPECT_EQ(1, drop_calls) << "the cache drop should have been attempted exactly once";
+    EXPECT_EQ(0, read_rows(tablet_id, 3)) << "the retried del file should have applied";
+}
+
 // Spill path: the op-aware parallel merge must preserve in-transaction upsert/delete order. Drive the
 // default spill path (enable_load_spill=true) with parallel merge and tiny merge batches so a key that is
 // deleted and then re-upserted across flushes resolves across merge batches; the re-upsert (higher global
@@ -1065,6 +1140,98 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_clips_deletes_to_tablet_range) {
     // "unexpected segment id" on an ancestor rssid the child no longer has.
     write_one_txn(3, make_op_chunk(n, /*value_shift=*/0, /*upsert=*/false, _slot_cid_map));
     EXPECT_EQ(n - kRangeUpperExclusive, read_rows(tablet_id, 3));
+}
+
+// Cross publish hands a SPLIT child the parent's whole op_write, its siblings' rows included, and
+// SegmentPKChunkRef::owned marks which of them are this child's. Both things the child feeds the
+// primary index -- the upsert, and the lookup that turns into its delvec -- have to be restricted to
+// those rows.
+//
+// The lookup side is what corrupts data: the parent view ORs the children's delvecs, so a row some
+// sibling looked up and marked deleted here vanishes from the parent view even though its owner kept
+// it. The upsert side leaves the child claiming keys outside its range, which later reads clip away
+// but which still shadow the real owner's entries in an inherited sstable.
+//
+// A real SPLIT is out of reach here, so the two things create_if_needed keys on are staged directly:
+// a tablet range covering the lower half of the keys, and an op_write whose segments are marked
+// shared. Both publishes are cross publishes of the same key set, which makes the second one's delete
+// count a direct read-out of what the first one actually indexed.
+TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_indexes_only_the_rows_this_child_owns) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    // Tablet owns (-inf, n/2); the upper half belongs to a sibling.
+    const int kOwnedRows = n / 2;
+
+    // Range distribution requires the order-preserving big-endian PK encoding; create_sst_seek_range_from
+    // rejects anything else, and the selector declines to build without it.
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto* range_pb = _tablet_metadata->mutable_range();
+    {
+        DatumVariant upper(get_type_info(LogicalType::TYPE_INT), Datum(kOwnedRows));
+        VariantTuple tuple;
+        tuple.append(upper);
+        tuple.to_proto(range_pb->mutable_upper_bound());
+        range_pb->set_upper_bound_included(false);
+    }
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+
+    auto cross_publish_all_keys = [&](int64_t version) {
+        auto chunk = make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // What convert_txn_log_for_splitting leaves behind: the segments stay the parent's and every
+        // child publishes the same ones, so each has to select its own rows out of them.
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+
+    // The two publishes run the two sides of parallel_upsert, which select identically but reach the
+    // index by different overloads -- inline with the DeletesMap, or through a slot the context owns.
+    {
+        ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
+        cross_publish_all_keys(2);
+    }
+    {
+        ConfigResetGuard<bool> parallel(&config::enable_pk_index_parallel_execution, true);
+        cross_publish_all_keys(3);
+    }
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    // v3 overwrites exactly the keys v2 put in the index. Unselected, v2 indexes all n and v3 finds
+    // all n, so this would be n.
+    EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(kOwnedRows, read_rows(tablet_id, 3));
 }
 
 // Spill path regression (kevincai review on #75366): when a single op-aware merge task emits more than one

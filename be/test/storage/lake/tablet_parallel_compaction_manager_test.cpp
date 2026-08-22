@@ -133,6 +133,32 @@ TEST_F(TabletParallelCompactionStateTest, test_is_complete) {
     EXPECT_TRUE(_state->is_complete());
 }
 
+// Pins the compaction-policy configs that these tests' expected subtask counts are derived from, and
+// puts the previous values back on destruction. The BE test binary shares one process, so without
+// this the number of rowsets pick_rowsets() returns depends on whatever suite ran earlier: with a
+// leaked max_cumulative_compaction_num_singleton_deltas=10, a 20-rowset tablet yields 2 subtasks
+// instead of 4. The pinned values are the config defaults.
+class CompactionPolicyConfigPin {
+public:
+    CompactionPolicyConfigPin() {
+        config::enable_size_tiered_compaction_strategy = true;
+        config::min_cumulative_compaction_num_singleton_deltas = 5;
+        config::max_cumulative_compaction_num_singleton_deltas = 500;
+    }
+
+    ~CompactionPolicyConfigPin() {
+        config::enable_size_tiered_compaction_strategy = _enable_size_tiered;
+        config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _max_cumulative_deltas;
+    }
+
+private:
+    // Captured before the constructor body overwrites them.
+    bool _enable_size_tiered = config::enable_size_tiered_compaction_strategy;
+    int64_t _min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+    int64_t _max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+};
+
 class TabletParallelCompactionManagerTest : public TestBase {
 public:
     TabletParallelCompactionManagerTest() : TestBase(kTestDirectory) { clear_and_init_test_dir(); }
@@ -238,6 +264,9 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
     std::unique_ptr<ThreadPool> _thread_pool;
+    // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
+    // the pinned values and no other suite inherits them.
+    CompactionPolicyConfigPin _config_pin;
 };
 
 TEST_F(TabletParallelCompactionManagerTest, test_get_tablet_state_not_exist) {
@@ -276,6 +305,154 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_not_exist) {
 TEST_F(TabletParallelCompactionManagerTest, test_metrics_initial_value) {
     EXPECT_EQ(0, _manager->running_subtasks());
     EXPECT_EQ(0, _manager->completed_subtasks());
+}
+
+// Builds |rowset_count| shared rowsets of |segments_per_rowset| segments, each |segment_bytes| big.
+// Returned by value alongside the metadata that owns them.
+static std::vector<RowsetPtr> make_shared_rowsets(TabletManager* tablet_mgr, const MutableTabletMetadataPtr& metadata,
+                                                  int rowset_count, int segments_per_rowset, int64_t segment_bytes) {
+    std::vector<RowsetPtr> rowsets;
+    for (int rowset_id = 0; rowset_id < rowset_count; ++rowset_id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(segments_per_rowset * 100);
+        rowset->set_data_size(segments_per_rowset * segment_bytes);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < segments_per_rowset; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("unshare_{}_{}", rowset_id, segment));
+            segment_meta->set_size(segment_bytes);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(tablet_mgr, metadata, rowset_id, 0));
+    }
+    return rowsets;
+}
+
+// The planner refuses to plan at all rather than returning a partial cover. UNSHARE is
+// all-or-nothing, so "no groups" is the safe answer and the caller falls back to the serial path.
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_degenerate_inputs) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90101);
+    metadata->set_version(2);
+    auto rowsets = make_shared_rowsets(_tablet_mgr.get(), metadata, 2, 4, 100);
+
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), {}, 4, 200).empty()) << "no rowsets";
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 1, 200).empty()) << "no parallelism";
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 0).empty()) << "no byte budget";
+    // Budget larger than the whole tablet: one part is enough, so there is nothing to parallelise.
+    EXPECT_TRUE(_manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 1 << 20).empty())
+            << "a single part covers everything";
+}
+
+// More rowsets than parts: each group takes whole rowsets and never splits one, so every group is
+// NORMAL and the cover is still exact.
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_pack_whole_rowsets) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90102);
+    metadata->set_version(2);
+    auto rowsets = make_shared_rowsets(_tablet_mgr.get(), metadata, 6, 2, 100);
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 3, 400);
+    ASSERT_FALSE(groups.empty());
+    EXPECT_LE(groups.size(), 3u);
+    EXPECT_TRUE(std::all_of(groups.begin(), groups.end(),
+                            [](const SubtaskGroup& group) { return group.type == SubtaskType::NORMAL; }));
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+
+    size_t covered = 0;
+    for (const auto& group : groups) {
+        covered += group.rowsets.size();
+    }
+    EXPECT_EQ(rowsets.size(), covered) << "every rowset must land in exactly one group";
+}
+
+// A rowset that only warrants one part is emitted as NORMAL rather than as a one-part
+// LARGE_ROWSET_PART, while its outsized sibling is still split. Both shapes in one plan.
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_mixed_part_counts) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90103);
+    metadata->set_version(2);
+    std::vector<RowsetPtr> rowsets;
+    // rowset 0 is tiny (1 segment), rowset 1 is 8x bigger and must be carved up.
+    for (int rowset_id = 0; rowset_id < 2; ++rowset_id) {
+        const int segments = rowset_id == 0 ? 1 : 8;
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(segments * 100);
+        rowset->set_data_size(segments * 100);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < segments; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("mixed_{}_{}", rowset_id, segment));
+            segment_meta->set_size(100);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), metadata, rowset_id, 0));
+    }
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_FALSE(groups.empty());
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok())
+            << "a mixed plan must still cover every segment exactly once";
+}
+
+// Coverage validation has to reject a plan that drops a whole rowset, not just one with a
+// gap/overlap inside a rowset -- dropping one is exactly how sibling rows would survive UNSHARE.
+TEST_F(TabletParallelCompactionManagerTest, test_validate_unshare_coverage_rejects_a_missing_rowset) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90104);
+    metadata->set_version(2);
+    auto rowsets = make_shared_rowsets(_tablet_mgr.get(), metadata, 2, 4, 100);
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_FALSE(groups.empty());
+    ASSERT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+
+    groups.pop_back();
+    EXPECT_FALSE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+}
+
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_cover_all_segments) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90001);
+    metadata->set_version(2);
+    std::vector<RowsetPtr> rowsets;
+    for (uint32_t rowset_id = 0; rowset_id < 2; ++rowset_id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(600);
+        rowset->set_data_size(600);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < 6; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("unshare_{}_{}", rowset_id, segment));
+            segment_meta->set_size(100);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), metadata, rowset_id, 0));
+    }
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_EQ(4, groups.size());
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+    EXPECT_TRUE(std::all_of(groups.begin(), groups.end(),
+                            [](const SubtaskGroup& group) { return group.type == SubtaskType::LARGE_ROWSET_PART; }));
+
+    groups.front().segment_start = 1;
+    auto invalid = _manager->_validate_unshare_group_coverage(rowsets, groups);
+    EXPECT_FALSE(invalid.ok());
+    EXPECT_TRUE(invalid.message().find("gap/overlap") != std::string::npos);
+
+    const int64_t txn_id = 90002;
+    auto state_or = _manager->create_and_register_tablet_state(metadata->id(), txn_id, metadata->version(), 4, 200,
+                                                               true, nullptr, [](bool /*success*/) {});
+    ASSERT_TRUE(state_or.ok());
+    state_or.value()->expected_unshare_subtask_count = 2;
+    auto merged_log = _manager->get_merged_txn_log(metadata->id(), txn_id);
+    EXPECT_FALSE(merged_log.ok());
+    EXPECT_TRUE(merged_log.status().message().find("Incomplete parallel UNSHARE") != std::string::npos);
+    _manager->cleanup_tablet(metadata->id(), txn_id);
 }
 
 TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_not_exist) {
@@ -2991,6 +3168,9 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::unique_ptr<TabletParallelCompactionManager> _manager;
+    // Constructed before SetUp() and destroyed after TearDown(), so every test in this fixture sees
+    // the pinned values and no other suite inherits them.
+    CompactionPolicyConfigPin _config_pin;
 };
 
 // Test that a large rowset meeting split criteria is identified

@@ -25,6 +25,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/tablet_schema.h"
 #include "test_util.h"
 
 namespace starrocks::lake {
@@ -39,6 +40,19 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_compaction_policy";
 
     void SetUp() override {
+        // The whole BE test binary runs in one process, so snapshot every global config this fixture
+        // (or its test bodies) overrides and restore it in TearDown. Leaked values change how later
+        // suites pick compaction inputs -- max_cumulative_compaction_num_singleton_deltas=10 caps
+        // SizeTieredCompactionPolicy::pick_rowsets() at 10 segments instead of the default 500.
+        _saved_tablet_max_versions = config::tablet_max_versions;
+        _saved_min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _saved_max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _saved_min_base_deltas = config::min_base_compaction_num_singleton_deltas;
+        _saved_size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _saved_size_tiered_level_multiple = config::size_tiered_level_multiple;
+        _saved_size_tiered_level_num = config::size_tiered_level_num;
+        _saved_enable_size_tiered = config::enable_size_tiered_compaction_strategy;
+
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 3;
         config::max_cumulative_compaction_num_singleton_deltas = 10;
@@ -51,7 +65,18 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        config::tablet_max_versions = _saved_tablet_max_versions;
+        config::min_cumulative_compaction_num_singleton_deltas = _saved_min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _saved_max_cumulative_deltas;
+        config::min_base_compaction_num_singleton_deltas = _saved_min_base_deltas;
+        config::size_tiered_min_level_size = _saved_size_tiered_min_level_size;
+        config::size_tiered_level_multiple = _saved_size_tiered_level_multiple;
+        config::size_tiered_level_num = _saved_size_tiered_level_num;
+        config::enable_size_tiered_compaction_strategy = _saved_enable_size_tiered;
+
+        remove_test_dir_ignore_error();
+    }
 
     void add_data_rowset(uint32 id, bool overlap, int64_t level) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
@@ -81,6 +106,16 @@ protected:
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
+
+    // Config values captured in SetUp and put back in TearDown.
+    int16_t _saved_tablet_max_versions = 0;
+    int64_t _saved_min_cumulative_deltas = 0;
+    int64_t _saved_max_cumulative_deltas = 0;
+    int64_t _saved_min_base_deltas = 0;
+    int64_t _saved_size_tiered_min_level_size = 0;
+    int64_t _saved_size_tiered_level_multiple = 0;
+    int64_t _saved_size_tiered_level_num = 0;
+    bool _saved_enable_size_tiered = false;
 };
 
 // ------ BaseAndCumulativeCompactionPolicy ------
@@ -736,6 +771,144 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
                     CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto cumulative_rowsets, cumulative_policy->pick_rowsets());
     EXPECT_TRUE(cumulative_rowsets.empty());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_picks_complete_shared_rowsets_only) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_version(2);
+    metadata->mutable_range();
+
+    auto add_rowset = [&](uint32_t id, std::initializer_list<bool> shared_segments) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        rowset->set_overlapped(shared_segments.size() > 1);
+        for (bool shared : shared_segments) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename("rowset_" + std::to_string(id) + "_segment_" +
+                                  std::to_string(rowset->segment_metas_size()));
+            segment->set_shared(shared);
+        }
+    };
+    add_rowset(1, {false});
+    add_rowset(2, {true});
+    add_rowset(3, {false, true, false});
+    add_rowset(4, {false, false});
+
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, true));
+    ASSIGN_OR_ABORT(auto rowsets, policy->pick_rowsets());
+    ASSERT_EQ(2, rowsets.size());
+    EXPECT_EQ(2, rowsets[0]->id());
+    EXPECT_EQ(3, rowsets[1]->id());
+    // A mixed rowset is selected as one complete Rowset object, never as an
+    // individual shared-segment slice.
+    EXPECT_EQ(3, rowsets[1]->num_segments());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_rejects_unsupported_metadata) {
+    auto non_pk = generate_simple_tablet_metadata(DUP_KEYS);
+    non_pk->mutable_range();
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), non_pk, false, true).ok());
+
+    auto no_range = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), no_range, false, true).ok());
+
+    auto dcg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    dcg->mutable_range();
+    (*dcg->mutable_dcg_meta()->mutable_dcgs())[1].add_column_files("dcg.cols");
+    auto dcg_status = CompactionPolicy::create(_tablet_mgr.get(), dcg, false, true);
+    ASSERT_FALSE(dcg_status.ok());
+    EXPECT_TRUE(dcg_status.status().is_not_supported());
+
+    auto idg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    idg->mutable_range();
+    (*idg->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("idg.idx");
+    auto idg_status = CompactionPolicy::create(_tablet_mgr.get(), idg, false, true);
+    ASSERT_FALSE(idg_status.ok());
+    EXPECT_TRUE(idg_status.status().is_not_supported());
+}
+
+// The guard that keeps everyday compaction off a split's inherited files. Without it an ordinary
+// compaction on an ORDER BY != PK child reads the shared segments whole (the tablet range is
+// withheld for that shape and the row filter is only built for UNSHARE), folds the siblings' rows
+// into a private output, and UNSHARE then skips that rowset because it no longer carries a shared
+// segment -- so those rows are served by the wrong child after cutover.
+// Its own on-disk root, not LakeCompactionPolicyTest's. The test binary runs each case in its own
+// process but several at once from the same working directory, and every fixture in that family
+// clears the same RELATIVE directory in SetUp -- so one process's clear_and_init_test_dir() deletes
+// the meta/ another has just created. Adding cases to the shared root widens that window.
+class OrdinaryCompactionSharedWindowTest : public TestBase {
+public:
+    OrdinaryCompactionSharedWindowTest() : TestBase(kOwnTestDirectory) {}
+
+protected:
+    constexpr static const char* const kOwnTestDirectory = "test_ordinary_compaction_shared_window";
+
+    void SetUp() override { clear_and_init_test_dir(); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    // Delete-bearing rowsets plus force_base_compaction below, so that WITHOUT the guard the picker
+    // is guaranteed to select all of them. Otherwise an empty result would not distinguish "the
+    // guard blocked it" from "the size-tiered policy had nothing worth merging", and the test would
+    // pass for the wrong reason.
+    MutableTabletMetadataPtr make_metadata(bool separate_sort_key, bool shared_segment) {
+        constexpr int64_t kBig = 100 * 1024 * 1024;
+        auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        metadata->set_version(2);
+        metadata->mutable_range();
+        // c0 is the only key column; ORDER BY the value column c1 is what makes the sort key
+        // separate from the primary key -- the shape whose range has no rowid interval.
+        if (separate_sort_key) {
+            metadata->mutable_schema()->add_sort_key_idxes(1);
+        }
+        for (uint32_t id = 1; id <= 2; ++id) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(id);
+            rowset->set_overlapped(false);
+            rowset->set_num_rows(4000000);
+            rowset->set_num_dels(3200000);
+            rowset->set_data_size(kBig);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename("rowset_" + std::to_string(id) + "_segment_0");
+            segment->set_num_rows(4000000);
+            segment->set_shared(shared_segment);
+        }
+        return metadata;
+    }
+
+    std::vector<RowsetPtr> pick(const MutableTabletMetadataPtr& metadata) {
+        auto policy_or = CompactionPolicy::create(_tablet_mgr.get(), metadata, /*force_base_compaction=*/true,
+                                                  /*is_unshare=*/false);
+        CHECK(policy_or.ok()) << policy_or.status();
+        auto rowsets_or = policy_or.value()->pick_rowsets();
+        CHECK(rowsets_or.ok()) << rowsets_or.status();
+        return std::move(rowsets_or.value());
+    }
+};
+
+// The control: nothing shared, so the guard does not apply and the picker takes both rowsets. This
+// is what makes the two assertions below meaningful.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_picks_normally_when_no_segment_is_shared) {
+    auto metadata = make_metadata(/*separate_sort_key=*/true, /*shared_segment=*/false);
+    ASSERT_TRUE(TabletSchema::create(metadata->schema())->has_separate_sort_key());
+    EXPECT_EQ(2, pick(metadata).size()) << "the guard must not outlive the shared window";
+}
+
+// The fix itself: ordinary compaction must not touch a split's inherited files, because it would
+// fold the siblings' rows into a private output that the UNSHARE pass then skips.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_blocked_while_shared_segments_await_unshare) {
+    auto metadata = make_metadata(/*separate_sort_key=*/true, /*shared_segment=*/true);
+    EXPECT_TRUE(pick(metadata).empty()) << "ordinary compaction must wait for UNSHARE";
+}
+
+// A plain split keeps the range in sort-key space, so _apply_tablet_range still narrows to a rowid
+// interval and ordinary compaction is not reading whole shared segments. Blocking here would stall
+// every ranged primary-key table that ever split, for nothing.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_when_the_sort_key_is_the_primary_key) {
+    auto metadata = make_metadata(/*separate_sort_key=*/false, /*shared_segment=*/true);
+    ASSERT_FALSE(TabletSchema::create(metadata->schema())->has_separate_sort_key());
+    EXPECT_EQ(2, pick(metadata).size()) << "the guard is only for the shape whose range has no rowid interval";
 }
 
 } // namespace starrocks::lake

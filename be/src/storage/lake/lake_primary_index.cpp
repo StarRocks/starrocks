@@ -14,6 +14,9 @@
 
 #include "storage/lake/lake_primary_index.h"
 
+#include <utility>
+#include <vector>
+
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "storage/chunk_helper.h"
@@ -21,10 +24,30 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset_update_state.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 
 namespace starrocks::lake {
+
+// A cross-published chunk carries this tablet's rows AND its siblings'. SegmentPKChunkRef::owned
+// marks which are ours, as a mask over the chunk rather than a filtered copy, so row i keeps its
+// source-segment rowid physical_rowid_offset + i. These two turn that mask into the shapes the
+// primary index takes, and neither is entered at all on an ordinary publish, where `owned` is empty
+// and every row belongs here.
+
+// Absolute source-segment rowids of the owned rows, in chunk order. Must be read off the mask BEFORE
+// the column is filtered -- filtering renumbers the survivors and the correspondence is lost.
+std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current) {
+    std::vector<uint32_t> rowids;
+    rowids.reserve(current.owned.size());
+    for (size_t i = 0; i < current.owned.size(); ++i) {
+        if (current.owned[i]) {
+            rowids.push_back(current.physical_rowid_offset + static_cast<uint32_t>(i));
+        }
+    }
+    return rowids;
+}
 
 Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -285,6 +308,29 @@ int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
 // - Each task allocates its own slot to avoid data races during parallel execution
 // - Shared state (deletes, status) is protected by mutex when updated
 // - Errors are accumulated and checked after all tasks complete
+Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
+                                      ParallelPublishContext* context) {
+    DCHECK(!current.owned.empty());
+    // Off the mask before filtering: filtering renumbers what survives, and these have to stay the
+    // rows' positions in the source segment.
+    auto owned_rowids = owned_rowids_of(current);
+    slot->pk_column->filter(current.owned);
+    if (owned_rowids.empty()) {
+        return Status::OK();
+    }
+    // One call for the whole chunk, never one per contiguous run of owned rows: ownership of a
+    // segment ordered by a separate sort key is scattered row by row, so runs degenerate towards one
+    // per row and each call redoes the inactive-memtable and SST lookup and the flush check.
+    RETURN_IF_ERROR(upsert(rssid, owned_rowids, *slot->pk_column, nullptr /* stat */, context));
+    if (context->token == nullptr) {
+        // With no token LakePersistentIndex::upsert resolves the replaced locations inline but does
+        // not drain them into context->deletes -- in the parallel case that is the submitted lambda's
+        // job, so it only happens there.
+        old_values_to_deletes(slot->old_values, context->deletes);
+    }
+    return Status::OK();
+}
+
 Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
                                       DeletesMap* new_deletes) {
     // Prepare parallel execution infrastructure if enabled
@@ -315,8 +361,16 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             if (pk_column_st.ok()) {
                 // Query index for existing rows with these primary keys
                 slot->pk_column = std::move(pk_column_st.value());
+                // Drop the siblings' keys first. Their old locations would otherwise reach
+                // old_values_to_deletes below and be marked deleted in THIS child's delvec, and the
+                // parent view ORs the children's delvecs -- so a sibling's lookup would erase a row
+                // its owner kept. Only the values matter downstream, never their positions, so
+                // filtering in place needs no index mapping.
+                if (!current.owned.empty()) {
+                    slot->pk_column->filter(current.owned);
+                }
                 slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
-                st = get(*slot->pk_column, &slot->old_values);
+                st = slot->pk_column->empty() ? Status::OK() : get(*slot->pk_column, &slot->old_values);
             } else {
                 st = pk_column_st.status();
             }
@@ -487,9 +541,13 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
                 // Store pk_column in this task's slot to avoid data races
                 slot->pk_column = std::move(pk_column_st.value());
 
-                // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
-                // them in the context (not used for upsert, only for parallel_get)
-                st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
+                if (!current.owned.empty()) {
+                    st = upsert_owned(rssid, current, slot, &context);
+                } else {
+                    // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
+                    // them in the context (not used for upsert, only for parallel_get)
+                    st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
+                }
                 TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
             } else {
                 st = pk_column_st.status();
@@ -503,7 +561,22 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
         } else {
             // Serial mode: Execute inline with direct error propagation
             ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
-            RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
+            if (current.owned.empty()) {
+                // No slot here, unlike the branch below: this overload takes the DeletesMap directly
+                // and knows nothing about a context, so it buffers internally. Only the rowid-vector
+                // overload needs one -- it was written for the parallel path, where the scratch has
+                // to outlive the call in storage the context owns.
+                RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
+            } else {
+                // A fresh slot per chunk, as in the parallel branch. The scratch inside it is
+                // append-only (build_persistent_keys and _build_persistent_values both emplace_back,
+                // and old_values is resized without re-initialising what is already there), so
+                // reusing one would need explicit clearing; a new slot is simply always empty.
+                context.extend_slots();
+                auto* slot = context.slots.back().get();
+                slot->pk_column = std::move(pk_column);
+                RETURN_IF_ERROR(upsert_owned(rssid, current, slot, &context));
+            }
         }
     }
     // Synchronize parallel execution if enabled

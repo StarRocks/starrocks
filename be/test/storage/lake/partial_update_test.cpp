@@ -1747,6 +1747,208 @@ protected:
     Chunk::SlotHashMap _slot_cid_map;
 };
 
+// `ORDER BY` may put value columns into a primary key table's sort key while still keeping a key
+// column in it, e.g. PRIMARY KEY(c0) ORDER BY(c1, c0). A DELETE on such a table reaches the writer
+// as a "partial update" (its write schema is just the key columns), and its publish must not try to
+// rewrite the empty segment that the delete-only flush emits: the rewrite would write the unmodified
+// columns (c1, c2) alone, a column set that holds SOME sort key columns but not c0.
+class LakeSortKeyWithValueColumnDeleteTest : public TestBase {
+public:
+    LakeSortKeyWithValueColumnDeleteTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+        //
+        //  | column | type | KEY | NULL | SORTKEY |
+        //  +--------+------+-----+------+---------+
+        //  |   c0   |  INT | YES |  NO  |   YES   |
+        //  |   c1   |  INT | NO  |  YES |   YES   |
+        //  |   c2   |  INT | NO  |  YES |   NO    |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("INT");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+        }
+        // ORDER BY(c1, c0): a value column first, the key column second. The delete's rewrite column
+        // set (c1, c2) therefore intersects the sort key without covering it.
+        schema->add_sort_key_idxes(1);
+        schema->add_sort_key_idxes(0);
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+        // A DELETE hands the writer the key columns plus the trailing __op marker.
+        _delete_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _delete_slots.emplace_back(1, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        for (auto& slot : _delete_slots) {
+            _delete_slot_pointers.emplace_back(&slot);
+        }
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override {
+        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        remove_test_dir_or_die();
+    }
+
+    Chunk generate_full_data(int64_t chunk_size) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            c1->append(i * 3);
+            c2->append(i * 7);
+        }
+        Chunk::SlotHashMap slot_cid_map;
+        slot_cid_map[0] = 0;
+        slot_cid_map[1] = 1;
+        slot_cid_map[2] = 2;
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, slot_cid_map);
+    }
+
+    Chunk generate_delete_data(int64_t chunk_size) {
+        auto c0 = Int32Column::create();
+        auto cop = Int8Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            cop->append(TOpType::DELETE);
+        }
+        Chunk::SlotHashMap slot_cid_map;
+        slot_cid_map[0] = 0;
+        slot_cid_map[1] = 1;
+        return Chunk({std::move(c0), std::move(cop)}, slot_cid_map);
+    }
+
+    int64_t read_rows(int64_t tablet_id, int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        int64_t rows = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            rows += chunk->num_rows();
+            chunk->reset();
+        }
+        return rows;
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_sort_key_with_value_column_delete";
+    constexpr static const int kChunkSize = 12;
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = 4562;
+    std::vector<SlotDescriptor> _delete_slots;
+    std::vector<SlotDescriptor*> _delete_slot_pointers;
+};
+
+TEST_F(LakeSortKeyWithValueColumnDeleteTest, test_delete_publish) {
+    auto tablet_id = _tablet_metadata->id();
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    int64_t version = 1;
+
+    // Load the rows with a full-schema write.
+    {
+        auto chunk = generate_full_data(kChunkSize);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+
+    // Delete every row. The delete-only flush emits a 0-row segment plus a del file, and the txn log
+    // carries partial-update metadata for it; publishing must skip the rewrite of that empty segment
+    // instead of failing with "is sort key but not find while init segment writer".
+    {
+        auto chunk = generate_delete_data(kChunkSize);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_delete_slot_pointers)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+
+        // The regression only bites when the txn log really does look like a partial update with an
+        // empty segment to rewrite -- assert that shape so the test cannot silently stop covering it.
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        const auto& op_write = txn_log->op_write();
+        ASSERT_TRUE(op_write.has_txn_meta());
+        ASSERT_GT(op_write.rewrite_segments_meta_size(), 0);
+        ASSERT_EQ(0, op_write.rowset().num_rows());
+        ASSERT_GT(op_write.rowset().segment_metas_size(), 0);
+        for (const auto& segment_meta : op_write.rowset().segment_metas()) {
+            ASSERT_EQ(0, segment_meta.num_rows());
+        }
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(0, read_rows(tablet_id, version));
+}
+
 TEST_F(LakeIncompleteSortKeyPartialUpdateTest, test_incomplete_sort_key) {
     auto chunk0 = generate_data(kChunkSize, 0, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -1844,6 +2046,85 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
     // success
     _tablet_mgr->prune_metacache();
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id));
+    ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+}
+
+// The other half of the guard in RowsetUpdateState::rewrite_segment: a row-mode partial update whose
+// rowset-level num_rows has been apportioned to 0 by a split cross publish must STILL be rewritten,
+// because its segments do hold this tablet's rows. Emulate the apportionment by zeroing the txn log's
+// rowset counter while leaving the per-segment counts alone -- exactly what
+// tablet_reshard_helper::update_rowset_data_stats does to a sibling.
+//
+// c2 is the assertion that has teeth: it is not in the partial write, so it only survives if the
+// rewrite merged the unmodified columns back in. Skipping the rewrite would attach a segment holding
+// c0 and c1 alone.
+TEST_P(LakePartialUpdateTest, test_partial_update_rewrite_with_apportioned_num_rows) {
+    if (GetParam().enable_persistent_index) return;
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) return;
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Apportion the rowset counter down to 0, leaving the per-segment counts as the only witness
+    // that this rowset holds rows.
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto apportioned = std::make_shared<TxnLogPB>(*txn_log);
+        auto* rowset = apportioned->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->num_rows(), 0);
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->set_num_rows(0);
+        int64_t segment_rows = 0;
+        for (const auto& segment_meta : rowset->segment_metas()) {
+            segment_rows += segment_meta.num_rows();
+        }
+        ASSERT_GT(segment_rows, 0) << "the per-segment counts must survive the apportionment";
+        ASSERT_OK(_tablet_mgr->put_txn_log(apportioned));
+        _tablet_mgr->prune_metacache();
+    }
+
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
     ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
 }
 

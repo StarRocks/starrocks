@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -45,6 +47,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -173,15 +176,17 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testTargetPartitionSpecShortCircuits() throws Exception {
-        // INSERT INTO t PARTITION(p1) SELECT * FROM src restricts the load to
-        // specific target partitions. Pre-split must not sample the whole source
-        // and pre-create partitions outside that set.
+    public void testTargetPartitionSpecBuildsRestrictedTemporaryScope() {
         InsertStmt stmt = simpleTableInsertStmt();
         when(stmt.isSpecifyPartitionNames()).thenReturn(true);
+        when(stmt.getTargetPartitionNames()).thenReturn(
+                new PartitionRef(List.of("p1_temp"), true, NodePosition.ZERO));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.fromInsert(stmt);
+
+        Assertions.assertTrue(scope.isSpecified());
+        Assertions.assertTrue(scope.isTemporary());
+        Assertions.assertEquals("p1_temp", scope.mappedCatalogName("P1_TEMP"));
     }
 
     @Test
@@ -413,6 +418,33 @@ public class InsertPreSplitHookTableTest {
         }
     }
 
+    @Test
+    public void testMaterializedViewTargetRecordsItsSkipReason() {
+        // The sampled sources cannot map an MV's hidden row-id sort key back to a source column, so
+        // they must decline -- but declining silently left an operator unable to tell this apart from
+        // the statement never having been a pre-split candidate at all.
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (SourceFixture fixture = sourceFixture()) {
+            MaterializedView mv = mock(MaterializedView.class);
+            when(mv.getName()).thenReturn("mv_target");
+            fixture.metaUtils.when(() -> MetaUtils.getSessionAwareTable(
+                            any(), Mockito.argThat(db -> db != fixture.sourceDb), any()))
+                    .thenReturn(mv);
+
+            String label = SkipReason.MATERIALIZED_VIEW_TARGET.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            fixture.assertNoSubmit();
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "an MV target on a sampled path must bump the materialized_view_target bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
     // ---------- tryRunPreSplit: partition-branch gate ----------
 
     @Test
@@ -482,6 +514,75 @@ public class InsertPreSplitHookTableTest {
 
             fixture.assertNoSubmit();
         }
+    }
+
+    @Test
+    public void testIcebergSourceIsSupportedAndUsesSnapshotTotals() {
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        org.apache.iceberg.Snapshot snapshot = mock(org.apache.iceberg.Snapshot.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        when(snapshot.summary()).thenReturn(Map.of(
+                "total-files-size", "872000000000",
+                "total-records", "3500000000"));
+
+        Assertions.assertTrue(TablePreSplitSource.isSupportedSourceTable(icebergTable));
+        Assertions.assertEquals(new Estimates(872000000000L, 3500000000L),
+                TablePreSplitSource.sourceEstimates(icebergTable));
+    }
+
+    // The snapshot-summary keys below are written by whichever engine produced the snapshot, not by
+    // StarRocks, so a source table can legitimately arrive without them. These lock down what
+    // pre-split then does, because the degradation is silent at the SQL level.
+
+    private static IcebergTable mockIcebergTableWithSummary(Map<String, String> summary) {
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        if (summary == null) {
+            when(nativeTable.currentSnapshot()).thenReturn(null);
+            return icebergTable;
+        }
+        org.apache.iceberg.Snapshot snapshot = mock(org.apache.iceberg.Snapshot.class);
+        when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        when(snapshot.summary()).thenReturn(summary);
+        return icebergTable;
+    }
+
+    @Test
+    public void testIcebergSourceWithoutCurrentSnapshotEstimatesZero() {
+        // An empty (never-written) Iceberg table has no current snapshot.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(null)));
+    }
+
+    @Test
+    public void testIcebergSourceMissingSummaryTotalsEstimatesZero() {
+        // The case most likely to bite in production: a snapshot exists and the scan works, but the
+        // writer never recorded the totals, so pre-split has no size to work from.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(Map.of("operation", "append"))));
+    }
+
+    @Test
+    public void testIcebergSourceWithUnparseableSummaryTotalsEstimatesZero() {
+        // Never propagate a partially-parsed size: one bad key must not be combined with a good one
+        // into a ratio that over- or under-splits.
+        Assertions.assertEquals(Estimates.ZERO,
+                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(
+                        Map.of("total-files-size", "not-a-number", "total-records", "-17"))));
+    }
+
+    @Test
+    public void testZeroSourceEstimateRemovesTheSamplingRateLimit() {
+        // The consequence of the three cases above, asserted end-to-end so it cannot regress
+        // unnoticed: a zero byte estimate makes the Bernoulli rate 1.0, so every predicate-matching
+        // row reaches the ORDER BY rand() LIMIT rather than a small sample. On a large Iceberg
+        // snapshot that turns a cheap sample into a top-N over the whole filtered input.
+        Assertions.assertEquals(1.0, AbstractSqlSampleSubqueryExecutor.pickSamplingRate(0L));
+        Assertions.assertTrue(AbstractSqlSampleSubqueryExecutor.pickSamplingRate(872000000000L) < 1.0e-4,
+                "a sized snapshot must still be sampled at a small rate");
     }
 
     @Test
