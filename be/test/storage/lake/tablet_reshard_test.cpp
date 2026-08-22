@@ -288,6 +288,45 @@ protected:
         return sstable;
     }
 
+    PersistentIndexSstablePB* add_non_shared_modern_sstable(TabletMetadataPB* metadata, const std::string& filename,
+                                                            uint32_t rssid, int64_t shared_version, uint32_t max_rowid,
+                                                            uint64_t filesize) {
+        auto* sstable = add_shared_rssid_sstable(metadata, filename, rssid, shared_version, max_rowid, filesize);
+        sstable->set_shared(false);
+        return sstable;
+    }
+
+    void attach_embedded_delvec(TabletMetadataPB* metadata, int64_t tablet_id, PersistentIndexSstablePB* sstable,
+                                int64_t version, const std::string& filename, const std::string& content) {
+        auto* page = sstable->mutable_delvec();
+        page->set_version(version);
+        page->set_offset(0);
+        page->set_size(content.size());
+        FileMetaPB file;
+        file.set_name(filename);
+        file.set_size(content.size());
+        (*metadata->mutable_delvec_meta()->mutable_version_to_file())[version] = file;
+        write_file(_tablet_manager->delvec_location(tablet_id, filename), content);
+    }
+
+    std::shared_ptr<TabletMetadataPB> make_single_rowset_pk_metadata(int64_t tablet_id, uint32_t rowset_id,
+                                                                     const std::string& segment_filename) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(rowset_id + 1);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+        return metadata;
+    }
+
     TabletMetadataPtr make_modern_shared_occurrence(int64_t tablet_id, uint32_t rowset_id, uint32_t shared_rssid,
                                                     int32_t rssid_offset, uint32_t max_rowid, uint64_t filesize = 512,
                                                     int64_t shared_version = 7) {
@@ -6761,6 +6800,202 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_rejects_
     EXPECT_TRUE(merged.status().message().contains("effective rssid is out of uint32 range")) << merged.status();
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_drops_ownerless_non_shared_modern_data_sstable_with_embedded_delvec) {
+    const int64_t cold_tablet = next_id();
+    const int64_t hot_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(cold_tablet);
+    prepare_tablet_dirs(hot_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto cold = make_single_rowset_pk_metadata(cold_tablet, /*rowset_id=*/1, "cold_live.dat");
+    auto hot = make_single_rowset_pk_metadata(hot_tablet, /*rowset_id=*/3, "hot_live.dat");
+    const std::string filename = "ownerless_non_shared_modern.sst";
+    const uint64_t filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(hot_tablet, filename),
+                                                      {{"stale-key", /*rssid=*/1, /*rowid=*/0}});
+    auto* sstable = add_non_shared_modern_sstable(hot.get(), filename, /*rssid=*/1, /*shared_version=*/1,
+                                                  /*max_rowid=*/0, filesize);
+    attach_embedded_delvec(hot.get(), hot_tablet, sstable, /*version=*/1, "ownerless_non_shared.dv", "delvec");
+
+    auto merged = merge_modern_shared_occurrences(cold, hot, merged_tablet);
+    ASSERT_OK(merged);
+    for (const auto& output : merged.value()->sstable_meta().sstables()) {
+        EXPECT_NE(filename, output.filename());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_below_floor_non_shared_modern_tombstone) {
+    const int64_t cold_tablet = next_id();
+    const int64_t hot_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(cold_tablet);
+    prepare_tablet_dirs(hot_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto cold = std::make_shared<TabletMetadataPB>();
+    cold->set_id(cold_tablet);
+    cold->set_version(1);
+    cold->set_next_rowset_id(1);
+    set_primary_key_schema(cold.get(), 1001);
+    auto hot = make_single_rowset_pk_metadata(hot_tablet, /*rowset_id=*/107, "below_floor_non_shared_live.dat");
+    const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+    const std::string filename = "below_floor_non_shared_tombstone.sst";
+    const uint64_t filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(hot_tablet, filename),
+                                                      {{"deleted-key", tombstone, tombstone}});
+    add_non_shared_modern_sstable(hot.get(), filename, /*rssid=*/47, /*shared_version=*/1,
+                                  /*max_rowid=*/tombstone, filesize);
+
+    auto merged_or = merge_modern_shared_occurrences(cold, hot, merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+    const PersistentIndexSstablePB* output = nullptr;
+    for (const auto& candidate : merged->sstable_meta().sstables()) {
+        if (candidate.filename() == filename) output = &candidate;
+    }
+    ASSERT_NE(nullptr, output);
+    EXPECT_FALSE(output->shared());
+    EXPECT_EQ(0, output->shared_rssid());
+    EXPECT_EQ(0, output->rssid_offset());
+
+    ASSIGN_OR_ABORT(auto sstable, lake::PersistentIndexSstable::new_sstable(
+                                          *output, _tablet_manager->sst_location(merged_tablet, filename),
+                                          /*cache=*/nullptr, /*need_filter=*/false, /*delvec=*/nullptr, merged,
+                                          _tablet_manager.get()));
+    sstable::ReadOptions read_options;
+    read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iterator(sstable->new_iterator(read_options));
+    iterator->SeekToFirst();
+    ASSERT_TRUE(iterator->Valid());
+    IndexValuesWithVerPB values;
+    ASSERT_TRUE(values.ParseFromArray(iterator->value().data, static_cast<int>(iterator->value().size)));
+    ASSERT_EQ(1, values.values_size());
+    EXPECT_EQ(tombstone, values.values(0).rssid());
+    EXPECT_EQ(tombstone, values.values(0).rowid());
+    iterator->Next();
+    EXPECT_FALSE(iterator->Valid());
+    ASSERT_OK(iterator->status());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_modern_tombstone_keeps_embedded_delvec_guard) {
+    const int64_t cold_tablet = next_id();
+    const int64_t hot_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(cold_tablet);
+    prepare_tablet_dirs(hot_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto cold = std::make_shared<TabletMetadataPB>();
+    cold->set_id(cold_tablet);
+    cold->set_version(1);
+    cold->set_next_rowset_id(5);
+    set_primary_key_schema(cold.get(), 1001);
+    auto hot = make_single_rowset_pk_metadata(hot_tablet, /*rowset_id=*/3, "guard_live.dat");
+    const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+    const std::string filename = "non_shared_tombstone_delvec_guard.sst";
+    const uint64_t filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(hot_tablet, filename),
+                                                      {{"deleted-key", tombstone, tombstone}});
+    auto* sstable = add_non_shared_modern_sstable(hot.get(), filename, /*rssid=*/1, /*shared_version=*/1,
+                                                  /*max_rowid=*/tombstone, filesize);
+    attach_embedded_delvec(hot.get(), hot_tablet, sstable, /*version=*/1, "non_shared_tombstone_guard.dv", "delvec");
+
+    auto merged = merge_modern_shared_occurrences(cold, hot, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("Delvec page not found for sstable after merge")) << merged.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_live_non_shared_modern_sstable_preserves_ownership_and_delvec) {
+    const int64_t live_tablet = next_id();
+    const int64_t empty_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(live_tablet);
+    prepare_tablet_dirs(empty_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto live = make_single_rowset_pk_metadata(live_tablet, /*rowset_id=*/1, "live_non_shared_modern.dat");
+    const std::string filename = "live_non_shared_modern.sst";
+    const uint64_t filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(live_tablet, filename),
+                                                      {{"live-key", /*rssid=*/1, /*rowid=*/0}});
+    add_non_shared_modern_sstable(live.get(), filename, /*rssid=*/1, /*shared_version=*/1,
+                                  /*max_rowid=*/0, filesize);
+    DelVector delvec;
+    const std::vector<uint32_t> deleted_rowids = {0};
+    delvec.init(/*version=*/1, deleted_rowids.data(), deleted_rowids.size());
+    add_delvec(live.get(), live_tablet, /*version=*/1, /*segment_id=*/1, "live_non_shared_modern.dv", delvec.save());
+
+    auto empty = std::make_shared<TabletMetadataPB>();
+    empty->set_id(empty_tablet);
+    empty->set_version(1);
+    empty->set_next_rowset_id(1);
+    set_primary_key_schema(empty.get(), 1001);
+    auto merged_or = merge_modern_shared_occurrences(live, empty, merged_tablet);
+    ASSERT_OK(merged_or);
+    const auto& outputs = merged_or.value()->sstable_meta().sstables();
+    auto iter = std::find_if(outputs.begin(), outputs.end(),
+                             [&](const auto& sstable) { return sstable.filename() == filename; });
+    ASSERT_NE(outputs.end(), iter);
+    EXPECT_FALSE(iter->shared());
+    EXPECT_EQ(1, iter->shared_rssid());
+    EXPECT_EQ(0, iter->rssid_offset());
+    EXPECT_TRUE(iter->has_delvec());
+    EXPECT_GT(iter->delvec().size(), 0);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_modern_rejects_missing_final_owner) {
+    const int64_t live_tablet = next_id();
+    const int64_t empty_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(live_tablet);
+    prepare_tablet_dirs(empty_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto live = make_single_rowset_pk_metadata(live_tablet, /*rowset_id=*/1, "missing_final_owner.dat");
+    const std::string filename = "missing_final_owner.sst";
+    const uint64_t filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(live_tablet, filename),
+                                                      {{"live-key", /*rssid=*/1, /*rowid=*/0}});
+    add_non_shared_modern_sstable(live.get(), filename, /*rssid=*/1, /*shared_version=*/1,
+                                  /*max_rowid=*/0, filesize);
+    auto empty = std::make_shared<TabletMetadataPB>();
+    empty->set_id(empty_tablet);
+    empty->set_version(1);
+    empty->set_next_rowset_id(1);
+    set_primary_key_schema(empty.get(), 1001);
+
+    SyncPoint::GetInstance()->SetCallBack("merge_sstables:merged_live_rssids", [](void* arg) {
+        auto* live_rssids = static_cast<std::unordered_set<uint32_t>*>(arg);
+        live_rssids->erase(1);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_point([&] {
+        SyncPoint::GetInstance()->ClearCallBack("merge_sstables:merged_live_rssids");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto merged = merge_modern_shared_occurrences(live, empty, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("has no merged segment owner")) << merged.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_modern_effective_overflow_precedes_liveness) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+    auto child = make_single_rowset_pk_metadata(child_a, /*rowset_id=*/5, "overflow_live.dat");
+    auto* sstable = add_non_shared_modern_sstable(child.get(), "non_shared_overflow.sst", /*rssid=*/0,
+                                                  /*shared_version=*/1, /*max_rowid=*/0, /*filesize=*/512);
+    sstable->set_rssid_offset(-1);
+    auto empty = std::make_shared<TabletMetadataPB>();
+    empty->set_id(child_b);
+    empty->set_version(1);
+    empty->set_next_rowset_id(1);
+    set_primary_key_schema(empty.get(), 1001);
+    auto merged = merge_modern_shared_occurrences(child, empty, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("effective rssid is out of uint32 range")) << merged.status();
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_drops_ownerless_shared_data_sstable) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -7952,7 +8187,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_projected_domain_befor
     const int64_t child_a = next_id();
     const int64_t child_b = next_id();
     const int64_t merged_tablet = next_id();
-    auto make_child = [&](int64_t tablet_id, uint32_t shared_rssid, const std::string& missing_sst) {
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+    auto make_child = [&](int64_t tablet_id, uint32_t shared_rssid, const std::string& sst_filename) {
         auto metadata = std::make_shared<TabletMetadataPB>();
         metadata->set_id(tablet_id);
         metadata->set_version(1);
@@ -7968,7 +8206,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_projected_domain_befor
         rowset->add_segment_metas()->set_filename(fmt::format("projected-domain-{}.dat", tablet_id));
         lake::tablet_reshard_helper::set_rowset_uid(rowset);
         auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
-        sstable->set_filename(missing_sst);
+        sstable->set_filename(sst_filename);
         sstable->set_shared_rssid(shared_rssid);
         sstable->set_max_rss_rowid(static_cast<uint64_t>(shared_rssid) << 32);
         return metadata;
@@ -7977,6 +8215,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_projected_domain_befor
     auto source_a = make_child(child_a, /*shared_rssid=*/1, "projected-domain-a-missing.sst");
     auto source_b = make_child(child_b, /*shared_rssid=*/std::numeric_limits<int32_t>::max() - 1,
                                "projected-domain-b-missing.sst");
+    const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+    const uint64_t boundary_sst_size =
+            write_legacy_pk_sstable(_tablet_manager->sst_location(child_b, "projected-domain-b-missing.sst"),
+                                    {{"projected-domain-boundary-tombstone", tombstone, tombstone}});
+    source_b->mutable_sstable_meta()->mutable_sstables(0)->set_filesize(boundary_sst_size);
     const std::string source_a_before = source_a->SerializeAsString();
     const std::string source_b_before = source_b->SerializeAsString();
     MergingTabletInfoPB merging_info;
