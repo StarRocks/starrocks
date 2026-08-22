@@ -2257,6 +2257,8 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
         } else if (statement.getDataCacheSelectStmt() != null) {
             visitDataCacheSelectStatement(statement.getDataCacheSelectStmt(), context);
+        } else if (statement.getUpdateStmt() != null) {
+            visitUpdateStatement(statement.getUpdateStmt(), context);
         } else {
             visitInsertStatement(statement.getInsertStmt(), context);
         }

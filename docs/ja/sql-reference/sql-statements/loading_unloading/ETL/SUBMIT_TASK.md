@@ -21,6 +21,7 @@ ETL ステートメントを非同期タスクとして送信します。
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (v3.0 以降)
 - [INSERT](../INSERT.md) (v3.0 以降)
 - [CACHE SELECT](../../../../data_source/data_cache/block_cache_warmup.md) (v3.3 以降)
+- [UPDATE](../../table_bucket_part_index/UPDATE.md) (v4.2 以降)
 
 タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#使用上の注意)を参照してください。
 
@@ -66,7 +67,7 @@ AS insert into t2 select * from t1;
 | task_name          | はい     | タスクの名前です。                                                                               |
 | schedule_start     | いいえ      | スケジュールされたタスクの開始時間です。                                                                 |
 | schedule_interval  | いいえ      | スケジュールされたタスクが実行される間隔で、最小間隔は10秒です。          |
-| etl_statement      | はい     | 非同期タスクとして送信したい ETL ステートメントです。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) と [INSERT](../INSERT.md) の非同期タスクの送信をサポートしています。 |
+| etl_statement      | はい     | 非同期タスクとして送信したい ETL ステートメントです。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)、[INSERT](../INSERT.md)、および [UPDATE](../../table_bucket_part_index/UPDATE.md) の非同期タスクの送信をサポートしています。 |
 
 ## 戻り値
 
@@ -162,4 +163,15 @@ PROPERTIES (
     "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
+```
+
+例 7: ステージングテーブルから主キーテーブルを更新する UPDATE ステートメントの非同期タスクを送信します。このタスクは 5 分間隔で定期的に実行されます:
+
+```SQL
+SUBMIT TASK etl_update
+SCHEDULE EVERY(INTERVAL 5 MINUTE)
+AS
+UPDATE target_tbl SET v1 = src.v1
+FROM staging_tbl src
+WHERE target_tbl.pk = src.pk;
 ```

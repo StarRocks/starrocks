@@ -699,7 +699,7 @@ columnNameWithComment
 submitTaskStatement
     : SUBMIT TASK qualifiedName?
         taskClause*
-        AS (createTableAsSelectStatement | insertStatement | dataCacheSelectStatement)
+        AS (createTableAsSelectStatement | insertStatement | updateStatement | dataCacheSelectStatement)
     ;
 
 alterTaskStatement

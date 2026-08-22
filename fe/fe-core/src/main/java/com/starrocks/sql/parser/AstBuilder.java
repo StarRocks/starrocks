@@ -2180,11 +2180,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
+        UpdateStmt updateStmt = null;
         DataCacheSelectStatement dataCacheSelectStmt = null;
         if (context.createTableAsSelectStatement() != null) {
             createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
         } else if (context.insertStatement() != null) {
             insertStmt = (InsertStmt) visit(context.insertStatement());
+        } else if (context.updateStatement() != null) {
+            updateStmt = (UpdateStmt) visit(context.updateStatement());
         } else if (context.dataCacheSelectStatement() != null) {
             dataCacheSelectStmt = (DataCacheSelectStatement) visit(context.dataCacheSelectStatement());
         }
@@ -2194,6 +2197,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             startIndex = context.createTableAsSelectStatement().start.getStartIndex();
         } else if (dataCacheSelectStmt != null) {
             startIndex = context.dataCacheSelectStatement().start.getStartIndex();
+        } else if (updateStmt != null) {
+            startIndex = context.updateStatement().start.getStartIndex();
         } else {
             startIndex = context.insertStatement().start.getStartIndex();
         }
@@ -2210,6 +2215,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             res = new SubmitTaskStmt(taskName, startIndex, createTableAsSelectStmt, pos);
         } else if (dataCacheSelectStmt != null) {
             res = new SubmitTaskStmt(taskName, startIndex, dataCacheSelectStmt, pos);
+        } else if (updateStmt != null) {
+            res = new SubmitTaskStmt(taskName, startIndex, updateStmt, pos);
         } else {
             res = new SubmitTaskStmt(taskName, startIndex, insertStmt, pos);
         }
