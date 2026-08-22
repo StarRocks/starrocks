@@ -3175,7 +3175,7 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
         const bool invalid_metadata_only =
                 !lifted_range.valid() && classification == NonSharedLegacySstableClassification::kMetadataOnly;
         needs_rebuild = classification == NonSharedLegacySstableClassification::kNeedsRebuild || invalid_metadata_only;
-        trust_source_watermark = !invalid_metadata_only;
+        trust_source_watermark = lifted_range.valid();
     }
     if (needs_rebuild) {
         PersistentIndexSstablePB rebuilt_pb;
