@@ -2418,6 +2418,19 @@ Status drop_source_sstable_cache_on_corruption(TabletManager* tablet_manager, in
     return st;
 }
 
+Status parse_non_empty_index_values(const Slice& raw_value, const std::string& filename, const char* read_context,
+                                    IndexValuesWithVerPB* values_pb) {
+    if (!values_pb->ParseFromArray(raw_value.data, static_cast<int>(raw_value.size))) {
+        return Status::Corruption(
+                fmt::format("Failed to parse legacy sstable {} value during {}", filename, read_context));
+    }
+    if (values_pb->values_size() == 0) {
+        return Status::Corruption(
+                fmt::format("legacy sstable {} has no index values during {}", filename, read_context));
+    }
+    return Status::OK();
+}
+
 // Rebuilds an ancestor-inherited shared PK sstable (shared=true,
 // !has_shared_rssid) by reading every entry, remapping stored rssids to the
 // merged tablet's final rssid space via merge_contexts, applying the merged
@@ -2558,12 +2571,10 @@ Status rebuild_legacy_shared_sstable(TabletManager* tablet_manager, int64_t merg
         }
         const Slice entry_raw_value = source_iterator->value();
         IndexValuesWithVerPB values_pb;
-        if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
-            // These bytes come straight out of the source sstable's data block, so a
-            // parse failure means the persisted content is corrupted.
-            return drop_source_sstable_cache_on_corruption(
-                    tablet_manager, src_metadata->id(), src_pb,
-                    Status::Corruption("Failed to parse legacy sstable value during rebuild"));
+        const Status parse_status =
+                parse_non_empty_index_values(entry_raw_value, src_pb.filename(), "shared legacy rebuild", &values_pb);
+        if (!parse_status.ok()) {
+            return drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb, parse_status);
         }
         // (2) + (3) per-entry remap and delvec filter, packed into one helper. A
         // Corruption from it (stored rssid out of range after the offset shift) is
@@ -2705,12 +2716,10 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         const Slice entry_key = source_iterator->key();
         const Slice entry_raw_value = source_iterator->value();
         IndexValuesWithVerPB values_pb;
-        if (!values_pb.ParseFromArray(entry_raw_value.data, static_cast<int>(entry_raw_value.size))) {
-            // These bytes come straight out of the source sstable's data block, so a
-            // parse failure means the persisted content is corrupted.
-            return drop_source_sstable_cache_on_corruption(
-                    tablet_manager, src_metadata->id(), src_pb,
-                    Status::Corruption("Failed to parse non-shared sstable value during rebuild"));
+        const Status parse_status = parse_non_empty_index_values(entry_raw_value, src_pb.filename(),
+                                                                 "non-shared legacy rebuild", &values_pb);
+        if (!parse_status.ok()) {
+            return drop_source_sstable_cache_on_corruption(tablet_manager, src_metadata->id(), src_pb, parse_status);
         }
         IndexValuesWithVerPB retained_values;
         bool dropped_value = false;
@@ -3059,13 +3068,10 @@ StatusOr<NonSharedLegacySstableClassification> classify_non_shared_legacy_sstabl
         saw_entry = true;
         IndexValuesWithVerPB values_pb;
         const Slice raw_value = iterator->value();
-        if (!values_pb.ParseFromArray(raw_value.data, static_cast<int>(raw_value.size))) {
-            return handle_source_error(
-                    Status::Corruption("Failed to parse non-shared sstable value during owner validation"));
-        }
-        if (values_pb.values_size() == 0) {
-            return handle_source_error(Status::Corruption(fmt::format(
-                    "non-shared sstable {} has no index values during owner validation", src_pb.filename())));
+        const Status parse_status =
+                parse_non_empty_index_values(raw_value, src_pb.filename(), "owner validation", &values_pb);
+        if (!parse_status.ok()) {
+            return handle_source_error(parse_status);
         }
         for (const auto& index_value : values_pb.values()) {
             if (is_index_tombstone(index_value)) continue;
