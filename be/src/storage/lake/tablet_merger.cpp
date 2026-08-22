@@ -1840,23 +1840,10 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 // single_source state
                 auto seen_it = state.seen_sources.find(source_key);
                 if (seen_it != state.seen_sources.end()) {
-                    // Dedup hit: same file_name + offset
+                    // Dedup hit: same file_name + offset. File metadata was
+                    // already validated through actual_page_source_files.
                     if (seen_it->second != page.size()) {
                         return Status::Corruption("Delvec page size mismatch for same source");
-                    }
-                    const auto& existing_ref = *state.single_source;
-                    auto existing_file_it = existing_ref.ctx->metadata()->delvec_meta().version_to_file().find(
-                            existing_ref.page.version());
-                    if (existing_file_it == existing_ref.ctx->metadata()->delvec_meta().version_to_file().end()) {
-                        return Status::InvalidArgument("Delvec file not found for existing duplicate page version");
-                    }
-                    const auto& existing_file = existing_file_it->second;
-                    const auto& incoming_file = file_it->second;
-                    if (!delvec_file_metadata_matches(existing_file, incoming_file)) {
-                        return Status::Corruption(
-                                fmt::format("Delvec duplicate source metadata mismatch for file {} between tablets {} "
-                                            "and {}",
-                                            file_name, existing_ref.ctx->metadata()->id(), ctx.metadata()->id()));
                     }
                     // Skip (page-ref dedup)
                     continue;
