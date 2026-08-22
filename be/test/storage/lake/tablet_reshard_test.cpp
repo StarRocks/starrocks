@@ -32,6 +32,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -39,6 +40,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "platform/key_cache.h"
 #include "platform/store_path.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
@@ -69,6 +71,7 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
 #include "storage_primitive/primary_key_encoder.h"
@@ -448,6 +451,190 @@ protected:
         CHECK_OK(lake::PersistentIndexSstable::build_sstable(map, wf.get(), &filesz, &range_pb));
         CHECK_OK(wf->close());
         return filesz;
+    }
+
+    struct RawPkSstableFile {
+        uint64_t filesize = 0;
+        PersistentIndexSstableRangePB range;
+        std::string encryption_meta;
+    };
+
+    void ensure_kek_in_key_cache() {
+        if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
+            return;
+        }
+        EncryptionKeyPB key_pb;
+        key_pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        key_pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        key_pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        key_pb.set_plain_key("0000000000000000");
+        auto root_key = EncryptionKey::create_from_pb(key_pb).value();
+        auto kek = root_key->generate_key().value();
+        kek->set_id(2);
+        KeyCache::instance().add_key(root_key);
+        KeyCache::instance().add_key(kek);
+    }
+
+    std::string serialize_index_values(const std::vector<std::tuple<int64_t, uint32_t, uint32_t>>& values) const {
+        IndexValuesWithVerPB values_pb;
+        for (const auto& [version, rssid, rowid] : values) {
+            auto* value = values_pb.add_values();
+            value->set_version(version);
+            value->set_rssid(rssid);
+            value->set_rowid(rowid);
+        }
+        return values_pb.SerializeAsString();
+    }
+
+    RawPkSstableFile write_raw_pk_sstable(const std::string& path,
+                                          std::vector<std::pair<std::string, std::string>> entries,
+                                          bool encrypted = false) {
+        std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+            return sstable::BytewiseComparator()->Compare(Slice(lhs.first), Slice(rhs.first)) < 0;
+        });
+
+        RawPkSstableFile result;
+        WritableFileOptions write_options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        if (encrypted) {
+            ensure_kek_in_key_cache();
+            auto encryption_pair = KeyCache::instance().create_encryption_meta_pair_using_current_kek().value();
+            write_options.encryption_info = encryption_pair.info;
+            result.encryption_meta = std::move(encryption_pair.encryption_meta);
+        }
+        auto writable_file_or = fs::new_writable_file(write_options, path);
+        CHECK_OK(writable_file_or.status());
+        auto writable_file = std::move(writable_file_or.value());
+
+        std::unique_ptr<sstable::FilterPolicy> filter_policy(
+                const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+        sstable::Options options;
+        options.filter_policy = filter_policy.get();
+        sstable::TableBuilder builder(options, writable_file.get());
+        for (const auto& [key, value] : entries) {
+            CHECK_OK(builder.Add(Slice(key), Slice(value)));
+        }
+        CHECK_OK(builder.Finish());
+        result.filesize = builder.FileSize();
+        if (!entries.empty()) {
+            auto [start_key, end_key] = builder.KeyRange();
+            result.range.set_start_key(start_key.to_string());
+            result.range.set_end_key(end_key.to_string());
+        }
+        CHECK_OK(writable_file->close());
+        return result;
+    }
+
+    struct BelowFloorLegacyFixture {
+        static constexpr int64_t kBaseVersion = 1;
+        static constexpr int64_t kMergedVersion = 2;
+        static constexpr uint32_t kSourceLiveRssid = 107;
+        static constexpr uint32_t kFinalLiveRssid = 1;
+        static constexpr int32_t kContextOffset = -106;
+
+        int64_t cold_tablet = 0;
+        int64_t hot_tablet = 0;
+        int64_t merged_tablet = 0;
+        std::string source_filename;
+        std::string source_path;
+        std::string segment_filename;
+        std::string live_key;
+        std::shared_ptr<TabletMetadataPB> cold_metadata;
+        std::shared_ptr<TabletMetadataPB> hot_metadata;
+        PersistentIndexSstablePB source_pb;
+    };
+
+    BelowFloorLegacyFixture make_below_floor_legacy_fixture(
+            const std::string& source_filename, const std::vector<std::pair<std::string, std::string>>& entries,
+            uint32_t source_high, bool encrypted = false, bool filter_live_row_with_delvec = false) {
+        BelowFloorLegacyFixture fixture;
+        fixture.cold_tablet = next_id();
+        fixture.hot_tablet = next_id();
+        fixture.merged_tablet = next_id();
+        fixture.source_filename = source_filename;
+        fixture.source_path = _tablet_manager->sst_location(fixture.hot_tablet, source_filename);
+        fixture.segment_filename = source_filename + ".dat";
+        fixture.live_key = encode_int_primary_key(20);
+        prepare_tablet_dirs(fixture.cold_tablet);
+        prepare_tablet_dirs(fixture.hot_tablet);
+        prepare_tablet_dirs(fixture.merged_tablet);
+
+        const uint64_t segment_size = write_two_column_segment(
+                fixture.hot_tablet, fixture.segment_filename, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+        const auto source_file = write_raw_pk_sstable(fixture.source_path, entries, encrypted);
+
+        auto make_metadata = [&](int64_t tablet_id) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(BelowFloorLegacyFixture::kBaseVersion);
+            set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+            metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+            metadata->set_enable_persistent_index(true);
+            metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+            return metadata;
+        };
+
+        fixture.cold_metadata = make_metadata(fixture.cold_tablet);
+        fixture.cold_metadata->set_next_rowset_id(1);
+
+        fixture.hot_metadata = make_metadata(fixture.hot_tablet);
+        fixture.hot_metadata->set_next_rowset_id(BelowFloorLegacyFixture::kSourceLiveRssid + 1);
+        auto* rowset = fixture.hot_metadata->add_rowsets();
+        rowset->set_id(BelowFloorLegacyFixture::kSourceLiveRssid);
+        rowset->set_version(BelowFloorLegacyFixture::kBaseVersion);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(segment_size);
+        rowset->set_overlapped(false);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(fixture.segment_filename);
+        segment->set_size(segment_size);
+        segment->set_num_rows(1);
+
+        auto* source_pb = fixture.hot_metadata->mutable_sstable_meta()->add_sstables();
+        source_pb->set_version(13);
+        source_pb->set_filename(source_filename);
+        source_pb->set_filesize(source_file.filesize);
+        source_pb->set_max_rss_rowid((static_cast<uint64_t>(source_high) << 32) | 9);
+        source_pb->set_encryption_meta(source_file.encryption_meta);
+        source_pb->set_shared(false);
+        source_pb->set_rssid_offset(0);
+        if (!entries.empty()) {
+            source_pb->mutable_range()->CopyFrom(source_file.range);
+        }
+        source_pb->mutable_fileset_id()->set_hi(0x13579);
+        source_pb->mutable_fileset_id()->set_lo(0x24680);
+        source_pb->set_generation_version(17);
+
+        if (filter_live_row_with_delvec) {
+            DelVector delvec;
+            const uint32_t deleted_rowid = 0;
+            delvec.init(BelowFloorLegacyFixture::kBaseVersion, &deleted_rowid, 1);
+            add_delvec(fixture.hot_metadata.get(), fixture.hot_tablet, BelowFloorLegacyFixture::kBaseVersion,
+                       BelowFloorLegacyFixture::kSourceLiveRssid, source_filename + ".dv", delvec.save());
+        }
+        fixture.source_pb.CopyFrom(*source_pb);
+        return fixture;
+    }
+
+    StatusOr<std::vector<std::pair<std::string, IndexValuesWithVerPB>>> read_raw_pk_sstable(
+            int64_t tablet_id, const TabletMetadataPtr& metadata, const PersistentIndexSstablePB& sstable_pb) {
+        ASSIGN_OR_RETURN(
+                auto source_sstable,
+                lake::PersistentIndexSstable::new_sstable(
+                        sstable_pb, _tablet_manager->sst_location(tablet_id, sstable_pb.filename()),
+                        /*cache=*/nullptr, /*need_filter=*/false, /*delvec=*/nullptr, metadata, _tablet_manager.get()));
+        sstable::ReadOptions read_options;
+        read_options.fill_cache = false;
+        std::unique_ptr<sstable::Iterator> iterator(source_sstable->new_iterator(read_options));
+        std::vector<std::pair<std::string, IndexValuesWithVerPB>> entries;
+        for (iterator->SeekToFirst(); iterator->Valid(); iterator->Next()) {
+            IndexValuesWithVerPB values_pb;
+            if (!values_pb.ParseFromArray(iterator->value().data, static_cast<int>(iterator->value().size))) {
+                return Status::Corruption("failed to parse raw test sstable value");
+            }
+            entries.emplace_back(iterator->key().to_string(), std::move(values_pb));
+        }
+        RETURN_IF_ERROR(iterator->status());
+        return entries;
     }
 
     void run_other_occurrence_range_case(bool out_of_range_tombstone) {
@@ -11307,7 +11494,7 @@ static void corrupt_first_data_block_type_byte(const std::string& path) {
 static std::pair<Status, int> publish_merge_and_count_cache_drops(lake::TabletManager* tablet_manager,
                                                                   const ReshardingTabletInfoPB& resharding_tablet,
                                                                   int64_t base_version, int64_t new_version,
-                                                                  int64_t txn_id) {
+                                                                  int64_t txn_id, bool* published = nullptr) {
     TxnInfoPB txn_info;
     txn_info.set_txn_id(txn_id);
 
@@ -11321,6 +11508,10 @@ static std::pair<Status, int> publish_merge_and_count_cache_drops(lake::TabletMa
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
     Status status = lake::publish_resharding_tablet(tablet_manager, resharding_tablet, base_version, new_version,
                                                     txn_info, false, tablet_metadatas, tablet_ranges);
+    if (published != nullptr) {
+        *published = resharding_tablet.has_merging_tablet_info() &&
+                     tablet_metadatas.contains(resharding_tablet.merging_tablet_info().new_tablet_id());
+    }
 
     SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
     SyncPoint::GetInstance()->DisableProcessing();
@@ -12062,6 +12253,378 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_sstable_rejects_sha
                                                   txn_info, false, tablet_metadatas, tablet_ranges);
     ASSERT_FALSE(status.ok()) << "shared_version without shared_rssid must be rejected";
     EXPECT_TRUE(status.is_corruption()) << "expected Corruption, got: " << status.to_string();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_below_floor_non_shared_legacy_tombstone_without_rewrite) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
+    const std::string tombstone_key = encode_int_primary_key(10);
+    auto fixture = make_below_floor_legacy_fixture(
+            "below_floor_legacy_tombstone.sst",
+            {{tombstone_key, serialize_index_values({{/*version=*/23, kTombstone, kTombstone}})}},
+            /*source_high=*/47);
+
+    ASSERT_TRUE(fixture.source_pb.has_range());
+    EXPECT_FALSE(fixture.source_pb.range().start_key().empty());
+    EXPECT_FALSE(fixture.source_pb.range().end_key().empty());
+    ASSERT_TRUE(fixture.source_pb.has_fileset_id());
+    EXPECT_EQ(0x13579, fixture.source_pb.fileset_id().hi());
+    EXPECT_EQ(0x24680, fixture.source_pb.fileset_id().lo());
+    EXPECT_EQ(17, fixture.source_pb.generation_version());
+    ASSERT_EQ(-59, static_cast<int64_t>(47) + BelowFloorLegacyFixture::kContextOffset);
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+    ASSERT_OK(FileSystem::Default()->path_exists(
+            _tablet_manager->segment_location(fixture.hot_tablet, fixture.segment_filename)));
+
+    auto merged_or =
+            merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+
+    const PersistentIndexSstablePB* normalized = nullptr;
+    int source_reference_count = 0;
+    for (const auto& sstable : merged->sstable_meta().sstables()) {
+        if (sstable.filename() == fixture.source_filename) {
+            normalized = &sstable;
+            ++source_reference_count;
+        }
+    }
+    ASSERT_NE(nullptr, normalized);
+    EXPECT_EQ(1, source_reference_count) << "same-file normalization must not add a replacement PB";
+    EXPECT_FALSE(normalized->shared());
+    EXPECT_FALSE(normalized->has_shared_rssid());
+    EXPECT_EQ(0, normalized->max_rss_rowid());
+    EXPECT_EQ(BelowFloorLegacyFixture::kContextOffset, normalized->rssid_offset());
+    EXPECT_EQ(fixture.source_pb.filesize(), normalized->filesize());
+    EXPECT_EQ(fixture.source_pb.encryption_meta(), normalized->encryption_meta());
+    ASSERT_TRUE(normalized->has_range());
+    EXPECT_EQ(fixture.source_pb.range().SerializeAsString(), normalized->range().SerializeAsString());
+    ASSERT_TRUE(normalized->has_fileset_id());
+    EXPECT_EQ(fixture.source_pb.fileset_id().SerializeAsString(), normalized->fileset_id().SerializeAsString());
+    EXPECT_EQ(fixture.source_pb.generation_version(), normalized->generation_version());
+
+    PersistentIndexSstablePB expected(fixture.source_pb);
+    expected.set_max_rss_rowid(0);
+    expected.set_rssid_offset(BelowFloorLegacyFixture::kContextOffset);
+    expected.clear_delvec();
+    EXPECT_EQ(expected.SerializeAsString(), normalized->SerializeAsString())
+            << "only the watermark and accumulated offset may change";
+
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+    EXPECT_TRUE(std::none_of(merged->orphan_files().begin(), merged->orphan_files().end(),
+                             [&](const auto& file) { return file.name() == fixture.source_filename; }));
+    EXPECT_EQ(0, merged->orphan_files_size());
+
+    ASSIGN_OR_ABORT(auto raw_entries, read_raw_pk_sstable(fixture.merged_tablet, merged, *normalized));
+    ASSERT_EQ(1, raw_entries.size());
+    EXPECT_EQ(tombstone_key, raw_entries[0].first);
+    ASSERT_EQ(1, raw_entries[0].second.values_size());
+    EXPECT_EQ(23, raw_entries[0].second.values(0).version());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rssid());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rowid());
+
+    const std::vector<std::string> lookup_keys = {tombstone_key, fixture.live_key};
+    ASSIGN_OR_ABORT(auto lookup_values, load_index_values(merged, fixture.merged_tablet, lookup_keys));
+    ASSERT_EQ(2, lookup_values.size());
+    EXPECT_EQ(IndexValue(NullIndexValue), lookup_values[0]);
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(BelowFloorLegacyFixture::kFinalLiveRssid) << 32), lookup_values[1]);
+
+    ASSIGN_OR_ABORT(auto after_dml,
+                    publish_followup_upsert_delete(fixture.merged_tablet, BelowFloorLegacyFixture::kMergedVersion,
+                                                   /*upsert_key=*/10, /*upsert_value=*/1010, /*delete_key=*/20));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
+}
+
+TEST_F(LakeTabletReshardTest,
+       test_tablet_merging_preserves_below_floor_non_shared_legacy_multi_version_tombstones_without_rewrite) {
+    constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
+    const std::string tombstone_key = encode_int_primary_key(10);
+    auto fixture = make_below_floor_legacy_fixture(
+            "below_floor_legacy_multi_tombstone.sst",
+            {{tombstone_key, serialize_index_values({{/*version=*/31, kTombstone, kTombstone},
+                                                     {/*version=*/29, kTombstone, kTombstone}})}},
+            /*source_high=*/47);
+
+    auto merged_or =
+            merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+
+    const PersistentIndexSstablePB* normalized = nullptr;
+    int source_reference_count = 0;
+    for (const auto& sstable : merged->sstable_meta().sstables()) {
+        if (sstable.filename() == fixture.source_filename) {
+            normalized = &sstable;
+            ++source_reference_count;
+        }
+    }
+    ASSERT_NE(nullptr, normalized);
+    EXPECT_EQ(1, source_reference_count);
+    EXPECT_EQ(0, normalized->max_rss_rowid());
+    EXPECT_EQ(BelowFloorLegacyFixture::kContextOffset, normalized->rssid_offset());
+    PersistentIndexSstablePB expected(fixture.source_pb);
+    expected.set_max_rss_rowid(0);
+    expected.set_rssid_offset(BelowFloorLegacyFixture::kContextOffset);
+    expected.clear_delvec();
+    EXPECT_EQ(expected.SerializeAsString(), normalized->SerializeAsString());
+
+    ASSIGN_OR_ABORT(auto raw_entries, read_raw_pk_sstable(fixture.merged_tablet, merged, *normalized));
+    ASSERT_EQ(1, raw_entries.size());
+    EXPECT_EQ(tombstone_key, raw_entries[0].first);
+    ASSERT_EQ(2, raw_entries[0].second.values_size());
+    EXPECT_EQ(31, raw_entries[0].second.values(0).version());
+    EXPECT_EQ(29, raw_entries[0].second.values(1).version());
+    for (const auto& value : raw_entries[0].second.values()) {
+        EXPECT_EQ(kTombstone, value.rssid());
+        EXPECT_EQ(kTombstone, value.rowid());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_empty_non_shared_legacy_sstable_does_not_cover_live_tail) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    constexpr uint32_t kSourceHigh = 108;
+    constexpr int64_t kProjectedHigh = static_cast<int64_t>(kSourceHigh) + BelowFloorLegacyFixture::kContextOffset;
+    static_assert(kProjectedHigh == 2);
+    static_assert(kProjectedHigh > BelowFloorLegacyFixture::kFinalLiveRssid);
+    auto fixture = make_below_floor_legacy_fixture("below_floor_legacy_empty.sst", {}, kSourceHigh);
+    ASSIGN_OR_ABORT(auto source_entries,
+                    read_raw_pk_sstable(fixture.hot_tablet, fixture.hot_metadata, fixture.source_pb));
+    ASSERT_TRUE(source_entries.empty()) << "fixture must be a structurally valid zero-entry SST";
+
+    auto merged_or =
+            merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+
+    const PersistentIndexSstablePB* empty_source_output = nullptr;
+    for (const auto& sstable : merged->sstable_meta().sstables()) {
+        if (sstable.filename() == fixture.source_filename) {
+            empty_source_output = &sstable;
+        }
+    }
+    if (empty_source_output != nullptr) {
+        EXPECT_EQ((static_cast<uint64_t>(kProjectedHigh) << 32) | 9, empty_source_output->max_rss_rowid())
+                << "pre-fix PB must expose nonnegative false coverage above the live tail";
+    }
+    EXPECT_EQ(nullptr, empty_source_output) << "a real empty SST contributes no merged metadata coverage";
+    EXPECT_TRUE(std::none_of(merged->orphan_files().begin(), merged->orphan_files().end(), [&](const auto& file) {
+        return file.name() == fixture.source_filename;
+    })) << "vacuum, not inline merge cleanup, owns the now-unreferenced source";
+
+    ASSIGN_OR_ABORT(auto lookup_value, load_index_value(merged, fixture.merged_tablet, fixture.live_key));
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(BelowFloorLegacyFixture::kFinalLiveRssid) << 32), lookup_value);
+
+    ASSIGN_OR_ABORT(auto after_dml,
+                    publish_followup_upsert_delete(fixture.merged_tablet, BelowFloorLegacyFixture::kMergedVersion,
+                                                   /*upsert_key=*/10, /*upsert_value=*/1010, /*delete_key=*/20));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+}
+
+TEST_F(LakeTabletReshardTest,
+       test_tablet_merging_preserves_below_floor_tde_non_shared_legacy_tombstone_without_rewrite) {
+    ensure_kek_in_key_cache();
+    const bool old_tde = config::enable_transparent_data_encryption;
+    config::enable_transparent_data_encryption = true;
+    DeferOp restore_tde([&] { config::enable_transparent_data_encryption = old_tde; });
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
+    const std::string tombstone_key = encode_int_primary_key(10);
+    auto fixture = make_below_floor_legacy_fixture(
+            "below_floor_legacy_tde_tombstone.sst",
+            {{tombstone_key, serialize_index_values({{/*version=*/41, kTombstone, kTombstone}})}},
+            /*source_high=*/47, /*encrypted=*/true);
+    ASSERT_FALSE(fixture.source_pb.encryption_meta().empty());
+    ASSERT_OK(KeyCache::instance().unwrap_encryption_meta(fixture.source_pb.encryption_meta()).status());
+
+    auto merged_or =
+            merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+    ASSERT_EQ(2, merged->sstable_meta().sstables_size())
+            << "only the original encrypted SST and the legitimate materialized tail are referenced";
+
+    const PersistentIndexSstablePB* normalized = nullptr;
+    const PersistentIndexSstablePB* tail = nullptr;
+    int source_reference_count = 0;
+    for (const auto& sstable : merged->sstable_meta().sstables()) {
+        if (sstable.filename() == fixture.source_filename) {
+            normalized = &sstable;
+            ++source_reference_count;
+        } else {
+            tail = &sstable;
+        }
+    }
+    ASSERT_NE(nullptr, normalized);
+    ASSERT_NE(nullptr, tail);
+    EXPECT_EQ(1, source_reference_count) << "normalization must not create a replacement SST";
+    EXPECT_EQ(fixture.source_pb.encryption_meta(), normalized->encryption_meta());
+    EXPECT_FALSE(normalized->encryption_meta().empty());
+    EXPECT_EQ(0, normalized->max_rss_rowid());
+    EXPECT_EQ(BelowFloorLegacyFixture::kContextOffset, normalized->rssid_offset());
+    EXPECT_EQ(fixture.source_pb.filesize(), normalized->filesize());
+    ASSERT_TRUE(normalized->has_range());
+    EXPECT_EQ(fixture.source_pb.range().SerializeAsString(), normalized->range().SerializeAsString());
+    ASSERT_TRUE(normalized->has_fileset_id());
+    EXPECT_EQ(fixture.source_pb.fileset_id().SerializeAsString(), normalized->fileset_id().SerializeAsString());
+    EXPECT_EQ(fixture.source_pb.generation_version(), normalized->generation_version());
+    PersistentIndexSstablePB expected(fixture.source_pb);
+    expected.set_max_rss_rowid(0);
+    expected.set_rssid_offset(BelowFloorLegacyFixture::kContextOffset);
+    expected.clear_delvec();
+    EXPECT_EQ(expected.SerializeAsString(), normalized->SerializeAsString());
+    EXPECT_NE(fixture.source_filename, tail->filename());
+    EXPECT_FALSE(tail->encryption_meta().empty());
+    ASSERT_OK(KeyCache::instance().unwrap_encryption_meta(tail->encryption_meta()).status());
+
+    ASSIGN_OR_ABORT(auto raw_entries, read_raw_pk_sstable(fixture.merged_tablet, merged, *normalized));
+    ASSERT_EQ(1, raw_entries.size()) << "the same encrypted object must reopen and decrypt";
+    ASSERT_EQ(1, raw_entries[0].second.values_size());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rssid());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rowid());
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+    EXPECT_TRUE(std::none_of(merged->orphan_files().begin(), merged->orphan_files().end(),
+                             [&](const auto& file) { return file.name() == fixture.source_filename; }));
+    EXPECT_EQ(0, merged->orphan_files_size());
+}
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_index_values_in_non_shared_legacy_sstable) {
+    IndexValuesWithVerPB empty_values;
+    const std::string empty_value_key = encode_int_primary_key(10);
+    auto fixture = make_below_floor_legacy_fixture("below_floor_legacy_zero_values.sst",
+                                                   {{empty_value_key, empty_values.SerializeAsString()}},
+                                                   /*source_high=*/47);
+    ASSERT_EQ(0, empty_values.values_size());
+    ASSIGN_OR_ABORT(auto source_entries,
+                    read_raw_pk_sstable(fixture.hot_tablet, fixture.hot_metadata, fixture.source_pb));
+    ASSERT_EQ(1, source_entries.size());
+    EXPECT_EQ(empty_value_key, source_entries[0].first);
+    EXPECT_EQ(0, source_entries[0].second.values_size())
+            << "fixture must persist one real key with a serialized empty IndexValuesWithVerPB";
+
+    ASSERT_OK(put_tablet_metadata(fixture.cold_metadata));
+    ASSERT_OK(put_tablet_metadata(fixture.hot_metadata));
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(fixture.cold_tablet);
+    merging.add_old_tablet_ids(fixture.hot_tablet);
+    merging.set_new_tablet_id(fixture.merged_tablet);
+
+    const int64_t read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    bool published = true;
+    auto [status, cache_drop_count] = publish_merge_and_count_cache_drops(
+            _tablet_manager.get(), resharding, BelowFloorLegacyFixture::kBaseVersion,
+            BelowFloorLegacyFixture::kMergedVersion, /*txn_id=*/407, &published);
+    ASSERT_FALSE(status.ok()) << "serialized empty per-key value lists must fail closed";
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_TRUE(status.message().contains(fixture.source_filename)) << status;
+    EXPECT_TRUE(status.message().contains("no index values")) << status;
+    EXPECT_EQ(1, cache_drop_count) << "semantic source corruption must evict the source cache exactly once";
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_FALSE(published) << "source corruption must not publish merged metadata";
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+}
+#endif
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_below_floor_mixed_tombstone_and_live_data_does_not_clamp) {
+    constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
+    auto fixture = make_below_floor_legacy_fixture(
+            "below_floor_legacy_mixed_live.sst",
+            {{encode_int_primary_key(10), serialize_index_values({{/*version=*/51, kTombstone, kTombstone}})},
+             {encode_int_primary_key(20),
+              serialize_index_values({{/*version=*/50, BelowFloorLegacyFixture::kSourceLiveRssid, /*rowid=*/0}})}},
+            /*source_high=*/47);
+
+    auto merged = merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_FALSE(merged.ok()) << "one live data value makes below-floor metadata-only projection unsafe";
+    EXPECT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("rssid high overflow in merge projection")) << merged.status();
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_below_floor_mixed_tombstone_and_dead_data_rebuilds) {
+    constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
+    const std::string tombstone_key = encode_int_primary_key(10);
+    auto fixture = make_below_floor_legacy_fixture(
+            "below_floor_legacy_mixed_dead.sst",
+            {{tombstone_key, serialize_index_values({{/*version=*/61, kTombstone, kTombstone}})},
+             {encode_int_primary_key(30), serialize_index_values({{/*version=*/60, /*rssid=*/47, /*rowid=*/0}})}},
+            /*source_high=*/47);
+
+    auto merged_or =
+            merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& rebuilt = merged->sstable_meta().sstables(0);
+    EXPECT_NE(fixture.source_filename, rebuilt.filename());
+    EXPECT_FALSE(rebuilt.shared());
+    EXPECT_FALSE(rebuilt.has_shared_rssid());
+    EXPECT_EQ(0, rebuilt.rssid_offset());
+    EXPECT_EQ(0, rebuilt.max_rss_rowid());
+    EXPECT_EQ(BelowFloorLegacyFixture::kMergedVersion, rebuilt.generation_version());
+
+    ASSIGN_OR_ABORT(auto raw_entries, read_raw_pk_sstable(fixture.merged_tablet, merged, rebuilt));
+    ASSERT_EQ(1, raw_entries.size());
+    EXPECT_EQ(tombstone_key, raw_entries[0].first);
+    ASSERT_EQ(1, raw_entries[0].second.values_size());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rssid());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rowid());
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_below_floor_mixed_tombstone_and_delvec_data_rebuilds) {
+    constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
+    const std::string tombstone_key = encode_int_primary_key(10);
+    auto fixture = make_below_floor_legacy_fixture(
+            "below_floor_legacy_mixed_delvec.sst",
+            {{tombstone_key, serialize_index_values({{/*version=*/71, kTombstone, kTombstone}})},
+             {encode_int_primary_key(20),
+              serialize_index_values({{/*version=*/70, BelowFloorLegacyFixture::kSourceLiveRssid, /*rowid=*/0}})}},
+            /*source_high=*/47, /*encrypted=*/false, /*filter_live_row_with_delvec=*/true);
+
+    auto merged_or =
+            merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& rebuilt = merged->sstable_meta().sstables(0);
+    EXPECT_NE(fixture.source_filename, rebuilt.filename());
+    EXPECT_FALSE(rebuilt.shared());
+    EXPECT_FALSE(rebuilt.has_shared_rssid());
+    EXPECT_EQ(0, rebuilt.rssid_offset());
+    EXPECT_EQ(0, rebuilt.max_rss_rowid());
+    EXPECT_EQ(BelowFloorLegacyFixture::kMergedVersion, rebuilt.generation_version());
+
+    ASSIGN_OR_ABORT(auto raw_entries, read_raw_pk_sstable(fixture.merged_tablet, merged, rebuilt));
+    ASSERT_EQ(1, raw_entries.size());
+    EXPECT_EQ(tombstone_key, raw_entries[0].first);
+    ASSERT_EQ(1, raw_entries[0].second.values_size());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rssid());
+    EXPECT_EQ(kTombstone, raw_entries[0].second.values(0).rowid());
+    ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
 }
 
 // A stale non-shared SST watermark below the source tablet's carried rowset floor
