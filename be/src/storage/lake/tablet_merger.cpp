@@ -2935,6 +2935,12 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, co
 //        find_if (lake_persistent_index.cpp:865-885) erases the wrong span
 //        otherwise.
 //
+//   (I3) Every ranged fileset is strictly ordered and non-overlapping by key.
+//        PersistentIndexSstableFileset::init(vector) rejects a member whose
+//        start_key is less than or equal to the prior member's end_key. A
+//        standalone sstable must also remain a singleton because its lookup
+//        path does not consult ranged members.
+//
 // Source of conflict between I1 and I2: PersistentIndexSstableFileset::
 // append() (persistent_index_sstable_fileset.cpp:96-115) lets a freshly-
 // flushed sstable inherit an existing fileset's _fileset_id whenever the
@@ -2947,51 +2953,65 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, co
 // non-contiguous runs of FID-X.
 //
 // Resolution: stable_sort by signed max_rss_rowid (satisfies I1), then walk
-// the sorted output and detect when a fileset_id reappears after at least
-// one other-FID sstable has closed its earlier run. Any such later run
-// cannot share a logical fileset with the earlier one — there is at least
-// one foreign sstable physically between them in metadata, so init() /
-// pick_compaction_candidates / apply_opcompaction would have to treat them
-// as separate filesets anyway. Assign a fresh fileset_id (UniqueId::
-// gen_uid) to each later run so I2 is satisfied without sacrificing I1.
-// Sstables with no fileset_id remain singletons and close any open run;
-// they are not grouped with anything.
+// the sorted output and split each original identity into valid emitted runs.
+// A ranged same-FID member continues only when its start key is strictly after
+// the current run's end key. Reappearance, overlap, reversal, and standalone
+// members start singleton/new runs with fresh IDs after the original identity
+// has closed. Sstables with no fileset_id also remain singletons and close any
+// open run. This preserves I2 and I3 without changing I1.
 void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<PersistentIndexSstablePB>* dest) {
     std::stable_sort(dest->begin(), dest->end(),
                      [](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
                          return static_cast<int64_t>(a.max_rss_rowid()) < static_cast<int64_t>(b.max_rss_rowid());
                      });
 
+    const auto* comparator = sstable::BytewiseComparator();
     std::unordered_set<UniqueId> closed_orig_fids;
     UniqueId current_run_orig;
     UniqueId current_run_emitted;
+    std::string current_run_end_key;
     bool has_run = false;
+    auto close_run = [&]() {
+        if (has_run) {
+            closed_orig_fids.insert(current_run_orig);
+            has_run = false;
+        }
+    };
     for (auto& sst : *dest) {
         if (!sst.has_fileset_id()) {
             // No fileset_id (legacy / standalone): cannot be grouped. Close
             // any open run so a same-FID sstable after this one will be
             // treated as a non-contiguous reuse.
-            if (has_run) {
-                closed_orig_fids.insert(current_run_orig);
-                has_run = false;
-            }
+            close_run();
             continue;
         }
         UniqueId orig(sst.fileset_id());
-        if (has_run && orig == current_run_orig) {
+        if (!sst.has_range()) {
+            // A standalone PB must be its own fileset. It may retain the
+            // original ID only on its first appearance; closing the identity
+            // immediately forces every adjacent/future occurrence into a
+            // different emitted fileset.
+            close_run();
+            UniqueId emitted = (closed_orig_fids.count(orig) > 0) ? UniqueId::gen_uid() : orig;
+            sst.mutable_fileset_id()->CopyFrom(emitted.to_proto());
+            closed_orig_fids.insert(orig);
+            continue;
+        }
+        if (has_run && orig == current_run_orig &&
+            comparator->Compare(Slice(current_run_end_key), Slice(sst.range().start_key())) < 0) {
             // Continuation of the current run: emit with this run's FID
             // (which may be the original or a freshly-assigned one).
             sst.mutable_fileset_id()->CopyFrom(current_run_emitted.to_proto());
+            current_run_end_key = sst.range().end_key();
             continue;
         }
         // Run boundary.
-        if (has_run) {
-            closed_orig_fids.insert(current_run_orig);
-        }
+        close_run();
         UniqueId emitted = (closed_orig_fids.count(orig) > 0) ? UniqueId::gen_uid() : orig;
         sst.mutable_fileset_id()->CopyFrom(emitted.to_proto());
         current_run_orig = orig;
         current_run_emitted = emitted;
+        current_run_end_key = sst.range().end_key();
         has_run = true;
     }
 }
