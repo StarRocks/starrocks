@@ -2629,7 +2629,7 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
                                          const std::unordered_set<uint32_t>& source_live_rssids,
                                          const TabletMetadataPB& new_metadata,
                                          std::unordered_map<uint32_t, DelVectorPtr>* del_vector_cache,
-                                         PersistentIndexSstablePB* out_pb) {
+                                         bool trust_source_watermark, PersistentIndexSstablePB* out_pb) {
     out_pb->Clear();
     RETURN_IF_ERROR(validate_non_shared_legacy_sstable_form(src_pb));
 
@@ -2652,25 +2652,25 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
         return Status::OK();
     }
 
-    // Now safe to open the writer + project initial watermark.
+    // Now safe to open the writer and initialize the output watermark.
     ASSIGN_OR_RETURN(auto output_writer, open_legacy_rebuild_output(tablet_manager, merged_tablet_id));
     CancelableDefer cleanup_partial_output([&] { delete_partial_legacy_rebuild_output(output_writer); });
 
     const int32_t source_rssid_offset = src_pb.rssid_offset();
-    // Initial watermark: project the source max_rss_rowid.high through
-    // ctx.map_rssid so tombstone-only files still emit a stable
-    // post-merge watermark. Per-entry update_max_encoded_rss_rowid_from
-    // only widens this initial value as non-tombstone entries are
-    // written.
-    const uint32_t source_max_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
+    // When the source watermark is trusted, project it through ctx.map_rssid
+    // so tombstone-only files still emit a stable post-merge watermark.
+    // Otherwise derive the exact watermark only from retained data values.
     std::optional<uint64_t> max_encoded_rss_rowid;
-    if (auto projected_max_high = ctx.map_rssid(source_max_high); projected_max_high.ok()) {
-        max_encoded_rss_rowid =
-                encode_rss_rowid(projected_max_high.value(), extract_rss_rowid_low(src_pb.max_rss_rowid()));
-    } else if (static_cast<int64_t>(source_max_high) + ctx.rssid_offset() >= 0) {
-        // Only a projection below the carried source-rowset floor describes a
-        // stale watermark. Positive overflow remains a fatal metadata error.
-        return projected_max_high.status();
+    if (trust_source_watermark) {
+        const uint32_t source_max_high = extract_rss_rowid_high(src_pb.max_rss_rowid());
+        if (auto projected_max_high = ctx.map_rssid(source_max_high); projected_max_high.ok()) {
+            max_encoded_rss_rowid =
+                    encode_rss_rowid(projected_max_high.value(), extract_rss_rowid_low(src_pb.max_rss_rowid()));
+        } else if (static_cast<int64_t>(source_max_high) + ctx.rssid_offset() >= 0) {
+            // Only a projection below the carried source-rowset floor describes a
+            // stale watermark. Positive overflow remains a fatal metadata error.
+            return projected_max_high.status();
+        }
     }
 
     uint64_t kept_entry_count = 0;
@@ -3012,6 +3012,7 @@ StatusOr<NonSharedLegacySstableClassification> classify_non_shared_legacy_sstabl
         TabletManager* tablet_manager, const PersistentIndexSstablePB& src_pb, const TabletMergeContext& ctx,
         const std::unordered_set<uint32_t>& source_live_rssids, const TabletMetadataPB& new_metadata,
         std::unordered_map<uint32_t, DelVectorPtr>* del_vector_cache) {
+    TEST_SYNC_POINT_CALLBACK("classify_non_shared_legacy_sstable:entry", nullptr);
     ASSIGN_OR_RETURN(auto source_sstable,
                      PersistentIndexSstable::new_sstable(
                              src_pb, tablet_manager->sst_location(ctx.metadata()->id(), src_pb.filename()),
@@ -3159,8 +3160,9 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
     bool needs_rebuild = lifted_range.valid() && !ctx_disagreement_keys.empty() &&
                          TabletMergeContext::mapping_disagrees_with_natural_in_range(
                                  ctx_disagreement_keys, lifted_range.lower, lifted_range.upper);
-    bool needs_exact_scan = lifted_range_has_source_live_gap(lifted_range, source_live_rssids);
+    bool needs_exact_scan = !lifted_range.valid() || lifted_range_has_source_live_gap(lifted_range, source_live_rssids);
     auto classification = NonSharedLegacySstableClassification::kMetadataOnly;
+    bool trust_source_watermark = true;
     if (!needs_rebuild && !needs_exact_scan) {
         ASSIGN_OR_RETURN(needs_exact_scan,
                          lifted_range_may_reference_merged_delvec(lifted_range, ctx, source_live_rssids, new_metadata));
@@ -3169,14 +3171,17 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
         ASSIGN_OR_RETURN(classification,
                          classify_non_shared_legacy_sstable(tablet_manager, src_pb, ctx, source_live_rssids,
                                                             new_metadata, del_vector_cache));
-        needs_rebuild = classification == NonSharedLegacySstableClassification::kNeedsRebuild;
         if (classification == NonSharedLegacySstableClassification::kEmpty) return Status::OK();
+        const bool invalid_metadata_only =
+                !lifted_range.valid() && classification == NonSharedLegacySstableClassification::kMetadataOnly;
+        needs_rebuild = classification == NonSharedLegacySstableClassification::kNeedsRebuild || invalid_metadata_only;
+        trust_source_watermark = !invalid_metadata_only;
     }
     if (needs_rebuild) {
         PersistentIndexSstablePB rebuilt_pb;
         RETURN_IF_ERROR(rebuild_non_shared_legacy_sstable(tablet_manager, new_metadata.id(), src_pb, ctx,
                                                           ctx.metadata(), source_live_rssids, new_metadata,
-                                                          del_vector_cache, &rebuilt_pb));
+                                                          del_vector_cache, trust_source_watermark, &rebuilt_pb));
         if (!rebuilt_pb.filename().empty()) {
             // Rebuilt = a brand-new physical file, first visible at the merge version.
             rebuilt_pb.set_generation_version(new_metadata.version());
