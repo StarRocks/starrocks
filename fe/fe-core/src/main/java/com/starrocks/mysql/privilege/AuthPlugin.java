@@ -16,6 +16,7 @@ package com.starrocks.mysql.privilege;
 
 import com.google.re2j.Pattern;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.IometeAuthenticationProvider;
 import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
@@ -34,7 +35,8 @@ public class AuthPlugin {
         MYSQL_NATIVE_PASSWORD,
         AUTHENTICATION_LDAP_SIMPLE,
         AUTHENTICATION_JWT,
-        AUTHENTICATION_OAUTH2;
+        AUTHENTICATION_OAUTH2,
+        AUTHENTICATION_IOMETE;
 
         public AuthenticationProvider getProvider(String authString) {
             AuthPlugin.Server authPlugin = this;
@@ -112,6 +114,10 @@ public class AuthPlugin {
                             COMMA_SPLIT.split(oauth2RequiredAudience.trim()),
                             oauthConnectWaitTimeout));
                 }
+
+                case AUTHENTICATION_IOMETE -> {
+                    return new IometeAuthenticationProvider(authString);
+                }
             }
 
             return null;
@@ -140,6 +146,8 @@ public class AuthPlugin {
             return Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_OAUTH2.toString())) {
             return Client.AUTHENTICATION_OAUTH2_CLIENT.toString();
+        } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_IOMETE.toString())) {
+            return Client.MYSQL_CLEAR_PASSWORD.toString();
         }
         return null;
     }

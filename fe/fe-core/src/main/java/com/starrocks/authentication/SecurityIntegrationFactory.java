@@ -27,6 +27,7 @@ public class SecurityIntegrationFactory {
                     .add(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name())
                     .add(AuthPlugin.Server.AUTHENTICATION_JWT.name())
                     .add(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name())
+                    .add(AuthPlugin.Server.AUTHENTICATION_IOMETE.name())
                     .build();
 
     public static void checkSecurityIntegrationIsSupported(String securityIntegrationType) {
@@ -46,6 +47,8 @@ public class SecurityIntegrationFactory {
             securityIntegration = new JWTSecurityIntegration(name, propertyMap);
         } else if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_OAUTH2.name())) {
             securityIntegration = new OAuth2SecurityIntegration(name, propertyMap);
+        } else if (type.equalsIgnoreCase(AuthPlugin.Server.AUTHENTICATION_IOMETE.name())) {
+            securityIntegration = new IometeSecurityIntegration(name, propertyMap);
         }
         Preconditions.checkArgument(securityIntegration != null);
         return securityIntegration;
