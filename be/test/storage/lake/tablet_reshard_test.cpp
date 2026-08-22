@@ -637,6 +637,15 @@ protected:
         return entries;
     }
 
+    StatusOr<std::set<std::string>> directory_inventory(const std::string& directory) {
+        std::set<std::string> files;
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(directory, [&](std::string_view name) {
+            files.emplace(name);
+            return true;
+        }));
+        return files;
+    }
+
     void run_other_occurrence_range_case(bool out_of_range_tombstone) {
         set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
         DeferOp restore_source_flush([&] {
@@ -11494,7 +11503,8 @@ static void corrupt_first_data_block_type_byte(const std::string& path) {
 static std::pair<Status, int> publish_merge_and_count_cache_drops(lake::TabletManager* tablet_manager,
                                                                   const ReshardingTabletInfoPB& resharding_tablet,
                                                                   int64_t base_version, int64_t new_version,
-                                                                  int64_t txn_id, bool* published = nullptr) {
+                                                                  int64_t txn_id, bool* published = nullptr,
+                                                                  TabletMetadataPtr* merged_metadata = nullptr) {
     TxnInfoPB txn_info;
     txn_info.set_txn_id(txn_id);
 
@@ -11508,9 +11518,14 @@ static std::pair<Status, int> publish_merge_and_count_cache_drops(lake::TabletMa
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
     Status status = lake::publish_resharding_tablet(tablet_manager, resharding_tablet, base_version, new_version,
                                                     txn_info, false, tablet_metadatas, tablet_ranges);
+    const auto merged_iter = resharding_tablet.has_merging_tablet_info()
+                                     ? tablet_metadatas.find(resharding_tablet.merging_tablet_info().new_tablet_id())
+                                     : tablet_metadatas.end();
     if (published != nullptr) {
-        *published = resharding_tablet.has_merging_tablet_info() &&
-                     tablet_metadatas.contains(resharding_tablet.merging_tablet_info().new_tablet_id());
+        *published = merged_iter != tablet_metadatas.end();
+    }
+    if (merged_metadata != nullptr) {
+        *merged_metadata = merged_iter == tablet_metadatas.end() ? nullptr : merged_iter->second;
     }
 
     SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
@@ -12545,6 +12560,230 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_index_values_in_
     EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
     EXPECT_FALSE(published) << "source corruption must not publish merged metadata";
     ASSERT_OK(FileSystem::Default()->path_exists(fixture.source_path));
+}
+
+// Mapping disagreement is sufficient to dispatch this non-shared legacy SST
+// straight to rebuild_non_shared_legacy_sstable. The exact owner classifier is
+// intentionally bypassed, so its zero-value validation cannot satisfy this
+// regression. The direct rebuild reader must reject the real serialized empty
+// IndexValuesWithVerPB and its cleanup guard must remove the already-opened
+// partial writer output.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_index_values_in_direct_non_shared_legacy_rebuild) {
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_source_flush(
+            [&] { set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE); });
+
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string source_filename = "direct_non_shared_zero_values.sst";
+    const std::string source_path = _tablet_manager->sst_location(child_b, source_filename);
+    const std::string empty_value_key = encode_int_primary_key(10);
+    IndexValuesWithVerPB empty_values;
+    const auto source_file = write_raw_pk_sstable(source_path, {{empty_value_key, empty_values.SerializeAsString()}});
+
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(3);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(1);
+    rowset_a->set_version(base_version);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    auto* segment_a = rowset_a->add_segment_metas();
+    segment_a->set_filename("direct_rebuild_shared.dat");
+    segment_a->set_size(100);
+    segment_a->set_shared(true);
+    stamp_physical_identity_uid(rowset_a, segment_a->filename());
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(3);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* shared_rowset_b = meta_b->add_rowsets();
+    shared_rowset_b->CopyFrom(*rowset_a);
+    auto* local_rowset_b = meta_b->add_rowsets();
+    local_rowset_b->set_id(2);
+    local_rowset_b->set_version(base_version);
+    local_rowset_b->set_num_rows(5);
+    local_rowset_b->set_data_size(50);
+    auto* local_segment_b = local_rowset_b->add_segment_metas();
+    local_segment_b->set_filename("direct_rebuild_local.dat");
+    local_segment_b->set_size(50);
+    local_segment_b->set_shared(false);
+
+    auto* source_pb = meta_b->mutable_sstable_meta()->add_sstables();
+    source_pb->set_filename(source_filename);
+    source_pb->set_filesize(source_file.filesize);
+    source_pb->set_shared(false);
+    source_pb->set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+    source_pb->mutable_range()->CopyFrom(source_file.range);
+
+    ASSIGN_OR_ABORT(auto source_entries, read_raw_pk_sstable(child_b, meta_b, *source_pb));
+    ASSERT_EQ(1, source_entries.size());
+    EXPECT_EQ(empty_value_key, source_entries[0].first);
+    EXPECT_EQ(0, source_entries[0].second.values_size())
+            << "fixture must persist one real key with a serialized empty IndexValuesWithVerPB";
+
+    ASSERT_OK(put_tablet_metadata(meta_a));
+    ASSERT_OK(put_tablet_metadata(meta_b));
+    const std::string output_directory = _location_provider->segment_root_location(merged_tablet);
+    ASSIGN_OR_ABORT(auto files_before, directory_inventory(output_directory));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+
+    const int64_t read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    bool published = true;
+    TabletMetadataPtr returned_merged_metadata;
+    auto [status, cache_drop_count] =
+            publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding, base_version, new_version,
+                                                /*txn_id=*/408, &published, &returned_merged_metadata);
+
+    EXPECT_FALSE(status.ok()) << "direct non-shared rebuild must fail closed instead of silently dropping the key";
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_TRUE(status.message().contains(source_filename)) << status;
+    EXPECT_TRUE(status.message().contains("rebuild")) << status;
+    EXPECT_TRUE(status.message().contains("no index values")) << status;
+    EXPECT_EQ(1, cache_drop_count) << "semantic source corruption must evict the source cache exactly once";
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_FALSE(published) << "source corruption must not publish target metadata";
+    if (returned_merged_metadata != nullptr) {
+        EXPECT_EQ(0, returned_merged_metadata->sstable_meta().sstables_size())
+                << "the pre-fix success must be a silent drop, not a replacement SST";
+        EXPECT_EQ(0, returned_merged_metadata->orphan_files_size());
+    }
+    EXPECT_EQ(nullptr, returned_merged_metadata) << "source corruption must not return a merged PB or orphan list";
+
+    ASSIGN_OR_ABORT(auto files_after, directory_inventory(output_directory));
+    EXPECT_EQ(files_before, files_after) << "the direct-rebuild cleanup guard must remove partial writer output";
+    ASSERT_OK(FileSystem::Default()->path_exists(source_path));
+}
+
+// The same physical legacy shared SST is grouped from the first two range
+// occurrences, while its zero-value key belongs to the third input range. The
+// current remapper drops such an entry as owned by another occurrence before it
+// inspects values. Validation therefore has to happen before route/remap; moving
+// it afterwards must make this test RED by restoring the silent drop.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_index_values_before_grouped_shared_legacy_route_drop) {
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_source_flush(
+            [&] { set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE); });
+
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t child_c = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, child_c, merged_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string source_filename = "grouped_shared_route_drop_zero_values.sst";
+    const std::string source_path = _tablet_manager->sst_location(child_a, source_filename);
+    const std::string third_range_key = encode_int_primary_key(80);
+    IndexValuesWithVerPB empty_values;
+    const auto source_file = write_raw_pk_sstable(source_path, {{third_range_key, empty_values.SerializeAsString()}});
+
+    auto make_child = [&](int64_t tablet_id, int lower, int upper, const std::string& segment_filename,
+                          bool reference_source) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(2);
+        set_int_primary_key_schema(metadata.get(), 1001);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(100);
+
+        if (reference_source) {
+            auto* source_pb = metadata->mutable_sstable_meta()->add_sstables();
+            source_pb->set_filename(source_filename);
+            source_pb->set_filesize(source_file.filesize);
+            source_pb->set_shared(true);
+            source_pb->set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+            source_pb->mutable_range()->CopyFrom(source_file.range);
+        }
+        return metadata;
+    };
+
+    auto meta_a = make_child(child_a, /*lower=*/0, /*upper=*/30, "grouped_route_left.dat",
+                             /*reference_source=*/true);
+    auto meta_b = make_child(child_b, /*lower=*/30, /*upper=*/60, "grouped_route_middle.dat",
+                             /*reference_source=*/true);
+    auto meta_c = make_child(child_c, /*lower=*/60, /*upper=*/100, "grouped_route_right.dat",
+                             /*reference_source=*/false);
+
+    ASSERT_EQ(1, meta_a->sstable_meta().sstables_size());
+    ASSIGN_OR_ABORT(auto source_entries, read_raw_pk_sstable(child_a, meta_a, meta_a->sstable_meta().sstables(0)));
+    ASSERT_EQ(1, source_entries.size());
+    EXPECT_EQ(third_range_key, source_entries[0].first);
+    EXPECT_EQ(0, source_entries[0].second.values_size())
+            << "fixture must persist one real key with a serialized empty IndexValuesWithVerPB";
+
+    ASSERT_OK(put_tablet_metadata(meta_a));
+    ASSERT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_tablet_metadata(meta_c));
+    const std::string output_directory = _location_provider->segment_root_location(merged_tablet);
+    ASSIGN_OR_ABORT(auto files_before, directory_inventory(output_directory));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.add_old_tablet_ids(child_c);
+    merging.set_new_tablet_id(merged_tablet);
+
+    const int64_t read_errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    bool published = true;
+    TabletMetadataPtr returned_merged_metadata;
+    auto [status, cache_drop_count] =
+            publish_merge_and_count_cache_drops(_tablet_manager.get(), resharding, base_version, new_version,
+                                                /*txn_id=*/409, &published, &returned_merged_metadata);
+
+    EXPECT_FALSE(status.ok()) << "grouped shared rebuild must validate before route/remap can silently drop the key";
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_TRUE(status.message().contains(source_filename)) << status;
+    EXPECT_TRUE(status.message().contains("rebuild")) << status;
+    EXPECT_TRUE(status.message().contains("no index values")) << status;
+    EXPECT_EQ(1, cache_drop_count) << "semantic source corruption must evict the source cache exactly once";
+    EXPECT_EQ(read_errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_FALSE(published) << "source corruption must not publish target metadata";
+    if (returned_merged_metadata != nullptr) {
+        EXPECT_EQ(0, returned_merged_metadata->sstable_meta().sstables_size())
+                << "the pre-fix success must be a route-drop, not a replacement SST";
+        EXPECT_EQ(0, returned_merged_metadata->orphan_files_size());
+    }
+    EXPECT_EQ(nullptr, returned_merged_metadata) << "source corruption must not return a merged PB or orphan list";
+
+    ASSIGN_OR_ABORT(auto files_after, directory_inventory(output_directory));
+    EXPECT_EQ(files_before, files_after) << "the grouped-rebuild cleanup guard must remove partial writer output";
+    ASSERT_OK(FileSystem::Default()->path_exists(source_path));
 }
 #endif
 
