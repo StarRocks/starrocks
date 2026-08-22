@@ -31,15 +31,19 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "column/datum_tuple.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "platform/store_path.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -50,6 +54,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_range_helper.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -1100,6 +1105,95 @@ protected:
         IndexValue value;
         RETURN_IF_ERROR(index->get(/*n=*/1, &key_slice, &value));
         return value;
+    }
+
+    StatusOr<std::vector<IndexValue>> load_index_values(const TabletMetadataPtr& metadata, int64_t tablet_id,
+                                                        const std::vector<std::string>& keys) {
+        auto index = std::make_unique<lake::LakePersistentIndex>(_tablet_manager.get(), tablet_id);
+        RETURN_IF_ERROR(index->init(metadata));
+        lake::Tablet tablet(_tablet_manager.get(), tablet_id);
+        auto metadata_copy = std::make_shared<TabletMetadataPB>(*metadata);
+        lake::MetaFileBuilder builder(tablet, metadata_copy);
+        RETURN_IF_ERROR(index->load_from_lake_tablet(_tablet_manager.get(), metadata, metadata->version(), &builder));
+        std::vector<Slice> key_slices;
+        key_slices.reserve(keys.size());
+        for (const auto& key : keys) {
+            key_slices.emplace_back(key);
+        }
+        std::vector<IndexValue> values(keys.size());
+        RETURN_IF_ERROR(index->get(keys.size(), key_slices.data(), values.data()));
+        return values;
+    }
+
+    StatusOr<TabletMetadataPtr> publish_followup_upsert_delete(int64_t tablet_id, int64_t base_version,
+                                                               int32_t upsert_key, int32_t upsert_value,
+                                                               int32_t delete_key) {
+        std::vector<SlotDescriptor> slots;
+        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
+        Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
+
+        const int32_t keys[] = {upsert_key, delete_key};
+        const int32_t values[] = {upsert_value, 0};
+        const uint8_t operations[] = {TOpType::UPSERT, TOpType::DELETE};
+        auto key_column = Int32Column::create();
+        auto value_column = Int32Column::create();
+        auto operation_column = Int8Column::create();
+        key_column->append_numbers(keys, sizeof(keys));
+        value_column->append_numbers(values, sizeof(values));
+        operation_column->append_numbers(operations, sizeof(operations));
+        Chunk chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)}, slot_cid_map);
+        const uint32_t indexes[] = {0, 1};
+
+        ASSIGN_OR_RETURN(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, base_version));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        RuntimeProfile profile("tablet-merge-tail-followup-dml");
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_RETURN(auto delta_writer, lake::DeltaWriterBuilder()
+                                                    .set_tablet_manager(_tablet_manager.get())
+                                                    .set_tablet_id(tablet_id)
+                                                    .set_txn_id(txn_id)
+                                                    .set_partition_id(next_id())
+                                                    .set_mem_tracker(_mem_tracker.get())
+                                                    .set_schema_id(metadata->schema().id())
+                                                    .set_tablet_schema(std::move(tablet_schema))
+                                                    .set_slot_descriptors(&slot_pointers)
+                                                    .set_profile(&profile)
+                                                    .build());
+        RETURN_IF_ERROR(delta_writer->open());
+        RETURN_IF_ERROR(delta_writer->write(chunk, indexes, std::size(indexes)));
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_commit_time(1);
+        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+    }
+
+    StatusOr<std::vector<std::pair<int32_t, int32_t>>> read_two_column_rows(const TabletMetadataPtr& metadata) {
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto reader = std::make_shared<lake::TabletReader>(_tablet_manager.get(), metadata, *schema);
+        RETURN_IF_ERROR(reader->prepare());
+        RETURN_IF_ERROR(reader->open(TabletReaderParams()));
+
+        std::vector<std::pair<int32_t, int32_t>> rows;
+        while (true) {
+            auto chunk = ChunkFactory::new_chunk(*schema, 128);
+            auto status = reader->get_next(chunk.get());
+            if (status.is_end_of_file()) break;
+            RETURN_IF_ERROR(status);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                rows.emplace_back(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+            }
+        }
+        std::sort(rows.begin(), rows.end());
+        return rows;
     }
 
     struct RealSplitSstOwnerFixture {
@@ -9382,6 +9476,301 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_overlay_precedes_tail_material
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), reinserted_value);
     EXPECT_EQ(IndexValue(NullIndexValue), deleted_value);
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(3) << 32), sibling_value);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dropped_non_shared_modern_watermark_does_not_hide_live_tail) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    const int64_t base_version = 1;
+    const int64_t merged_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string segment_a = "retained_coverage_non_shared_a.dat";
+    const std::string segment_b = "retained_coverage_non_shared_b.dat";
+    const uint64_t segment_a_size =
+            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size =
+            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const std::string dead_sst_filename = "retained_coverage_non_shared_dead.sst";
+    const uint64_t dead_sst_size =
+            write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, dead_sst_filename),
+                                       {{encode_int_primary_key(30), /*version=*/1, /*rssid=*/3, /*rowid=*/0}});
+    const std::string live_sst_filename = "retained_coverage_non_shared_live.sst";
+    const uint64_t live_sst_size =
+            write_versioned_pk_sstable(_tablet_manager->sst_location(child_b, live_sst_filename),
+                                       {{encode_int_primary_key(60), /*version=*/1, /*rssid=*/1, /*rowid=*/0}});
+
+    auto make_source = [&](int64_t tablet_id, int lower, int upper, uint32_t rowset_id,
+                           const std::string& segment_filename, uint64_t segment_size) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(rowset_id + 1);
+        set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(segment_size);
+        rowset->set_overlapped(false);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(segment_size);
+        segment->set_num_rows(1);
+        return metadata;
+    };
+
+    auto source_a = make_source(child_a, /*lower=*/0, /*upper=*/50, /*rowset_id=*/1, segment_a, segment_a_size);
+    add_non_shared_modern_sstable(source_a.get(), dead_sst_filename, /*rssid=*/3, /*shared_version=*/1,
+                                  /*max_rowid=*/0, dead_sst_size);
+    auto source_b = make_source(child_b, /*lower=*/50, /*upper=*/100, /*rowset_id=*/1, segment_b, segment_b_size);
+    add_non_shared_modern_sstable(source_b.get(), live_sst_filename, /*rssid=*/1, /*shared_version=*/1,
+                                  /*max_rowid=*/0, live_sst_size);
+    ASSERT_OK(put_tablet_metadata(source_a));
+    ASSERT_OK(put_tablet_metadata(source_b));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+    TxnInfoPB merge_txn;
+    merge_txn.set_txn_id(1);
+    merge_txn.set_commit_time(1);
+    merge_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, merged_version,
+                                              merge_txn, false, tablet_metadatas, tablet_ranges));
+    auto merged = tablet_metadatas.at(merged_tablet);
+
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        EXPECT_NE(dead_sst_filename, sst.filename());
+    }
+    const std::vector<std::string> lookup_keys = {encode_int_primary_key(10), encode_int_primary_key(60)};
+    ASSIGN_OR_ABORT(auto lookup_values, load_index_values(merged, merged_tablet, lookup_keys));
+    ASSERT_EQ(2, lookup_values.size());
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(1) << 32), lookup_values[0]);
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), lookup_values[1]);
+
+    ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(merged_tablet, merged_version, /*upsert_key=*/10,
+                                                                   /*upsert_value=*/1010, /*delete_key=*/60));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_modern_live_occurrence_does_not_cover_dead_sibling_tail) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    const int64_t base_version = 1;
+    const int64_t merged_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string segment_a = "retained_coverage_shared_modern_a.dat";
+    const std::string segment_b = "retained_coverage_shared_modern_b.dat";
+    const uint64_t segment_a_size =
+            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size =
+            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const std::string shared_sst_filename = "retained_coverage_shared_modern.sst";
+    const uint64_t shared_sst_size =
+            write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
+                                       {{encode_int_primary_key(60), /*version=*/1, /*rssid=*/1, /*rowid=*/0}});
+
+    auto make_source = [&](int64_t tablet_id, int lower, int upper, const std::string& segment_filename,
+                           uint64_t segment_size) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(2);
+        set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(segment_size);
+        rowset->set_overlapped(false);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(segment_size);
+        segment->set_num_rows(1);
+        return metadata;
+    };
+
+    auto source_a = make_source(child_a, /*lower=*/0, /*upper=*/50, segment_a, segment_a_size);
+    add_shared_rssid_sstable(source_a.get(), shared_sst_filename, /*rssid=*/3, /*shared_version=*/1,
+                             /*max_rowid=*/0, shared_sst_size);
+    auto source_b = make_source(child_b, /*lower=*/50, /*upper=*/100, segment_b, segment_b_size);
+    add_shared_rssid_sstable(source_b.get(), shared_sst_filename, /*rssid=*/1, /*shared_version=*/1,
+                             /*max_rowid=*/0, shared_sst_size);
+    ASSERT_OK(put_tablet_metadata(source_a));
+    ASSERT_OK(put_tablet_metadata(source_b));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+    TxnInfoPB merge_txn;
+    merge_txn.set_txn_id(1);
+    merge_txn.set_commit_time(1);
+    merge_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, merged_version,
+                                              merge_txn, false, tablet_metadatas, tablet_ranges));
+    auto merged = tablet_metadatas.at(merged_tablet);
+
+    ASSERT_FALSE(merged->sstable_meta().sstables().empty());
+    EXPECT_EQ(shared_sst_filename, merged->sstable_meta().sstables(0).filename());
+    const std::vector<std::string> lookup_keys = {encode_int_primary_key(10), encode_int_primary_key(60)};
+    ASSIGN_OR_ABORT(auto lookup_values, load_index_values(merged, merged_tablet, lookup_keys));
+    ASSERT_EQ(2, lookup_values.size());
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(1) << 32), lookup_values[0]);
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), lookup_values[1]);
+
+    ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(merged_tablet, merged_version, /*upsert_key=*/10,
+                                                                   /*upsert_value=*/1010, /*delete_key=*/60));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_legacy_global_max_does_not_hide_source_local_tail) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_flush_failpoints([&] {
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    const int64_t base_version = 1;
+    const int64_t merged_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    const std::string segment_a_covered = "retained_coverage_shared_legacy_a_covered.dat";
+    const std::string segment_a_tail = "retained_coverage_shared_legacy_a_tail.dat";
+    const std::string segment_b = "retained_coverage_shared_legacy_b.dat";
+    const uint64_t segment_a_covered_size =
+            write_two_column_segment(child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_a_tail_size =
+            write_two_column_segment(child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+    const uint64_t segment_b_size =
+            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const std::string shared_sst_filename = "retained_coverage_shared_legacy.sst";
+    const uint64_t shared_sst_size =
+            write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
+                                       {{encode_int_primary_key(10), /*version=*/1, /*rssid=*/1, /*rowid=*/0},
+                                        {encode_int_primary_key(60), /*version=*/1, /*rssid=*/3, /*rowid=*/0}});
+
+    auto make_source = [&](int64_t tablet_id, int lower, int upper) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(base_version);
+        metadata->set_next_rowset_id(4);
+        set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* sst = metadata->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(shared_sst_filename);
+        sst->set_filesize(shared_sst_size);
+        sst->set_shared(true);
+        sst->set_max_rss_rowid(static_cast<uint64_t>(3) << 32);
+        return metadata;
+    };
+    auto add_real_rowset = [&](TabletMetadataPB* metadata, uint32_t rowset_id, const std::string& segment_filename,
+                               uint64_t segment_size) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(segment_size);
+        rowset->set_overlapped(false);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_filename);
+        segment->set_size(segment_size);
+        segment->set_num_rows(1);
+    };
+
+    auto source_a = make_source(child_a, /*lower=*/0, /*upper=*/50);
+    source_a->set_next_rowset_id(3);
+    add_real_rowset(source_a.get(), /*rowset_id=*/1, segment_a_covered, segment_a_covered_size);
+    add_real_rowset(source_a.get(), /*rowset_id=*/2, segment_a_tail, segment_a_tail_size);
+    auto source_b = make_source(child_b, /*lower=*/50, /*upper=*/100);
+    add_real_rowset(source_b.get(), /*rowset_id=*/3, segment_b, segment_b_size);
+    ASSERT_OK(put_tablet_metadata(source_a));
+    ASSERT_OK(put_tablet_metadata(source_b));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+    TxnInfoPB merge_txn;
+    merge_txn.set_txn_id(1);
+    merge_txn.set_commit_time(1);
+    merge_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, merged_version,
+                                              merge_txn, false, tablet_metadatas, tablet_ranges));
+    auto merged = tablet_metadatas.at(merged_tablet);
+
+    const std::vector<std::string> lookup_keys = {encode_int_primary_key(10), encode_int_primary_key(20),
+                                                  encode_int_primary_key(60)};
+    ASSIGN_OR_ABORT(auto lookup_values, load_index_values(merged, merged_tablet, lookup_keys));
+    ASSERT_EQ(3, lookup_values.size());
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(1) << 32), lookup_values[0]);
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), lookup_values[1]);
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(3) << 32), lookup_values[2]);
+
+    ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(merged_tablet, merged_version, /*upsert_key=*/20,
+                                                                   /*upsert_value=*/2020, /*delete_key=*/10));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{20, 2020}, {60, 600}}), rows);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_materializes_uncovered_index_tail) {
