@@ -16,6 +16,7 @@ package com.starrocks.credential;
 
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aws.AwsCloudConfigurationProvider;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
@@ -29,6 +30,7 @@ import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,8 +38,10 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_ENDPOINT;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN;
+import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.ADLS_SAS_TOKEN_EXPIRES_AT_MS;
 import static com.starrocks.credential.azure.AzureCloudConfigurationProvider.BLOB_ENDPOINT;
 import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN;
+import static com.starrocks.credential.gcp.GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT;
 
 public class CloudConfigurationFactoryTest {
 
@@ -75,6 +79,15 @@ public class CloudConfigurationFactoryTest {
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
                         "region='us-west-2', endpoint='endpoint'}, enablePathStyleAccess=false, enableSSL=true}",
                 cloudConfiguration.toConfString());
+
+        // Vended expiry: null when the catalog omits it, carried when present, null when malformed.
+        Assertions.assertNull(cloudConfiguration.getVendedCredentialExpiresAtMs());
+        map.put(AwsCloudConfigurationProvider.S3_SESSION_TOKEN_EXPIRES_AT_MS, "1700000000000");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
+        Assertions.assertEquals(1700000000000L, cloudConfiguration.getVendedCredentialExpiresAtMs());
+        map.put(AwsCloudConfigurationProvider.S3_SESSION_TOKEN_EXPIRES_AT_MS, "not-a-number");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map, "");
+        Assertions.assertNull(cloudConfiguration.getVendedCredentialExpiresAtMs());
     }
 
     @Test
@@ -104,6 +117,34 @@ public class CloudConfigurationFactoryTest {
                         "container='container', sasToken='sas_token', useManagedIdentity='false', clientId='', " +
                         "clientSecret='', tenantId=''}}",
                 cloudConfiguration.toConfString());
+
+        // Vended expiry: an opaque SAS with neither expires-at-ms property nor se= param -> null.
+        Assertions.assertNull(cloudConfiguration.getVendedCredentialExpiresAtMs());
+
+        // Catalog-sent expires-at-ms property is the primary source (ADLS arm).
+        map = new HashMap<>();
+        map.put(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT, "sas_token");
+        map.put(ADLS_SAS_TOKEN_EXPIRES_AT_MS + "account." + ADLS_ENDPOINT, "1700000000000");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "abfss://container@account.dfs.core.windows.net/path/1/2");
+        Assertions.assertEquals(1700000000000L, cloudConfiguration.getVendedCredentialExpiresAtMs());
+
+        // Fallback: the SAS token's own URL-encoded se= param; ske= (signed key expiry) must not match.
+        map = new HashMap<>();
+        map.put(ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT,
+                "sv=2024&ske=2031-01-01T00%3A00%3A00Z&se=2030-01-01T00%3A00%3A00Z&sig=x");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "abfss://container@account.dfs.core.windows.net/path/1/2");
+        Assertions.assertEquals(Instant.parse("2030-01-01T00:00:00Z").toEpochMilli(),
+                cloudConfiguration.getVendedCredentialExpiresAtMs());
+
+        // Blob arm carries the expiry property too.
+        map = new HashMap<>();
+        map.put(ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT, "sas_token");
+        map.put(ADLS_SAS_TOKEN_EXPIRES_AT_MS + "account." + BLOB_ENDPOINT, "1700000000000");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "wasbs://container@account.blob.core.windows.net/path/1/2");
+        Assertions.assertEquals(1700000000000L, cloudConfiguration.getVendedCredentialExpiresAtMs());
     }
 
     @Test
@@ -417,6 +458,13 @@ public class CloudConfigurationFactoryTest {
         cloudConfiguration.applyToConfiguration(conf);
         Assertions.assertEquals("ACCESS_TOKEN_PROVIDER", conf.get("fs.gs.auth.type"));
         Assertions.assertEquals("access_token", conf.get("fs.gs.temporary.access.token"));
+
+        // Vended expiry: MAX_VALUE default when the catalog omits it, the sent value otherwise.
+        Assertions.assertEquals(Long.MAX_VALUE, cloudConfiguration.getVendedCredentialExpiresAtMs());
+        map.put(GCS_ACCESS_TOKEN_EXPIRES_AT, "1700000000000");
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map,
+                "gs://iceberg_gcp/iceberg_catalog/path/1/2");
+        Assertions.assertEquals(1700000000000L, cloudConfiguration.getVendedCredentialExpiresAtMs());
     }
 
     @Test

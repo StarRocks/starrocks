@@ -31,6 +31,17 @@ public class CloudConfiguration {
     private String configResources;
     private String runtimeJars;
     private String hadoopUsername;
+    // Epoch-millis expiry of a catalog-vended credential; null when not vended or unknown.
+    // FE-only refresh bookkeeping — deliberately excluded from toThrift/toConfString.
+    private Long vendedCredentialExpiresAtMs;
+
+    public Long getVendedCredentialExpiresAtMs() {
+        return vendedCredentialExpiresAtMs;
+    }
+
+    public void setVendedCredentialExpiresAtMs(Long expiresAtMs) {
+        this.vendedCredentialExpiresAtMs = expiresAtMs;
+    }
 
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
