@@ -1263,4 +1263,15 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  <slot 9> : DictDecode(10: S_ADDRESS, [<place-holder>], " +
                 "array_intersect(10: S_ADDRESS, array_distinct(10: S_ADDRESS)))"), plan);
     }
+
+    @Test
+    public void testArrayFunctionsWithEmptyListParam() throws Exception {
+        String sql = """
+                SELECT ARRAY_CONTAINS_ALL(S_ADDRESS, [])
+                FROM supplier_nullable;
+                """;
+
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("array_contains_all(10: S_ADDRESS, CAST([] AS ARRAY<INT>))"), plan);
+    }
 }

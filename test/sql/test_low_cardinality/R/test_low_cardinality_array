@@ -417,3 +417,7 @@ with cte as (select a1, a2 from s1) [materialized] select a1 from cte where a2[1
 ["Hebei","Hong Kong","Macao","Guangxi"]
 ["Hong Kong","Jiangsu","Tibet","Yunnan","Fujian"]
 -- !result
+select array_contains_seq(a1, []) from s1 limit 1;
+-- result:
+1
+-- !result
