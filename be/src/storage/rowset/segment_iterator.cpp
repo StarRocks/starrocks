@@ -2036,7 +2036,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.col_unique_id = ucid;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .buffer_size = lake_scan_buffer_size(_opts.lake_io_opts),
                                  .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
     std::string dcg_filename;

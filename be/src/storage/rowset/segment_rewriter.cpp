@@ -10,6 +10,7 @@
 #include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/segment.pb.h"
@@ -260,7 +261,10 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     auto tablet_mgr = tablet->tablet_mgr();
     // not fill data and meta cache
     auto fill_cache = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = -1};
+    // Rewrite reads whole columns like compaction does, so it takes compaction's read size
+    // rather than falling through to the much smaller query-scan default.
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache,
+                               .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
     ASSIGN_OR_RETURN(auto segment,
                      tablet_mgr->load_segment(src, segment_id, &footer_sine_hint, lake_io_opts, fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();
