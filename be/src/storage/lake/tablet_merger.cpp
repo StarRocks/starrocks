@@ -2997,11 +2997,7 @@ bool lifted_range_has_source_live_gap(const ClampedLiftedRange& range,
     return false;
 }
 
-struct NonSharedLegacySstableClassification {
-    bool needs_rebuild = false;
-    bool tombstone_only = false;
-    bool empty = false;
-};
+enum class NonSharedLegacySstableClassification { kMetadataOnly, kNeedsRebuild, kTombstoneOnly, kEmpty };
 
 StatusOr<NonSharedLegacySstableClassification> classify_non_shared_legacy_sstable(
         TabletManager* tablet_manager, const PersistentIndexSstablePB& src_pb, const TabletMergeContext& ctx,
@@ -3047,18 +3043,20 @@ StatusOr<NonSharedLegacySstableClassification> classify_non_shared_legacy_sstabl
             }
             const auto source_rssid = static_cast<uint32_t>(lifted_rssid);
             if (!source_live_rssids.contains(source_rssid)) {
-                return NonSharedLegacySstableClassification{.needs_rebuild = true};
+                return NonSharedLegacySstableClassification::kNeedsRebuild;
             }
             ASSIGN_OR_RETURN(uint32_t final_rssid, ctx.map_rssid(source_rssid));
             ASSIGN_OR_RETURN(auto del_vector,
                              load_merged_del_vector(tablet_manager, new_metadata, final_rssid, del_vector_cache));
             if (del_vector && del_vector->roaring() && del_vector->roaring()->contains(index_value.rowid())) {
-                return NonSharedLegacySstableClassification{.needs_rebuild = true};
+                return NonSharedLegacySstableClassification::kNeedsRebuild;
             }
         }
     }
     RETURN_IF_ERROR(handle_source_error(iterator->status()));
-    return NonSharedLegacySstableClassification{.tombstone_only = saw_entry && !saw_data_value, .empty = !saw_entry};
+    if (!saw_entry) return NonSharedLegacySstableClassification::kEmpty;
+    return saw_data_value ? NonSharedLegacySstableClassification::kMetadataOnly
+                          : NonSharedLegacySstableClassification::kTombstoneOnly;
 }
 
 StatusOr<bool> lifted_range_may_reference_merged_delvec(const ClampedLiftedRange& range, const TabletMergeContext& ctx,
@@ -3156,7 +3154,7 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
                          TabletMergeContext::mapping_disagrees_with_natural_in_range(
                                  ctx_disagreement_keys, lifted_range.lower, lifted_range.upper);
     bool needs_exact_scan = lifted_range_has_source_live_gap(lifted_range, source_live_rssids);
-    NonSharedLegacySstableClassification classification;
+    auto classification = NonSharedLegacySstableClassification::kMetadataOnly;
     if (!needs_rebuild && !needs_exact_scan) {
         ASSIGN_OR_RETURN(needs_exact_scan,
                          lifted_range_may_reference_merged_delvec(lifted_range, ctx, source_live_rssids, new_metadata));
@@ -3165,8 +3163,8 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
         ASSIGN_OR_RETURN(classification,
                          classify_non_shared_legacy_sstable(tablet_manager, src_pb, ctx, source_live_rssids,
                                                             new_metadata, del_vector_cache));
-        needs_rebuild = classification.needs_rebuild;
-        if (classification.empty) return Status::OK();
+        needs_rebuild = classification == NonSharedLegacySstableClassification::kNeedsRebuild;
+        if (classification == NonSharedLegacySstableClassification::kEmpty) return Status::OK();
     }
     if (needs_rebuild) {
         PersistentIndexSstablePB rebuilt_pb;
@@ -3182,7 +3180,8 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
     }
     auto* out = dest->Add();
     out->CopyFrom(src_pb);
-    return project_non_shared_legacy_sstable(src_pb, ctx, classification.tombstone_only, out);
+    return project_non_shared_legacy_sstable(
+            src_pb, ctx, classification == NonSharedLegacySstableClassification::kTombstoneOnly, out);
 }
 
 // max_rss_rowid orders sstables and breaks same-version ties, but after merging
