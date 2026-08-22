@@ -742,18 +742,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
         TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
         std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level, bool* contain_shared_sstables) {
-    sstable::ReadOptions read_options;
-    // No need to cache input sst's blocks.
-    read_options.fill_cache = false;
-    std::vector<sstable::Iterator*> iters;
-    DeferOp free_iters([&] {
-        for (sstable::Iterator* iter : iters) {
-            delete iter;
-        }
-    });
-
-    iters.reserve(metadata->sstable_meta().sstables().size());
-    std::stringstream ss_debug;
     std::vector<PersistentIndexSstablePB> sstables_to_merge;
     // Pick sstable for merge, decide to use base merge or cumulative merge.
     pick_sstables_for_merge(metadata->sstable_meta(), &sstables_to_merge, merge_base_level);
@@ -768,12 +756,34 @@ Status LakePersistentIndex::prepare_merging_iterator(
     for (const auto& sstable_pb : sstables_to_merge) {
         txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
     }
+    return prepare_merging_iterator_for_sstables(tablet_mgr, metadata, sstables_to_merge, merging_sstables,
+                                                 merging_iter_ptr, contain_shared_sstables);
+}
+
+Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
+        TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+        const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
+        std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables,
+        bool count_open_corruption_metric) {
+    sstable::ReadOptions read_options;
+    // No need to cache input sst's blocks.
+    read_options.fill_cache = false;
+    std::vector<sstable::Iterator*> iters;
+    DeferOp free_iters([&] {
+        for (sstable::Iterator* iter : iters) {
+            delete iter;
+        }
+    });
+
+    iters.reserve(sstables_to_merge.size());
+    std::stringstream ss_debug;
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()), nullptr,
-                                 false /* need filter */, nullptr, metadata, tablet_mgr));
+                                 false /* need filter */, nullptr, metadata, tablet_mgr, count_open_corruption_metric));
         PersistentIndexSstablePtr merging_sstable = std::move(sstable);
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
@@ -800,7 +810,8 @@ Status LakePersistentIndex::prepare_merging_iterator(
 
 StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex::merge_sstables(
         std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-        const TabletMetadataPtr& metadata, bool contain_shared_sstables) {
+        const TabletMetadataPtr& metadata, bool contain_shared_sstables, KeyValueMergerOutputMode output_mode,
+        bool enable_multiple_output_files) {
     SstSeekRange seek_range;
     // adjust sst seek range by tablet range
     if (contain_shared_sstables) {
@@ -818,8 +829,9 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     }
 
     sstable::Options options;
-    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(),
-                                                   base_level_merge, tablet_mgr, metadata->id(), false);
+    auto merger =
+            std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), base_level_merge,
+                                             tablet_mgr, metadata->id(), enable_multiple_output_files, output_mode);
     while (iter_ptr->Valid()) {
         const Slice cur_key = iter_ptr->key();
         if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
@@ -831,6 +843,82 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     }
     RETURN_IF_ERROR(iter_ptr->status());
     return merger->finish();
+}
+
+Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(TabletManager* tablet_mgr,
+                                                                          TabletMetadataPB* metadata) {
+    if (metadata->sstable_meta().sstables_size() < 2) {
+        return Status::OK();
+    }
+
+    auto input_metadata = std::make_shared<TabletMetadata>(*metadata);
+    std::vector<PersistentIndexSstablePB> inputs;
+    inputs.reserve(input_metadata->sstable_meta().sstables_size());
+    uint64_t overlay_watermark = 0;
+    for (const auto& input : input_metadata->sstable_meta().sstables()) {
+        inputs.push_back(input);
+        overlay_watermark = std::max(overlay_watermark, input.max_rss_rowid());
+    }
+
+    auto drop_input_cache_on_corruption = [&](const Status& st) {
+        if (!st.is_corruption()) {
+            return;
+        }
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index tablet-merge overlay hit corruption, dropping local cache of " << inputs.size()
+                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
+        for (const auto& input : inputs) {
+            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), input.filename()));
+        }
+    };
+
+    std::vector<std::shared_ptr<PersistentIndexSstable>> opened_inputs;
+    std::unique_ptr<sstable::Iterator> merging_iter;
+    bool contain_shared_sstables = false;
+    auto prepare_st = prepare_merging_iterator_for_sstables(tablet_mgr, input_metadata, inputs, &opened_inputs,
+                                                            &merging_iter, &contain_shared_sstables,
+                                                            false /* overlay owns its corruption metric */);
+    if (!prepare_st.ok()) {
+        drop_input_cache_on_corruption(prepare_st);
+        return prepare_st;
+    }
+    if (!merging_iter->Valid()) {
+        auto st = merging_iter->status();
+        drop_input_cache_on_corruption(st);
+        return st;
+    }
+
+    auto outputs_or = merge_sstables(std::move(merging_iter), false, tablet_mgr, input_metadata,
+                                     contain_shared_sstables, KeyValueMergerOutputMode::kDuplicateKeysOnly, true);
+    if (!outputs_or.ok()) {
+        drop_input_cache_on_corruption(outputs_or.status());
+        return outputs_or.status();
+    }
+    if (outputs_or->empty()) {
+        return Status::OK();
+    }
+
+    const auto fileset_id = UniqueId::gen_uid().to_proto();
+    std::vector<PersistentIndexSstablePB> overlay_sstables;
+    overlay_sstables.reserve(outputs_or->size());
+    for (const auto& output : *outputs_or) {
+        PersistentIndexSstablePB overlay;
+        overlay.set_filename(output.filename);
+        overlay.set_filesize(output.filesize);
+        overlay.set_encryption_meta(output.encryption_meta);
+        overlay.set_max_rss_rowid(overlay_watermark);
+        overlay.mutable_range()->set_start_key(output.start_key);
+        overlay.mutable_range()->set_end_key(output.end_key);
+        overlay.mutable_fileset_id()->CopyFrom(fileset_id);
+        overlay.set_shared(false);
+        overlay.set_rssid_offset(0);
+        overlay.set_generation_version(metadata->version());
+        overlay_sstables.emplace_back(std::move(overlay));
+    }
+    for (const auto& overlay : overlay_sstables) {
+        metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(overlay);
+    }
+    return Status::OK();
 }
 
 // During large import, we may have many sst files to ingest and get, so we do parallel compaction to speedup the process.
@@ -1409,13 +1497,22 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
     return true;
 }
 
+static uint64_t effective_rebuild_rss_rowid_point(const PersistentIndexSstableMetaPB& sstable_meta,
+                                                  std::optional<uint64_t> override_point) {
+    if (override_point.has_value()) {
+        return *override_point;
+    }
+    const auto& sstables = sstable_meta.sstables();
+    return sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+}
+
 // Return {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
 std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const TabletMetadataPB& metadata,
-                                                                    const PersistentIndexSstableMetaPB& sstable_meta) {
+                                                                    const PersistentIndexSstableMetaPB& sstable_meta,
+                                                                    std::optional<uint64_t> rebuild_rss_rowid_point) {
     size_t file_cnt = 0;
     int64_t row_cnt = 0;
-    const auto& sstables = sstable_meta.sstables();
-    const uint32_t rebuild_rss_id = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid() >> 32;
+    const uint32_t rebuild_rss_id = effective_rebuild_rss_rowid_point(sstable_meta, rebuild_rss_rowid_point) >> 32;
     for (const auto& rowset : metadata.rowsets()) {
         if (!needs_rowset_rebuild(rowset, rebuild_rss_id)) {
             continue; // skip rowset
@@ -1745,7 +1842,8 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
 } // namespace
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                                  int64_t base_version, const MetaFileBuilder* builder) {
+                                                  int64_t base_version, const MetaFileBuilder* builder,
+                                                  std::optional<uint64_t> rebuild_rss_rowid_point_override) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -1755,7 +1853,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    auto [file_cnt, row_cnt] = need_rebuild_counts(*metadata, metadata->sstable_meta());
+    auto [file_cnt, row_cnt] =
+            need_rebuild_counts(*metadata, metadata->sstable_meta(), rebuild_rss_rowid_point_override);
     _need_rebuild_file_cnt = file_cnt;
     _need_rebuild_row_cnt = row_cnt;
     ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
@@ -1763,9 +1862,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
-    const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
-    const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+    const uint64_t rebuild_rss_rowid_point =
+            effective_rebuild_rss_rowid_point(metadata->sstable_meta(), rebuild_rss_rowid_point_override);
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     const bool need_encode = pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
@@ -1796,6 +1895,29 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // at a time on the caller thread (no thread pool) -- the segment-scan analog of load_dels reading
     // one del file at a time.
     const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
+    auto insert_rebuild_batch = [&](RebuildInsertBatch& batch, int64_t rowset_version) -> Status {
+        if (rebuild_rss_rowid_point_override.has_value() && !batch.keys.empty()) {
+            std::vector<IndexValue> existing_values(batch.keys.size(), IndexValue(NullIndexValue));
+            KeyIndexSet key_indexes;
+            for (size_t i = 0; i < batch.keys.size(); ++i) {
+                key_indexes.insert(i);
+            }
+            const auto* keys = reinterpret_cast<const Slice*>(batch.keys.data());
+            RETURN_IF_ERROR(get_from_inactive_memtables(batch.keys.size(), keys, existing_values.data(), &key_indexes,
+                                                        /*version=*/-1));
+            RETURN_IF_ERROR(get_from_sstables(batch.keys.size(), keys, existing_values.data(), &key_indexes,
+                                              /*version=*/-1));
+            for (size_t i = 0; i < batch.keys.size(); ++i) {
+                if (existing_values[i].get_value() != NullIndexValue && existing_values[i] != batch.values[i]) {
+                    return Status::AlreadyExist(
+                            fmt::format("merge tail rebuild found duplicate live key, existing_value={} tail_value={}",
+                                        existing_values[i].get_value(), batch.values[i].get_value()));
+                }
+            }
+        }
+        return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()), batch.values.data(),
+                      rowset_version);
+    };
 
     if (use_parallel) {
         // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
@@ -1851,8 +1973,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.num_rows);
                 for (auto& batch : result.batches) {
-                    RETURN_IF_ERROR(insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
-                                           batch.values.data(), unit.rowset_version));
+                    RETURN_IF_ERROR(insert_rebuild_batch(batch, unit.rowset_version));
                 }
                 unit_cursor++;
             }
@@ -1878,8 +1999,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 int64_t unit_rows = 0;
                 auto insert_emit = [&](RebuildInsertBatch& batch) -> Status {
                     unit_rows += static_cast<int64_t>(batch.values.size());
-                    return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
-                                  batch.values.data(), unit.rowset_version);
+                    return insert_rebuild_batch(batch, unit.rowset_version);
                 };
                 scan_one_rebuild_unit(unit, ctx, insert_emit);
                 RETURN_IF_ERROR(scan_status);

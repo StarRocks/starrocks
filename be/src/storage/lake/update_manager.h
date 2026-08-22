@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -197,7 +198,8 @@ public:
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
+                                                std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -221,7 +223,8 @@ public:
     // exclusion between publish_resharding_tablet and publish_version, so
     // the cached _data_version cannot advance past metadata->version()
     // during this call.
-    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version,
+                                                  std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,

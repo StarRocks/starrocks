@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -60,7 +61,7 @@ public:
     //
     // [thread-safe]
     Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                     const MetaFileBuilder* builder);
+                     const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
 
     bool is_load(int64_t base_version);
 
@@ -169,7 +170,7 @@ public:
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                         const MetaFileBuilder* builder);
+                         const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point);
 
 private:
     // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking

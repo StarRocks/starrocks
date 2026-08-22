@@ -1559,21 +1559,16 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
 // the new tablet at |new_tablet_index|) onto |new_tablet_metadata|'s non-segment
 // files (delvec pages, dcg entries, idg entries), so they follow the per-segment
 // shared decision instead of all staying shared:
-//   - a segment pruned away from this new tablet (keep == false): erase its dcg and
-//     idg entries (sstable projection never consults dcg/idg), and erase its delvec
-//     page unless a surviving has_shared_rssid sstable still needs it (protected_rssids);
+//   - a segment pruned away from this new tablet (keep == false): erase its delvec,
+//     dcg, and idg entries;
 //   - an exclusive kept segment (shared == false): mark its dcg and idg files private,
 //     so vacuum can reclaim them alongside the now-private segment. (Delvec FILES stay
 //     shared: one file holds pages for many segments, so it is not reclaimed per-rssid.)
 //
 // Must run BEFORE apply_segment_ownership_to_new_tablet_rowset, which compacts the
-// segment arrays away (this needs each segment's original rssid). Returns true if any
-// pruned segment of |rowset| had a protected rssid, which blocks removal of an
-// otherwise-empty rowset (the surviving sstable still anchors that rssid at MERGE).
-bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& rowset, const RowsetOwnership& ownership,
-                                                     int new_tablet_index,
-                                                     const std::unordered_set<uint32_t>& protected_rssids,
-                                                     TabletMetadataPB* new_tablet_metadata) {
+// segment arrays away (this needs each segment's original rssid).
+void propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& rowset, const RowsetOwnership& ownership,
+                                                     int new_tablet_index, TabletMetadataPB* new_tablet_metadata) {
     auto* delvecs = new_tablet_metadata->has_delvec_meta()
                             ? new_tablet_metadata->mutable_delvec_meta()->mutable_delvecs()
                             : nullptr;
@@ -1581,28 +1576,13 @@ bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
             new_tablet_metadata->has_dcg_meta() ? new_tablet_metadata->mutable_dcg_meta()->mutable_dcgs() : nullptr;
     auto* idgs =
             new_tablet_metadata->has_idg_meta() ? new_tablet_metadata->mutable_idg_meta()->mutable_idgs() : nullptr;
-    bool has_pruned_protected_rssid = false;
     for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
         const uint32_t rssid = get_rssid(rowset, segment_index);
         const auto& segment_ownership = ownership.segments[segment_index];
         if (!segment_ownership.keep[new_tablet_index]) {
             if (dcgs != nullptr) dcgs->erase(rssid);
-            // IDG mirrors DCG: sstable projection never consults idg, so no protected_rssids gate.
             if (idgs != nullptr) idgs->erase(rssid);
-            if (protected_rssids.contains(rssid)) {
-                // Leave the delvec page as-is (all-shared) rather than erasing it: MERGE's
-                // modern sstable projection re-reads this rssid's delvec, so erasing risks
-                // dropping real deletions. Keeping it preserves the pre-cleanup baseline --
-                // before per-segment delvec erase existed, every pruned segment's delvec was
-                // carried into MERGE unconditionally, so this is not a new orphan; this cleanup
-                // only ever REDUCES carried pages. The protected residual can still map to an
-                // unreferenced rssid at MERGE (e.g. a delvec kept by a non-first shared-sstable
-                // duplicate that merge_sstables skips before projection); bounding/remapping
-                // those orphan delvec keys is left to the merge-side follow-up.
-                has_pruned_protected_rssid = true;
-            } else if (delvecs != nullptr) {
-                delvecs->erase(rssid);
-            }
+            if (delvecs != nullptr) delvecs->erase(rssid);
         } else if (!segment_ownership.shared[new_tablet_index]) {
             if (dcgs != nullptr) {
                 auto dcg_it = dcgs->find(rssid);
@@ -1618,7 +1598,6 @@ bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
             }
         }
     }
-    return has_pruned_protected_rssid;
 }
 
 // Precondition: split_ranges.size() == splitting_tablet.new_tablet_ids_size().
@@ -1689,23 +1668,6 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
         }
     }
 
-    // rssids referenced by a surviving modern `has_shared_rssid` PK-index sstable.
-    // When such a segment is pruned from a new tablet we must NOT erase its delvec
-    // page: MERGE's modern shared_rssid sstable projection reads the delvec for that
-    // rssid directly (it does NOT go through the legacy remap_legacy_entry_or_drop
-    // drop path), so erasing it would break MERGE. This exception is load-bearing.
-    // DCG is never consulted by sstable projection, so DCG erase is never gated.
-    // sstable_meta is identical across new tablets (each is a copy of the old
-    // tablet), so compute the protected set once.
-    std::unordered_set<uint32_t> protected_rssids;
-    if (old_tablet_metadata->has_sstable_meta()) {
-        for (const auto& sstable : old_tablet_metadata->sstable_meta().sstables()) {
-            if (sstable.has_shared_rssid()) {
-                protected_rssids.insert(sstable.shared_rssid());
-            }
-        }
-    }
-
     for (int32_t i = 0; i < splitting_tablet.new_tablet_ids_size(); ++i) {
         auto new_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_metadata);
         new_tablet_new_metadata->set_id(splitting_tablet.new_tablet_ids(i));
@@ -1731,14 +1693,13 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
         for (auto& rowset_metadata : *new_tablet_new_metadata->mutable_rowsets()) {
             RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_range(&rowset_metadata, split_ranges[i].range));
 
-            // Phase-1 per-segment shared. The uid (family identity for the later MERGE) is
+            // Phase-1 per-segment shared. The uid (logical rowset identity for a later MERGE) is
             // preserved verbatim by the metadata copy, identical across new tablets. Segments
             // are then pruned to those overlapping this new tablet (shared=false where provably
             // exclusive+contained), or for non-pruneable / degraded rowsets stay all-shared.
             if (rowset_prunable[rowset_index]) {
-                const bool has_pruned_protected_rssid = propagate_pruned_ownership_to_non_segment_files(
-                        rowset_metadata, rowset_ownership[rowset_index], i, protected_rssids,
-                        new_tablet_new_metadata.get());
+                propagate_pruned_ownership_to_non_segment_files(rowset_metadata, rowset_ownership[rowset_index], i,
+                                                                new_tablet_new_metadata.get());
 
                 RETURN_IF_ERROR(apply_segment_ownership_to_new_tablet_rowset(&rowset_metadata,
                                                                              rowset_ownership[rowset_index], i));
@@ -1747,10 +1708,9 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
 
                 // A rowset whose every segment was pruned from this new tablet carries no
                 // data here. Remove it (and its rowset_to_schema mapping) unless it still
-                // holds a delete predicate, del_files, or a pruned protected rssid that a
-                // surviving sstable still anchors at MERGE.
+                // holds a delete predicate or del_files.
                 if (rowset_metadata.segment_metas_size() == 0 && !rowset_metadata.has_delete_predicate() &&
-                    rowset_metadata.del_files_size() == 0 && !has_pruned_protected_rssid) {
+                    rowset_metadata.del_files_size() == 0) {
                     keep_rowset[rowset_index] = false;
                     removed_rowset_ids.push_back(rowset_metadata.id());
                 }
