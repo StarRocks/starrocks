@@ -2734,15 +2734,19 @@ Status rebuild_non_shared_legacy_sstable(TabletManager* tablet_manager, int64_t 
 // by no contributing old tablet) reach the rebuilt sstable PB. Without it,
 // PersistentIndexSstable::multi_get could return stale rssids when the LSM
 // block-sort order is inverted.
-StatusOr<uint32_t> effective_shared_rssid(const PersistentIndexSstablePB& sst) {
-    const int64_t effective = static_cast<int64_t>(sst.shared_rssid()) + sst.rssid_offset();
+StatusOr<uint32_t> effective_shared_rssid(const std::string& filename, uint32_t shared_rssid, int32_t rssid_offset) {
+    const int64_t effective = static_cast<int64_t>(shared_rssid) + rssid_offset;
     if (effective < 0 || effective > std::numeric_limits<uint32_t>::max()) {
         return Status::Corruption(
                 fmt::format("Shared sstable {} effective rssid is out of uint32 range: shared_rssid={} "
                             "rssid_offset={} effective={}",
-                            sst.filename(), sst.shared_rssid(), sst.rssid_offset(), effective));
+                            filename, shared_rssid, rssid_offset, effective));
     }
     return static_cast<uint32_t>(effective);
+}
+
+StatusOr<uint32_t> effective_shared_rssid(const PersistentIndexSstablePB& sst) {
+    return effective_shared_rssid(sst.filename(), sst.shared_rssid(), sst.rssid_offset());
 }
 
 Status project_modern_shared_rssid_sstable(const PersistentIndexSstablePB& sst, uint32_t mapped_rssid,
@@ -3180,9 +3184,11 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     };
     struct ModernSharedSstableOccurrence {
         size_t old_tablet_index = 0;
-        PersistentIndexSstablePB source_pb;
+        uint32_t shared_rssid = 0;
+        int32_t rssid_offset = 0;
     };
     struct ModernSharedSstableGroup {
+        PersistentIndexSstablePB physical_pb;
         std::vector<ModernSharedSstableOccurrence> occurrences;
     };
     std::vector<LegacySharedSstableGroup> shared_legacy_sstable_groups;
@@ -3235,15 +3241,17 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                     auto [group_iter, inserted] = shared_rssid_sstable_group_by_filename.emplace(
                             sst.filename(), shared_rssid_sstable_groups.size());
                     if (inserted) {
-                        shared_rssid_sstable_groups.emplace_back();
+                        ModernSharedSstableGroup group;
+                        group.physical_pb.CopyFrom(sst);
+                        shared_rssid_sstable_groups.emplace_back(std::move(group));
                     } else if (!modern_shared_sstable_metadata_matches(
-                                       shared_rssid_sstable_groups[group_iter->second].occurrences.front().source_pb,
-                                       sst)) {
+                                       shared_rssid_sstable_groups[group_iter->second].physical_pb, sst)) {
                         return Status::Corruption("Shared-rssid sstable metadata mismatch for same filename");
                     }
                     auto& occurrence = shared_rssid_sstable_groups[group_iter->second].occurrences.emplace_back();
                     occurrence.old_tablet_index = old_tablet_index;
-                    occurrence.source_pb.CopyFrom(sst);
+                    occurrence.shared_rssid = sst.shared_rssid();
+                    occurrence.rssid_offset = sst.rssid_offset();
                 } else {
                     auto [group_iter, inserted] = shared_legacy_sstable_group_by_filename.emplace(
                             sst.filename(), shared_legacy_sstable_groups.size());
@@ -3297,10 +3305,12 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         for (const auto& group : shared_rssid_sstable_groups) {
             DCHECK(!group.occurrences.empty());
             const auto& first_occurrence = group.occurrences.front();
-            const auto& physical_pb = first_occurrence.source_pb;
+            const auto& physical_pb = group.physical_pb;
             std::optional<uint32_t> mapped_rssid;
             for (const auto& occurrence : group.occurrences) {
-                ASSIGN_OR_RETURN(const uint32_t source_rssid, effective_shared_rssid(occurrence.source_pb));
+                ASSIGN_OR_RETURN(const uint32_t source_rssid,
+                                 effective_shared_rssid(physical_pb.filename(), occurrence.shared_rssid,
+                                                        occurrence.rssid_offset));
                 const size_t old_tablet_index = occurrence.old_tablet_index;
                 if (!source_live_rssids[old_tablet_index].contains(source_rssid)) continue;
                 ASSIGN_OR_RETURN(auto candidate, merge_contexts[old_tablet_index].map_rssid(source_rssid));
