@@ -9733,10 +9733,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dropped_non_shared_modern_wate
 
     const std::string segment_a = "retained_coverage_non_shared_a.dat";
     const std::string segment_b = "retained_coverage_non_shared_b.dat";
-    const uint64_t segment_a_size =
-            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_size = write_two_column_segment(
+            child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string dead_sst_filename = "retained_coverage_non_shared_dead.sst";
     const uint64_t dead_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, dead_sst_filename),
@@ -9831,10 +9831,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_modern_live_occurrence_
 
     const std::string segment_a = "retained_coverage_shared_modern_a.dat";
     const std::string segment_b = "retained_coverage_shared_modern_b.dat";
-    const uint64_t segment_a_size =
-            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_size = write_two_column_segment(
+            child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string shared_sst_filename = "retained_coverage_shared_modern.sst";
     const uint64_t shared_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
@@ -9925,12 +9925,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_legacy_global_max_does_
     const std::string segment_a_covered = "retained_coverage_shared_legacy_a_covered.dat";
     const std::string segment_a_tail = "retained_coverage_shared_legacy_a_tail.dat";
     const std::string segment_b = "retained_coverage_shared_legacy_b.dat";
-    const uint64_t segment_a_covered_size =
-            write_two_column_segment(child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_a_tail_size =
-            write_two_column_segment(child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_covered_size = write_two_column_segment(
+            child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_a_tail_size = write_two_column_segment(
+            child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string shared_sst_filename = "retained_coverage_shared_legacy.sst";
     const uint64_t shared_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
