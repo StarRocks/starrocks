@@ -6322,6 +6322,94 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_selects_only_final_sing
     EXPECT_TRUE(loaded.roaring()->contains(9));
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_duplicate_source_metadata_mismatch_is_rejected) {
+    struct MetadataMismatch {
+        const char* name;
+        std::function<void(FileMetaPB*)> apply;
+    };
+    const std::vector<MetadataMismatch> mismatches = {
+            {"size", [](FileMetaPB* file) { file->set_size(file->size() + 1); }},
+            {"encryption_meta",
+             [](FileMetaPB* file) { file->set_encryption_meta(std::string(1, static_cast<char>(0xff))); }},
+            {"shared", [](FileMetaPB* file) { file->set_shared(true); }},
+    };
+
+    int writer_invocations = 0;
+    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:writer_invocations",
+                                          [&](void* arg) { writer_invocations += *static_cast<int*>(arg); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    for (const auto& mismatch : mismatches) {
+        for (bool mismatch_first : {false, true}) {
+            SCOPED_TRACE(fmt::format("field={}, order={}", mismatch.name,
+                                     mismatch_first ? "mismatch-first" : "baseline-first"));
+            const int64_t baseline_tablet = next_id();
+            const int64_t mismatch_tablet = next_id();
+            const int64_t merged_tablet = next_id();
+            for (int64_t tablet_id : {baseline_tablet, mismatch_tablet, merged_tablet}) {
+                prepare_tablet_dirs(tablet_id);
+            }
+
+            const std::string segment_filename = fmt::format("duplicate_metadata_{}.dat", mismatch.name);
+            const std::string delvec_filename = fmt::format("duplicate_metadata_{}_{}.delvec", mismatch.name,
+                                                            mismatch_first ? "mismatch_first" : "baseline_first");
+            auto baseline = make_shared_delvec_source(baseline_tablet, {segment_filename});
+            auto conflicting = make_shared_delvec_source(mismatch_tablet, {segment_filename});
+
+            DelVector delvec;
+            const uint32_t deleted_rowids[] = {1, 4};
+            delvec.init(/*version=*/10, deleted_rowids, std::size(deleted_rowids));
+            const std::string content = delvec.save();
+            add_delvec(baseline.get(), baseline_tablet, /*version=*/10, /*segment_id=*/1, delvec_filename, content);
+            add_delvec(conflicting.get(), mismatch_tablet, /*version=*/10, /*segment_id=*/1, delvec_filename, content);
+            auto* conflicting_file = &(*conflicting->mutable_delvec_meta()->mutable_version_to_file())[/*version=*/10];
+            mismatch.apply(conflicting_file);
+
+            ASSERT_OK(put_tablet_metadata(baseline));
+            ASSERT_OK(put_tablet_metadata(conflicting));
+            ASSIGN_OR_ABORT(auto inventory_before, delvec_inventory(merged_tablet));
+
+            ReshardingTabletInfoPB resharding;
+            auto& merging = *resharding.mutable_merging_tablet_info();
+            const std::vector<int64_t> source_tablets =
+                    mismatch_first ? std::vector<int64_t>{mismatch_tablet, baseline_tablet}
+                                   : std::vector<int64_t>{baseline_tablet, mismatch_tablet};
+            for (int64_t source_tablet : source_tablets) {
+                merging.add_old_tablet_ids(source_tablet);
+            }
+            merging.set_new_tablet_id(merged_tablet);
+            TxnInfoPB txn_info;
+            txn_info.set_txn_id(next_id());
+            txn_info.set_commit_time(1);
+            txn_info.set_gtid(1);
+            std::unordered_map<int64_t, TabletMetadataPtr> published_metadatas;
+            std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+            writer_invocations = 0;
+            auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, /*base_version=*/1,
+                                                          /*new_version=*/2, txn_info, false, published_metadatas,
+                                                          tablet_ranges);
+
+            EXPECT_TRUE(status.is_corruption()) << status;
+            EXPECT_TRUE(status.message().contains("metadata mismatch")) << status;
+            EXPECT_TRUE(status.message().contains(delvec_filename)) << status;
+            EXPECT_EQ(0, writer_invocations);
+            auto target_it = published_metadatas.find(merged_tablet);
+            EXPECT_EQ(published_metadatas.end(), target_it);
+            if (target_it != published_metadatas.end()) {
+                EXPECT_EQ(0, target_it->second->delvec_meta().delvecs_size());
+                EXPECT_EQ(0, target_it->second->delvec_meta().version_to_file_size());
+            }
+            EXPECT_TRUE(_tablet_manager->get_tablet_metadata(merged_tablet, /*version=*/2).status().is_not_found());
+            ASSIGN_OR_ABORT(auto inventory_after, delvec_inventory(merged_tablet));
+            EXPECT_EQ(inventory_before, inventory_after);
+        }
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_only_uses_encrypted_buffer_output) {
     constexpr int64_t kNewVersion = 2;
     const int64_t child_a = next_id();

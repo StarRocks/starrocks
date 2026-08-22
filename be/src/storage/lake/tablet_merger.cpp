@@ -1826,6 +1826,22 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                     if (seen_it->second != page.size()) {
                         return Status::Corruption("Delvec page size mismatch for same source");
                     }
+                    const auto& existing_ref = *state.single_source;
+                    auto existing_file_it = existing_ref.ctx->metadata()->delvec_meta().version_to_file().find(
+                            existing_ref.page.version());
+                    if (existing_file_it == existing_ref.ctx->metadata()->delvec_meta().version_to_file().end()) {
+                        return Status::InvalidArgument("Delvec file not found for existing duplicate page version");
+                    }
+                    const auto& existing_file = existing_file_it->second;
+                    const auto& incoming_file = file_it->second;
+                    if (existing_file.size() != incoming_file.size() ||
+                        existing_file.encryption_meta() != incoming_file.encryption_meta() ||
+                        existing_file.shared() != incoming_file.shared()) {
+                        return Status::Corruption(
+                                fmt::format("Delvec duplicate source metadata mismatch for file {} between tablets {} "
+                                            "and {}",
+                                            file_name, existing_ref.ctx->metadata()->id(), ctx.metadata()->id()));
+                    }
                     // Skip (page-ref dedup)
                     continue;
                 }
