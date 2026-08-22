@@ -50,6 +50,7 @@ set(STORAGE_FILES
     kv_store.cpp
     local_tablet_reader.cpp
     olap_server.cpp
+    options.cpp
     persistent_index.cpp
     primary_index.cpp
     query/bucket_sequence_morsel_queue.cpp

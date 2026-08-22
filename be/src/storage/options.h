@@ -82,4 +82,16 @@ struct LakeIOOptions {
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };
 
+// The read size to open a cloud-native scan file with: the caller's own choice when it made
+// one, otherwise config::lake_scan_min_remote_read_bytes for reads the datacache will not
+// round out to whole blocks, and starlet's own default for the ones it will.  Feeds
+// RandomAccessFileOptions::buffer_size, whose contract this preserves: a negative value
+// leaves the size to starlet.
+int64_t lake_scan_buffer_size(const LakeIOOptions& lake_io_opts);
+
+// Whether to wrap a cloud-native scan read in SharedBufferedInputStream and merge its page
+// ranges. On besides io_coalesce_lake_read_enable, coalescing is on wherever the read size is
+// ours to choose, which is where lake_scan_min_remote_read_bytes applies.
+bool should_enable_io_coalesce_lake_read(const LakeIOOptions& lake_io_opts);
+
 } // namespace starrocks

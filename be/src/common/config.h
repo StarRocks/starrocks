@@ -1325,6 +1325,9 @@ CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn
 CONF_mBool(s3_use_list_objects_v1, "false");
 
 // Lake
+// Force page-range coalescing on for every cloud-native scan read. Off, coalescing is still
+// used wherever the size of the read is ours to choose rather than dictated by the datacache's
+// block layout -- see should_enable_io_coalesce_lake_read().
 CONF_mBool(io_coalesce_lake_read_enable, "false");
 
 // orc reader
@@ -1465,6 +1468,23 @@ CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
+
+// Lower bound on the size of a remote read issued by the cloud-native scan path: the segment
+// footer, the short-key index, and each column's index and data pages. A read already this
+// large is issued unchanged, so this never splits a read; it only keeps a small one from being
+// served by an oversized fetch. The scan asks for exact page ranges, so a large read-ahead
+// only rounds every request up and fetches bytes the scan never looks at. Lowering the bound
+// trades more requests for less read bandwidth.
+//
+// Supplies the value when LakeIOOptions::buffer_size is left at -1, which the query scan path
+// always does, overriding starlet_fs_stream_buffer_size_bytes for that path only; callers that
+// pick their own size, such as compaction and segment rewrite, are unaffected. Applies only
+// where the datacache is not already rounding reads out to whole blocks -- see
+// lake_scan_buffer_size().
+//     > 0   use this many bytes
+//    == 0   do not buffer: issue every read at exactly its requested size
+//     < 0   inherit starlet_fs_stream_buffer_size_bytes
+CONF_mInt64(lake_scan_min_remote_read_bytes, "131072"); // 128KB
 CONF_mBool(starlet_use_star_cache, "true");
 CONF_Bool(starlet_star_cache_async_init, "true");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
