@@ -2073,22 +2073,33 @@ const LegacySstableSourceRoute* find_legacy_sstable_source_route(const Slice& en
 }
 
 // True iff two PB instances of the same-filename shared sstable describe the
-// same physical file AND have identical projection-affecting fields. The
-// projection fields (rssid_offset, shared_rssid, shared_version) are included
-// because they change how stored bytes are interpreted at read time —
-// keeping the first sibling's PB on a mismatch would silently mis-map the
-// rebuilt or projected output. SPLIT today copies metadata as-is so siblings
-// agree on every field; this is defense-in-depth against future MERGE input
-// topologies. fileset_id is intentionally excluded: it can be synthesized
-// per-load by PersistentIndexSstableFileset::init when the source has none
-// (PR #72031).
-bool shared_sstable_metadata_matches(const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+// same physical file. fileset_id is intentionally excluded: it can be
+// synthesized per-load by PersistentIndexSstableFileset::init when the source
+// has none (PR #72031).
+bool shared_sstable_file_metadata_matches(const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
     if (a.filesize() != b.filesize() || a.encryption_meta() != b.encryption_meta()) return false;
     if (a.has_range() != b.has_range()) return false;
     if (a.has_range() &&
         (a.range().start_key() != b.range().start_key() || a.range().end_key() != b.range().end_key())) {
         return false;
     }
+    return true;
+}
+
+// Modern shared occurrences can carry different RSSID projections after
+// independent intermediate merges. Their shared_version and watermark low
+// word remain immutable read/ordering metadata for the physical file.
+bool modern_shared_sstable_metadata_matches(const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+    if (!shared_sstable_file_metadata_matches(a, b)) return false;
+    if (a.has_shared_version() != b.has_shared_version()) return false;
+    if (a.has_shared_version() && a.shared_version() != b.shared_version()) return false;
+    return extract_rss_rowid_low(a.max_rss_rowid()) == extract_rss_rowid_low(b.max_rss_rowid());
+}
+
+// A legacy grouped rebuild opens one PB interpretation for the physical file,
+// so keep its pre-existing strict projection-field equality.
+bool legacy_shared_sstable_metadata_matches(const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+    if (!shared_sstable_file_metadata_matches(a, b)) return false;
     if (a.rssid_offset() != b.rssid_offset()) return false;
     if (a.has_shared_rssid() != b.has_shared_rssid()) return false;
     if (a.has_shared_rssid() && a.shared_rssid() != b.shared_rssid()) return false;
@@ -3163,14 +3174,21 @@ Status finalize_next_rowset_id(TabletMetadataPB* metadata);
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
-    struct SharedSstableGroup {
+    struct LegacySharedSstableGroup {
         PersistentIndexSstablePB source_pb;
         std::vector<size_t> old_tablet_indexes;
     };
-    std::vector<SharedSstableGroup> shared_legacy_sstable_groups;
+    struct ModernSharedSstableOccurrence {
+        size_t old_tablet_index = 0;
+        PersistentIndexSstablePB source_pb;
+    };
+    struct ModernSharedSstableGroup {
+        std::vector<ModernSharedSstableOccurrence> occurrences;
+    };
+    std::vector<LegacySharedSstableGroup> shared_legacy_sstable_groups;
     std::unordered_map<std::string, size_t> shared_legacy_sstable_group_by_filename;
 
-    std::vector<SharedSstableGroup> shared_rssid_sstable_groups;
+    std::vector<ModernSharedSstableGroup> shared_rssid_sstable_groups;
     std::unordered_map<std::string, size_t> shared_rssid_sstable_group_by_filename;
     std::vector<std::unordered_set<uint32_t>> source_live_rssids(merge_contexts.size());
 
@@ -3213,19 +3231,32 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
             // legacy rebuild or modern owner selection.
             if (sst.shared()) {
                 const bool is_modern = sst.has_shared_rssid();
-                auto& groups = is_modern ? shared_rssid_sstable_groups : shared_legacy_sstable_groups;
-                auto& group_by_filename =
-                        is_modern ? shared_rssid_sstable_group_by_filename : shared_legacy_sstable_group_by_filename;
-                auto [group_iter, inserted] = group_by_filename.emplace(sst.filename(), groups.size());
-                if (inserted) {
-                    SharedSstableGroup group;
-                    group.source_pb.CopyFrom(sst);
-                    groups.emplace_back(std::move(group));
-                } else if (!shared_sstable_metadata_matches(groups[group_iter->second].source_pb, sst)) {
-                    return Status::Corruption(is_modern ? "Shared-rssid sstable metadata mismatch for same filename"
-                                                        : "Shared legacy sstable metadata mismatch for same filename");
+                if (is_modern) {
+                    auto [group_iter, inserted] = shared_rssid_sstable_group_by_filename.emplace(
+                            sst.filename(), shared_rssid_sstable_groups.size());
+                    if (inserted) {
+                        shared_rssid_sstable_groups.emplace_back();
+                    } else if (!modern_shared_sstable_metadata_matches(
+                                       shared_rssid_sstable_groups[group_iter->second].occurrences.front().source_pb,
+                                       sst)) {
+                        return Status::Corruption("Shared-rssid sstable metadata mismatch for same filename");
+                    }
+                    auto& occurrence = shared_rssid_sstable_groups[group_iter->second].occurrences.emplace_back();
+                    occurrence.old_tablet_index = old_tablet_index;
+                    occurrence.source_pb.CopyFrom(sst);
+                } else {
+                    auto [group_iter, inserted] = shared_legacy_sstable_group_by_filename.emplace(
+                            sst.filename(), shared_legacy_sstable_groups.size());
+                    if (inserted) {
+                        LegacySharedSstableGroup group;
+                        group.source_pb.CopyFrom(sst);
+                        shared_legacy_sstable_groups.emplace_back(std::move(group));
+                    } else if (!legacy_shared_sstable_metadata_matches(
+                                       shared_legacy_sstable_groups[group_iter->second].source_pb, sst)) {
+                        return Status::Corruption("Shared legacy sstable metadata mismatch for same filename");
+                    }
+                    shared_legacy_sstable_groups[group_iter->second].old_tablet_indexes.push_back(old_tablet_index);
                 }
-                groups[group_iter->second].old_tablet_indexes.push_back(old_tablet_index);
                 continue;
             }
 
@@ -3264,23 +3295,28 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         }
 
         for (const auto& group : shared_rssid_sstable_groups) {
-            ASSIGN_OR_RETURN(const uint32_t source_rssid, effective_shared_rssid(group.source_pb));
+            DCHECK(!group.occurrences.empty());
+            const auto& first_occurrence = group.occurrences.front();
+            const auto& physical_pb = first_occurrence.source_pb;
             std::optional<uint32_t> mapped_rssid;
-            for (size_t old_tablet_index : group.old_tablet_indexes) {
+            for (const auto& occurrence : group.occurrences) {
+                ASSIGN_OR_RETURN(const uint32_t source_rssid, effective_shared_rssid(occurrence.source_pb));
+                const size_t old_tablet_index = occurrence.old_tablet_index;
                 if (!source_live_rssids[old_tablet_index].contains(source_rssid)) continue;
                 ASSIGN_OR_RETURN(auto candidate, merge_contexts[old_tablet_index].map_rssid(source_rssid));
                 if (mapped_rssid.has_value() && *mapped_rssid != candidate) {
                     return Status::Corruption(
                             fmt::format("Shared sstable {} has multiple final rssid owners: {} and {}",
-                                        group.source_pb.filename(), *mapped_rssid, candidate));
+                                        physical_pb.filename(), *mapped_rssid, candidate));
                 }
                 mapped_rssid = candidate;
             }
 
             if (!mapped_rssid.has_value()) {
-                const size_t first_old_tablet_index = group.old_tablet_indexes.front();
+                ASSIGN_OR_RETURN(const uint32_t source_rssid, effective_shared_rssid(physical_pb));
+                const size_t first_old_tablet_index = first_occurrence.old_tablet_index;
                 const auto& first_ctx = merge_contexts[first_old_tablet_index];
-                ASSIGN_OR_RETURN(auto contents, classify_shared_rssid_sstable_contents(tablet_manager, group.source_pb,
+                ASSIGN_OR_RETURN(auto contents, classify_shared_rssid_sstable_contents(tablet_manager, physical_pb,
                                                                                        first_ctx.metadata()));
                 if (contents == SharedRssidSstableContents::kData) {
                     // No source tablet still owns the segment referenced by this SST.
@@ -3302,20 +3338,19 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                     // earliest valid ordering watermark instead of failing merge.
                 }
                 auto* out = dest->Add();
-                out->CopyFrom(group.source_pb);
-                RETURN_IF_ERROR(
-                        project_modern_shared_rssid_sstable(group.source_pb, tombstone_rssid, new_metadata, out));
+                out->CopyFrom(physical_pb);
+                RETURN_IF_ERROR(project_modern_shared_rssid_sstable(physical_pb, tombstone_rssid, new_metadata, out));
                 continue;
             }
 
             if (!merged_live_rssids.contains(*mapped_rssid)) {
                 return Status::Corruption(
                         fmt::format("Projected shared sstable {} rssid {} has no merged segment owner",
-                                    group.source_pb.filename(), *mapped_rssid));
+                                    physical_pb.filename(), *mapped_rssid));
             }
             auto* out = dest->Add();
-            out->CopyFrom(group.source_pb);
-            RETURN_IF_ERROR(project_modern_shared_rssid_sstable(group.source_pb, *mapped_rssid, new_metadata, out));
+            out->CopyFrom(physical_pb);
+            RETURN_IF_ERROR(project_modern_shared_rssid_sstable(physical_pb, *mapped_rssid, new_metadata, out));
         }
     }
 

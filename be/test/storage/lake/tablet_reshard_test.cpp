@@ -288,6 +288,56 @@ protected:
         return sstable;
     }
 
+    TabletMetadataPtr make_modern_shared_occurrence(int64_t tablet_id, uint32_t rowset_id, uint32_t shared_rssid,
+                                                    int32_t rssid_offset, uint32_t max_rowid, uint64_t filesize = 512,
+                                                    int64_t shared_version = 7) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(rowset_id + 1);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename("projected_modern_shared_segment.dat");
+        segment->set_size(100);
+        segment->set_shared(true);
+        stamp_physical_identity_uid(rowset, segment->filename());
+
+        auto* sst = add_shared_rssid_sstable(metadata.get(), "projected_modern_shared.sst", shared_rssid,
+                                             shared_version, max_rowid, filesize);
+        sst->set_rssid_offset(rssid_offset);
+        const int64_t effective_rssid = static_cast<int64_t>(shared_rssid) + rssid_offset;
+        const uint32_t watermark_high = effective_rssid < 0 ? 0 : static_cast<uint32_t>(effective_rssid);
+        sst->set_max_rss_rowid((static_cast<uint64_t>(watermark_high) << 32) | max_rowid);
+        return metadata;
+    }
+
+    StatusOr<TabletMetadataPtr> merge_modern_shared_occurrences(const TabletMetadataPtr& child_a,
+                                                                const TabletMetadataPtr& child_b,
+                                                                int64_t merged_tablet) {
+        RETURN_IF_ERROR(put_tablet_metadata(child_a));
+        RETURN_IF_ERROR(put_tablet_metadata(child_b));
+        ReshardingTabletInfoPB resharding_tablet;
+        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+        merging_info.add_old_tablet_ids(child_a->id());
+        merging_info.add_old_tablet_ids(child_b->id());
+        merging_info.set_new_tablet_id(merged_tablet);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(1);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, /*base_version=*/1,
+                                                        /*new_version=*/2, txn_info, false, tablet_metadatas,
+                                                        tablet_ranges));
+        return tablet_metadatas.at(merged_tablet);
+    }
+
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                     const std::string& file_name, const std::string& content) {
         FileMetaPB file_meta;
@@ -6621,6 +6671,94 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_effectiv
     ASSERT_EQ(2, merged->rowsets_size());
     EXPECT_EQ("live_segment.dat", merged->rowsets(1).segment_metas(0).filename());
     EXPECT_EQ(output.shared_rssid(), merged->rowsets(1).id());
+}
+
+// The same modern shared file can be projected into different sibling-local
+// RSSID spaces by intermediate merges. Each occurrence must be mapped through
+// its own context before checking that they converge on one final owner.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_reconciles_projected_occurrences) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto occurrence_a = make_modern_shared_occurrence(child_a, /*rowset_id=*/1, /*shared_rssid=*/1,
+                                                      /*rssid_offset=*/0, /*max_rowid=*/9);
+    auto occurrence_b = make_modern_shared_occurrence(child_b, /*rowset_id=*/5, /*shared_rssid=*/4,
+                                                      /*rssid_offset=*/1, /*max_rowid=*/9);
+    auto merged_or = merge_modern_shared_occurrences(occurrence_a, occurrence_b, merged_tablet);
+    ASSERT_OK(merged_or);
+    auto merged = std::move(merged_or).value();
+
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(1, merged->rowsets(0).id());
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    const auto& output = merged->sstable_meta().sstables(0);
+    EXPECT_EQ(1, output.shared_rssid());
+    EXPECT_EQ(0, output.rssid_offset());
+    EXPECT_EQ((static_cast<uint64_t>(1) << 32) | 9, output.max_rss_rowid());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_rejects_physical_size_mismatch) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto occurrence_a = make_modern_shared_occurrence(child_a, 1, 1, 0, 9, /*filesize=*/512);
+    auto occurrence_b = make_modern_shared_occurrence(child_b, 1, 1, 0, 9, /*filesize=*/513);
+    auto merged = merge_modern_shared_occurrences(occurrence_a, occurrence_b, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("metadata mismatch")) << merged.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_rejects_shared_version_mismatch) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto occurrence_a = make_modern_shared_occurrence(child_a, 1, 1, 0, 9, 512, /*shared_version=*/7);
+    auto occurrence_b = make_modern_shared_occurrence(child_b, 1, 1, 0, 9, 512, /*shared_version=*/8);
+    auto merged = merge_modern_shared_occurrences(occurrence_a, occurrence_b, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("metadata mismatch")) << merged.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_rejects_watermark_low_mismatch) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto occurrence_a = make_modern_shared_occurrence(child_a, 1, 1, 0, /*max_rowid=*/9);
+    auto occurrence_b = make_modern_shared_occurrence(child_b, 1, 1, 0, /*max_rowid=*/10);
+    auto merged = merge_modern_shared_occurrences(occurrence_a, occurrence_b, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("metadata mismatch")) << merged.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_modern_shared_sstable_rejects_nonfirst_effective_rssid_overflow) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto occurrence_a = make_modern_shared_occurrence(child_a, 1, 1, 0, /*max_rowid=*/9);
+    auto occurrence_b = make_modern_shared_occurrence(child_b, 5, 0, -1, /*max_rowid=*/9);
+    auto merged = merge_modern_shared_occurrences(occurrence_a, occurrence_b, merged_tablet);
+    ASSERT_TRUE(merged.status().is_corruption()) << merged.status();
+    EXPECT_TRUE(merged.status().message().contains("effective rssid is out of uint32 range")) << merged.status();
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_drops_ownerless_shared_data_sstable) {
