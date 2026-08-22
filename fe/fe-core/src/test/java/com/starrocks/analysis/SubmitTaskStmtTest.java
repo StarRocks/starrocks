@@ -31,12 +31,16 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.TaskName;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -161,6 +165,19 @@ public class SubmitTaskStmtTest extends MVTestBase {
         SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
         Assertions.assertNotNull(submitStmt.getDbName());
         Assertions.assertNotNull(submitStmt.getSqlText());
+    }
+
+    @Test
+    public void testSubmitTaskStmtUpdateConstructor() {
+        UpdateStmt updateStmt = new UpdateStmt(null, Collections.emptyList(), Collections.emptyList(),
+                null, Collections.emptyList());
+        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("test", "task_update"), 10, updateStmt, NodePosition.ZERO);
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("task_update", stmt.getTaskName());
+        Assertions.assertEquals(10, stmt.getSqlBeginIndex());
+        Assertions.assertSame(updateStmt, stmt.getUpdateStmt());
+        Assertions.assertNull(stmt.getInsertStmt());
+        new AstTraverser<>().visit(stmt, null);
     }
 
     @Test

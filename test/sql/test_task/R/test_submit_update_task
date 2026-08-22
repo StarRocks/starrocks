@@ -17,17 +17,17 @@ insert into target values(1, 10), (2, 20);
 insert into staging values(1, 100), (3, 300);
 -- result:
 -- !result
-submit task t_update as update target set v = staging.v from staging where target.pk = staging.pk;
+submit task t_update_${uuid0} as update target set v = staging.v from staging where target.pk = staging.pk;
 -- result:
-t_update	SUBMITTED
+t_update_${uuid0}	SUBMITTED
 -- !result
-select TASK_NAME, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name='t_update';
+select TASK_NAME, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name='t_update_${uuid0}';
 -- result:
-t_update	update target set v = staging.v from staging where target.pk = staging.pk;
+t_update_${uuid0}	update target set v = staging.v from staging where target.pk = staging.pk;
 -- !result
 LOOP {
   PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for the UPDATE task run to succeed"}
-  result=select count(*) from information_schema.task_runs where `DATABASE`='test_task_${uuid0}' and task_name='t_update' and `STATE`='SUCCESS';
+  result=select count(*) from information_schema.task_runs where `DATABASE`='test_task_${uuid0}' and task_name='t_update_${uuid0}' and `STATE`='SUCCESS';
   CHECK: int(${result}[-1][0]) > 0
 } END LOOP
 select * from target order by pk;
@@ -35,7 +35,7 @@ select * from target order by pk;
 1	100
 2	20
 -- !result
-drop task t_update;
+drop task t_update_${uuid0};
 -- result:
 -- !result
 drop table staging;
