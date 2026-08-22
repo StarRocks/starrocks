@@ -8370,6 +8370,59 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_projected_domain_befor
     EXPECT_EQ(source_b_before, source_b->SerializeAsString());
 }
 
+// A raw-PB allocation check before dead-owner classification would reject this
+// merge: child A's next_rowset_id=2 gives child B an offset of 1, so B's
+// source_rssid=INT32_MAX-1 projects to INT32_MAX. The real SST's only data
+// value belongs to that dead source owner, however, and is discarded.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_drops_exhausted_projected_non_shared_modern_data_sstable) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(2);
+        set_primary_key_schema(metadata.get(), 1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(1);
+        rowset->add_segment_metas()->set_filename(fmt::format("dead-data-boundary-{}.dat", tablet_id));
+        lake::tablet_reshard_helper::set_rowset_uid(rowset);
+        return metadata;
+    };
+
+    auto source_a = make_child(child_a);
+    auto source_b = make_child(child_b);
+    const uint32_t dead_source_rssid = std::numeric_limits<int32_t>::max() - 1;
+    const std::string dead_sst_filename = "dead-data-boundary.sst";
+    const uint64_t dead_sst_size =
+            write_legacy_pk_sstable(_tablet_manager->sst_location(child_b, dead_sst_filename),
+                                    {{"dead-data-boundary-key", dead_source_rssid, /*rowid=*/0}});
+    add_non_shared_modern_sstable(source_b.get(), dead_sst_filename, dead_source_rssid, /*shared_version=*/1,
+                                  /*max_rowid=*/0, dead_sst_size);
+
+    MergingTabletInfoPB merging_info;
+    merging_info.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    std::vector<TabletMetadataPtr> sources = {source_a, source_b};
+
+    auto merged = lake::merge_tablet(_tablet_manager.get(), sources, merging_info, /*new_version=*/2, txn_info);
+
+    ASSERT_OK(merged);
+    for (const auto& output : merged.value()->sstable_meta().sstables()) {
+        EXPECT_NE(dead_sst_filename, output.filename());
+    }
+    EXPECT_LE(merged.value()->next_rowset_id(), static_cast<uint32_t>(std::numeric_limits<int32_t>::max()));
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_writable) {
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush_failpoint(
