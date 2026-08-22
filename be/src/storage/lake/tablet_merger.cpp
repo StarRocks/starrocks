@@ -2842,7 +2842,7 @@ StatusOr<SharedRssidSstableContents> classify_shared_rssid_sstable_contents(Tabl
 // preserves correctness when the file already carries a non-zero
 // rssid_offset (stacked merge case).
 Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
-                                         PersistentIndexSstablePB* out) {
+                                         bool tombstone_only, PersistentIndexSstablePB* out) {
     RETURN_IF_ERROR(validate_non_shared_legacy_sstable_form(sst));
     const int64_t accumulated_offset = static_cast<int64_t>(sst.rssid_offset()) + ctx.rssid_offset();
     if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
@@ -2854,13 +2854,16 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, co
     out->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
     const int64_t high = static_cast<int64_t>(extract_rss_rowid_high(sst.max_rss_rowid()));
     const int64_t new_high = high + ctx.rssid_offset();
-    if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
+    if (new_high < 0 && tombstone_only) {
+        out->set_max_rss_rowid(0);
+    } else if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
         return Status::Corruption(
                 fmt::format("rssid high overflow in merge projection: high={} ctx_offset={} new_high={}", high,
                             ctx.rssid_offset(), new_high));
+    } else {
+        out->set_max_rss_rowid(
+                encode_rss_rowid(static_cast<uint32_t>(new_high), extract_rss_rowid_low(sst.max_rss_rowid())));
     }
-    out->set_max_rss_rowid(
-            encode_rss_rowid(static_cast<uint32_t>(new_high), extract_rss_rowid_low(sst.max_rss_rowid())));
     out->clear_delvec();
     return Status::OK();
 }
@@ -2994,12 +2997,16 @@ bool lifted_range_has_source_live_gap(const ClampedLiftedRange& range,
     return false;
 }
 
-StatusOr<bool> non_shared_legacy_sstable_needs_rebuild(TabletManager* tablet_manager,
-                                                       const PersistentIndexSstablePB& src_pb,
-                                                       const TabletMergeContext& ctx,
-                                                       const std::unordered_set<uint32_t>& source_live_rssids,
-                                                       const TabletMetadataPB& new_metadata,
-                                                       std::unordered_map<uint32_t, DelVectorPtr>* del_vector_cache) {
+struct NonSharedLegacySstableClassification {
+    bool needs_rebuild = false;
+    bool tombstone_only = false;
+    bool empty = false;
+};
+
+StatusOr<NonSharedLegacySstableClassification> classify_non_shared_legacy_sstable(
+        TabletManager* tablet_manager, const PersistentIndexSstablePB& src_pb, const TabletMergeContext& ctx,
+        const std::unordered_set<uint32_t>& source_live_rssids, const TabletMetadataPB& new_metadata,
+        std::unordered_map<uint32_t, DelVectorPtr>* del_vector_cache) {
     ASSIGN_OR_RETURN(auto source_sstable,
                      PersistentIndexSstable::new_sstable(
                              src_pb, tablet_manager->sst_location(ctx.metadata()->id(), src_pb.filename()),
@@ -3013,15 +3020,23 @@ StatusOr<bool> non_shared_legacy_sstable_needs_rebuild(TabletManager* tablet_man
         return drop_source_sstable_cache_on_corruption(tablet_manager, ctx.metadata()->id(), src_pb, status);
     };
 
+    bool saw_entry = false;
+    bool saw_data_value = false;
     for (; iterator->Valid(); iterator->Next()) {
+        saw_entry = true;
         IndexValuesWithVerPB values_pb;
         const Slice raw_value = iterator->value();
         if (!values_pb.ParseFromArray(raw_value.data, static_cast<int>(raw_value.size))) {
             return handle_source_error(
                     Status::Corruption("Failed to parse non-shared sstable value during owner validation"));
         }
+        if (values_pb.values_size() == 0) {
+            return handle_source_error(Status::Corruption(fmt::format(
+                    "non-shared sstable {} has no index values during owner validation", src_pb.filename())));
+        }
         for (const auto& index_value : values_pb.values()) {
             if (is_index_tombstone(index_value)) continue;
+            saw_data_value = true;
             const int64_t lifted_rssid =
                     static_cast<int64_t>(index_value.rssid()) + static_cast<int64_t>(src_pb.rssid_offset());
             if (lifted_rssid < 0 || lifted_rssid > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
@@ -3031,17 +3046,19 @@ StatusOr<bool> non_shared_legacy_sstable_needs_rebuild(TabletManager* tablet_man
                         index_value.rssid(), src_pb.rssid_offset(), lifted_rssid)));
             }
             const auto source_rssid = static_cast<uint32_t>(lifted_rssid);
-            if (!source_live_rssids.contains(source_rssid)) return true;
+            if (!source_live_rssids.contains(source_rssid)) {
+                return NonSharedLegacySstableClassification{.needs_rebuild = true};
+            }
             ASSIGN_OR_RETURN(uint32_t final_rssid, ctx.map_rssid(source_rssid));
             ASSIGN_OR_RETURN(auto del_vector,
                              load_merged_del_vector(tablet_manager, new_metadata, final_rssid, del_vector_cache));
             if (del_vector && del_vector->roaring() && del_vector->roaring()->contains(index_value.rowid())) {
-                return true;
+                return NonSharedLegacySstableClassification{.needs_rebuild = true};
             }
         }
     }
     RETURN_IF_ERROR(handle_source_error(iterator->status()));
-    return false;
+    return NonSharedLegacySstableClassification{.tombstone_only = saw_entry && !saw_data_value, .empty = !saw_entry};
 }
 
 StatusOr<bool> lifted_range_may_reference_merged_delvec(const ClampedLiftedRange& range, const TabletMergeContext& ctx,
@@ -3139,14 +3156,17 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
                          TabletMergeContext::mapping_disagrees_with_natural_in_range(
                                  ctx_disagreement_keys, lifted_range.lower, lifted_range.upper);
     bool needs_exact_scan = lifted_range_has_source_live_gap(lifted_range, source_live_rssids);
+    NonSharedLegacySstableClassification classification;
     if (!needs_rebuild && !needs_exact_scan) {
         ASSIGN_OR_RETURN(needs_exact_scan,
                          lifted_range_may_reference_merged_delvec(lifted_range, ctx, source_live_rssids, new_metadata));
     }
     if (!needs_rebuild && needs_exact_scan) {
-        ASSIGN_OR_RETURN(needs_rebuild,
-                         non_shared_legacy_sstable_needs_rebuild(tablet_manager, src_pb, ctx, source_live_rssids,
-                                                                 new_metadata, del_vector_cache));
+        ASSIGN_OR_RETURN(classification,
+                         classify_non_shared_legacy_sstable(tablet_manager, src_pb, ctx, source_live_rssids,
+                                                            new_metadata, del_vector_cache));
+        needs_rebuild = classification.needs_rebuild;
+        if (classification.empty) return Status::OK();
     }
     if (needs_rebuild) {
         PersistentIndexSstablePB rebuilt_pb;
@@ -3162,7 +3182,7 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
     }
     auto* out = dest->Add();
     out->CopyFrom(src_pb);
-    return project_non_shared_legacy_sstable(src_pb, ctx, out);
+    return project_non_shared_legacy_sstable(src_pb, ctx, classification.tombstone_only, out);
 }
 
 // max_rss_rowid orders sstables and breaks same-version ties, but after merging
