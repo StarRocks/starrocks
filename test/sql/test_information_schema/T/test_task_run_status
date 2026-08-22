@@ -36,6 +36,15 @@ LOOP {
   CHECK: int(${result}[-1][0]) > 0
 } END LOOP
 select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
+CREATE TABLE ss_pk( pk INT NOT NULL, pv BIGINT NOT NULL) PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 8 PROPERTIES("replication_num" = "1");
+insert into ss_pk values(1, 1), (2, 2);
+submit task task_src_update_${uuid0} as update ss_pk set pv = 100 where pk = 1;
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for UPDATE task run to appear"}
+  result=select count(*) from information_schema.task_runs where task_name='task_src_update_${uuid0}';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_update_${uuid0}';
 
 admin set frontend config('enable_task_run_fe_evaluation'='false');
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
