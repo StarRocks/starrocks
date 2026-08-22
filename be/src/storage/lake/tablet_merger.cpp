@@ -1782,6 +1782,11 @@ Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
     return Status::OK();
 }
 
+bool delvec_file_metadata_matches(const FileMetaPB& left, const FileMetaPB& right) {
+    return left.size() == right.size() && left.encryption_meta() == right.encryption_meta() &&
+           left.shared() == right.shared();
+}
+
 DEFINE_FAIL_POINT(tablet_merge_after_write_delvec);
 Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts,
                      const std::vector<CanonicalGapSpec>& synthesized_gap_specs, int64_t new_version, int64_t txn_id,
@@ -1814,9 +1819,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
             if (!inserted) {
                 const auto& canonical_file = canonical_file_it->second.delvec_file;
                 const auto& incoming_file = file_it->second;
-                if (canonical_file.size() != incoming_file.size() ||
-                    canonical_file.encryption_meta() != incoming_file.encryption_meta() ||
-                    canonical_file.shared() != incoming_file.shared()) {
+                if (!delvec_file_metadata_matches(canonical_file, incoming_file)) {
                     return Status::Corruption(
                             fmt::format("Delvec actual page source metadata mismatch for file {} between tablets {} "
                                         "and {}",
@@ -1849,9 +1852,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                     }
                     const auto& existing_file = existing_file_it->second;
                     const auto& incoming_file = file_it->second;
-                    if (existing_file.size() != incoming_file.size() ||
-                        existing_file.encryption_meta() != incoming_file.encryption_meta() ||
-                        existing_file.shared() != incoming_file.shared()) {
+                    if (!delvec_file_metadata_matches(existing_file, incoming_file)) {
                         return Status::Corruption(
                                 fmt::format("Delvec duplicate source metadata mismatch for file {} between tablets {} "
                                             "and {}",
@@ -1956,8 +1957,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
             continue;
         }
         const auto& existing = unique_delvec_files[dedup_it->second].delvec_file;
-        if (existing.size() != file.size() || existing.encryption_meta() != file.encryption_meta() ||
-            existing.shared() != file.shared()) {
+        if (!delvec_file_metadata_matches(existing, file)) {
             return Status::Corruption("Delvec file metadata mismatch for same final consumer file name");
         }
     }
