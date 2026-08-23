@@ -22,6 +22,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 
+import java.util.Locale;
 import java.util.Map;
 
 // Helper class to drives the convert of session variables according to the converters.
@@ -39,6 +40,18 @@ public class VariableVarConverters {
         CONVERTERS.put(SessionVariable.PARTIAL_UPDATE_MODE, partialUpdateModeConverter);
         CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
         CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
+        CONVERTERS.put(SessionVariable.PAIMON_READER_MODE, new PaimonReaderModeConverter());
+        CONVERTERS.put(SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM,
+                new IntegerRangeConverter(SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM, 1,
+                        SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM_MAX));
+        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT,
+                new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, 0));
+        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT,
+                new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT, 1));
+        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT,
+                new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT, 0));
+        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY,
+                new PaimonBitmapRowRangeRefiningStrategyConverter());
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -66,6 +79,18 @@ public class VariableVarConverters {
                 return value;
             } else {
                 throw new DdlException("partial_update_mode only support auto|row|column");
+            }
+        }
+    }
+
+    public static class PaimonReaderModeConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            String mode = value.toUpperCase(Locale.ROOT);
+            try {
+                return SessionVariable.PaimonReaderMode.valueOf(mode).name();
+            } catch (IllegalArgumentException e) {
+                throw new DdlException("paimon_reader_mode only supports AUTO, JNI, or NATIVE");
             }
         }
     }
@@ -99,6 +124,82 @@ public class VariableVarConverters {
             if (!value.matches("^[a-zA-Z0-9_\\-]*$")) {
                 throw new DdlException("custom_session_name can only contain letters, digits, hyhens and underscores");
             }
+            return value;
+        }
+    }
+
+    private static class IntegerRangeConverter implements VariableVarConverterI {
+        private final String variableName;
+        private final int minimum;
+        private final int maximum;
+
+        private IntegerRangeConverter(String variableName, int minimum, int maximum) {
+            this.variableName = variableName;
+            this.minimum = minimum;
+            this.maximum = maximum;
+        }
+
+        @Override
+        public String convert(String value) throws DdlException {
+            try {
+                int intValue = Integer.parseInt(value);
+                if (intValue < minimum || intValue > maximum) {
+                    reportInvalidValue(value);
+                }
+            } catch (NumberFormatException e) {
+                reportInvalidValue(value);
+            }
+            return value;
+        }
+
+        private void reportInvalidValue(String value) throws DdlException {
+            ErrorReport.reportDdlException(
+                    ErrorCode.ERR_INVALID_VALUE, variableName, value,
+                    "an integer between " + minimum + " and " + maximum);
+        }
+    }
+
+    private static class MinLongConverter implements VariableVarConverterI {
+        private final String variableName;
+        private final long minimum;
+
+        private MinLongConverter(String variableName, long minimum) {
+            this.variableName = variableName;
+            this.minimum = minimum;
+        }
+
+        @Override
+        public String convert(String value) throws DdlException {
+            try {
+                if (Long.parseLong(value) < minimum) {
+                    reportInvalidValue(value);
+                }
+            } catch (NumberFormatException e) {
+                reportInvalidValue(value);
+            }
+            return value;
+        }
+
+        private void reportInvalidValue(String value) throws DdlException {
+            ErrorReport.reportDdlException(
+                    ErrorCode.ERR_INVALID_VALUE, variableName, value, "an integer at least " + minimum);
+        }
+    }
+
+    private static class PaimonBitmapRowRangeRefiningStrategyConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            if (value.equalsIgnoreCase("coalesce")) {
+                return "coalesce";
+            }
+            if (value.equalsIgnoreCase("trim")) {
+                return "trim";
+            }
+            ErrorReport.reportDdlException(
+                    ErrorCode.ERR_INVALID_VALUE,
+                    SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY,
+                    value,
+                    "one of {coalesce, trim}");
             return value;
         }
     }

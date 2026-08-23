@@ -1303,6 +1303,69 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
 
+### paimon_reader_mode
+
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 保持默认行为：对于支持的 Raw File 使用 StarRocks 原生 Reader，否则使用 JNI Reader。历史变量 `paimon_force_jni_reader` 仅在本变量为 `AUTO` 时强制使用 JNI Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 对 Paimon `DataSplit` Scan Range 使用 paimon-cpp 原生 Reader，对其他 Split 类型使用 JNI Reader。使用 `NATIVE` 要求 BE 已集成 paimon-cpp。
+* 默认值：AUTO
+* 类型：String
+* 引入版本：v4.2
+
+### paimon_native_reader_enable_prefetch
+
+* 描述：是否允许 paimon-cpp 原生 Reader 从单个文件预取 Batch。预取可以让远端 I/O 与解码并行执行，默认关闭。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
+### paimon_native_reader_enable_multi_thread_row_to_batch
+
+* 描述：是否允许 paimon-cpp 原生 Reader 并行地将合并后的键值行转换为 Arrow Batch。该参数主要影响主键表的 Merge-on-Read 扫描，对 Append-only 表通常不生效。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
+### paimon_native_reader_row_to_batch_thread_num
+
+* 描述：启用 `paimon_native_reader_enable_multi_thread_row_to_batch` 后，Row-to-Batch 转换使用的线程数。
+* 默认值：1
+* 类型：Integer
+* 取值范围：[1, 256]
+* 引入版本：v4.2
+
+### paimon_parquet_read_cache_hole_size_limit
+
+* 描述：paimon-cpp Parquet Reader 合并相邻 I/O Range 时允许跨越的最大字节间隔。
+* 默认值：4194304（4 MiB）
+* 类型：Big integer
+* 单位：Byte
+* 取值范围：[0, 9223372036854775807]
+* 引入版本：v4.2
+
+### paimon_parquet_read_cache_range_size_limit
+
+* 描述：paimon-cpp Parquet Reader 合并后 I/O Range 的目标最大长度。该值必须大于 `paimon_parquet_read_cache_hole_size_limit`。单个原始 Range 仍可能超过该值。
+* 默认值：33554432（32 MiB）
+* 类型：Big integer
+* 单位：Byte
+* 取值范围：[1, 9223372036854775807]
+* 引入版本：v4.2
+
+### paimon_parquet_read_bitmap_row_range_refining_strategy
+
+* 描述：paimon-cpp Parquet Reader 优化 Selection Bitmap RowRange 的策略。有效值为 `coalesce`（合并相邻命中范围）和 `trim`（保留精确命中范围）。
+* 默认值：coalesce
+* 类型：String
+* 引入版本：v4.2
+
+### paimon_parquet_read_bitmap_coalesce_hole_size_limit
+
+* 描述：当 `paimon_parquet_read_bitmap_row_range_refining_strategy` 为 `coalesce` 时，间隔不超过该行数的命中 RowRange 会被合并。
+* 默认值：32
+* 类型：Big integer
+* 单位：Row
+* 取值范围：[0, 9223372036854775807]
+* 引入版本：v4.2
+
 ### parallel_exchange_instance_num
 
 用于设置执行计划中，一个上层节点接收下层节点数据所使用的 exchange node 数量。默认为 -1，即表示 exchange node 数量等于下层节点执行实例的个数（默认行为）。当设置大于 0，并且小于下层节点执行实例的个数，则 exchange node 数量等于设置值。

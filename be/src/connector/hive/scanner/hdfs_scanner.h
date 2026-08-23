@@ -52,6 +52,9 @@ public:
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) = 0;
+    // Finalize asynchronous or externally-owned reader state that must be
+    // reflected in profile counters before do_update_counter() is called.
+    virtual void do_prepare_close() noexcept {}
     virtual void do_update_counter(HdfsScannerProfile* profile);
     virtual Status reinterpret_status(const Status& st);
 

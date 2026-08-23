@@ -423,6 +423,19 @@ struct TQueryOptions {
   // it even when the scan-range count already reaches pipeline_dop) once its rows exceed this ratio times
   // the per-driver ideal share. Only affects enable_lake_prepared_physical_split_scan. Default 1.5.
   225: optional double lake_tablet_internal_parallel_skew_split_ratio = 1.5;
+
+  // Paimon C++ native reader execution options.
+  226: optional bool paimon_native_reader_enable_prefetch;
+  227: optional bool paimon_native_reader_enable_multi_thread_row_to_batch;
+  228: optional i32 paimon_native_reader_row_to_batch_thread_num;
+
+  // Paimon C++ Parquet byte-range coalescing limits, in bytes.
+  230: optional i64 paimon_parquet_read_cache_hole_size_limit;
+  231: optional i64 paimon_parquet_read_cache_range_size_limit;
+
+  // Paimon C++ selection-bitmap RowRange refining options.
+  232: optional string paimon_parquet_read_bitmap_row_range_refining_strategy;
+  233: optional i64 paimon_parquet_read_bitmap_coalesce_hole_size_limit;
 }
 
 // A scan range plus the parameters needed to execute that scan.

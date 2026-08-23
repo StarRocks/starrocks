@@ -284,6 +284,7 @@ void HdfsScanner::close() noexcept {
 
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
+    do_prepare_close();
     update_counter();
     do_close(_runtime_state);
     _file.reset(nullptr);
