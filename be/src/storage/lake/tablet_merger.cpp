@@ -1800,7 +1800,6 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     std::map<uint32_t, TargetDelvecState> target_states;
     std::unordered_map<std::string, DelvecFileInfo> actual_page_source_files;
     bool output_requires_encryption = false;
-    bool saw_source_page = false;
 
     for (const auto& ctx : merge_contexts) {
         if (!ctx.metadata()->has_delvec_meta()) {
@@ -1827,7 +1826,6 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                                         file_name, canonical_file_it->second.tablet_id, ctx.metadata()->id()));
                 }
             }
-            saw_source_page = true;
             output_requires_encryption |= !file_it->second.encryption_meta().empty();
 
             auto& state = target_states[target];
@@ -1924,7 +1922,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     // state has already been decoded into union_buffer and does not need its
     // immutable source file copied into the output.
     std::vector<DelvecFileInfo> unique_delvec_files;
-    std::unordered_map<std::string, size_t> file_name_to_index;
+    std::unordered_set<std::string> selected_source_filenames;
     for (const auto& [target, state] : target_states) {
         (void)target;
         if (!state.single_source.has_value()) {
@@ -1939,14 +1937,8 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         if (file.name() != ref.file_name) {
             return Status::Corruption("Delvec final single-source file name changed during merge");
         }
-        auto [dedup_it, inserted] = file_name_to_index.emplace(file.name(), unique_delvec_files.size());
-        if (inserted) {
+        if (selected_source_filenames.emplace(file.name()).second) {
             unique_delvec_files.push_back(DelvecFileInfo{ref.ctx->metadata()->id(), file});
-            continue;
-        }
-        const auto& existing = unique_delvec_files[dedup_it->second].delvec_file;
-        if (!delvec_file_metadata_matches(existing, file)) {
-            return Status::Corruption("Delvec file metadata mismatch for same final consumer file name");
         }
     }
     TEST_SYNC_POINT_CALLBACK("merge_delvecs:selected_source_files", &unique_delvec_files);
@@ -1969,7 +1961,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         RETURN_IF_ERROR(write_delvec_file_from_buffer(tablet_manager, new_metadata->id(), txn_id, Slice(union_buffer),
                                                       &new_delvec_file, output_requires_encryption));
         union_base_offset = 0;
-        if (!saw_source_page) {
+        if (actual_page_source_files.empty()) {
             g_tablet_merge_synthesized_only_delvec_total << 1;
         }
     } else {
