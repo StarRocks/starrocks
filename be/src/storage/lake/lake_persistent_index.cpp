@@ -72,6 +72,21 @@ LakePersistentIndex::~LakePersistentIndex() {
     _sstable_filesets.clear();
 }
 
+template <typename InputSstables>
+void drop_input_sstable_caches_on_corruption(TabletManager* tablet_mgr, int64_t tablet_id,
+                                             const InputSstables& input_sstables, const char* operation,
+                                             const Status& status) {
+    if (!status.is_corruption()) {
+        return;
+    }
+    StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+    LOG(WARNING) << "PK index " << operation << " hit corruption, dropping local cache of " << input_sstables.size()
+                 << " input sstables, tablet_id=" << tablet_id << ", error: " << status;
+    for (const auto& sstable_pb : input_sstables) {
+        (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(tablet_id, sstable_pb.filename()));
+    }
+}
+
 StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
         const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
         const TabletMetadataPtr& metadata) {
@@ -860,18 +875,6 @@ Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(Tablet
         overlay_watermark = std::max(overlay_watermark, input.max_rss_rowid());
     }
 
-    auto drop_input_cache_on_corruption = [&](const Status& st) {
-        if (!st.is_corruption()) {
-            return;
-        }
-        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        LOG(WARNING) << "PK index tablet-merge overlay hit corruption, dropping local cache of " << inputs.size()
-                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
-        for (const auto& input : inputs) {
-            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), input.filename()));
-        }
-    };
-
     std::vector<std::shared_ptr<PersistentIndexSstable>> opened_inputs;
     std::unique_ptr<sstable::Iterator> merging_iter;
     bool contain_shared_sstables = false;
@@ -879,19 +882,20 @@ Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(Tablet
                                                             &merging_iter, &contain_shared_sstables,
                                                             false /* overlay owns its corruption metric */);
     if (!prepare_st.ok()) {
-        drop_input_cache_on_corruption(prepare_st);
+        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), inputs, "tablet-merge overlay", prepare_st);
         return prepare_st;
     }
     if (!merging_iter->Valid()) {
         auto st = merging_iter->status();
-        drop_input_cache_on_corruption(st);
+        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), inputs, "tablet-merge overlay", st);
         return st;
     }
 
     auto outputs_or = merge_sstables(std::move(merging_iter), false, tablet_mgr, input_metadata,
                                      contain_shared_sstables, KeyValueMergerOutputMode::kDuplicateKeysOnly, true);
     if (!outputs_or.ok()) {
-        drop_input_cache_on_corruption(outputs_or.status());
+        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), inputs, "tablet-merge overlay",
+                                                outputs_or.status());
         return outputs_or.status();
     }
     if (outputs_or->empty()) {
@@ -1021,23 +1025,12 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     // input list in `txn_log`, which prepare_merging_iterator fills with the full picked
     // set before opening anything, so corruption hit while opening an input is covered
     // too (the failing file never makes it into `sstable_vec`).
-    auto drop_input_cache_on_corruption = [&](const Status& st) {
-        if (!st.is_corruption()) {
-            return;
-        }
-        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of "
-                     << txn_log->op_compaction().input_sstables_size()
-                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
-        for (const auto& sstable_pb : txn_log->op_compaction().input_sstables()) {
-            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()));
-        }
-    };
     // build merge iterator
     auto prepare_st = prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
                                                &merge_base_level, &contain_shared_sstables);
     if (!prepare_st.ok()) {
-        drop_input_cache_on_corruption(prepare_st);
+        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), txn_log->op_compaction().input_sstables(),
+                                                "sst compaction", prepare_st);
         return prepare_st;
     }
     if (merging_iter_ptr == nullptr) {
@@ -1045,14 +1038,16 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
         return Status::OK();
     }
     if (!merging_iter_ptr->Valid()) {
-        drop_input_cache_on_corruption(merging_iter_ptr->status());
+        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), txn_log->op_compaction().input_sstables(),
+                                                "sst compaction", merging_iter_ptr->status());
         return merging_iter_ptr->status();
     }
     // merge sstable files.
     auto merge_results_or = merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata,
                                            contain_shared_sstables);
     if (!merge_results_or.ok()) {
-        drop_input_cache_on_corruption(merge_results_or.status());
+        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), txn_log->op_compaction().input_sstables(),
+                                                "sst compaction", merge_results_or.status());
         return merge_results_or.status();
     }
     auto& merge_results = merge_results_or.value();
