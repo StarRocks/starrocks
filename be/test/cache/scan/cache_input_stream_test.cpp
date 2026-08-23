@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
@@ -527,6 +530,32 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
     ASSERT_EQ(stats.read_block_cache_count, block_count);
+}
+
+TEST_F(CacheInputStreamTest, test_remote_read_buffer_block_count) {
+    constexpr int64_t block_count = 20;
+    const int64_t data_size = block_size * block_count;
+    std::vector<char> data(data_size);
+    std::vector<char> output(data_size);
+    gen_test_data(data.data(), data_size, block_size);
+
+    auto make_shared_stream = [&](const std::string& file_name) {
+        std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data.data(), data_size));
+        return std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+    };
+
+    auto default_buffer_stream = make_shared_stream("test_remote_read_buffer_default");
+    CacheInputStream default_cache_stream(default_buffer_stream, default_buffer_stream->filename(), data_size, 0);
+    ASSERT_OK(default_cache_stream.read_at_fully(0, output.data(), data_size));
+    ASSERT_EQ(2, default_buffer_stream->direct_io_count());
+    ASSERT_EQ(data, output);
+
+    std::fill(output.begin(), output.end(), 0);
+    auto custom_buffer_stream = make_shared_stream("test_remote_read_buffer_custom");
+    CacheInputStream custom_cache_stream(custom_buffer_stream, custom_buffer_stream->filename(), data_size, 0, 5);
+    ASSERT_OK(custom_cache_stream.read_at_fully(0, output.data(), data_size));
+    ASSERT_EQ(4, custom_buffer_stream->direct_io_count());
+    ASSERT_EQ(data, output);
 }
 
 } // namespace starrocks

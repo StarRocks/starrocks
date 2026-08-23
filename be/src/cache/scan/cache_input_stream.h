@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -27,6 +28,9 @@ namespace starrocks {
 
 class CacheInputStream : public io::SeekableInputStreamWrapper {
 public:
+    static constexpr int32_t kDefaultRemoteReadBufferBlockCount = 16;
+    static constexpr int32_t kMaxRemoteReadBufferBlockCount = 256;
+
     struct Stats {
         int64_t read_block_cache_ns = 0;
         int64_t write_block_cache_ns = 0;
@@ -54,7 +58,8 @@ public:
     };
 
     explicit CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream, const std::string& filename,
-                              size_t size, int64_t modification_time);
+                              size_t size, int64_t modification_time,
+                              int32_t remote_read_buffer_block_count = kDefaultRemoteReadBufferBlockCount);
 
     ~CacheInputStream() override;
 

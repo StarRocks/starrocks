@@ -22,6 +22,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsFileFormat;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
@@ -30,12 +31,15 @@ import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.io.DataInputViewStreamWrapper;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -184,7 +188,74 @@ public class PaimonScanNodeTest {
         scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
-        Assertions.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());
+        THdfsScanRange hdfsScanRange = tScanRangeLocations.getScan_range().getHdfs_scan_range();
+        Assertions.assertEquals(THdfsFileFormat.UNKNOWN, hdfsScanRange.getFile_format());
+        Assertions.assertTrue(hdfsScanRange.isUse_paimon_jni_reader());
+        Assertions.assertFalse(hdfsScanRange.isUse_paimon_native_reader());
+        Assertions.assertFalse(hdfsScanRange.isSetPaimon_table_path());
+        Assertions.assertFalse(hdfsScanRange.isSetPaimon_split_info_binary());
+        Assertions.assertEquals(com.starrocks.qe.SessionVariable.PaimonReaderMode.AUTO,
+                ctx.getSessionVariable().getPaimonReaderMode());
+    }
+
+    @Test
+    public void testAddNativeSplitScanRangeLocations(@Mocked PaimonTable table) throws IOException {
+        String tablePath = "s3://warehouse/db/table";
+        new Expectations() {
+            {
+                table.getTableLocation();
+                result = tablePath;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setPaimonReaderMode("NATIVE");
+        ctx.setThreadLocalInfo();
+        try {
+            DataSplit split = createDataSplit();
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.addSplitScanRangeLocations(split, null, 200L);
+
+            Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            THdfsScanRange hdfsScanRange = scanNode.getScanRangeLocations(10).get(0)
+                    .getScan_range().getHdfs_scan_range();
+            Assertions.assertFalse(hdfsScanRange.isUse_paimon_jni_reader());
+            Assertions.assertTrue(hdfsScanRange.isUse_paimon_native_reader());
+            Assertions.assertEquals(tablePath, hdfsScanRange.getFull_path());
+            Assertions.assertEquals(tablePath, hdfsScanRange.getPaimon_table_path());
+            Assertions.assertTrue(hdfsScanRange.isSetPaimon_split_info_binary());
+            Assertions.assertNotNull(hdfsScanRange.getPaimon_split_info_binary());
+            Assertions.assertTrue(hdfsScanRange.getPaimon_split_info_binary().length > 0);
+            DataSplit deserializedSplit = DataSplit.deserialize(new DataInputViewStreamWrapper(
+                    new ByteArrayInputStream(hdfsScanRange.getPaimon_split_info_binary())));
+            Assertions.assertEquals(split.snapshotId(), deserializedSplit.snapshotId());
+            Assertions.assertEquals(split.bucket(), deserializedSplit.bucket());
+            Assertions.assertEquals(split.bucketPath(), deserializedSplit.bucketPath());
+
+            // The deprecated boolean only affects AUTO mode and cannot override an explicit mode.
+            ctx.getSessionVariable().setPaimonForceJNIReader(true);
+            PaimonScanNode stillNativeScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
+            stillNativeScanNode.addSplitScanRangeLocations(split, null, 200L);
+            THdfsScanRange stillNativeRange = stillNativeScanNode.getScanRangeLocations(10).get(0)
+                    .getScan_range().getHdfs_scan_range();
+            Assertions.assertFalse(stillNativeRange.isUse_paimon_jni_reader());
+            Assertions.assertTrue(stillNativeRange.isUse_paimon_native_reader());
+
+            ctx.getSessionVariable().setPaimonReaderMode("JNI");
+            PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
+            jniScanNode.addSplitScanRangeLocations(split, null, 200L);
+            THdfsScanRange jniScanRange = jniScanNode.getScanRangeLocations(10).get(0)
+                    .getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(jniScanRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(jniScanRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(jniScanRange.isSetPaimon_table_path());
+            Assertions.assertFalse(jniScanRange.isSetPaimon_split_info_binary());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     @Test
@@ -210,5 +281,19 @@ public class PaimonScanNodeTest {
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
         scanNode.splitRawFileScanRangeLocations(rawFile, null);
         Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
+    }
+
+    private static DataSplit createDataSplit() {
+        BinaryRow partition = new BinaryRow(2);
+        BinaryRowWriter writer = new BinaryRowWriter(partition, 10);
+        writer.writeInt(0, 2000);
+        writer.writeInt(1, 4444);
+        writer.complete();
+
+        DataFileMeta dataFile = DataFileMeta.create("file1", 100L, 200L, EMPTY_MIN_KEY, EMPTY_MAX_KEY,
+                EMPTY_STATS, EMPTY_STATS, 100L, 200L, 1L, DUMMY_LEVEL, List.of(),
+                null, null, null, null, null, null, null);
+        return DataSplit.builder().withSnapshot(1L).withPartition(partition).withBucket(1)
+                .withBucketPath("bucket-1").withDataFiles(List.of(dataFile)).isStreaming(false).build();
     }
 }
