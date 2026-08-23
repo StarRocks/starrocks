@@ -498,6 +498,15 @@ struct THdfsScanRange {
 
     // fluss split info
     42: optional string fluss_split_info
+
+    // whether to use the Paimon C++ native reader
+    43: optional bool use_paimon_native_reader
+
+    // Paimon table path used by the native reader
+    44: optional string paimon_table_path
+
+    // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
+    45: optional binary paimon_split_info_binary
 }
 
 struct TBinlogScanRange {
