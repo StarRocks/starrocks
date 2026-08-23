@@ -87,8 +87,8 @@ private:
     // per key, so storing it inline avoids the per-key heap allocation pair
     // that std::list<IndexValueWithVer> would incur on every input row.
     std::optional<IndexValueWithVer> _current_value;
-    // Number of parsed, live, and projected occurrences of the current key.
-    size_t _current_key_occurrences = 0;
+    // Whether multiple parsed, live, and projected occurrences share the current key.
+    bool _current_key_has_duplicate = false;
     // If do merge base level, that means we can delete NullIndexValue items safely.
     bool _merge_base_level = false;
     TabletManager* _tablet_mgr = nullptr;

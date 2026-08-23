@@ -1342,6 +1342,20 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     return Status::OK();
 }
 
+static Status prepare_delvec_output_encryption(bool encrypt_output, WritableFileOptions* options,
+                                               std::string* encryption_meta) {
+    if (!encrypt_output) {
+        return Status::OK();
+    }
+    Status create_encryption_meta_status;
+    TEST_SYNC_POINT_CALLBACK("write_delvec_output:create_encryption_meta", &create_encryption_meta_status);
+    RETURN_IF_ERROR(create_encryption_meta_status);
+    ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+    options->encryption_info = pair.info;
+    *encryption_meta = std::move(pair.encryption_meta);
+    return Status::OK();
+}
+
 Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
                           int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
                           std::vector<uint64_t>* offsets, const Slice& extra_data, uint64_t* extra_data_offset,
@@ -1366,14 +1380,7 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     std::string new_encryption_meta;
-    if (need_encrypt) {
-        Status create_encryption_meta_status;
-        TEST_SYNC_POINT_CALLBACK("write_delvec_output:create_encryption_meta", &create_encryption_meta_status);
-        RETURN_IF_ERROR(create_encryption_meta_status);
-        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-        wopts.encryption_info = pair.info;
-        new_encryption_meta.swap(pair.encryption_meta);
-    }
+    RETURN_IF_ERROR(prepare_delvec_output_encryption(need_encrypt, &wopts, &new_encryption_meta));
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
 
     std::vector<uint64_t> new_offsets;
@@ -1435,14 +1442,7 @@ Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tabl
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     std::string new_encryption_meta;
-    if (encrypt_output) {
-        Status create_encryption_meta_status;
-        TEST_SYNC_POINT_CALLBACK("write_delvec_output:create_encryption_meta", &create_encryption_meta_status);
-        RETURN_IF_ERROR(create_encryption_meta_status);
-        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-        wopts.encryption_info = pair.info;
-        new_encryption_meta.swap(pair.encryption_meta);
-    }
+    RETURN_IF_ERROR(prepare_delvec_output_encryption(encrypt_output, &wopts, &new_encryption_meta));
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
     Status append_status;
     TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);

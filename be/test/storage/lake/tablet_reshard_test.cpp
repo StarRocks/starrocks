@@ -1752,8 +1752,8 @@ protected:
         prepare_tablet_dirs(target_tablet_id);
         const uint64_t old_size = write_two_column_segment(child_a, old_segment, 1, [](int) { return 100; });
         const uint64_t tail_size = write_two_column_segment(child_a, tail_segment, 1, [](int) { return 200; });
-        const uint64_t sibling_size =
-                write_two_column_segment(child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
+        const uint64_t sibling_size = write_two_column_segment(
+                child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
         const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
         const uint64_t tombstone_size =
                 write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, tombstone_filename),
@@ -9638,8 +9638,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_wr
     auto merged = tablet_metadatas.at(merged_tablet);
     ASSERT_EQ(std::numeric_limits<int32_t>::max(), merged->next_rowset_id());
 
-    const uint64_t write_segment_size =
-            write_two_column_segment(merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
+    const uint64_t write_segment_size = write_two_column_segment(
+            merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
     TxnLogPB write_log;
     write_log.set_tablet_id(merged_tablet);
     write_log.set_txn_id(2);
@@ -10721,10 +10721,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dropped_non_shared_modern_wate
 
     const std::string segment_a = "retained_coverage_non_shared_a.dat";
     const std::string segment_b = "retained_coverage_non_shared_b.dat";
-    const uint64_t segment_a_size =
-            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_size = write_two_column_segment(
+            child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string dead_sst_filename = "retained_coverage_non_shared_dead.sst";
     const uint64_t dead_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, dead_sst_filename),
@@ -10819,10 +10819,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_modern_live_occurrence_
 
     const std::string segment_a = "retained_coverage_shared_modern_a.dat";
     const std::string segment_b = "retained_coverage_shared_modern_b.dat";
-    const uint64_t segment_a_size =
-            write_two_column_segment(child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_size = write_two_column_segment(
+            child_a, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string shared_sst_filename = "retained_coverage_shared_modern.sst";
     const uint64_t shared_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
@@ -10913,12 +10913,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_legacy_global_max_does_
     const std::string segment_a_covered = "retained_coverage_shared_legacy_a_covered.dat";
     const std::string segment_a_tail = "retained_coverage_shared_legacy_a_tail.dat";
     const std::string segment_b = "retained_coverage_shared_legacy_b.dat";
-    const uint64_t segment_a_covered_size =
-            write_two_column_segment(child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
-    const uint64_t segment_a_tail_size =
-            write_two_column_segment(child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
-    const uint64_t segment_b_size =
-            write_two_column_segment(child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
+    const uint64_t segment_a_covered_size = write_two_column_segment(
+            child_a, segment_a_covered, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+    const uint64_t segment_a_tail_size = write_two_column_segment(
+            child_a, segment_a_tail, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+    const uint64_t segment_b_size = write_two_column_segment(
+            child_b, segment_b, /*num_rows=*/1, [](int key) { return key * 10; }, 60);
     const std::string shared_sst_filename = "retained_coverage_shared_legacy.sst";
     const uint64_t shared_sst_size =
             write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, shared_sst_filename),
@@ -13047,7 +13047,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_shared_rebuild_drops_cache
     // range [0, 2] still contains id 1, the rebuild route is kept, and the first
     // entry (stored rssid 0, lifted to -1) trips the range guard.
     auto [overflow_status, overflow_drops] = run_scenario(
-            [this](const std::string& path) { return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}}); },
+            [this](const std::string& path) {
+                return write_legacy_pk_sstable(path, {{"k_overflow", 0, 0}});
+            },
             /*rssid_offset=*/-1, /*txn_id=*/204);
     ASSERT_FALSE(overflow_status.ok()) << "merge over an out-of-range stored rssid must fail";
     EXPECT_TRUE(overflow_status.is_corruption()) << overflow_status;
@@ -18230,8 +18232,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_after_registered
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(rowset_id);
         rowset->set_version(kBaseVersion);
-        const uint64_t segment_size =
-                write_two_column_segment(tablet_id, segment, /*num_rows=*/1, [](int key) { return key * 10; }, lower);
+        const uint64_t segment_size = write_two_column_segment(
+                tablet_id, segment, /*num_rows=*/1, [](int key) { return key * 10; }, lower);
         rowset->set_num_rows(1);
         rowset->set_data_size(segment_size);
         auto* segment_meta = rowset->add_segment_metas();
@@ -18332,8 +18334,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_preserves_shared
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(rowset_id);
         rowset->set_version(kBaseVersion);
-        const uint64_t segment_size =
-                write_two_column_segment(tablet_id, segment, /*num_rows=*/1, [](int key) { return key * 10; }, lower);
+        const uint64_t segment_size = write_two_column_segment(
+                tablet_id, segment, /*num_rows=*/1, [](int key) { return key * 10; }, lower);
         rowset->set_num_rows(1);
         rowset->set_data_size(segment_size);
         auto* segment_meta = rowset->add_segment_metas();
