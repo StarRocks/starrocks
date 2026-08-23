@@ -85,6 +85,7 @@ bvar::Adder<int64_t> g_tablet_merge_non_shared_sstable_rebuild_total("tablet_mer
 namespace starrocks::lake {
 
 DEFINE_FAIL_POINT(skip_lake_pk_index_merge_source_flush);
+DEFINE_FAIL_POINT(tablet_merge_after_register_new_sstable);
 
 namespace {
 
@@ -3349,6 +3350,24 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                          update_manager->flush_pk_memtable(ctx.metadata(), new_metadata->version()));
         ctx.set_metadata(std::move(flushed_metadata));
     }
+    std::unordered_set<std::string> source_sstable_filenames;
+    for (const auto& ctx : merge_contexts) {
+        if (!ctx.metadata()->has_sstable_meta()) continue;
+        for (const auto& sst : ctx.metadata()->sstable_meta().sstables()) {
+            source_sstable_filenames.insert(sst.filename());
+        }
+    }
+    CancelableDefer cleanup_new_sstables([&] {
+        std::unordered_set<std::string> deleted_filenames;
+        for (const auto& sst : *dest) {
+            const auto& filename = sst.filename();
+            if (source_sstable_filenames.contains(filename) || !deleted_filenames.insert(filename).second) continue;
+            const auto location = tablet_manager->sst_location(new_metadata->id(), filename);
+            auto status = fs::delete_file(location);
+            LOG_IF(WARNING, !status.ok() && !status.is_not_found())
+                    << "failed to clean up tablet merge output " << location << ": " << status;
+        }
+    });
     std::vector<std::optional<uint64_t>> retained_coverage_by_source(merge_contexts.size());
 
     for (size_t old_tablet_index = 0; old_tablet_index < merge_contexts.size(); ++old_tablet_index) {
@@ -3517,6 +3536,13 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         }
     }
 
+    const bool has_new_sstable = std::any_of(dest->begin(), dest->end(), [&](const auto& sst) {
+        return !source_sstable_filenames.contains(sst.filename());
+    });
+    if (has_new_sstable) {
+        FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_merge_after_register_new_sstable);
+    }
+
     // The merge above appended projected sstables in source old tablet iteration
     // order. Re-sort by signed max_rss_rowid and reassign fileset_ids on
     // non-contiguous reuse so the emitted sstable_meta satisfies both the
@@ -3536,6 +3562,7 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                                                            new_metadata->version(), safe_rebuild_point));
         new_metadata->mutable_sstable_meta()->CopyFrom(materialized_metadata->sstable_meta());
     }
+    cleanup_new_sstables.cancel();
     return Status::OK();
 }
 

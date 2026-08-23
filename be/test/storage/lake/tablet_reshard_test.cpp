@@ -18268,7 +18268,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_after_registered
                                                       txn_info, false, tablet_metadatas, tablet_ranges);
         EXPECT_FALSE(status.ok()) << "later registered-output failpoint must reject merge attempt " << attempt;
         EXPECT_THAT(status.to_string(), ::testing::HasSubstr("inject error tablet_merge_after_register_new_sstable"));
-        EXPECT_TRUE(tablet_metadatas.empty());
+        EXPECT_TRUE(tablet_metadatas.contains(child_a));
+        EXPECT_TRUE(tablet_metadatas.contains(child_b));
+        EXPECT_FALSE(tablet_metadatas.contains(merged_tablet));
         auto target_metadata = _tablet_manager->get_tablet_metadata(merged_tablet, kNewVersion);
         EXPECT_TRUE(target_metadata.status().is_not_found());
         ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(merged_tablet));
@@ -18368,7 +18370,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_preserves_shared
                                                   txn_info, false, tablet_metadatas, tablet_ranges);
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(status.to_string(), ::testing::HasSubstr("inject error tablet_merge_after_register_new_sstable"));
-    EXPECT_TRUE(tablet_metadatas.empty());
+    EXPECT_TRUE(tablet_metadatas.contains(child_a));
+    EXPECT_TRUE(tablet_metadatas.contains(child_b));
+    EXPECT_FALSE(tablet_metadatas.contains(merged_tablet));
     ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(merged_tablet));
     EXPECT_EQ(inventory_before, inventory_after);
     ASSERT_OK(FileSystem::Default()->path_exists(shared_path));
