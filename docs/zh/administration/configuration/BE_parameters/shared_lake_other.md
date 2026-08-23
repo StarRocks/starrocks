@@ -234,6 +234,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_scan_min_remote_read_bytes
+
+- 默认值：131072
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描云原生表时单次远程读取的大小下限，作用于 Segment footer、短键索引以及各列的索引页和数据页。如果一次读取本身已经不小于该值，则按原样下发，因此该参数不会拆分读取，只会避免用过大的一次取回去服务一次很小的读取。扫描请求的是精确的页范围，过大的预读只会把每次请求向上取整、多取回扫描根本不会读的字节，因此默认值远小于 `starlet_fs_stream_buffer_size_bytes`。继续调小会以更多的请求数换取更少的读带宽。设为 `0` 表示每次读取都按其请求的大小精确下发；设为负值表示回退到 `starlet_fs_stream_buffer_size_bytes`。该参数仅在 Data Cache 没有把读取按 `starlet_star_cache_block_size_bytes` 对齐成整块时生效，即读取跳过磁盘缓存或不回填缓存的情况。
+- 引入版本：v4.2
+
 ### lake_vacuum_enable_task_timeout
 
 - 默认值：true

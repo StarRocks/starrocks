@@ -139,8 +139,8 @@ public:
     }
 
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
-        if (auto sharedBufferStream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
-            sharedBufferStream == nullptr) {
+        auto* shared_buffer_stream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
+        if (shared_buffer_stream == nullptr) {
             return Status::OK();
         }
 
@@ -151,7 +151,14 @@ public:
             result.emplace_back(io_range);
         }
 
-        return dynamic_cast<SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
+        // These ranges describe the upcoming scan in full, so whatever is still in the stream's map
+        // belongs to the previous one. set_io_ranges() inserts without clearing and reset_for_reuse()
+        // keeps the streams, so without this a prepared-split fan-out stacks one round of buffers per
+        // child. The end-of-stream release in ScalarColumnIterator does not cover it: every column
+        // read goes through the sparse-range overload, whose loop exits on has_more() rather than on
+        // eos, so that release only ever fires on the ordinal and metadata-only paths.
+        shared_buffer_stream->release();
+        return shared_buffer_stream->set_io_ranges(result);
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;

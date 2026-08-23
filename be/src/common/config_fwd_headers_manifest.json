@@ -514,6 +514,7 @@
         "tablet_internal_parallel_min_scan_dop",
         "max_hdfs_file_handle",
         "io_coalesce_lake_read_enable",
+        "lake_scan_min_remote_read_bytes",
         "enable_orc_late_materialization",
         "orc_tiny_stripe_threshold_size",
         "orc_loading_buffer_size",

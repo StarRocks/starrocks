@@ -237,6 +237,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
+### lake_scan_min_remote_read_bytes
+
+- デフォルト: 131072
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタでクラウドネイティブテーブルをクエリスキャンする際に発行されるリモート読み取りサイズの下限です。対象は Segment フッター、ショートキーインデックス、および各列のインデックスページとデータページです。すでにこの値以上の読み取りはそのまま発行されるため、このパラメータが読み取りを分割することはなく、小さな読み取りが過大なフェッチで処理されるのを防ぐだけです。スキャンは正確なページ範囲を要求するため、大きな先読みは各リクエストを切り上げ、スキャンが読まないバイトを取得するだけです。そのためデフォルト値は `starlet_fs_stream_buffer_size_bytes` よりかなり小さく設定されています。さらに小さくすると、リクエスト数の増加と引き換えに読み取り帯域幅が減ります。`0` を指定すると各読み取りは要求されたサイズのまま発行され、負の値を指定すると `starlet_fs_stream_buffer_size_bytes` にフォールバックします。このパラメータは、Data Cache が読み取りを `starlet_star_cache_block_size_bytes` のブロック単位に丸めていない場合、つまり読み取りがディスクキャッシュをスキップするか、キャッシュを充填しない場合にのみ有効です。
+- Introduced in: v4.2
+
 ### lake_vacuum_enable_task_timeout
 
 - デフォルト: true

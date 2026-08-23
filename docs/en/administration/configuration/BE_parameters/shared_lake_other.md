@@ -237,6 +237,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_scan_min_remote_read_bytes
+
+- Default: 131072
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The lower bound on the size of a remote read issued by the query scan path for a cloud-native table in a shared-data cluster: the segment footer, the short-key index, and each column's index and data pages. A read that is already at least this large is issued unchanged, so this never splits a read; it only keeps a small read from being served by an oversized fetch. The scan asks for exact page ranges, so a large read-ahead only rounds every request up and fetches bytes the scan never reads, which is why the default is well below `starlet_fs_stream_buffer_size_bytes`. Lowering it further trades more requests for less read bandwidth. Set it to `0` to issue every read at exactly its requested size, or to a negative value to fall back to `starlet_fs_stream_buffer_size_bytes`. It applies only where the data cache is not already rounding reads out to whole `starlet_star_cache_block_size_bytes` blocks, that is, when the read skips the disk cache or is not populating it.
+- Introduced in: v4.2
+
 ### lake_vacuum_enable_task_timeout
 
 - Default: true

@@ -42,6 +42,7 @@
 #include "base/types/decimal12.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
@@ -53,6 +54,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
@@ -973,6 +975,79 @@ TEST_F(ColumnReaderWriterTest, test_next_batch_after_eos_is_idempotent) {
         ASSERT_EQ(0U, n);
         ASSERT_EQ(0U, dst->size());
     }
+}
+
+// release() is the only thing that clears a SharedBufferedInputStream's range map, and
+// set_io_ranges() inserts into it without clearing, so a coalescing scan has to hand the buffers
+// back or an iterator that outlives one scan stacks a fresh round of up-to-
+// io_coalesce_read_max_buffer_size buffers on top of the last. Two places do it, and both are
+// keyed on the scan itself rather than on io_coalesce_lake_read_enable, which stays at its default
+// false here because the cloud-native scan path now turns coalescing on by itself wherever the
+// read size is its own to choose: registering a new scan's ranges drops the previous scan's, and
+// ScalarColumnIterator drops them at end of stream on the paths that reach one.
+TEST_F(ColumnReaderWriterTest, coalesced_buffers_do_not_accumulate) {
+    // Pinned off rather than merely asserted off: another fixture in this binary flips it, and
+    // the point of the test is that the release does not depend on it.
+    const bool saved_coalesce_config = config::io_coalesce_lake_read_enable;
+    config::io_coalesce_lake_read_enable = false;
+    DeferOp restore_coalesce_config([&] { config::io_coalesce_lake_read_enable = saved_coalesce_config; });
+
+    constexpr size_t kNumRows = 2 * 1024;
+    constexpr size_t kNullEvery = 4;
+    auto src = ChunkFactory::column_from_field_type(TYPE_INT, true);
+    src->reserve(kNumRows);
+    for (size_t i = 0; i < kNumRows; ++i) {
+        auto v = static_cast<int32_t>(i);
+        (void)src->append_numbers(&v, sizeof(v));
+    }
+    for (size_t i = 0; i < kNumRows; i += kNullEvery) {
+        (void)src->set_null(i);
+    }
+
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_INT, DEFAULT_ENCODING, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*src));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
+    ASSIGN_OR_ABORT(auto file_size, _read_file->get_size());
+    // Wired the way SegmentIterator does it when coalescing is on: reads go through the shared
+    // stream, and the page ranges the scan will touch are registered on it up front.
+    auto shared = std::make_unique<SharedBufferedInputStream>(_read_file->stream(), fname, file_size);
+
+    ASSIGN_OR_ABORT(auto iter, _reader->new_iterator());
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = &_stats;
+    iter_opts.read_file = shared.get();
+    iter_opts.use_page_cache = false;
+    iter_opts.is_io_coalesce = true;
+    ASSERT_OK(iter->init(iter_opts));
+
+    ASSERT_OK(iter->convert_sparse_range_to_io_range(SparseRange<>(0, kNumRows)));
+    const int64_t registered = shared->current_range_ref_sum();
+    ASSERT_GT(registered, 0);
+
+    // What a reused segment iterator does: reset_for_reuse() keeps the stream, so the next scan
+    // registers its ranges on the same map. It must be rebuilt, not appended to, or a prepared-split
+    // fan-out grows by one round of buffers per child.
+    ASSERT_OK(iter->convert_sparse_range_to_io_range(SparseRange<>(0, kNumRows)));
+    ASSERT_EQ(registered, shared->current_range_ref_sum());
+
+    ASSERT_OK(iter->seek_to_first());
+    size_t nulls = 0;
+    ASSERT_OK(iter->null_count(&nulls));
+    ASSERT_EQ(kNumRows / kNullEvery, nulls);
+    ASSERT_EQ(0, shared->current_range_ref_sum());
 }
 
 // ---------------------------------------------------------------------------

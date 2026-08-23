@@ -87,6 +87,9 @@ CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
 CONF_mInt32(max_hdfs_file_handle, "1000");
 
 // Lake
+// Force page-range coalescing on for every cloud-native scan read. Off, coalescing is still
+// used wherever the size of the read is ours to choose rather than dictated by the datacache's
+// block layout -- see should_enable_io_coalesce_lake_read().
 CONF_mBool(io_coalesce_lake_read_enable, "false");
 
 // orc reader
@@ -159,6 +162,23 @@ CONF_Int32(connector_io_tasks_adjust_smooth, "4");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
+
+// Lower bound on the size of a remote read issued by the cloud-native scan path: the segment
+// footer, the short-key index, and each column's index and data pages. A read already this
+// large is issued unchanged, so this never splits a read; it only keeps a small one from being
+// served by an oversized fetch. The scan asks for exact page ranges, so a large read-ahead
+// only rounds every request up and fetches bytes the scan never looks at. Lowering the bound
+// trades more requests for less read bandwidth.
+//
+// Supplies the value when LakeIOOptions::buffer_size is left at -1, which the query scan path
+// always does, overriding starlet_fs_stream_buffer_size_bytes for those reads. Callers that
+// pick their own size, compaction among them, are unaffected; callers that leave it unset,
+// such as segment rewrite, follow this value too. Applies only where the datacache is not
+// already rounding reads out to whole blocks -- see lake_scan_buffer_size().
+//     > 0   use this many bytes
+//    == 0   do not buffer: issue every read at exactly its requested size
+//     < 0   inherit starlet_fs_stream_buffer_size_bytes
+CONF_mInt64(lake_scan_min_remote_read_bytes, "131072"); // 128KB
 
 // If your sort key cardinality is very high,
 // You could enable this config to speed up the point lookup query,
