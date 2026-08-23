@@ -86,9 +86,9 @@ CREATE TABLE ss_pk( pk INT NOT NULL, pv BIGINT NOT NULL) PRIMARY KEY(pk) DISTRIB
 insert into ss_pk values(1, 1), (2, 2);
 -- result:
 -- !result
-submit task task_src_update_${uuid0} as update ss_pk set pv = 100 where pk = 1;
+function: assert_query_contains("submit task task_src_update_${uuid0} as update ss_pk set pv = 100 where pk = 1;", "SUBMITTED")
 -- result:
-task_src_update_${uuid0}	SUBMITTED
+None
 -- !result
 LOOP {
   PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for UPDATE task run to appear"}
