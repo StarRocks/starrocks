@@ -183,7 +183,7 @@ public class SubmitTaskStmtTest extends MVTestBase {
     @Test
     public void testSubmitUpdate() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        starRocksAssert.withDatabase("test").useDatabase("test")
+        starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.test_update\n" +
                         "(\n" +
                         "    pk bigint NOT NULL,\n" +
@@ -219,7 +219,7 @@ public class SubmitTaskStmtTest extends MVTestBase {
     @Test
     public void testSubmitUpdateFromSource() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        starRocksAssert.withDatabase("test").useDatabase("test")
+        starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.update_target\n" +
                         "(\n" +
                         "    k1 int NOT NULL,\n" +
