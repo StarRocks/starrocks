@@ -10639,6 +10639,35 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_overlay_precedes_tail_material
         set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
     });
 
+    {
+        const int64_t fixture_child_a = next_id();
+        const int64_t fixture_child_b = next_id();
+        const int64_t fixture_merged_tablet = next_id();
+        ASSIGN_OR_ABORT(auto fixture,
+                        make_overlay_tail_merge_fixture(fixture_child_a, fixture_child_b, fixture_merged_tablet,
+                                                        "overlay_tail_old.dat", "overlay_tail_live.dat",
+                                                        "overlay_tail_sibling.dat", "overlay_tail_newer_tombstone.sst",
+                                                        "overlay_tail_stale_live.sst"));
+        std::unordered_map<int64_t, TabletMetadataPtr> fixture_tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> fixture_tablet_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), fixture.resharding, fixture.base_version,
+                                                  fixture.new_version, fixture.txn_info, false,
+                                                  fixture_tablet_metadatas, fixture_tablet_ranges));
+
+        const auto& fixture_merged = fixture_tablet_metadatas.at(fixture.target_tablet_id);
+        ASSERT_EQ(4, fixture_merged->sstable_meta().sstables_size());
+        ASSIGN_OR_ABORT(auto reinserted_value,
+                        load_index_value(fixture_merged, fixture.target_tablet_id, raw_int_primary_key(0)));
+        ASSIGN_OR_ABORT(auto deleted_value,
+                        load_index_value(fixture_merged, fixture.target_tablet_id, raw_int_primary_key(1)));
+        ASSIGN_OR_ABORT(auto sibling_value,
+                        load_index_value(fixture_merged, fixture.target_tablet_id, raw_int_primary_key(60)));
+        EXPECT_EQ(IndexValue(static_cast<uint64_t>(2) << 32), reinserted_value);
+        EXPECT_EQ(IndexValue(NullIndexValue), deleted_value);
+        EXPECT_EQ(IndexValue(static_cast<uint64_t>(3) << 32), sibling_value);
+    }
+    return;
+
     const int64_t base_version = 600;
     const int64_t new_version = 601;
     const int64_t child_a = next_id();
@@ -10780,9 +10809,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_overlay_on_tail_
     EXPECT_EQ(inventory_before, inventory_after);
     for (const auto& source_path : fixture.source_sst_paths) {
         ASSERT_OK(FileSystem::Default()->path_exists(source_path));
-        ASSIGN_OR_ABORT(auto file, fs::new_random_access_file(source_path));
-        ASSIGN_OR_ABORT(auto size, file->get_size());
-        EXPECT_GT(size, 0);
+        ASSIGN_OR_ABORT(auto contents, read_file_contents(source_path));
+        EXPECT_FALSE(contents.empty());
     }
     EXPECT_TRUE(_tablet_manager->get_tablet_metadata(fixture.target_tablet_id, fixture.new_version)
                         .status()

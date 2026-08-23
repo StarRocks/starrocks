@@ -878,24 +878,32 @@ TEST_F(LakePersistentIndexTest, test_key_value_merger_multi_output_close_failure
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true,
-                          KeyValueMergerOutputMode::kDuplicateKeysOnly);
-    KeyValueMergerTestIterator a_old("a", 1, IndexValue(1), 1);
-    KeyValueMergerTestIterator a_new("a", 2, IndexValue(2), 2);
-    KeyValueMergerTestIterator b_old("b", 1, IndexValue(3), 3);
-    KeyValueMergerTestIterator b_new("b", 2, IndexValue(4), 4);
-    KeyValueMergerTestIterator c_old("c", 1, IndexValue(5), 5);
-    KeyValueMergerTestIterator c_new("c", 2, IndexValue(6), 6);
-    ASSERT_OK(merger.merge(&a_old));
-    ASSERT_OK(merger.merge(&a_new));
-    ASSERT_OK(merger.merge(&b_old));
-    ASSERT_OK(merger.merge(&b_new));
-    ASSERT_OK(merger.merge(&c_old));
-    ASSERT_OK(merger.merge(&c_new));
+    Status finish_status = Status::OK();
+    {
+        KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true,
+                              KeyValueMergerOutputMode::kDuplicateKeysOnly);
+        const std::string a_key(128 * 1024, 'a');
+        const std::string b_key(128 * 1024, 'b');
+        const std::string c_key(128 * 1024, 'c');
+        KeyValueMergerTestIterator a_old(a_key, 1, IndexValue(1), 1);
+        KeyValueMergerTestIterator a_new(a_key, 2, IndexValue(2), 2);
+        KeyValueMergerTestIterator b_old(b_key, 1, IndexValue(3), 3);
+        KeyValueMergerTestIterator b_new(b_key, 2, IndexValue(4), 4);
+        KeyValueMergerTestIterator c_old(c_key, 1, IndexValue(5), 5);
+        KeyValueMergerTestIterator c_new(c_key, 2, IndexValue(6), 6);
+        ASSERT_OK(merger.merge(&a_old));
+        ASSERT_OK(merger.merge(&a_new));
+        ASSERT_OK(merger.merge(&b_old));
+        ASSERT_OK(merger.merge(&b_new));
+        ASSERT_OK(merger.merge(&c_old));
+        ASSERT_OK(merger.merge(&c_new));
 
-    auto outputs = merger.finish();
-    ASSERT_FALSE(outputs.ok());
-    EXPECT_EQ("Internal error: injected later builder close failure", outputs.status().to_string());
+        auto outputs = merger.finish();
+        finish_status = outputs.status();
+    }
+
+    ASSERT_FALSE(finish_status.ok());
+    EXPECT_EQ("Internal error: injected later builder close failure", finish_status.to_string());
     ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(_tablet_metadata->id()));
     EXPECT_EQ(inventory_before, inventory_after);
     EXPECT_EQ((std::vector<size_t>{0, 1}), finish_attempts);
