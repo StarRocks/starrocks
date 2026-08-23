@@ -33,7 +33,8 @@ namespace starrocks {
 // `SharedBufferedInputStream`. Also, if we don't set the io range for `SharedBufferedInputStream`, it will
 // act as the old `DefaultInputStream`.
 CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream,
-                                   const std::string& filename, size_t size, int64_t modification_time)
+                                   const std::string& filename, size_t size, int64_t modification_time,
+                                   int32_t remote_read_buffer_block_count)
         : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
           _sb_stream(stream),
@@ -59,8 +60,13 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         uint32_t file_size = _size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
-    // default _buffer size is 4MB = (16 * 256KB)
-    _buffer_size = 16 * _block_size;
+    if (UNLIKELY(remote_read_buffer_block_count <= 0 ||
+                 remote_read_buffer_block_count > kMaxRemoteReadBufferBlockCount)) {
+        remote_read_buffer_block_count = kDefaultRemoteReadBufferBlockCount;
+    }
+    DCHECK_GT(remote_read_buffer_block_count, 0);
+    DCHECK_LE(remote_read_buffer_block_count, kMaxRemoteReadBufferBlockCount);
+    _buffer_size = static_cast<int64_t>(remote_read_buffer_block_count) * _block_size;
     _buffer.reserve(_buffer_size);
 }
 
