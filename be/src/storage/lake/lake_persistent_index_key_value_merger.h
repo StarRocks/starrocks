@@ -48,7 +48,7 @@ public:
               _enable_multiple_output_files(enable_multiple_output_files),
               _output_mode(output_mode) {}
 
-    ~KeyValueMerger() = default;
+    ~KeyValueMerger();
 
     struct TableBuilderWrapper {
         std::string filename;
@@ -57,6 +57,8 @@ public:
         std::unique_ptr<sstable::FilterPolicy> filter_policy;
         // destroy first.
         std::unique_ptr<sstable::TableBuilder> table_builder;
+        bool finish_attempted = false;
+        bool close_attempted = false;
     };
 
     struct KeyValueMergerOutput {
@@ -96,6 +98,7 @@ private:
     bool _enable_multiple_output_files = false;
     KeyValueMergerOutputMode _output_mode = KeyValueMergerOutputMode::kAllKeys;
     std::vector<TableBuilderWrapper> _output_builders;
+    bool _outputs_released = false;
     // Scratch buffers reused across merge()/flush() to avoid per-key protobuf
     // allocator churn. Cleared between calls so internal capacity is retained.
     IndexValuesWithVerPB _merge_pb_scratch;
