@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -163,6 +164,16 @@ protected:
     void TearDown() override { remove_test_dir_ignore_error(); }
 
     constexpr static const char* const kTestDirectory = "test_lake_persistent_index";
+
+    StatusOr<std::set<std::string>> sst_inventory(int64_t tablet_id) {
+        std::set<std::string> files;
+        RETURN_IF_ERROR(
+                FileSystem::Default()->iterate_dir(_lp->segment_root_location(tablet_id), [&](std::string_view name) {
+                    if (name.ends_with(".sst")) files.emplace(name);
+                    return true;
+                }));
+        return files;
+    }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
 
@@ -832,6 +843,65 @@ TEST_F(LakePersistentIndexTest, test_key_value_merger_duplicate_only_normalizes_
     EXPECT_EQ("same", entries[0].first);
     EXPECT_EQ(9, entries[0].second.first);
     EXPECT_EQ(value, entries[0].second.second.get_value());
+}
+
+TEST_F(LakePersistentIndexTest, test_key_value_merger_multi_output_close_failure_cleans_all_files) {
+    const int64_t old_target_size = config::pk_index_target_file_size;
+    config::pk_index_target_file_size = 1;
+    DeferOp restore_target_size([&]() { config::pk_index_target_file_size = old_target_size; });
+
+    ASSIGN_OR_ABORT(auto inventory_before, sst_inventory(_tablet_metadata->id()));
+    std::vector<size_t> finish_attempts;
+    std::vector<size_t> real_closes;
+    std::vector<size_t> cleanup_abandons;
+    std::vector<size_t> cleanup_closes;
+    SyncPoint::GetInstance()->SetCallBack("KeyValueMerger::finish:finish_attempt",
+                                          [&](void* arg) { finish_attempts.emplace_back(*static_cast<size_t*>(arg)); });
+    SyncPoint::GetInstance()->SetCallBack("KeyValueMerger::finish:close_status", [&](void* arg) {
+        auto* close = static_cast<std::pair<size_t, Status*>*>(arg);
+        real_closes.emplace_back(close->first);
+        if (close->first == 1) {
+            *close->second = Status::InternalError("injected later builder close failure");
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("KeyValueMerger::cleanup:abandon", [&](void* arg) {
+        cleanup_abandons.emplace_back(*static_cast<size_t*>(arg));
+    });
+    SyncPoint::GetInstance()->SetCallBack("KeyValueMerger::cleanup:close",
+                                          [&](void* arg) { cleanup_closes.emplace_back(*static_cast<size_t*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp restore_callbacks([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("KeyValueMerger::finish:finish_attempt");
+        SyncPoint::GetInstance()->ClearCallBack("KeyValueMerger::finish:close_status");
+        SyncPoint::GetInstance()->ClearCallBack("KeyValueMerger::cleanup:abandon");
+        SyncPoint::GetInstance()->ClearCallBack("KeyValueMerger::cleanup:close");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true,
+                          KeyValueMergerOutputMode::kDuplicateKeysOnly);
+    KeyValueMergerTestIterator a_old("a", 1, IndexValue(1), 1);
+    KeyValueMergerTestIterator a_new("a", 2, IndexValue(2), 2);
+    KeyValueMergerTestIterator b_old("b", 1, IndexValue(3), 3);
+    KeyValueMergerTestIterator b_new("b", 2, IndexValue(4), 4);
+    KeyValueMergerTestIterator c_old("c", 1, IndexValue(5), 5);
+    KeyValueMergerTestIterator c_new("c", 2, IndexValue(6), 6);
+    ASSERT_OK(merger.merge(&a_old));
+    ASSERT_OK(merger.merge(&a_new));
+    ASSERT_OK(merger.merge(&b_old));
+    ASSERT_OK(merger.merge(&b_new));
+    ASSERT_OK(merger.merge(&c_old));
+    ASSERT_OK(merger.merge(&c_new));
+
+    auto outputs = merger.finish();
+    ASSERT_FALSE(outputs.ok());
+    EXPECT_EQ("Internal error: injected later builder close failure", outputs.status().to_string());
+    ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(_tablet_metadata->id()));
+    EXPECT_EQ(inventory_before, inventory_after);
+    EXPECT_EQ((std::vector<size_t>{0, 1}), finish_attempts);
+    EXPECT_EQ((std::vector<size_t>{0, 1}), real_closes);
+    EXPECT_EQ((std::vector<size_t>{2}), cleanup_abandons);
+    EXPECT_EQ((std::vector<size_t>{2}), cleanup_closes);
 }
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {

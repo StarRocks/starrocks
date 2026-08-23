@@ -968,6 +968,12 @@ protected:
         return files;
     }
 
+    StatusOr<std::set<std::string>> sst_inventory(int64_t tablet_id) {
+        ASSIGN_OR_RETURN(auto files, directory_inventory(_location_provider->segment_root_location(tablet_id)));
+        std::erase_if(files, [](const std::string& file) { return !file.ends_with(".sst"); });
+        return files;
+    }
+
     StatusOr<std::string> read_file_contents(const std::string& path) {
         ASSIGN_OR_RETURN(auto file, fs::new_random_access_file(path));
         ASSIGN_OR_RETURN(auto size, file->get_size());
@@ -1722,6 +1728,99 @@ protected:
         }
         std::sort(rows.begin(), rows.end());
         return rows;
+    }
+
+    struct OverlayTailMergeFixture {
+        ReshardingTabletInfoPB resharding;
+        TxnInfoPB txn_info;
+        int64_t base_version;
+        int64_t new_version;
+        int64_t target_tablet_id;
+        std::vector<std::string> source_sst_paths;
+    };
+
+    StatusOr<OverlayTailMergeFixture> make_overlay_tail_merge_fixture(
+            int64_t child_a, int64_t child_b, int64_t target_tablet_id, const std::string& old_segment,
+            const std::string& tail_segment, const std::string& sibling_segment, const std::string& tombstone_filename,
+            const std::string& stale_live_filename) {
+        OverlayTailMergeFixture fixture;
+        fixture.base_version = 600;
+        fixture.new_version = 601;
+        fixture.target_tablet_id = target_tablet_id;
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        prepare_tablet_dirs(target_tablet_id);
+        const uint64_t old_size = write_two_column_segment(child_a, old_segment, 1, [](int) { return 100; });
+        const uint64_t tail_size = write_two_column_segment(child_a, tail_segment, 1, [](int) { return 200; });
+        const uint64_t sibling_size =
+                write_two_column_segment(child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
+        const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+        const uint64_t tombstone_size =
+                write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, tombstone_filename),
+                                           {{raw_int_primary_key(0), 540, tombstone, tombstone},
+                                            {raw_int_primary_key(1), 540, tombstone, tombstone}});
+        const uint64_t stale_size =
+                write_versioned_pk_sstable(_tablet_manager->sst_location(child_b, stale_live_filename),
+                                           {{raw_int_primary_key(0), 513, 1, 0}, {raw_int_primary_key(1), 513, 1, 0}});
+        fixture.source_sst_paths = {_tablet_manager->sst_location(child_a, tombstone_filename),
+                                    _tablet_manager->sst_location(child_b, stale_live_filename)};
+        auto make_metadata = [&](int64_t tablet_id, int lower, int upper) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(fixture.base_version);
+            set_two_column_pk_schema(metadata.get(), 4001);
+            metadata->set_enable_persistent_index(true);
+            metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+            metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+            metadata->mutable_range()->set_lower_bound_included(true);
+            metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+            metadata->mutable_range()->set_upper_bound_included(false);
+            return metadata;
+        };
+        auto meta_a = make_metadata(child_a, 0, 50);
+        meta_a->set_next_rowset_id(3);
+        auto add_a_rowset = [&](uint32_t id, int64_t version, const std::string& filename, uint64_t size) {
+            auto* rowset = meta_a->add_rowsets();
+            rowset->set_id(id);
+            rowset->set_version(version);
+            rowset->set_num_rows(1);
+            rowset->set_data_size(size);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(filename);
+            segment->set_size(size);
+            segment->set_num_rows(1);
+        };
+        add_a_rowset(1, 500, old_segment, old_size);
+        add_a_rowset(2, fixture.base_version, tail_segment, tail_size);
+        auto* tombstone_sst = meta_a->mutable_sstable_meta()->add_sstables();
+        tombstone_sst->set_filename(tombstone_filename);
+        tombstone_sst->set_filesize(tombstone_size);
+        tombstone_sst->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | UINT32_MAX);
+        auto meta_b = make_metadata(child_b, 50, 100);
+        meta_b->set_next_rowset_id(2);
+        auto* rowset = meta_b->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(500);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(sibling_size);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(sibling_segment);
+        segment->set_size(sibling_size);
+        segment->set_num_rows(1);
+        auto* stale_sst = meta_b->mutable_sstable_meta()->add_sstables();
+        stale_sst->set_filename(stale_live_filename);
+        stale_sst->set_filesize(stale_size);
+        stale_sst->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | UINT32_MAX);
+        RETURN_IF_ERROR(put_tablet_metadata(meta_a));
+        RETURN_IF_ERROR(put_tablet_metadata(meta_b));
+        auto& merging = *fixture.resharding.mutable_merging_tablet_info();
+        merging.add_old_tablet_ids(child_a);
+        merging.add_old_tablet_ids(child_b);
+        merging.set_new_tablet_id(target_tablet_id);
+        fixture.txn_info.set_txn_id(1);
+        fixture.txn_info.set_commit_time(1);
+        fixture.txn_info.set_gtid(1);
+        return fixture;
     }
 
     struct RealSplitSstOwnerFixture {
@@ -10655,6 +10754,41 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_overlay_precedes_tail_material
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(3) << 32), sibling_value);
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_overlay_on_tail_failure) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_failpoints([&] {
+        set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+    });
+
+    ASSIGN_OR_ABORT(auto fixture,
+                    make_overlay_tail_merge_fixture(next_id(), next_id(), next_id(), "cleanup_overlay_old.dat",
+                                                    "cleanup_overlay_tail.dat", "cleanup_overlay_sibling.dat",
+                                                    "cleanup_overlay_tombstone.sst", "cleanup_overlay_stale.sst"));
+    ASSIGN_OR_ABORT(auto inventory_before, sst_inventory(fixture.target_tablet_id));
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), fixture.resharding, fixture.base_version,
+                                                  fixture.new_version, fixture.txn_info, false, tablet_metadatas,
+                                                  tablet_ranges);
+    ASSERT_FALSE(status.ok());
+    EXPECT_THAT(status.to_string(), ::testing::StartsWith("Internal error: injected flush_pk_memtable failure"));
+    ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(fixture.target_tablet_id));
+    EXPECT_EQ(inventory_before, inventory_after);
+    for (const auto& source_path : fixture.source_sst_paths) {
+        ASSERT_OK(FileSystem::Default()->path_exists(source_path));
+        ASSIGN_OR_ABORT(auto file, fs::new_random_access_file(source_path));
+        ASSIGN_OR_ABORT(auto size, file->get_size());
+        EXPECT_GT(size, 0);
+    }
+    EXPECT_TRUE(_tablet_manager->get_tablet_metadata(fixture.target_tablet_id, fixture.new_version)
+                        .status()
+                        .is_not_found());
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_dropped_non_shared_modern_watermark_does_not_hide_live_tail) {
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
@@ -18142,6 +18276,200 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_sstable) {
     EXPECT_FALSE(armed.ok()) << "hook not reached after the rebuilt sstable was written";
 
     EXPECT_OK(run_merge());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_after_registered_legacy_output) {
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    set_failpoint_mode("tablet_merge_after_register_new_sstable", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_failpoints([&] {
+        set_failpoint_mode("tablet_merge_after_register_new_sstable", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+    });
+
+    constexpr int64_t kBaseVersion = 1;
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+    const std::string legacy_filename = "inner_cleanup_legacy_shared.sst";
+    const std::string legacy_path = _tablet_manager->sst_location(child_a, legacy_filename);
+    const std::string left_key = encode_int_primary_key(10);
+    const uint64_t legacy_filesize = write_legacy_pk_sstable(
+            legacy_path,
+            {{left_key, /*rssid=*/1, /*rowid=*/0}, {encode_int_primary_key(60), /*rssid=*/2, /*rowid=*/0}});
+
+    auto make_source = [&](int64_t tablet_id, int lower, int upper, uint32_t rowset_id, const std::string& segment) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(kBaseVersion);
+        metadata->set_next_rowset_id(3);
+        set_two_column_pk_schema(metadata.get(), 4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(kBaseVersion);
+        const uint64_t segment_size =
+                write_two_column_segment(tablet_id, segment, /*num_rows=*/1, [](int key) { return key * 10; }, lower);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment);
+        segment_meta->set_size(segment_size);
+        segment_meta->set_shared(true);
+        stamp_physical_identity_uid(rowset, segment);
+        auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
+        sstable->set_filename(legacy_filename);
+        sstable->set_filesize(legacy_filesize);
+        sstable->set_shared(true);
+        sstable->set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+        return metadata;
+    };
+    auto source_a = make_source(child_a, 0, 50, 1, "inner_cleanup_legacy_left.dat");
+    auto source_b = make_source(child_b, 50, 100, 2, "inner_cleanup_legacy_right.dat");
+    ASSERT_OK(put_tablet_metadata(source_a));
+    ASSERT_OK(put_tablet_metadata(source_b));
+    ASSIGN_OR_ABORT(auto inventory_before, sst_inventory(merged_tablet));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kBaseVersion, kNewVersion,
+                                                      txn_info, false, tablet_metadatas, tablet_ranges);
+        EXPECT_FALSE(status.ok()) << "later registered-output failpoint must reject merge attempt " << attempt;
+        EXPECT_THAT(status.to_string(), ::testing::HasSubstr("inject error tablet_merge_after_register_new_sstable"));
+        EXPECT_TRUE(tablet_metadatas.empty());
+        auto target_metadata = _tablet_manager->get_tablet_metadata(merged_tablet, kNewVersion);
+        EXPECT_TRUE(target_metadata.status().is_not_found());
+        ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(merged_tablet));
+        EXPECT_EQ(inventory_before, inventory_after);
+    }
+    ASSERT_OK(FileSystem::Default()->path_exists(legacy_path));
+    ASSIGN_OR_ABORT(auto source_sstable,
+                    lake::PersistentIndexSstable::new_sstable(source_a->sstable_meta().sstables(0), legacy_path,
+                                                              /*cache=*/nullptr, /*need_filter=*/false,
+                                                              /*delvec=*/nullptr, source_a, _tablet_manager.get()));
+    sstable::ReadOptions read_options;
+    read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iterator(source_sstable->new_iterator(read_options));
+    iterator->Seek(left_key);
+    ASSERT_TRUE(iterator->Valid());
+    EXPECT_EQ(left_key, iterator->key().to_string());
+    ASSERT_OK(iterator->status());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_inner_cleanup_preserves_shared_source_filename) {
+    set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+    set_failpoint_mode("tablet_merge_after_register_new_sstable", FailPointTriggerModeType::ENABLE);
+    DeferOp restore_failpoints([&] {
+        set_failpoint_mode("tablet_merge_after_register_new_sstable", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+    });
+
+    constexpr int64_t kBaseVersion = 1;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+    const std::string shared_filename = "inner_cleanup_shared_modern.sst";
+    const std::string shared_path = _tablet_manager->sst_location(child_a, shared_filename);
+    const std::string shared_key = encode_int_primary_key(10);
+    const uint64_t shared_filesize = write_versioned_pk_sstable(
+            shared_path, {{shared_key, /*version=*/1, /*rssid=*/1, /*rowid=*/0},
+                          {encode_int_primary_key(60), /*version=*/1, /*rssid=*/2, /*rowid=*/0}});
+    const std::string legacy_filename = "inner_cleanup_generated_legacy.sst";
+    const uint64_t legacy_filesize = write_legacy_pk_sstable(_tablet_manager->sst_location(child_a, legacy_filename),
+                                                             {{encode_int_primary_key(20), 1, 0}});
+
+    auto make_source = [&](int64_t tablet_id, int lower, int upper, uint32_t rowset_id, uint32_t shared_rssid,
+                           const std::string& segment) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(kBaseVersion);
+        metadata->set_next_rowset_id(3);
+        set_two_column_pk_schema(metadata.get(), 4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(kBaseVersion);
+        const uint64_t segment_size =
+                write_two_column_segment(tablet_id, segment, /*num_rows=*/1, [](int key) { return key * 10; }, lower);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment);
+        segment_meta->set_size(segment_size);
+        segment_meta->set_shared(true);
+        stamp_physical_identity_uid(rowset, segment);
+        add_shared_rssid_sstable(metadata.get(), shared_filename, shared_rssid, kBaseVersion, 0, shared_filesize);
+        return metadata;
+    };
+    auto source_a = make_source(child_a, 0, 50, 1, 1, "inner_cleanup_shared_left.dat");
+    auto* legacy = source_a->mutable_sstable_meta()->add_sstables();
+    legacy->set_filename(legacy_filename);
+    legacy->set_filesize(legacy_filesize);
+    legacy->set_shared(true);
+    legacy->set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+    auto source_b = make_source(child_b, 50, 100, 2, 0, "inner_cleanup_shared_right.dat");
+    ASSERT_OK(put_tablet_metadata(source_a));
+    ASSERT_OK(put_tablet_metadata(source_b));
+    ASSIGN_OR_ABORT(auto inventory_before, sst_inventory(merged_tablet));
+
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, kBaseVersion, kBaseVersion + 1,
+                                                  txn_info, false, tablet_metadatas, tablet_ranges);
+    EXPECT_FALSE(status.ok());
+    EXPECT_THAT(status.to_string(), ::testing::HasSubstr("inject error tablet_merge_after_register_new_sstable"));
+    EXPECT_TRUE(tablet_metadatas.empty());
+    ASSIGN_OR_ABORT(auto inventory_after, sst_inventory(merged_tablet));
+    EXPECT_EQ(inventory_before, inventory_after);
+    ASSERT_OK(FileSystem::Default()->path_exists(shared_path));
+    ASSIGN_OR_ABORT(auto source_sstable,
+                    lake::PersistentIndexSstable::new_sstable(source_a->sstable_meta().sstables(0), shared_path,
+                                                              /*cache=*/nullptr, /*need_filter=*/false,
+                                                              /*delvec=*/nullptr, source_a, _tablet_manager.get()));
+    sstable::ReadOptions read_options;
+    read_options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iterator(source_sstable->new_iterator(read_options));
+    iterator->Seek(shared_key);
+    ASSERT_TRUE(iterator->Valid());
+    EXPECT_EQ(shared_key, iterator->key().to_string());
+    ASSERT_OK(iterator->status());
 }
 
 } // namespace starrocks
