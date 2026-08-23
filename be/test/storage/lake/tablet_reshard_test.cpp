@@ -363,25 +363,34 @@ protected:
         return metadata;
     }
 
-    StatusOr<TabletMetadataPtr> merge_modern_shared_occurrences(const TabletMetadataPtr& child_a,
-                                                                const TabletMetadataPtr& child_b, int64_t merged_tablet,
-                                                                int64_t base_version = 1, int64_t new_version = 2,
-                                                                int64_t txn_id = 1) {
-        RETURN_IF_ERROR(put_tablet_metadata(child_a));
-        RETURN_IF_ERROR(put_tablet_metadata(child_b));
+    Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
+                                    int64_t base_version, int64_t new_version, int64_t txn_id,
+                                    std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas) {
+        for (const auto& source : sources) {
+            RETURN_IF_ERROR(put_tablet_metadata(source));
+        }
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
-        merging_info.add_old_tablet_ids(child_a->id());
-        merging_info.add_old_tablet_ids(child_b->id());
+        for (const auto& source : sources) {
+            merging_info.add_old_tablet_ids(source->id());
+        }
         merging_info.set_new_tablet_id(merged_tablet);
         TxnInfoPB txn_info;
         txn_info.set_txn_id(txn_id);
         txn_info.set_commit_time(1);
         txn_info.set_gtid(1);
-        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version,
-                                                        new_version, txn_info, false, tablet_metadatas, tablet_ranges));
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+    }
+
+    StatusOr<TabletMetadataPtr> merge_modern_shared_occurrences(const TabletMetadataPtr& child_a,
+                                                                const TabletMetadataPtr& child_b, int64_t merged_tablet,
+                                                                int64_t base_version = 1, int64_t new_version = 2,
+                                                                int64_t txn_id = 1) {
+        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+        RETURN_IF_ERROR(publish_resharding_merge({child_a, child_b}, merged_tablet, base_version, new_version, txn_id,
+                                                 tablet_metadatas));
         return tablet_metadatas.at(merged_tablet);
     }
 
@@ -452,25 +461,9 @@ protected:
     StatusOr<TabletMetadataPtr> merge_delvec_sources(const std::vector<TabletMetadataPtr>& sources,
                                                      int64_t merged_tablet, int64_t new_version = 2,
                                                      int64_t txn_id = 10) {
-        for (const auto& source : sources) {
-            RETURN_IF_ERROR(put_tablet_metadata(source));
-        }
-
-        ReshardingTabletInfoPB resharding_tablet;
-        auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
-        for (const auto& source : sources) {
-            merging_info.add_old_tablet_ids(source->id());
-        }
-        merging_info.set_new_tablet_id(merged_tablet);
-
-        TxnInfoPB txn_info;
-        txn_info.set_txn_id(txn_id);
-        txn_info.set_commit_time(1);
-        txn_info.set_gtid(1);
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, /*base_version=*/1,
-                                                        new_version, txn_info, false, tablet_metadatas, tablet_ranges));
+        RETURN_IF_ERROR(publish_resharding_merge(sources, merged_tablet, /*base_version=*/1, new_version, txn_id,
+                                                 tablet_metadatas));
         auto merged_it = tablet_metadatas.find(merged_tablet);
         if (merged_it == tablet_metadatas.end()) {
             return Status::InternalError("merged delvec test metadata is missing");
