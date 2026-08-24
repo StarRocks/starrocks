@@ -347,8 +347,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
         try {
-            return withAuthRecovery(() -> delegate.get().dropTable(buildContext(context),
-                    TableIdentifier.of(convertDbNameToNamespace(dbName), tableName)));
+            TableIdentifier tableIdentifier = TableIdentifier.of(convertDbNameToNamespace(dbName), tableName);
+            if (purge) {
+                return withAuthRecovery(() -> delegate.get().purgeTable(buildContext(context), tableIdentifier));
+            } else {
+                return withAuthRecovery(() -> delegate.get().dropTable(buildContext(context), tableIdentifier));
+            }
         } catch (RESTException re) {
             LOG.error("Failed to drop table using REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
             throw new StarRocksConnectorException("Failed to drop table using REST Catalog", re);
