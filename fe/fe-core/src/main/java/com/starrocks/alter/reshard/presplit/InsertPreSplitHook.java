@@ -71,6 +71,9 @@ public final class InsertPreSplitHook {
 
     private static final Logger LOG = LogManager.getLogger(InsertPreSplitHook.class);
 
+    /** No reshard job was admitted, so the caller has nothing left to wait for. */
+    public static final long NO_RESHARD_JOB = PreSplitFlow.NO_RESHARD_JOB;
+
     /** Order matters only for reporting; matches() is mutually exclusive. */
     private static final List<InsertPreSplitSource> SOURCES =
             List.of(new FilesPreSplitSource(), new TablePreSplitSource());
@@ -90,18 +93,24 @@ public final class InsertPreSplitHook {
      * Runs the dynamic-overwrite variant after its transaction has been opened but before the
      * load is replanned and starts writing. Fail-safe like {@link #maybeRunPreSplit}: any failure
      * leaves the runtime auto-partition path to create or reuse the temporary partitions.
+     *
+     * @return the id of the reshard job this hook admitted, or {@link #NO_RESHARD_JOB} when it
+     *         admitted none. The caller must keep it: this is the one hook whose caller goes on to
+     *         commit under the {@code TABLET_RESHARD} state its own job holds, and the id is what
+     *         lets that commit tell its own reshard apart from a foreign one.
      */
-    public static void maybeRunDynamicOverwritePreSplit(
+    public static long maybeRunDynamicOverwritePreSplit(
             InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId) {
         try {
             if (!passesDynamicOverwritePreFilters(insertStmt, context, overwriteTransactionId)) {
-                return;
+                return NO_RESHARD_JOB;
             }
-            tryRunEligibleInsert(insertStmt, context, overwriteTransactionId,
+            return tryRunEligibleInsert(insertStmt, context, overwriteTransactionId,
                     PreSplitPartitionScope.unrestricted(), false);
         } catch (Throwable unexpected) {
             LOG.warn("Sample-Based Tablet Pre-Split (dynamic INSERT OVERWRITE) hook failed; "
                     + "proceeding without pre-split", unexpected);
+            return NO_RESHARD_JOB;
         }
     }
 
@@ -203,44 +212,49 @@ public final class InsertPreSplitHook {
                 PreSplitPartitionScope.fromInsert(insertStmt), false);
     }
 
-    private static void tryRunEligibleInsert(
+    /**
+     * @return the reshard job id only the dynamic-overwrite route reports (its caller has to commit
+     *         under the state that job holds); {@link #NO_RESHARD_JOB} for every other route, whose
+     *         callers do not care what was admitted.
+     */
+    private static long tryRunEligibleInsert(
             InsertStmt insertStmt, ConnectContext context, long overwriteTransactionId,
             PreSplitPartitionScope partitionScope, boolean staticOverwrite)
             throws AccessDeniedException {
         SelectRelation selectRelation = extractSelectRelation(insertStmt);
         if (selectRelation == null) {
-            return;
+            return NO_RESHARD_JOB;
         }
         InsertPreSplitSource source = selectSource(insertStmt, selectRelation);
         if (source == null) {
-            return;
+            return NO_RESHARD_JOB;
         }
         // Config gate AFTER candidate identification: only a real candidate whose path flag is off
         // records DISABLED_BY_CONFIG (no per-statement inflation, no double-count across sources).
         if (!source.configEnabled()) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_CONFIG);
-            return;
+            return NO_RESHARD_JOB;
         }
         if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
-            return;
+            return NO_RESHARD_JOB;
         }
         ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
         if (resolvedTable == null) {
-            return;
+            return NO_RESHARD_JOB;
         }
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(resolvedTable.olapTable());
         if (!targetColumnListIsPreSplitSafe(insertStmt, resolvedTable.olapTable(), sortKeyColumns)) {
-            return;
+            return NO_RESHARD_JOB;
         }
         authorizeTargetSideEffects(resolvedTable, context);
 
         PreSplitFlow.Prepared prepared = source.prepare(
                 insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
         if (prepared == null) {
-            return;
+            return NO_RESHARD_JOB;
         }
         if (overwriteTransactionId > 0) {
-            PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+            return PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
                     prepared, source.loadKind(), context::isStatementCancelled, context, overwriteTransactionId);
         } else if (staticOverwrite) {
             PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
@@ -249,6 +263,7 @@ public final class InsertPreSplitHook {
             PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
                     prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
         }
+        return NO_RESHARD_JOB;
     }
 
     private static boolean passesCommonPreFilters(InsertStmt insertStmt, ConnectContext context) {

@@ -229,8 +229,10 @@ public class PreSplitFlowTest {
                             any(), any(), anyList(), anyInt(), any(), any(), any(), eq(42L)))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
-            PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
-                    () -> false, mock(ConnectContext.class), 42L);
+            Assertions.assertEquals(PreSplitFlow.NO_RESHARD_JOB,
+                    PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                            () -> false, mock(ConnectContext.class), 42L),
+                    "a skipped submission leaves the caller nothing to wait for");
 
             grouper.verify(() -> PartitionSampleGrouper.groupTemporary(
                     any(SampleSet.class), eq(table), any(ConnectContext.class),
@@ -286,6 +288,7 @@ public class PreSplitFlowTest {
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
         SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
         TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+        when(combinedJob.getJobId()).thenReturn(9911L);
 
         try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
@@ -301,8 +304,11 @@ public class PreSplitFlowTest {
                             any(), any(), anyList(), anyInt(), any(), any(), any(), eq(42L)))
                     .thenReturn(new PreSplitOutcome.SubmittedCombined(combinedJob, List.of()));
 
-            PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
-                    () -> false, mock(ConnectContext.class), 42L);
+            // The id is reported back so the overwrite's commit can wait for THIS job instead of
+            // failing on the table state it holds -- the exclusion above is gone by then.
+            Assertions.assertEquals(9911L,
+                    PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                            () -> false, mock(ConnectContext.class), 42L));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
                     any(), eq(table), eq(combinedJob), any()), times(1));
@@ -331,8 +337,11 @@ public class PreSplitFlowTest {
                     MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                     MockedStatic<TabletPreSplitCoordinator> coordinator =
                             Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
-                PreSplitFlow.runDynamicOverwriteFlow(database, testCase.table(), prepared,
-                        LoadKind.INSERT_FROM_TABLE, () -> false, mock(ConnectContext.class), testCase.txnId());
+                Assertions.assertEquals(PreSplitFlow.NO_RESHARD_JOB,
+                        PreSplitFlow.runDynamicOverwriteFlow(database, testCase.table(), prepared,
+                                LoadKind.INSERT_FROM_TABLE, () -> false, mock(ConnectContext.class),
+                                testCase.txnId()),
+                        testCase.name());
 
                 grouper.verifyNoInteractions();
                 coordinator.verifyNoInteractions();
