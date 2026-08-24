@@ -2626,6 +2626,14 @@ struct TGetTabletMetadataRequest {
     5: optional i64 version;
 }
 
+// Extension point for TCloudTabletMeta. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TCloudTabletMeta
+// fields belong on TCloudTabletMeta itself, whose remaining numbers are free.
+struct TCloudTabletMetaExt {
+}
+
 // Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
 // on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
 // must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
@@ -2642,7 +2650,11 @@ struct TCloudTabletMeta {
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
     10: optional i32 compression_level;
+<<<<<<< HEAD
     11: optional bool enable_change_data_capture;
+=======
+    11: optional TCloudTabletMetaExt ext;
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TGetTabletMetadataResponse {

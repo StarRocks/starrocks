@@ -422,19 +422,28 @@ enum TEtlState {
     UNKNOWN
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TTableType {
-    MYSQL_TABLE,
-    OLAP_TABLE,
-    SCHEMA_TABLE,
-    KUDU_TABLE, // Deprecated
-    BROKER_TABLE,
-    ES_TABLE,
-    HDFS_TABLE,
-    ICEBERG_TABLE,
-    HUDI_TABLE,
-    JDBC_TABLE,
-    PAIMON_TABLE,
+    MYSQL_TABLE = 0,
+    OLAP_TABLE = 1,
+    SCHEMA_TABLE = 2,
+    KUDU_TABLE = 3, // Deprecated
+    BROKER_TABLE = 4,
+    ES_TABLE = 5,
+    HDFS_TABLE = 6,
+    ICEBERG_TABLE = 7,
+    HUDI_TABLE = 8,
+    JDBC_TABLE = 9,
+    PAIMON_TABLE = 10,
     VIEW = 20,
+<<<<<<< HEAD
     MATERIALIZED_VIEW,
     FILE_TABLE,
     DELTALAKE_TABLE,
@@ -453,6 +462,25 @@ enum TTableType {
     LANCE_TABLE,
     FLUSS_TABLE,
     STARROCKS_TABLE
+=======
+    MATERIALIZED_VIEW = 21,
+    FILE_TABLE = 22,
+    DELTALAKE_TABLE = 23,
+    TABLE_FUNCTION_TABLE = 24,
+    ODPS_TABLE = 25,
+    LOGICAL_ICEBERG_METADATA_TABLE = 26,
+    ICEBERG_REFS_TABLE = 27,
+    ICEBERG_HISTORY_TABLE = 28,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE = 29,
+    ICEBERG_SNAPSHOTS_TABLE = 30,
+    ICEBERG_MANIFESTS_TABLE = 31,
+    ICEBERG_FILES_TABLE = 32,
+    ICEBERG_PARTITIONS_TABLE = 33,
+    BENCHMARK_TABLE = 34,
+    ICEBERG_PROPERTIES_TABLE = 35,
+    LANCE_TABLE = 36,
+    FLUSS_TABLE = 37
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 enum TKeysType {
@@ -608,6 +636,14 @@ enum TIcebergFileContent {
     EQUALITY_DELETES,
 }
 
+// Extension point for TIcebergDataFile. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TIcebergDataFile
+// fields belong on TIcebergDataFile itself, whose remaining numbers are free.
+struct TIcebergDataFileExt {
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -619,6 +655,7 @@ struct TIcebergDataFile {
     8: optional string partition_null_fingerprint;
     9: optional TIcebergFileContent file_content;
     10: optional string referenced_data_file;
+<<<<<<< HEAD
 
     // Enterprise-only fields start at 50, reserve some fields for upstream StarRocks so a sync
     // never collides on ordinals.
@@ -646,6 +683,9 @@ struct TIcebergPreviousDeleteFile {
     // Byte length of the delete file (DeleteFile.fileSizeInBytes); lets the BE merge path
     // avoid get_file_size, which is unsupported on object storage.
     8: optional i64 file_size_in_bytes
+=======
+    11: optional TIcebergDataFileExt ext;
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct THiveFileInfo {
@@ -655,6 +695,14 @@ struct THiveFileInfo {
     5: optional i64 file_size_in_bytes
 }
 
+// Extension point for TSinkCommitInfo. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TSinkCommitInfo
+// fields belong on TSinkCommitInfo itself, whose remaining numbers are free.
+struct TSinkCommitInfoExt {
+}
+
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
@@ -662,10 +710,14 @@ struct TSinkCommitInfo {
     100: optional bool is_overwrite;
     101: optional string staging_dir
     102: optional bool is_rewrite;
+<<<<<<< HEAD
 
     // Enterprise-only fields start at 150, reserve some fields for upstream StarRocks so a sync
     // never collides on ordinals.
     150: optional list<TIcebergPreviousDeleteFile> rewritten_delete_files
+=======
+    103: optional TSinkCommitInfoExt ext;
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TSnapshotInfo {

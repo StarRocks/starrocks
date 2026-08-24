@@ -369,6 +369,14 @@ enum CompactionStrategyPB {
     REAL_TIME = 1;
 }
 
+// Extension point for TabletMetadataPB. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TabletMetadataPB
+// fields belong on TabletMetadataPB itself, whose remaining numbers are free.
+message TabletMetadataExtPB {
+}
+
 message TabletMetadataPB {
     optional int64 id = 1;
     optional int64 version = 2;
@@ -419,11 +427,29 @@ message TabletMetadataPB {
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
 
+<<<<<<< HEAD
     // CDC: metadata ancestor chain for reverse traversal.
     // chain[0] = direct parent version; subsequent elements = older ancestors.
     // Length capped at max(1, cloud_native_tablet_metadata_ancestors_recorded) (default 5).
     repeated int64 metadata_ancestors = 50;
     optional CdcMetadataPB cdc_metadata = 51;
+=======
+    // Tags 50, 51 are occupied by downstream distributions and already persisted
+    // in downstream tablet metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    repeated int64 placeholder_50 = 50;
+    optional bytes placeholder_51 = 51;
+    optional TabletMetadataExtPB ext = 25;
+}
+
+// Extension point for MetadataUpdateInfoPB. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New
+// MetadataUpdateInfoPB fields belong on MetadataUpdateInfoPB itself, whose
+// remaining numbers are free.
+message MetadataUpdateInfoExtPB {
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 message MetadataUpdateInfoPB {
@@ -435,7 +461,11 @@ message MetadataUpdateInfoPB {
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
     optional TabletRangePB tablet_range = 7;
+<<<<<<< HEAD
     optional bool enable_change_data_capture = 8;
+=======
+    optional MetadataUpdateInfoExtPB ext = 8;
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 message BundleTabletMetadataPB {

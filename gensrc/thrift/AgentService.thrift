@@ -105,6 +105,14 @@ enum TCompactionStrategy {
     REAL_TIME = 1
 }
 
+// Extension point for TCreateTabletReq. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TCreateTabletReq
+// fields belong on TCreateTabletReq itself, whose remaining numbers are free.
+struct TCreateTabletReqExt {
+}
+
 struct TCreateTabletReq {
     1: required Types.TTabletId tablet_id
     2: required TTabletSchema tablet_schema
@@ -146,6 +154,7 @@ struct TCreateTabletReq {
     // New fields should be added above this comment.
     // NOTE: If you add a new field here that ends up in tablet metadata,
     // also update TCloudTabletMeta in FrontendService.thrift to keep the two paths in sync.
+    28: optional TCreateTabletReqExt ext
 }
 
 struct TDropTabletReq {
@@ -523,7 +532,16 @@ struct TRestoreTabletResult {
      2: optional string error_msg
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TTabletMetaType {
+<<<<<<< HEAD
     PARTITIONID,
     INMEMORY,
     ENABLE_PERSISTENT_INDEX,
@@ -541,6 +559,32 @@ enum TTabletMetaType {
     ENABLE_FILE_BUNDLING,
     COMPACTION_STRATEGY,
     CHANGE_DATA_CAPTURE
+=======
+    PARTITIONID = 0,
+    INMEMORY = 1,
+    ENABLE_PERSISTENT_INDEX = 2,
+    WRITE_QUORUM = 3,
+    REPLICATED_STORAGE = 4,
+    DISABLE_BINLOG = 5,
+    BINLOG_CONFIG = 6,
+    BUCKET_SIZE = 7,
+    PRIMARY_INDEX_CACHE_EXPIRE_SEC = 8,
+    STORAGE_TYPE = 9,
+    MUTABLE_BUCKET_NUM = 10,
+    ENABLE_LOAD_PROFILE = 11,
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 12,
+    FLAT_JSON_CONFIG = 13,
+    ENABLE_FILE_BUNDLING = 14,
+    COMPACTION_STRATEGY = 15
+}
+
+// Extension point for TTabletMetaInfo. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TTabletMetaInfo
+// fields belong on TTabletMetaInfo itself, whose remaining numbers are free.
+struct TTabletMetaInfoExt {
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TTabletMetaInfo {
@@ -560,7 +604,11 @@ struct TTabletMetaInfo {
     13: optional bool bundle_tablet_metadata;
     14: optional TCompactionStrategy compaction_strategy;
     15: optional Types.TTabletRange tablet_range;
+<<<<<<< HEAD
     16: optional bool enable_change_data_capture;
+=======
+    16: optional TTabletMetaInfoExt ext;
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TUpdateTabletMetaInfoReq {

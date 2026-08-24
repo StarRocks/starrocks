@@ -44,7 +44,16 @@ include "RuntimeFilter.thrift"
 include "CloudConfiguration.thrift"
 include "DataCache.thrift"
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TPlanNodeType {
+<<<<<<< HEAD
   OLAP_SCAN_NODE,
   MYSQL_SCAN_NODE,
   CSV_SCAN_NODE,
@@ -90,13 +99,57 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
+  CHANGES_SCAN_NODE,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE,
+  STARROCKS_SCAN_NODE
+=======
+  OLAP_SCAN_NODE = 0,
+  MYSQL_SCAN_NODE = 1,
+  CSV_SCAN_NODE = 2,
+  SCHEMA_SCAN_NODE = 3,
+  HASH_JOIN_NODE = 4,
+  MERGE_JOIN_NODE = 5,
+  AGGREGATION_NODE = 6,
+  PRE_AGGREGATION_NODE = 7,
+  SORT_NODE = 8,
+  EXCHANGE_NODE = 9,
+  MERGE_NODE = 10,
+  SELECT_NODE = 11,
+  CROSS_JOIN_NODE = 12,
+  META_SCAN_NODE = 13,
+  ANALYTIC_EVAL_NODE = 14,
+  OLAP_REWRITE_NODE = 15,
+  KUDU_SCAN_NODE = 16,
+  FILE_SCAN_NODE = 17,
+  EMPTY_SET_NODE = 18,
+  UNION_NODE = 19,
+  ES_SCAN_NODE = 20,
+  ES_HTTP_SCAN_NODE = 21,
+  REPEAT_NODE = 22,
+  ASSERT_NUM_ROWS_NODE = 23,
+  INTERSECT_NODE = 24,
+  EXCEPT_NODE = 25,
+  ADAPTER_NODE = 26,
+  HDFS_SCAN_NODE = 27,
+  PROJECT_NODE = 28,
+  TABLE_FUNCTION_NODE = 29,
+  DECODE_NODE = 30,
+  JDBC_SCAN_NODE = 31,
+  LAKE_SCAN_NODE = 32,
+  NESTLOOP_JOIN_NODE = 33,
 
-  // Enterprise-only values start at 300, reserve some values for upstream StarRocks so a sync
-  // never collides on ordinals. Keep this block last: an implicit value after an explicit one
-  // continues from it.
-  CHANGES_SCAN_NODE = 300,
-  STARROCKS_SCAN_NODE = 301
+  STREAM_SCAN_NODE = 34,
+  STREAM_JOIN_NODE = 35,
+  STREAM_AGG_NODE = 36,
+  LAKE_META_SCAN_NODE = 37,
+  CAPTURE_VERSION_NODE = 38,
+  RAW_VALUES_NODE = 39,
+  FETCH_NODE = 40,
+  LOOKUP_NODE = 41,
+  BENCHMARK_SCAN_NODE = 42,
+  LAKE_CACHE_STATS_SCAN_NODE = 43,
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 // phases of an execution node
@@ -398,6 +451,14 @@ struct TDeletionVectorDescriptor {
   5: optional i64 cardinality
 }
 
+// Extension point for THdfsScanRange. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New THdfsScanRange
+// fields belong on THdfsScanRange itself, whose remaining numbers are free.
+struct THdfsScanRangeExt {
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -520,6 +581,7 @@ struct THdfsScanRange {
 
     // fluss split info
     42: optional string fluss_split_info
+    43: optional THdfsScanRangeExt ext
 }
 
 struct TBinlogScanRange {
@@ -537,6 +599,7 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+<<<<<<< HEAD
 // How the BE derives one partition/tablet's changes for a CHANGES range.
 enum TChangeDerivationMode {
     // Diff adjacent versions along the version chain over (base_version, head_version].
@@ -594,6 +657,14 @@ struct TStarRocksScanRange {
   2: optional Types.TNetworkAddress remote_be
   3: optional TStarRocksScanTransport transport
   4: optional i64 packet_seq
+=======
+// Extension point for TScanRange. DO NOT MODIFY: do not add fields here, and
+// do not rename, renumber or remove it. The field numbers inside are allocated
+// separately, so anything added here collides with them, and renaming or
+// removing it breaks whatever fills it in. New TScanRange fields belong on
+// TScanRange itself, whose remaining numbers are free.
+struct TScanRangeExt {
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -611,9 +682,13 @@ struct TScanRange {
   30: optional TBinlogScanRange binlog_scan_range
 
   40: optional TBenchmarkScanRange benchmark_scan_range
+<<<<<<< HEAD
 
   50: optional TChangesScanRange changes_scan_range
   51: optional TStarRocksScanRange starrocks_scan_range
+=======
+  41: optional TScanRangeExt ext
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TMySQLScanNode {
@@ -683,6 +758,14 @@ struct TFrontend {
   4: optional i32 rpc_port
 }
 
+// Extension point for TSchemaScanNode. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TSchemaScanNode
+// fields belong on TSchemaScanNode itself, whose remaining numbers are free.
+struct TSchemaScanNodeExt {
+}
+
 struct TSchemaScanNode {
   1: required Types.TTupleId tuple_id
 
@@ -713,8 +796,12 @@ struct TSchemaScanNode {
   26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
+<<<<<<< HEAD
   102: optional i64 bookmark_id
   103: optional i64 db_id
+=======
+  102: optional TSchemaScanNodeExt ext;
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 enum TAccessPathType {
@@ -818,6 +905,14 @@ struct TTableSampleOptions {
   5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
+// Extension point for TOlapScanNode. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TOlapScanNode
+// fields belong on TOlapScanNode itself, whose remaining numbers are free.
+struct TOlapScanNodeExt {
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -870,6 +965,7 @@ struct TOlapScanNode {
   56: optional bool enable_global_late_materialization
 
   57: optional list<Exprs.TExpr> partition_conjuncts
+  59: optional TOlapScanNodeExt ext
 }
 
 struct TJDBCScanNode {
@@ -878,6 +974,14 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+}
+
+// Extension point for TLakeScanNode. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TLakeScanNode
+// fields belong on TLakeScanNode itself, whose remaining numbers are free.
+struct TLakeScanNodeExt {
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode
@@ -934,6 +1038,7 @@ struct TLakeScanNode {
   62: optional bool use_prepared_physical_split_scan
 
   63: optional TTableSampleOptions sample_options
+  64: optional TLakeScanNodeExt ext
 }
 
 struct TEqJoinCondition {
@@ -1691,6 +1796,14 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
+// Extension point for TPlanNode. DO NOT MODIFY: do not add fields here, and do
+// not rename, renumber or remove it. The field numbers inside are allocated
+// separately, so anything added here collides with them, and renaming or
+// removing it breaks whatever fills it in. New TPlanNode fields belong on
+// TPlanNode itself, whose remaining numbers are free.
+struct TPlanNodeExt {
+}
+
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -1776,11 +1889,16 @@ struct TPlanNode {
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
+<<<<<<< HEAD
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node;
 
   150: optional TChangesScanNode changes_scan_node;
 
   151: optional TStarRocksScanNode starrocks_scan_node;
+=======
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+  87: optional TPlanNodeExt ext
+>>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
