@@ -19,6 +19,11 @@
 #include <starlet.h>
 
 #include <memory>
+<<<<<<< HEAD:be/src/service/staros_worker.h
+=======
+#include <mutex>
+#include <optional>
+>>>>>>> 3b5300a428 ([BugFix] Skip table metrics for non-table StarOS shards (#78116)):be/src/compute_env/staros/staros_worker.h
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -120,7 +125,7 @@ private:
             _add_shard_listener(shardId);
         }
     }
-    uint64_t get_table_id(const ShardInfo& shared_info);
+    std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
 
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
