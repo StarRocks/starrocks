@@ -105,12 +105,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
 
     // Create segment iterators for update files
     OlapReaderStatistics stats;
-    // Emit every row of a shared segment and answer ownership per row instead of letting the tablet
-    // range narrow the iterator: the two branches this handler takes below -- apply the update through
-    // a DCG, or materialize the row into a new segment -- cannot be told apart from the rss_rowid
-    // alone, so it needs the mask, and the mask only exists if the rows reach the selector.
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats,
-                                                                                /*apply_tablet_range=*/false));
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == num_segments);
     // Only a SPLIT child's cross publish gets one; nullptr on every ordinary publish, and then every
     // row is owned. Held by the handler because the iterators keep referencing it.
@@ -336,10 +331,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
-    // Unclipped for the same reason site 1 is: the upt rowids in |upt_id_to_rowid_pairs| index into the
-    // chunk this reads, so both must address the update segment the same way.
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats,
-                                                                                /*apply_tablet_range=*/false));
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {

@@ -40,6 +40,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -516,6 +517,76 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
     }
 }
 
+// Append |count| copies of the value the merge produces for a row that has no old value: the column's
+// declared default, or the expression default this transaction carries for it, exactly as
+// UpdateManager::get_column_values fills its default slot -- which is what makes a narrowed publish and
+// a per-row-selected one write the same segment. |tablet_column| null means the caller has no such
+// notion (the auto-increment column, whose no-old-row values come from the FE allocation rather than a
+// default) and gets the column's plain zero value.
+static Status append_no_old_row_values(const TabletColumn* tablet_column,
+                                       const std::map<std::string, std::string>& column_to_expr_value, size_t count,
+                                       Column* column) {
+    if (count == 0) {
+        return Status::OK();
+    }
+    bool has_default_value = tablet_column != nullptr && tablet_column->has_default_value();
+    std::string default_value = has_default_value ? tablet_column->default_value() : "";
+    if (tablet_column != nullptr) {
+        auto iter = column_to_expr_value.find(std::string(tablet_column->name()));
+        if (iter != column_to_expr_value.end()) {
+            has_default_value = true;
+            default_value = iter->second;
+        }
+    }
+    if (!has_default_value) {
+        TRY_CATCH_BAD_ALLOC(column->append_default(count));
+        return Status::OK();
+    }
+    const TypeInfoPtr& type_info = get_type_info(*tablet_column);
+    auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+            true, default_value, tablet_column->is_nullable(), type_info, tablet_column->length(), count);
+    ColumnIteratorOptions iter_opts;
+    RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+    return default_value_iter->fetch_values_by_rowid(nullptr, count, column);
+}
+
+// Pad the merged values out to one per row of the SOURCE segment, defaulting the rows a sibling owns.
+//
+// On a cross publish the publish iterator is narrowed to this tablet's slice of the shared segment
+// (get_each_segment_iterator -> Rowset::set_segment_tablet_range), so the state built from it covers
+// only [base, base + k) of the segment. The rewriters are not narrowed and cannot be:
+// rewrite_partial_update copies the source segment's own columns verbatim -- every row of them -- and
+// rewrite_auto_increment_lake re-reads every row, so a short column makes the segment they emit
+// inconsistent. The first fails outright (SegmentWriter::finalize_columns, "num rows written
+// mismatch"), which fails the publish for good since publish retries; the second builds a chunk whose
+// columns disagree in length.
+//
+// The padded rows belong to a sibling, so a default is as good as anything: nothing reads them from
+// here, because the rowset carries this tablet's range and Rowset::set_segment_tablet_range clips the
+// rewrite output on it -- the output file is private (MetaFileBuilder clears `shared`) but the rows in
+// it are not all ours. Returns the bytes added, for the caller's memory accounting.
+static StatusOr<size_t> pad_rewrite_column_to_segment(MutableColumnPtr* column, uint32_t base, size_t num_segment_rows,
+                                                      const TabletColumn* tablet_column,
+                                                      const std::map<std::string, std::string>& column_to_expr_value) {
+    const size_t merged_rows = (*column)->size();
+    if (merged_rows == num_segment_rows) {
+        // Not narrowed: an ordinary publish, or a cross publish whose ownership was decided per row.
+        return 0;
+    }
+    RETURN_ERROR_IF_FALSE(base + merged_rows <= num_segment_rows,
+                          fmt::format("rewrite column does not fit the source segment, base:{} rows:{} segment:{}",
+                                      base, merged_rows, num_segment_rows));
+    const size_t before = (*column)->memory_usage();
+    auto padded = (*column)->clone_empty();
+    RETURN_IF_ERROR(append_no_old_row_values(tablet_column, column_to_expr_value, base, padded.get()));
+    TRY_CATCH_BAD_ALLOC(padded->append(**column));
+    RETURN_IF_ERROR(append_no_old_row_values(tablet_column, column_to_expr_value, num_segment_rows - base - merged_rows,
+                                             padded.get()));
+    const size_t after = padded->memory_usage();
+    *column = std::move(padded);
+    return after > before ? after - before : 0;
+}
+
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, SegmentFileInfo>* replace_segments,
                                           std::vector<FileMetaPB>* orphan_files) {
@@ -589,6 +660,33 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     // silently dropping the index after publish.
     ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
     const bool defer_vector_index_build = vector_index_opts.defer_build;
+
+    // The state may cover only this tablet's slice of the segment; the rewriters need every row.
+    const size_t num_segment_rows = src_seg_meta.num_rows();
+    if (num_segment_rows > 0) {
+        const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
+        size_t padded_bytes = 0;
+        if (has_partial_update_state(params)) {
+            auto& write_columns = _partial_update_states[segment_id].write_columns;
+            RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size());
+            for (size_t i = 0; i < write_columns.size(); i++) {
+                ASSIGN_OR_RETURN(auto added,
+                                 pad_rewrite_column_to_segment(&write_columns[i], owned_base, num_segment_rows,
+                                                               &params.tablet_schema->column(unmodified_column_ids[i]),
+                                                               _column_to_expr_value));
+                padded_bytes += added;
+            }
+        }
+        if (has_auto_increment_partial_update_state(params)) {
+            ASSIGN_OR_RETURN(auto added, pad_rewrite_column_to_segment(
+                                                 &_auto_increment_partial_update_states[segment_id].write_column,
+                                                 owned_base, num_segment_rows, nullptr, _column_to_expr_value));
+            padded_bytes += added;
+        }
+        // memory_usage() of both states is computed from the columns, so the release path would
+        // subtract the padded size; keep the running total in step with it.
+        _memory_usage += padded_bytes;
+    }
 
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
@@ -922,13 +1020,7 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
         // is what lets it hold its encode buffer across chunks.
         ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(
                                                 *params.metadata, params.tablet_schema, params.op_write.rowset()));
-        // Emit every row of a shared segment and let the selector answer per row, rather than letting
-        // the tablet range narrow the iterator first. Two reasons, both about this state's own shape:
-        // it must stay one entry per row of the source segment, because rewrite_segment hands those
-        // entries to SegmentRewriter, which copies the source segment whole and demands exactly that
-        // many values; and one mechanism deciding ownership is easier to keep honest than two.
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats,
-                                                                                /*apply_tablet_range=*/false));
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {

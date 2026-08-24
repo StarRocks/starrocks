@@ -651,8 +651,7 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                          OlapReaderStatistics* stats,
-                                                                          bool apply_tablet_range) {
+                                                                          OlapReaderStatistics* stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
@@ -667,10 +666,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
-    std::optional<SeekRange> shared_segment_range;
-    if (apply_tablet_range) {
-        ASSIGN_OR_RETURN(shared_segment_range, get_seek_range());
-    }
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     // Contract: callers downstream (SegmentPKIterator + LakePrimaryIndex
     // publish) require each emitted chunk's physical rowids to form a single
@@ -701,9 +697,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
                                               tablet_id(), metadata().id(), i));
             continue;
         }
-        if (apply_tablet_range) {
-            RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
-        }
+        RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             // Leave seg_iterators[i] as the default null placeholder, preserving alignment.

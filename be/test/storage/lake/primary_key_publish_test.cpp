@@ -1332,10 +1332,15 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
         delta_writer->close();
         return txn_id;
     };
-    // Both halves of what convert_txn_log_for_splitting leaves behind: the segments stay the parent's
-    // (every child publishes the same ones, so each has to select its own rows out of them) and this
-    // child's range is stamped onto the rowset, which is how the publish and the read path later learn
-    // that the rowset holds rows this child does not own.
+    // What convert_txn_log_for_splitting leaves behind: the segments stay the parent's and every child
+    // publishes the same ones, so each has to select its own rows out of them.
+    //
+    // Deliberately NOT the rowset range it also stamps. Without one the publish-time Rowset has no
+    // range at all (it is built from the txn log, so its _tablet_metadata is null and the tablet range
+    // cannot be reached), the iterator is never narrowed, and the selector's verdict is what decides --
+    // which is the code under test. A tablet whose ORDER BY differs from its PK reaches the same state
+    // for real, because Rowset::set_segment_tablet_range withholds the range there, but no path can
+    // build one yet.
     auto make_txn_log_cross_published = [&](int64_t txn_id) {
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         auto shared_log = std::make_shared<TxnLog>(*txn_log);
@@ -1344,7 +1349,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
         // The non-SST condition merge is the path under test; prebuilt ssts would route the publish
         // into _do_update_with_condition_parallel instead.
         ASSERT_EQ(0, shared_log->op_write().ssts_size());
-        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }
@@ -1467,7 +1471,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_delvecs_lo
         auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
         ASSERT_GT(rowset->segment_metas_size(), 0);
         ASSERT_EQ(0, shared_log->op_write().ssts_size());
-        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }

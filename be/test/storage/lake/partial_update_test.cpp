@@ -2169,20 +2169,19 @@ static void make_range_distributed(TabletMetadata* metadata, int lower_inclusive
 // this child's index -- without them a sibling lookup would simply miss and there would be nothing to
 // observe.
 //
-// c2 is the witness: it is not in the partial write, so a row whose old location was read carries the
-// old c2 (key * 4) and a row left at the sentinel carries c2's declared default (10). The assertion
-// opens the rewritten segment directly because a reader must NOT see the siblings' rows in it, which
-// is the other half of what this covers.
+// The range is stamped onto the ROWSET here, exactly as convert_txn_log_for_splitting does, which is
+// what narrows the publish iterator to this child's slice of the segment -- and what this covers:
 //
-// It is also a regression test for the rewrite's row-count contract. SegmentRewriter::rewrite_partial_update
-// copies the source segment's own columns verbatim -- all of its rows -- and appends the merged ones,
-// so SegmentWriter::finalize_columns fails the publish outright ("num rows written mismatch") unless
-// the state holds exactly one value per SOURCE row. Narrowing the publish iterator to this child's
-// slice produced fewer, so the range is stamped on the rowset here exactly as
-// convert_txn_log_for_splitting does: that is what used to trigger the narrowing, and now the
-// ownership mask does the selecting instead. MetaFileBuilder clears `shared` on the rewrite output
-// (the file really is private), so what keeps the siblings' rows out of reads is that the ROWSET
-// carries a range -- Rowset::set_segment_tablet_range clips on either.
+// - The rewrite's row-count contract. SegmentRewriter::rewrite_partial_update copies the source
+//   segment's own columns verbatim, every row of them, and appends the merged ones, so
+//   SegmentWriter::finalize_columns fails the publish outright ("num rows written mismatch") unless
+//   there is one merged value per SOURCE row. A narrowed iterator produces fewer, so rewrite_segment
+//   pads the rest with defaults. c2 is the witness: it is not in the partial write, so an owned row
+//   carries its old c2 (key * 4) and a padded row carries c2's declared default (10).
+// - That those padded rows stay out of reads. MetaFileBuilder clears `shared` on the rewrite output
+//   (the file really is private to this tablet), so what clips it is the range on the rowset --
+//   Rowset::set_segment_tablet_range accepts either. Hence one assertion on the file, which must hold
+//   every row, and one on the tablet, which must serve only this child's.
 TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_only_owned_rows) {
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
         GTEST_SKIP() << "column mode resolves the unmodified columns through DCGs, not this lookup";
@@ -2384,7 +2383,9 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_column_mode_updates_only_owned_
         auto shared_log = std::make_shared<TxnLog>(*txn_log);
         auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
         ASSERT_GT(rowset->segment_metas_size(), 0);
-        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        // Shared segments but no rowset range, so the iterator is never narrowed and the selector's
+        // mask is what decides -- see the note in
+        // LakePrimaryKeyPublishTest.test_cross_publish_condition_update_compares_only_owned_rows.
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }
