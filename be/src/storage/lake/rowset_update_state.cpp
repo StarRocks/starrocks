@@ -589,6 +589,59 @@ static StatusOr<MutableColumnPtr> widen_rewrite_column_to_segment(
     return widened;
 }
 
+Status RowsetUpdateState::_widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params,
+                                                                   uint32_t segment_id,
+                                                                   const std::vector<ColumnId>& unmodified_column_ids,
+                                                                   MutableColumns* widened_write_columns,
+                                                                   MutableColumnPtr* unwidened_auto_increment_column) {
+    // Only a resharded tablet can have a narrowed publish iterator: narrowing needs a range on the ROWSET
+    // (convert_txn_log_for_splitting stamps this tablet's onto a cross-published op_write) plus a segment
+    // the split marked shared. No range on the tablet, no narrowing, nothing to widen -- which is every
+    // tablet that was never resharded, so the ordinary publish path stops here.
+    if (!params.metadata->has_range()) {
+        return Status::OK();
+    }
+    const size_t num_segment_rows = params.op_write.rowset().segment_metas(segment_id).num_rows();
+    if (num_segment_rows == 0) {
+        // No per-segment count to widen to: metadata written by an older version, or a segment that holds
+        // no rows at all (the empty one a delete-only write leaves to reserve its del file's op_offset).
+        return Status::OK();
+    }
+    const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
+
+    if (has_partial_update_state(params) && !unmodified_column_ids.empty()) {
+        // An empty unmodified_column_ids means rewrite_partial_update takes its copy-only fast path and
+        // never reads these columns -- reachable when a schema change between the partial write and its
+        // publish leaves no unmodified column, in which case the cached state's columns no longer pair
+        // with the recomputed ids either.
+        auto& write_columns = _partial_update_states[segment_id].write_columns;
+        RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size());
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            ASSIGN_OR_RETURN(auto widened,
+                             widen_rewrite_column_to_segment(*write_columns[i], owned_base, num_segment_rows,
+                                                             &params.tablet_schema->column(unmodified_column_ids[i]),
+                                                             _column_to_expr_value));
+            if (widened != nullptr) {
+                widened_write_columns->emplace_back(std::move(widened));
+            }
+        }
+        // Every column came from the same iterator, so either all of them span the segment or none do.
+        RETURN_ERROR_IF_FALSE(widened_write_columns->empty() || widened_write_columns->size() == write_columns.size());
+    }
+
+    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
+    if (has_auto_increment_partial_update_state(params) && auto_increment_state.write_column != nullptr) {
+        ASSIGN_OR_RETURN(auto widened,
+                         widen_rewrite_column_to_segment(*auto_increment_state.write_column, owned_base,
+                                                         num_segment_rows, nullptr, _column_to_expr_value));
+        if (widened != nullptr) {
+            *unwidened_auto_increment_column = std::move(auto_increment_state.write_column);
+            auto_increment_state.write_column = std::move(widened);
+        }
+    }
+    return Status::OK();
+}
+
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, SegmentFileInfo>* replace_segments,
                                           std::vector<FileMetaPB>* orphan_files) {
@@ -663,52 +716,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
     const bool defer_vector_index_build = vector_index_opts.defer_build;
 
-    // The state covers the rows the publish iterator emitted, which on a cross publish is this tablet's
-    // slice of the segment; the rewriters need one value per row of the segment. Widen copies and leave
-    // the state alone -- see widen_rewrite_column_to_segment.
-    const size_t num_segment_rows = src_seg_meta.num_rows();
-    const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
     MutableColumns widened_write_columns;
-    if (num_segment_rows > 0 && has_partial_update_state(params) && !unmodified_column_ids.empty()) {
-        // unmodified_column_ids empty means the rewrite is a plain file copy and never looks at these
-        // columns -- reachable when a schema change between the partial write and its publish leaves no
-        // unmodified column, in which case the cached state's columns no longer pair with it either.
-        auto& write_columns = _partial_update_states[segment_id].write_columns;
-        RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size());
-        for (size_t i = 0; i < write_columns.size(); i++) {
-            ASSIGN_OR_RETURN(auto widened,
-                             widen_rewrite_column_to_segment(*write_columns[i], owned_base, num_segment_rows,
-                                                             &params.tablet_schema->column(unmodified_column_ids[i]),
-                                                             _column_to_expr_value));
-            if (widened != nullptr) {
-                widened_write_columns.emplace_back(std::move(widened));
-            }
-        }
-        // Every column came from the same iterator, so either all of them span the segment or none do.
-        RETURN_ERROR_IF_FALSE(widened_write_columns.empty() || widened_write_columns.size() == write_columns.size());
-    }
-    MutableColumns* rewrite_write_columns =
-            widened_write_columns.empty() ? &_partial_update_states[segment_id].write_columns : &widened_write_columns;
-
-    // The auto-increment rewriter reads its column out of the state (and moves it), so the widened copy
-    // has to go in. Put the original back afterwards, for the same retry reason.
-    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
     MutableColumnPtr unwidened_auto_increment_column;
+    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
+    // Must outlive the rewrite below: it hands the state its unwidened auto-increment column back.
     DeferOp restore_auto_increment_column([&]() {
         if (unwidened_auto_increment_column != nullptr) {
             auto_increment_state.write_column = std::move(unwidened_auto_increment_column);
         }
     });
-    if (num_segment_rows > 0 && has_auto_increment_partial_update_state(params) &&
-        auto_increment_state.write_column != nullptr) {
-        ASSIGN_OR_RETURN(auto widened,
-                         widen_rewrite_column_to_segment(*auto_increment_state.write_column, owned_base,
-                                                         num_segment_rows, nullptr, _column_to_expr_value));
-        if (widened != nullptr) {
-            unwidened_auto_increment_column = std::move(auto_increment_state.write_column);
-            auto_increment_state.write_column = std::move(widened);
-        }
-    }
+    RETURN_IF_ERROR(_widen_rewrite_columns_for_cross_publish(params, segment_id, unmodified_column_ids,
+                                                             &widened_write_columns, &unwidened_auto_increment_column));
+    MutableColumns* rewrite_write_columns =
+            widened_write_columns.empty() ? &_partial_update_states[segment_id].write_columns : &widened_write_columns;
 
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
