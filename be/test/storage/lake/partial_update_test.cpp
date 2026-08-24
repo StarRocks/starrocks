@@ -2133,6 +2133,29 @@ TEST_P(LakePartialUpdateTest, test_partial_update_rewrite_with_apportioned_num_r
     ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
 }
 
+// Turn the fixture's tablet into a range-distributed one owning [lower, upper): the order-preserving
+// big-endian PK encoding range distribution requires (create_sst_seek_range_from rejects anything else,
+// and CrossPublishRowSelector::create_if_needed declines to build without it) plus the range itself,
+// whose bound inclusivity is not a choice -- TabletRangeHelper::validate_tablet_range accepts
+// [lower, upper) and nothing else. The schema id is refreshed so the schema file the writers load stays
+// in step with the metadata this produces.
+static void make_range_distributed(TabletMetadata* metadata, int lower_inclusive, int upper_exclusive) {
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->set_id(next_id());
+    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto append_int_bound = [](auto* bound, int value) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
+        VariantTuple tuple;
+        tuple.append(variant);
+        tuple.to_proto(bound);
+    };
+    auto* range_pb = metadata->mutable_range();
+    append_int_bound(range_pb->mutable_lower_bound(), lower_inclusive);
+    range_pb->set_lower_bound_included(true);
+    append_int_bound(range_pb->mutable_upper_bound(), upper_exclusive);
+    range_pb->set_upper_bound_included(false);
+}
+
 // A row-mode partial update reads the columns it does not carry from each row's old location, and a
 // cross published SPLIT child is handed its siblings' rows along with its own. Looking a sibling's key
 // up resolves against the sstables this child inherited from the parent, so the location it returns can
@@ -2169,27 +2192,10 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     const int kOwnedUpper = n - n / 4;
     const int kOwnedRows = kOwnedUpper - kOwnedLower;
 
-    // Range distribution requires the order-preserving big-endian PK encoding; create_sst_seek_range_from
-    // rejects anything else and the selector declines to build without it. TabletRangeHelper::
-    // validate_tablet_range fixes the inclusivity: [lower, upper). A fresh schema id keeps the schema
-    // file the writers load in step with the metadata this edit produces.
-    auto* schema_pb = _tablet_metadata->mutable_schema();
-    schema_pb->set_id(next_id());
-    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
-    auto append_int_bound = [](auto* bound, int value) {
-        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
-        VariantTuple tuple;
-        tuple.append(variant);
-        tuple.to_proto(bound);
-    };
-    auto* range_pb = _tablet_metadata->mutable_range();
-    append_int_bound(range_pb->mutable_lower_bound(), kOwnedLower);
-    range_pb->set_lower_bound_included(true);
-    append_int_bound(range_pb->mutable_upper_bound(), kOwnedUpper);
-    range_pb->set_upper_bound_included(false);
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
-    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), *schema_pb));
-    _tablet_schema = TabletSchema::create(*schema_pb);
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
     _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
     auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
@@ -2244,7 +2250,7 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
         auto shared_log = std::make_shared<TxnLog>(*txn_log);
         auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
         ASSERT_GT(rowset->segment_metas_size(), 0);
-        rowset->mutable_range()->CopyFrom(*range_pb);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }
@@ -2303,6 +2309,96 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
         EXPECT_EQ(key * 5, it->second.first) << "key " << key;
         EXPECT_EQ(owned ? key * 4 : 10, it->second.second) << "key " << key;
     }
+}
+
+// Column-mode partial update on a cross-published rowset. This handler builds its OWN
+// SegmentPKIterators, so it needs its own selector: the mapping it derives from the index decides
+// which source row gets which update, and taking a sibling's row rewrites a value this child does not
+// own (in COLUMN_UPSERT_MODE it would materialize the key outright, which is why the ownership mask
+// has to reach build_rss_rowid_to_update_rowid -- a sibling's key that this child's inherited sstables
+// still answer for looks exactly like an update, and one they do not looks exactly like an insert).
+//
+// Staged as in the row-mode test: the baseline write is LOCAL, so every key -- siblings' included --
+// is in this child's index and resolvable. Only the owned half may end up updated.
+TEST_P(LakePartialUpdateTest, test_cross_publish_column_mode_updates_only_owned_rows) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "row mode merges the unmodified columns through the rewrite, not a DCG";
+    }
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: local full write -> every key lands in this child's index.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish a column-mode update of every key.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+
+    // The DCG lands on the baseline rowset, which this tablet wrote itself and reads whole, so a
+    // sibling's update would be plainly visible here: without the mask every key reads c1 = c0 * 5.
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  return c2 == c0 * 4 && c1 == (owned ? c0 * 5 : c0 * 3);
+              }));
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
