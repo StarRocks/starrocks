@@ -170,11 +170,11 @@ public class PaimonScanNode extends ScanNode {
                         }
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
-                        addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
+                        addJNISplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
                     }
                 } else {
                     long totalFileLength = getTotalFileLength(dataSplit);
-                    addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
+                    addJNISplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
                 }
                 BinaryRow partitionValue = dataSplit.partition();
                 if (!selectedPartitions.containsKey(partitionValue)) {
@@ -183,7 +183,7 @@ public class PaimonScanNode extends ScanNode {
             } else {
                 // paimon system table
                 long length = getEstimatedLength(split.rowCount(), tupleDescriptor);
-                addSplitScanRangeLocations(split, predicateInfo, length);
+                addJNISplitScanRangeLocations(split, predicateInfo, length);
             }
 
         }
@@ -325,7 +325,7 @@ public class PaimonScanNode extends ScanNode {
         }
     }
 
-    public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
+    public void addJNISplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
         checkJniReaderVariantSupport(desc);
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
