@@ -77,11 +77,11 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
     private ProcessExecPlan switchToIVMRefresh(TaskRunContext taskRunContext) throws Exception {
         // try ivm first, and if failed, transfer to pct
         try {
-            this.currentRefreshMode = MaterializedView.RefreshMode.INCREMENTAL;
-            logger.info("Try to do ivm refresh for mv: {}, current refresh mode: {}",
-                    mv.getName(), this.currentRefreshMode);
+            this.runRefreshMode = MaterializedView.RefreshMode.INCREMENTAL;
+            logger.info("Try to do ivm refresh for mv: {}, run refresh mode: {}",
+                    mv.getName(), this.runRefreshMode);
             updateTaskRunStatus(status -> {
-                status.getMvTaskRunExtraMessage().setRefreshMode(currentRefreshMode.name());
+                status.getMvTaskRunExtraMessage().setRefreshMode(runRefreshMode.name());
             });
             return ivmProcessor.getProcessExecPlan(taskRunContext);
         } catch (Exception e) {
@@ -92,10 +92,9 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
     }
 
     private ProcessExecPlan switchToPCTRefresh(TaskRunContext taskRunContext) throws Exception {
-        this.currentRefreshMode = MaterializedView.RefreshMode.AUTO;
-        // update the task run status to pct refresh
+        this.runRefreshMode = MaterializedView.RefreshMode.PCT;
         updateTaskRunStatus(status -> {
-            status.getMvTaskRunExtraMessage().setRefreshMode(MaterializedView.RefreshMode.PCT.name());
+            status.getMvTaskRunExtraMessage().setRefreshMode(runRefreshMode.name());
         });
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
@@ -126,11 +125,7 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
 
     @VisibleForTesting
     public MVRefreshProcessor getCurrentProcessor() {
-        if (this.currentRefreshMode == MaterializedView.RefreshMode.AUTO) {
-            return pctProcessor;
-        } else {
-            return ivmProcessor;
-        }
+        return runRefreshMode.isIncremental() ? ivmProcessor : pctProcessor;
     }
 
     @Override

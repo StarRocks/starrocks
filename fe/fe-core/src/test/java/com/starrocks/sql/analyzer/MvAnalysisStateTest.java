@@ -39,7 +39,7 @@ public class MvAnalysisStateTest {
     private static final Set<String> ANALYSIS_WRITTEN = Set.of(
             "keysType",
             "rowIdStrategy",
-            "currentRefreshMode",
+            "analyzedRefreshMode",
             "encodeRowIdVersion",
             "baseTableInfos",
             "sortKeys",

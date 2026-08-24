@@ -79,10 +79,10 @@ public class IVMAnalyzer {
 
     public record IVMAnalyzeResult(QueryStatement queryStatement,
                                    RowIdStrategy rowIdStrategy,
-                                   MaterializedView.RefreshMode currentRefreshMode) {
+                                   MaterializedView.RefreshMode analyzedRefreshMode) {
         public static IVMAnalyzeResult of(QueryStatement queryStatement, RowIdStrategy rowIdStrategy,
-                                          MaterializedView.RefreshMode currentRefreshMode) {
-            return new IVMAnalyzeResult(queryStatement, rowIdStrategy, currentRefreshMode);
+                                          MaterializedView.RefreshMode analyzedRefreshMode) {
+            return new IVMAnalyzeResult(queryStatement, rowIdStrategy, analyzedRefreshMode);
         }
     }
 

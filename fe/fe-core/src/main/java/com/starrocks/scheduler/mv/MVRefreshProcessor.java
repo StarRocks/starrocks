@@ -115,8 +115,8 @@ public abstract class MVRefreshProcessor {
     protected final MVPCTRefreshSynchronizer mvPctRefreshSynchronizer;
     protected final MVRefreshParams mvRefreshParams;
     protected final PCTRefreshScopeCalculator pctRefreshScopeCalculator;
-    // current refresh mode, can be changed in the refresh's runtime for `auto` mode
-    protected MaterializedView.RefreshMode currentRefreshMode;
+    // The mode this one run is using. Distinct from the mv's persisted mode, which AUTO leaves untouched.
+    protected MaterializedView.RefreshMode runRefreshMode;
 
     // Per-task-run shared snapshot infos bound once from mvContext. Mutate the map contents only.
     protected final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables;
@@ -179,13 +179,13 @@ public abstract class MVRefreshProcessor {
         this.mvPctRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext, mvRefreshParams);
         this.mvPctRefreshPlanner = new MVPCTRefreshPlanner(mvPctRefreshPartitioner);
         this.mvPctRefreshSynchronizer = new MVPCTRefreshSynchronizer(this);
-        this.currentRefreshMode = refreshMode;
+        this.runRefreshMode = refreshMode;
         this.pctRefreshScopeCalculator = new PCTRefreshScopeCalculator();
         this.isEnableExternalTablePreciseRefresh = isEnableExternalTablePreciseRefresh();
         this.snapshotBaseTables = refreshRuntimeState.getSnapshotBaseTables();
         // init the refresh mode
         updateTaskRunStatus(status -> {
-            status.getMvTaskRunExtraMessage().setRefreshMode(currentRefreshMode.name());
+            status.getMvTaskRunExtraMessage().setRefreshMode(runRefreshMode.name());
         });
     }
 
@@ -677,11 +677,11 @@ public abstract class MVRefreshProcessor {
             if (!baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
                 logger.info("table {} changed after refreshing materialized view, old id: {}, new id: {}",
                         baseTableInfo.getTableInfoStr(), table.getTableIdentifier(), newTable.getTableIdentifier());
-                if (currentRefreshMode.isIncremental()) {
+                if (runRefreshMode.isIncremental()) {
                     throw new SemanticException("Materialized view %s.%s refresh failed: base table %s schema " +
                             "or identity changed, cannot do incremental refresh in %s mode. " +
                             "Please drop and re-create the materialized view.",
-                            db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr(), currentRefreshMode);
+                            db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr(), runRefreshMode);
                 }
                 toRepairTables.add(Pair.create(newTable, baseTableInfo));
             }

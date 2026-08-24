@@ -118,7 +118,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
             for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
                 TvrVersionRange changedVersionRange =
-                        getBaseTableChangedVersionRange(snapshotInfo, mvTvrVersionRangeMap, currentRefreshMode);
+                        getBaseTableChangedVersionRange(snapshotInfo, mvTvrVersionRangeMap, runRefreshMode);
                 logger.info("Base table: {}, changed version range: {}",
                         snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
                 // collect changed version range

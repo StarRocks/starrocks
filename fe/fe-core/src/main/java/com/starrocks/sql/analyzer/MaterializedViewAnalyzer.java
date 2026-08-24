@@ -359,7 +359,7 @@ public class MaterializedViewAnalyzer {
      */
     private record MvAnalysisState(KeysType keysType,
                                    RowIdStrategy rowIdStrategy,
-                                   MaterializedView.RefreshMode currentRefreshMode,
+                                   MaterializedView.RefreshMode analyzedRefreshMode,
                                    int encodeRowIdVersion,
                                    List<BaseTableInfo> baseTableInfos,
                                    List<String> sortKeys,
@@ -379,7 +379,7 @@ public class MaterializedViewAnalyzer {
         static MvAnalysisState capture(CreateMaterializedViewStatement statement) {
             return new MvAnalysisState(statement.getKeysType(),
                     statement.getRowIdStrategy(),
-                    statement.getCurrentRefreshMode(),
+                    statement.getAnalyzedRefreshMode(),
                     statement.getEncodeRowIdVersion(),
                     statement.getBaseTableInfos(),
                     statement.getSortKeys(),
@@ -407,7 +407,7 @@ public class MaterializedViewAnalyzer {
 
             statement.setKeysType(keysType);
             statement.setRowIdStrategy(rowIdStrategy);
-            statement.setCurrentRefreshMode(currentRefreshMode);
+            statement.setAnalyzedRefreshMode(analyzedRefreshMode);
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
             statement.setBaseTableInfos(baseTableInfos);
             statement.setSortKeys(sortKeys);
@@ -527,7 +527,7 @@ public class MaterializedViewAnalyzer {
             try {
                 analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.INCREMENTAL,
                         catalog, dbName);
-                statement.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+                statement.setAnalyzedRefreshMode(MaterializedView.RefreshMode.AUTO);
             } catch (SemanticException e) {
                 // IvmTrialRewriter reports an internal rewriter failure as a rejection too, so a bug in the
                 // incremental path degrades silently unless it is logged here.
@@ -557,9 +557,9 @@ public class MaterializedViewAnalyzer {
                 // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
                 statement.setKeysType(KeysType.PRIMARY_KEYS);
                 statement.setRowIdStrategy(result.rowIdStrategy());
-                statement.setCurrentRefreshMode(result.currentRefreshMode());
+                statement.setAnalyzedRefreshMode(result.analyzedRefreshMode());
             } else {
-                statement.setCurrentRefreshMode(refreshMode);
+                statement.setAnalyzedRefreshMode(refreshMode);
             }
 
             // collect table from query statement
@@ -1587,7 +1587,7 @@ public class MaterializedViewAnalyzer {
         private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement,
                                                                   boolean enableRangeDistribution) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
-            boolean isGeneratedByIncrementalMV = statement.getCurrentRefreshMode().isIncrementalOrAuto();
+            boolean isGeneratedByIncrementalMV = statement.getAnalyzedRefreshMode().isIncrementalOrAuto();
             if (!isGeneratedByIncrementalMV) {
                 return distributionDesc;
             }

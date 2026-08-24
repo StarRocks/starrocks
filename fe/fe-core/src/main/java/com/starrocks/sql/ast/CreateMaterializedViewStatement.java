@@ -81,7 +81,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
     // the refresh mode of the mv determined by analyzer
-    private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
+    private MaterializedView.RefreshMode analyzedRefreshMode = MaterializedView.RefreshMode.PCT;
     // the encode row id version deduced by analyzer
     private int encodeRowIdVersion = 0;
     // the __ROW_ID__ production strategy deduced by analyzer for incremental MVs;
@@ -391,12 +391,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
     }
 
-    public void setCurrentRefreshMode(MaterializedView.RefreshMode currentRefreshMode) {
-        this.currentRefreshMode = currentRefreshMode;
+    public void setAnalyzedRefreshMode(MaterializedView.RefreshMode analyzedRefreshMode) {
+        this.analyzedRefreshMode = analyzedRefreshMode;
     }
 
-    public MaterializedView.RefreshMode getCurrentRefreshMode() {
-        return currentRefreshMode;
+    public MaterializedView.RefreshMode getAnalyzedRefreshMode() {
+        return analyzedRefreshMode;
     }
 
     public void setEncodeRowIdVersion(int encodeRowIdVersion) {

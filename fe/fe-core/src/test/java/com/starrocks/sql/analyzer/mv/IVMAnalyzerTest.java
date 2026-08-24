@@ -690,7 +690,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
                     + "AS " + selectSql;
             CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode(),
+            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode(),
                     "trial rewrite must accept: " + selectSql);
             assertEquals(RowIdStrategy.QUERY_COMPUTED, stmt.getRowIdStrategy(),
                     "aggregate MV must yield QUERY_COMPUTED after trial: " + selectSql);
@@ -709,7 +709,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
 
         CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-        assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode(),
+        assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode(),
                 "trial rewrite must accept non-aggregate scan");
         assertEquals(RowIdStrategy.AUTO_INCREMENT, stmt.getRowIdStrategy(),
                 "non-aggregate scan must yield AUTO_INCREMENT after trial");
@@ -878,7 +878,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
                     + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
             CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode());
 
             assertFalse(connectContext.getSessionVariable().isEnableIVMRefresh(),
                     "enable_ivm_refresh must be restored after successful trial");
@@ -913,7 +913,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         };
 
         CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getAnalyzedRefreshMode());
         assertEquals(0, pctTrialInvocationCount, "PCT CREATE analysis must not invoke the IVM trial");
     }
 
@@ -978,7 +978,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 }
             };
             CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", "", ""));
-            assertEquals(MaterializedView.RefreshMode.AUTO, supported.getCurrentRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.AUTO, supported.getAnalyzedRefreshMode());
             assertTrue(supported.getDistributionDesc() instanceof RangeDistributionDesc);
             assertEquals(1, autoTrialInvocationCount, "AUTO must compile the IVM plan at CREATE");
 
@@ -986,7 +986,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     + "REFRESH DEFERRED MANUAL AS SELECT id, COUNT(DISTINCT c1) "
                     + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
             CreateMaterializedViewStatement unsupported = analyzeMvDdl(unsupportedDdl);
-            assertEquals(MaterializedView.RefreshMode.PCT, unsupported.getCurrentRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.PCT, unsupported.getAnalyzedRefreshMode());
             assertEquals(1, autoTrialInvocationCount,
                     "a query the IVM rewrite rejects never reaches the trial");
         } finally {
@@ -1001,7 +1001,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         try {
             CreateMaterializedViewStatement stmt =
                     analyzeMvDdl(autoMvDdl("mv_auto_order_by_range", "", "ORDER BY (id) "));
-            assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.PCT, stmt.getAnalyzedRefreshMode());
         } finally {
             connectContext.getSessionVariable().setEnableRangeDistribution(previous);
         }
@@ -1020,7 +1020,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         CreateMaterializedViewStatement stmt =
                 analyzeMvDdl(autoMvDdl("mv_auto_trial_reject", "DISTRIBUTED BY HASH(id) BUCKETS 3 ", ""));
 
-        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getAnalyzedRefreshMode());
         assertEquals(KeysType.DUP_KEYS, stmt.getKeysType());
         assertNull(stmt.getRowIdStrategy());
         assertFalse(stmt.getMvColumnItems().stream()
@@ -1047,7 +1047,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         CreateMaterializedViewStatement direct = analyzeMvDdl(
                 "CREATE MATERIALIZED VIEW mv_pct_part_direct" + String.format(body, "pct"));
 
-        assertEquals(MaterializedView.RefreshMode.PCT, degraded.getCurrentRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.PCT, degraded.getAnalyzedRefreshMode());
         assertEquals(analyzedShape(direct), analyzedShape(degraded),
                 "a degraded AUTO mv must be indistinguishable from one created as PCT");
     }
@@ -1107,7 +1107,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
 
             assertEquals(PartitionType.LIST, direct.getPartitionType(), "fixture no longer exercises the maps");
             assertFalse(direct.getGeneratedPartitionCols().isEmpty(), "fixture no longer fills the maps");
-            assertEquals(MaterializedView.RefreshMode.PCT, degraded.getCurrentRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.PCT, degraded.getAnalyzedRefreshMode());
             assertEquals(analyzedShape(direct), analyzedShape(degraded),
                     "a degraded AUTO mv must be indistinguishable from one created as PCT");
         } finally {
@@ -1123,7 +1123,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT SUM(c2) AS sm, id, c1, AVG(c2) AS av "
                 + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
         CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getAnalyzedRefreshMode());
     }
 
     /**
@@ -1144,7 +1144,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         };
         CreateMaterializedViewStatement stmt = analyzeMvDdl(
                 autoMvDdl("mv_auto_trial_drift", "DISTRIBUTED BY HASH(id) BUCKETS 3 ", ""));
-        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getAnalyzedRefreshMode());
         assertEquals(KeysType.DUP_KEYS, stmt.getKeysType());
     }
 
