@@ -669,7 +669,10 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     const size_t num_segment_rows = src_seg_meta.num_rows();
     const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
     MutableColumns widened_write_columns;
-    if (num_segment_rows > 0 && has_partial_update_state(params)) {
+    if (num_segment_rows > 0 && has_partial_update_state(params) && !unmodified_column_ids.empty()) {
+        // unmodified_column_ids empty means the rewrite is a plain file copy and never looks at these
+        // columns -- reachable when a schema change between the partial write and its publish leaves no
+        // unmodified column, in which case the cached state's columns no longer pair with it either.
         auto& write_columns = _partial_update_states[segment_id].write_columns;
         RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size());
         for (size_t i = 0; i < write_columns.size(); i++) {
