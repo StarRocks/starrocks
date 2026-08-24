@@ -32,22 +32,20 @@ namespace starrocks::lake {
 // keep them alive because the pass loop keeps re-inserting the (much larger) segment objects
 // over them. Holding the delvecs at the task scope removes that reload entirely; memory is one
 // delvec per input segment, released with the task.
+//
+// Entries are handed out as shared pointers, not copies: the compaction read path only ever
+// inspects a delvec (cardinality / roaring iteration), and a copy per (segment, pass) lookup
+// would scale CPU and allocation with bitmap size times the column-group count.
 class CompactionDelvecHolder {
 public:
-    bool find(const TabletSegmentId& tsid, int64_t version, DelVector* out) {
+    DelVectorPtr find(const TabletSegmentId& tsid, int64_t version) {
         std::lock_guard<std::mutex> l(_mutex);
         auto it = _delvecs.find(std::make_tuple(tsid.tablet_id, tsid.segment_id, version));
-        if (it == _delvecs.end()) {
-            return false;
-        }
-        out->copy_from(*it->second);
-        return true;
+        return it == _delvecs.end() ? nullptr : it->second;
     }
-    void put(const TabletSegmentId& tsid, int64_t version, const DelVector& delvec) {
-        auto copy = std::make_shared<DelVector>();
-        copy->copy_from(delvec);
+    void put(const TabletSegmentId& tsid, int64_t version, DelVectorPtr delvec) {
         std::lock_guard<std::mutex> l(_mutex);
-        _delvecs.emplace(std::make_tuple(tsid.tablet_id, tsid.segment_id, version), std::move(copy));
+        _delvecs.emplace(std::make_tuple(tsid.tablet_id, tsid.segment_id, version), std::move(delvec));
     }
 
 private:
