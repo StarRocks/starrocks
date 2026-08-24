@@ -179,13 +179,13 @@ public:
 
     paimon::Status Seek(int64_t offset, paimon::SeekOrigin origin) override {
         int64_t new_position = offset;
-        if (origin == paimon::FS_SEEK_CUR) {
+        if (origin == paimon::SeekOrigin::FS_SEEK_CUR) {
             auto result = GetPos();
             if (!result.ok()) {
                 return result.status();
             }
             new_position += result.value();
-        } else if (origin == paimon::FS_SEEK_END) {
+        } else if (origin == paimon::SeekOrigin::FS_SEEK_END) {
             auto result = Length();
             if (!result.ok()) {
                 return result.status();
@@ -229,7 +229,15 @@ public:
             return paimon::Status::Invalid(
                     fmt::format("invalid positional read for {}: size={}, offset={}", _file->filename(), size, offset));
         }
-        return _read_at(buffer, size, offset, PaimonFileSystemStats::ReadType::POSITIONAL);
+        const int64_t start_ns = MonotonicNanos();
+        const Status status = _file->read_at_fully(offset, buffer, size);
+        _stats->record_app_read(PaimonFileSystemStats::ReadType::POSITIONAL, status.ok() ? size : 0,
+                                MonotonicNanos() - start_ns);
+        if (!status.ok()) {
+            return paimon::Status::IOError(fmt::format("Failed to read file {} at offset {}, reason: {}",
+                                                       _file->filename(), offset, status.detailed_message()));
+        }
+        return size;
     }
 
     void ReadAsync(char* buffer, int64_t size, int64_t offset,
@@ -239,8 +247,16 @@ public:
                     fmt::format("invalid async read for {}: size={}, offset={}", _file->filename(), size, offset)));
             return;
         }
-        auto result = _read_at(buffer, size, offset, PaimonFileSystemStats::ReadType::ASYNC);
-        callback(result.ok() ? paimon::Status::OK() : result.status());
+        const int64_t start_ns = MonotonicNanos();
+        const Status status = _file->read_at_fully(offset, buffer, size);
+        _stats->record_app_read(PaimonFileSystemStats::ReadType::ASYNC, status.ok() ? size : 0,
+                                MonotonicNanos() - start_ns);
+        if (!status.ok()) {
+            callback(paimon::Status::IOError(fmt::format("Failed to read file {} at offset {}, reason: {}",
+                                                         _file->filename(), offset, status.detailed_message())));
+            return;
+        }
+        callback(paimon::Status::OK());
     }
 
     paimon::Result<std::string> GetUri() const override { return _file->filename(); }
@@ -262,38 +278,6 @@ private:
         }
         _cache_stream = nullptr;
         _shared_buffered_stream = nullptr;
-    }
-
-    paimon::Result<int64_t> _read_at(char* buffer, int64_t size, int64_t offset,
-                                     PaimonFileSystemStats::ReadType read_type) {
-        // SeekableInputStream's default read_at_fully uses seek + read, so preserve the sequential cursor here.
-        auto position_result = _file->position();
-        if (!position_result.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to get position for file {}, reason: {}",
-                                                       _file->filename(), position_result.status().detailed_message()));
-        }
-        const int64_t start_ns = MonotonicNanos();
-        const Status status = _file->read_at_fully(offset, buffer, size);
-        _stats->record_app_read(read_type, status.ok() ? size : 0, MonotonicNanos() - start_ns);
-        auto current_position_result = _file->position();
-        if (!current_position_result.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to get position for file {}, reason: {}",
-                                                       _file->filename(),
-                                                       current_position_result.status().detailed_message()));
-        }
-        Status restore_status;
-        if (current_position_result.value() != position_result.value()) {
-            restore_status = _file->seek(position_result.value());
-        }
-        if (!status.ok()) {
-            return paimon::Status::IOError(
-                    fmt::format("Failed to read file {}, reason: {}", _file->filename(), status.detailed_message()));
-        }
-        if (!restore_status.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to restore position for file {}, reason: {}",
-                                                       _file->filename(), restore_status.detailed_message()));
-        }
-        return size;
     }
 
     std::unique_ptr<RandomAccessFile> _file;
@@ -335,11 +319,6 @@ private:
 } // namespace
 
 paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(const std::string& path) const {
-    return Open(path, -1);
-}
-
-paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(const std::string& path,
-                                                                            int64_t file_size) const {
     RandomAccessFileOptions options;
     auto result = _file_system->new_random_access_file(options, path);
     if (!result.ok()) {
@@ -354,20 +333,15 @@ paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(cons
 
     if (!_datacache_options.enable_datacache) {
         auto counted_file = std::make_unique<RandomAccessFile>(input_stream, filename);
-        if (file_size >= 0) {
-            counted_file->set_size(file_size);
-        }
         return std::make_unique<PaimonInputStream>(std::move(counted_file), _stats);
     }
 
-    if (file_size < 0) {
-        auto size_result = raw_file->get_size();
-        if (!size_result.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to get file size for {}, reason: {}", path,
-                                                       size_result.status().detailed_message()));
-        }
-        file_size = size_result.value();
+    auto size_result = raw_file->get_size();
+    if (!size_result.ok()) {
+        return paimon::Status::IOError(fmt::format("Failed to get file size for {}, reason: {}", path,
+                                                   size_result.status().detailed_message()));
     }
+    const int64_t file_size = size_result.value();
 
     auto shared_buffered_input_stream = std::make_shared<SharedBufferedInputStream>(input_stream, filename, file_size);
     const SharedBufferedInputStream::CoalesceOptions coalesce_options = {

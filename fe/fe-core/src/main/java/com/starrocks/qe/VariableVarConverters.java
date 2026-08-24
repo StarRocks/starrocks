@@ -41,9 +41,6 @@ public class VariableVarConverters {
         CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
         CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
         CONVERTERS.put(SessionVariable.PAIMON_READER_MODE, new PaimonReaderModeConverter());
-        CONVERTERS.put(SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM,
-                new IntegerRangeConverter(SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM, 1,
-                        SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM_MAX));
         CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT,
                 new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, 0));
         CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT,
@@ -125,37 +122,6 @@ public class VariableVarConverters {
                 throw new DdlException("custom_session_name can only contain letters, digits, hyhens and underscores");
             }
             return value;
-        }
-    }
-
-    private static class IntegerRangeConverter implements VariableVarConverterI {
-        private final String variableName;
-        private final int minimum;
-        private final int maximum;
-
-        private IntegerRangeConverter(String variableName, int minimum, int maximum) {
-            this.variableName = variableName;
-            this.minimum = minimum;
-            this.maximum = maximum;
-        }
-
-        @Override
-        public String convert(String value) throws DdlException {
-            try {
-                int intValue = Integer.parseInt(value);
-                if (intValue < minimum || intValue > maximum) {
-                    reportInvalidValue(value);
-                }
-            } catch (NumberFormatException e) {
-                reportInvalidValue(value);
-            }
-            return value;
-        }
-
-        private void reportInvalidValue(String value) throws DdlException {
-            ErrorReport.reportDdlException(
-                    ErrorCode.ERR_INVALID_VALUE, variableName, value,
-                    "an integer between " + minimum + " and " + maximum);
         }
     }
 

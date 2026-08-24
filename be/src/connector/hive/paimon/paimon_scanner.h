@@ -38,29 +38,24 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
     Status do_open(RuntimeState* runtime_state) override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    void do_prepare_close() noexcept override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     void do_update_counter(HdfsScannerProfile* profile) override;
 
 private:
-    void _close_reader() noexcept;
     Status _next_batch();
-    Status _initialize_converters();
     Status _append_batch_to_chunk();
-    Status _finish_chunk(ChunkPtr* chunk);
+    Status _fill_dst_chunk(ChunkPtr* chunk);
+    bool _chunk_is_full() const;
     bool _batch_is_exhausted() const;
 
     int64_t _max_chunk_size = 4096;
     int64_t _batch_start_idx = 0;
     int64_t _chunk_start_idx = 0;
     bool _scanner_eof = false;
-    bool _converters_initialized = false;
-    bool _reader_closed = false;
 
     std::shared_ptr<paimon::MemoryPool> _memory_pool;
     std::shared_ptr<PaimonFileSystem> _paimon_file_system;
     std::unique_ptr<paimon::BatchReader> _reader;
-    std::shared_ptr<paimon::Metrics> _reader_metrics;
     std::shared_ptr<arrow::RecordBatch> _arrow_batch;
 
     ObjectPool _pool;
@@ -68,6 +63,7 @@ private:
     std::vector<Expr*> _cast_exprs;
     ChunkPtr _read_chunk;
     Filter _chunk_filter;
+    Filter _conjunct_filter;
     ArrowConvertContext _convert_context;
 };
 
