@@ -80,11 +80,18 @@ public final class HistogramStatisticsUtils {
     static String buildDefaultBucketSql(Database database, Table table, String catalogName, String columnName,
                                         Map<String, String> mostCommonValues, double sampleRatio, String template) {
         VelocityContext context = buildBaseContext(database, table, catalogName, columnName);
+        // The query templates reference neither of these; only the INSERT ones do.
+        putMcv(context, mostCommonValues);
         putDefaultBucketSampleClause(context, sampleRatio);
         context.put("bucketExpr",
                 buildDefaultBucketExpr(StatisticUtils.quoting(table, columnName), sampleRatio, mostCommonValues));
 
         return StatisticsCollectJob.build(context, template);
+    }
+
+    static void putMcv(VelocityContext context, Map<String, String> mostCommonValues) {
+        String mcvJson = buildMcvJson(mostCommonValues);
+        context.put("mcv", mcvJson == null ? "NULL" : quoteSqlString(mcvJson));
     }
 
     // The default-bucket templates splice $sampleClause$randFilter straight onto "FROM `db`.`table`"

@@ -17,13 +17,10 @@ package com.starrocks.statistic;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,22 +30,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.statistic.HistogramStatisticsUtils.batchInsertPrefixSize;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBaseContext;
-import static com.starrocks.statistic.HistogramStatisticsUtils.buildBatchInsertPrefix;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsLiteral;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsSql;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildDefaultBucketSql;
-import static com.starrocks.statistic.HistogramStatisticsUtils.buildMcvJson;
-import static com.starrocks.statistic.HistogramStatisticsUtils.buildMostCommonValues;
-import static com.starrocks.statistic.HistogramStatisticsUtils.createInsertStmt;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildStatsTargetColumnNames;
+import static com.starrocks.statistic.HistogramStatisticsUtils.putMcv;
 import static com.starrocks.statistic.HistogramStatisticsUtils.putMcvExclude;
 import static com.starrocks.statistic.HistogramStatisticsUtils.quoteSqlString;
-import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 
-public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob {
+public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob
+        implements LegacyCollectTarget, BatchedCollectTarget {
     private static final Logger LOG = LogManager.getLogger(ExternalHistogramStatisticsCollectJob.class);
+
+    private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
+            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
+                    " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double)), " +
+                    " $mcv," +
+                    " NOW()" +
+                    " FROM (SELECT $columnName as column_key FROM `$catalogName`.`$dbName`.`$tableName`" +
+                    " where rand() <= $sampleRatio" +
+                    " and $columnName is not null $MCVExclude" +
+                    " ORDER BY $columnName LIMIT $totalRows) t";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT)," +
@@ -63,6 +67,11 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     // Histogram.getTotalRows() to reflect the column's real cardinality. So instead of storing
     // NULL buckets we store a single placeholder bucket that represents "all values excluding
     // the MCVs".
+    private static final String COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE =
+            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
+                    " $bucketExpr, $mcv, NOW()" +
+                    " FROM `$catalogName`.`$dbName`.`$tableName`";
+
     private static final String QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE =
             "SELECT cast(" + StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT)," +
                     " '$columnNameStr', $bucketExpr" +
@@ -107,96 +116,75 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
-        double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
-        long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
-        long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
-
-        collectBatched(context, analyzeStatus, sampleRatio, bucketNum, mcvSize);
-    }
-
-    private void collectBatched(ConnectContext context, AnalyzeStatus analyzeStatus, double sampleRatio, long bucketNum,
-                                long mcvSize) throws Exception {
-        List<List<Expr>> rowsBuffer = new ArrayList<>();
-        List<String> sqlBuffer = new ArrayList<>();
-        List<String> columnsBuffer = new ArrayList<>();
-        List<String> insertedColumns = new ArrayList<>();
-        long bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
-        long bufferLimit = Math.max(1, Config.histogram_batch_insert_buffer_size);
-
-        try {
-            for (int i = 0; i < columnNames.size(); i++) {
-                String columnName = columnNames.get(i);
-                Type columnType = columnTypes.get(i);
-                List<Expr> row;
-                String rowSql;
-                long rowSize;
-                try {
-                    List<TStatisticData> mcv = queryStatisticSync(
-                            buildCollectMCV(db, table, mcvSize, columnName), context, analyzeStatus);
-                    Map<String, String> mostCommonValues = buildMostCommonValues(mcv, UNSAMPLED_RATIO);
-
-                    String histogramQuery = shouldSkipHistogramBuckets(columnType)
-                            ? buildDefaultBucketSql(db, table, catalogName, columnName, mostCommonValues,
-                            UNSAMPLED_RATIO, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE)
-                            : buildQueryHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
-                            columnType);
-                    String buckets = getSingleHistogramResult(
-                            queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
-                    String mcvJson = buildMcvJson(mostCommonValues);
-                    row = buildBatchInsertRow(columnName, buckets, mcvJson);
-                    rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
-                    rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
-                } catch (Exception collectionFailure) {
-                    flushBatchInsertOnCollectionFailure(
-                            rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns,
-                            context, analyzeStatus, columnName, collectionFailure);
-                    throw collectionFailure;
-                }
-
-                if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
-                    flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-                    bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
-                    rowSize = utf8Length(rowSql);
-                }
-
-                rowsBuffer.add(row);
-                sqlBuffer.add(rowSql);
-                columnsBuffer.add(columnName);
-                bufferSize += rowSize;
-                if (bufferSize >= bufferLimit) {
-                    flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-                    bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
-                }
-
-                analyzeStatus.setProgress((i + 1) * 99L / columnNames.size());
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-            }
-
-            flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-        } finally {
-            cleanupInsertedRawHistogramRows(context, insertedColumns);
-        }
-
-        analyzeStatus.setProgress(100);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-    }
-
-    private void flushBatchInsertOnCollectionFailure(
-            List<List<Expr>> rowsBuffer, List<String> sqlBuffer, List<String> columnsBuffer,
-            List<String> insertedColumns, ConnectContext context, AnalyzeStatus analyzeStatus,
-            String columnName, Exception collectionFailure) {
-        try {
-            flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-        } catch (Exception flushFailure) {
-            if (flushFailure != collectionFailure) {
-                collectionFailure.addSuppressed(flushFailure);
-            }
-            LOG.warn("Failed to flush buffered external histogram statistics after collection failed for column {}",
-                    columnName, flushFailure);
+        HistogramCollectParams params = new HistogramCollectParams(properties);
+        if (Config.enable_batch_insert_histogram_statistics && columnNames.size() > 1) {
+            new BatchedHistogramCollector(this, params).collect(context, analyzeStatus);
+        } else {
+            new LegacyHistogramCollector(this, params).collect(context, analyzeStatus);
         }
     }
 
-    private void cleanupInsertedRawHistogramRows(ConnectContext context, List<String> insertedColumns) {
+    @Override
+    public StatisticsCollectJob job() {
+        return this;
+    }
+
+    @Override
+    public String statsTableName() {
+        return EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
+    }
+
+    @Override
+    public String statisticsDescription() {
+        return "external histogram";
+    }
+
+    @Override
+    public String buildMcvQuery(HistogramCollectParams params, String columnName) {
+        return buildCollectMCV(db, table, params.mcvSize(), columnName);
+    }
+
+    @Override
+    public double mcvCountScaleRatio(HistogramCollectParams params) {
+        return UNSAMPLED_RATIO;
+    }
+
+    @Override
+    public String buildLegacyCollectSql(ConnectContext context, StatisticExecutor executor,
+                                        HistogramCollectParams params, String columnName, Type columnType,
+                                        Map<String, String> mostCommonValues) {
+        // Skipping the buckets leaves one tail bucket holding all values - sum(MCVs).
+        return shouldSkipHistogramBuckets(columnType)
+                ? buildInsertIntoHistogramStatistics(buildDefaultBucketSql(db, table, catalogName, columnName,
+                mostCommonValues, UNSAMPLED_RATIO, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE))
+                : buildCollectHistogram(db, table, params.sampleRatio(), params.bucketNum(), mostCommonValues,
+                columnName, columnType);
+    }
+
+    @Override
+    public String buildBatchedHistogramQuery(ConnectContext context, AnalyzeStatus analyzeStatus,
+                                             HistogramCollectParams params, String columnName, Type columnType,
+                                             Map<String, String> mostCommonValues) {
+        return shouldSkipHistogramBuckets(columnType)
+                ? buildDefaultBucketSql(db, table, catalogName, columnName, mostCommonValues,
+                UNSAMPLED_RATIO, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE)
+                : buildQueryHistogram(db, table, params.sampleRatio(), params.bucketNum(), mostCommonValues,
+                columnName, columnType);
+    }
+
+    @Override
+    public void afterColumnInserted(ConnectContext context, StatisticExecutor executor, String columnName) {
+        // Best-effort: remove the stale raw-keyed row this column's fresh hashed-keyed row just
+        // superseded. The read side no longer depends on this for correctness (it dedups by
+        // update_time), so this is purely storage hygiene - failures are logged, not fatal.
+        if (!executor.dropExternalHistogramRawColumn(context, table.getUUID(), columnName)) {
+            LOG.warn("[ExternalStats] failed to clean up stale raw-keyed histogram row | catalog={} db={} table={} " +
+                    "column={}", catalogName, db.getOriginName(), table.getName(), columnName);
+        }
+    }
+
+    @Override
+    public void afterCollection(ConnectContext context, List<String> insertedColumns) {
         if (insertedColumns.isEmpty()) {
             return;
         }
@@ -225,6 +213,20 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
     }
 
+    private String buildCollectHistogram(Database database, Table table, double sampleRatio,
+                                         Long bucketNum, Map<String, String> mostCommonValues, String columnName,
+                                         Type columnType) {
+        VelocityContext context = buildBaseContext(database, table, catalogName, columnName);
+        putMcv(context, mostCommonValues);
+        putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);
+
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
+
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
+    }
+
     private String buildQueryHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
                                        Map<String, String> mostCommonValues, String columnName, Type columnType) {
         VelocityContext context = buildBaseContext(database, table, catalogName, columnName);
@@ -236,12 +238,18 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
     }
 
-    private TStatisticData getSingleHistogramResult(List<TStatisticData> results, String columnName)
-            throws DdlException {
-        return HistogramStatisticsUtils.getSingleHistogramResult(results, columnName, "external histogram");
+    private String buildInsertIntoHistogramStatistics(String query) {
+        List<String> targetColumnNames = buildStatsTargetColumnNames(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+        return "INSERT INTO " +
+                EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
+                columnNames +
+                " " +
+                query;
     }
 
-    private List<Expr> buildBatchInsertRow(String columnName, String buckets, String mcvJson) {
+    @Override
+    public List<Expr> buildBatchInsertRow(String columnName, String buckets, String mcvJson) {
         List<Expr> row = new ArrayList<>();
         row.add(new StringLiteral(StatisticUtils.hashTableUuidForPkStorage(table.getUUID())));
         row.add(new StringLiteral(columnName));
@@ -254,7 +262,8 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         return row;
     }
 
-    private String buildBatchInsertRowSql(String columnName, String buckets, String mcvJson) {
+    @Override
+    public String buildBatchInsertRowSql(String columnName, String buckets, String mcvJson) {
         List<String> values = new ArrayList<>();
         values.add(quoteSqlString(StatisticUtils.hashTableUuidForPkStorage(table.getUUID())));
         values.add(quoteSqlString(columnName));
@@ -267,20 +276,4 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         return "(" + String.join(", ", values) + ")";
     }
 
-    private void flushBatchInsert(List<List<Expr>> rowsBuffer, List<String> sqlBuffer, List<String> columnsBuffer,
-                                  List<String> insertedColumns, ConnectContext context, AnalyzeStatus analyzeStatus)
-            throws Exception {
-        if (rowsBuffer.isEmpty()) {
-            return;
-        }
-
-        String sql = buildBatchInsertPrefix(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME) +
-                String.join(", ", sqlBuffer) + ";";
-        collectStatisticSync(() -> createInsertStmt(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME, rowsBuffer, sql),
-                context, analyzeStatus);
-        insertedColumns.addAll(columnsBuffer);
-        rowsBuffer.clear();
-        sqlBuffer.clear();
-        columnsBuffer.clear();
-    }
 }
