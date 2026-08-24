@@ -72,7 +72,7 @@ public class ResourceGroupMgrShowTest {
             byName.put((String) namesAndGroups[i], rg);
             byId.put(rg.getId(), rg);
         }
-        Object snap = ResourceGroupMgr.newSnapshotForTest(
+        ResourceGroupMgr.ResourceGroupSnapshot snap = ResourceGroupMgr.newSnapshotForTest(
                 byName, byId, Collections.emptyMap(), null);
         mgr.setSnapshotForTest(snap);
     }
