@@ -141,6 +141,48 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 - Required: No
 - Description: The description of the security integration.
 
+### Create a security integration with IOMETE
+
+StarRocks can authenticate clear-password logins using an IOMETE API token. The token is
+validated by the IOMETE Core authorization endpoint for the configured domain and lakehouse.
+
+#### Syntax
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name>
+PROPERTIES (
+    "type" = "authentication_iomete",
+    "server_url" = "https://<iom-core-host>",
+    "domain" = "<domain>",
+    "lakehouse" = "<lakehouse>",
+    "connect_timeout_ms" = "5000",
+    "request_timeout_ms" = "10000",
+    "comment" = ""
+)
+```
+
+#### Parameters
+
+##### server_url
+
+- Required: Yes
+- Description: The base URL of the IOMETE Core service.
+
+##### domain
+
+- Required: Yes
+- Description: The IOMETE domain used in the authorization request.
+
+##### lakehouse
+
+- Required: Yes
+- Description: The IOMETE lakehouse used in the authorization request.
+
+##### connect_timeout_ms and request_timeout_ms
+
+- Required: No
+- Description: Positive connection and request timeout values in milliseconds. Defaults are 5000 and 10000.
+
 <SecurityIntegrationJWT />
 
 <SecurityIntegrationOAuth />

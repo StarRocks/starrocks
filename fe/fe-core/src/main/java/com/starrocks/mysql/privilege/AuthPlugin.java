@@ -17,6 +17,7 @@ package com.starrocks.mysql.privilege;
 import com.google.re2j.Pattern;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.IometeAuthenticationProvider;
+import com.starrocks.authentication.IometeSecurityIntegration;
 import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.authentication.LDAPAuthProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
@@ -116,7 +117,12 @@ public class AuthPlugin {
                 }
 
                 case AUTHENTICATION_IOMETE -> {
-                    return new IometeAuthenticationProvider(authString);
+                    JSONObject authStringJSON = new JSONObject(authString == null ? "{}" : authString);
+                    return new IometeAuthenticationProvider(
+                            authStringJSON.getString(IometeSecurityIntegration.SERVER_URL),
+                            authStringJSON.getString(IometeSecurityIntegration.DOMAIN),
+                            authStringJSON.getString(IometeSecurityIntegration.LAKEHOUSE),
+                            java.time.Duration.ofSeconds(5), java.time.Duration.ofSeconds(10));
                 }
             }
 

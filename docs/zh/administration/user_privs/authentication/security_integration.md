@@ -141,6 +141,47 @@ PROPERTIES (
 - 必需：否
 - 描述：安全集成的描述。
 
+### 使用 IOMETE 创建安全集成
+
+StarRocks 可以使用 IOMETE API token 验证明文密码登录。Token 将由 IOMETE Core 服务针对配置的域和湖仓进行验证。
+
+#### 语法
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name>
+PROPERTIES (
+    "type" = "authentication_iomete",
+    "server_url" = "https://<iom-core-host>",
+    "domain" = "<domain>",
+    "lakehouse" = "<lakehouse>",
+    "connect_timeout_ms" = "5000",
+    "request_timeout_ms" = "10000",
+    "comment" = ""
+)
+```
+
+#### 参数
+
+##### server_url
+
+- 必需：是
+- 描述：IOMETE Core 服务的基础 URL。
+
+##### domain
+
+- 必需：是
+- 描述：授权请求中使用的 IOMETE 域。
+
+##### lakehouse
+
+- 必需：是
+- 描述：授权请求中使用的 IOMETE 湖仓。
+
+##### connect_timeout_ms 和 request_timeout_ms
+
+- 必需：否
+- 描述：以毫秒为单位的正数连接和请求超时时间。默认值分别为 5000 和 10000。
+
 <SecurityIntegrationJWT />
 
 <SecurityIntegrationOAuth />

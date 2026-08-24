@@ -21,9 +21,8 @@ import java.util.Map;
 
 public class IometeSecurityIntegration extends SecurityIntegration {
     public static final String SERVER_URL = "server_url";
-    public static final String TOKEN_PATH = "token_path";
-    public static final String GRANT_TYPE = "grant_type";
-    public static final String CLIENT_ID = "client_id";
+    public static final String DOMAIN = "domain";
+    public static final String LAKEHOUSE = "lakehouse";
     public static final String CONNECT_TIMEOUT_MS = "connect_timeout_ms";
     public static final String REQUEST_TIMEOUT_MS = "request_timeout_ms";
 
@@ -34,18 +33,19 @@ public class IometeSecurityIntegration extends SecurityIntegration {
     @Override
     public AuthenticationProvider getAuthenticationProvider() {
         String serverUrl = required(SERVER_URL);
-        String tokenPath = propertyMap.getOrDefault(TOKEN_PATH, "/api/v1/identity/auth/token");
-        String grantType = propertyMap.getOrDefault(GRANT_TYPE, "password");
-        String clientId = propertyMap.getOrDefault(CLIENT_ID, "starrocks");
+        String domain = required(DOMAIN);
+        String lakehouse = required(LAKEHOUSE);
         Duration connectTimeout = Duration.ofMillis(parsePositiveLong(CONNECT_TIMEOUT_MS, 5000));
         Duration requestTimeout = Duration.ofMillis(parsePositiveLong(REQUEST_TIMEOUT_MS, 10000));
-        return new IometeAuthenticationProvider(serverUrl, tokenPath, grantType, clientId,
+        return new IometeAuthenticationProvider(serverUrl, domain, lakehouse,
                 connectTimeout, requestTimeout);
     }
 
     @Override
     public void checkProperty() throws SemanticException {
         required(SERVER_URL);
+        required(DOMAIN);
+        required(LAKEHOUSE);
     }
 
     private String required(String property) throws SemanticException {

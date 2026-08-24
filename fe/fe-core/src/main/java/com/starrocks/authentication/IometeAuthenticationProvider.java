@@ -20,59 +20,45 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
-/** Authenticates a StarRocks clear-password handshake against IOMETE identity. */
+/** Authenticates a StarRocks clear-password handshake against IOMETE core. */
 public class IometeAuthenticationProvider implements AuthenticationProvider {
     private static final Logger LOG = LogManager.getLogger(IometeAuthenticationProvider.class);
-    private static final String DEFAULT_TOKEN_PATH = "/api/v1/identity/auth/token";
-    private static final String DEFAULT_GRANT_TYPE = "password";
-    private static final String DEFAULT_CLIENT_ID = "starrocks";
+    private static final String API_PATH_TEMPLATE = "%s/api/v1/authz/domains/%s/lakehouses/%s";
 
-    private final URI tokenUri;
-    private final String grantType;
-    private final String clientId;
+    private final URI authorizationUri;
     private final Duration requestTimeout;
     private final HttpClient httpClient;
 
-    public IometeAuthenticationProvider(String baseUrl, String tokenPath, String grantType, String clientId,
+    public IometeAuthenticationProvider(String baseUrl, String domain, String lakehouse,
                                         Duration connectTimeout, Duration requestTimeout) {
-        this.tokenUri = URI.create(joinPath(baseUrl, tokenPath));
-        this.grantType = grantType;
-        this.clientId = clientId;
+        this.authorizationUri = URI.create(String.format(API_PATH_TEMPLATE,
+                stripTrailingSlash(baseUrl), domain, lakehouse));
         this.requestTimeout = requestTimeout;
         this.httpClient = HttpClient.newBuilder().connectTimeout(connectTimeout).build();
-    }
-
-    public IometeAuthenticationProvider(String baseUrl) {
-        this(baseUrl, DEFAULT_TOKEN_PATH, DEFAULT_GRANT_TYPE, DEFAULT_CLIENT_ID,
-                Duration.ofSeconds(5), Duration.ofSeconds(10));
     }
 
     @Override
     public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
-        String password = decodeClearPassword(authResponse);
-        String form = "username=" + encode(userIdentity.getUser())
-                + "&password=" + encode(password)
-                + "&grant_type=" + encode(grantType)
-                + "&client_id=" + encode(clientId);
-        HttpRequest request = HttpRequest.newBuilder(tokenUri)
+        String apiToken = decodeClearPassword(authResponse);
+        HttpRequest request = HttpRequest.newBuilder(authorizationUri)
                 .timeout(requestTimeout)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(form, StandardCharsets.UTF_8))
+                .header("x-user-id", userIdentity.getUser())
+                .header("x-api-token", apiToken)
+                .GET()
                 .build();
 
         try {
             HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new AuthenticationException("IOMETE authentication failed");
+            if (response.statusCode() != 200) {
+                throw new AuthenticationException("IOMETE authentication failed with status "
+                        + response.statusCode());
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -97,13 +83,7 @@ public class IometeAuthenticationProvider implements AuthenticationProvider {
         return new String(authResponse, 0, length, StandardCharsets.UTF_8);
     }
 
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
-    private static String joinPath(String baseUrl, String path) {
-        String base = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        String suffix = path.startsWith("/") ? path : "/" + path;
-        return base + suffix;
+    private static String stripTrailingSlash(String baseUrl) {
+        return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 }

@@ -46,37 +46,42 @@ public class IometeAuthenticationProviderTest {
     }
 
     @Test
-    public void testSuccessfulAuthenticationPostsFormEncodedCredentials() {
-        AtomicReference<String> requestBody = new AtomicReference<>();
-        server.createContext("/token", exchange -> {
-            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+    public void testSuccessfulAuthenticationSendsUserAndApiTokenToCore() {
+        AtomicReference<String> requestMethod = new AtomicReference<>();
+        AtomicReference<String> requestUser = new AtomicReference<>();
+        AtomicReference<String> requestToken = new AtomicReference<>();
+        server.createContext("/api/v1/authz/domains/hands-on/lakehouses/basic", exchange -> {
+            requestMethod.set(exchange.getRequestMethod());
+            requestUser.set(exchange.getRequestHeaders().getFirst("x-user-id"));
+            requestToken.set(exchange.getRequestHeaders().getFirst("x-api-token"));
             exchange.sendResponseHeaders(200, -1);
             exchange.close();
         });
         server.start();
 
         IometeAuthenticationProvider provider = new IometeAuthenticationProvider(
-                "http://127.0.0.1:" + server.getAddress().getPort(), "/token", "password", "star rocks",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "hands-on", "basic",
                 java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(2));
 
         Assertions.assertDoesNotThrow(() -> provider.authenticate(
                 new AccessControlContext(),
                 new UserIdentity("alice", "%"),
-                "p a+s\u0000".getBytes(StandardCharsets.UTF_8)));
-        Assertions.assertEquals("username=alice&password=p+a%2Bs&grant_type=password&client_id=star+rocks",
-                requestBody.get());
+                "api-token\u0000".getBytes(StandardCharsets.UTF_8)));
+        Assertions.assertEquals("GET", requestMethod.get());
+        Assertions.assertEquals("alice", requestUser.get());
+        Assertions.assertEquals("api-token", requestToken.get());
     }
 
     @Test
     public void testNonSuccessfulAuthenticationIsRejected() {
-        server.createContext("/token", exchange -> {
+        server.createContext("/api/v1/authz/domains/hands-on/lakehouses/basic", exchange -> {
             exchange.sendResponseHeaders(401, -1);
             exchange.close();
         });
         server.start();
 
         IometeAuthenticationProvider provider = new IometeAuthenticationProvider(
-                "http://127.0.0.1:" + server.getAddress().getPort(), "/token", "password", "starrocks",
+                "http://127.0.0.1:" + server.getAddress().getPort(), "hands-on", "basic",
                 java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(2));
 
         Assertions.assertThrows(AuthenticationException.class, () -> provider.authenticate(
@@ -90,7 +95,9 @@ public class IometeAuthenticationProviderTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
                 AuthPlugin.Server.AUTHENTICATION_IOMETE.name());
-        properties.put(IometeSecurityIntegration.SERVER_URL, "https://identity.example.com");
+        properties.put(IometeSecurityIntegration.SERVER_URL, "https://core.example.com");
+        properties.put(IometeSecurityIntegration.DOMAIN, "hands-on");
+        properties.put(IometeSecurityIntegration.LAKEHOUSE, "basic");
 
         SecurityIntegration integration = SecurityIntegrationFactory.createSecurityIntegration("iomete", properties);
         Assertions.assertInstanceOf(IometeSecurityIntegration.class, integration);
@@ -101,6 +108,22 @@ public class IometeAuthenticationProviderTest {
     @Test
     public void testMissingServerUrlIsRejected() {
         IometeSecurityIntegration integration = new IometeSecurityIntegration("iomete", Map.of());
+        Assertions.assertThrows(SemanticException.class, integration::checkProperty);
+    }
+
+    @Test
+    public void testMissingDomainIsRejected() {
+        IometeSecurityIntegration integration = new IometeSecurityIntegration("iomete", Map.of(
+                IometeSecurityIntegration.SERVER_URL, "https://core.example.com",
+                IometeSecurityIntegration.LAKEHOUSE, "basic"));
+        Assertions.assertThrows(SemanticException.class, integration::checkProperty);
+    }
+
+    @Test
+    public void testMissingLakehouseIsRejected() {
+        IometeSecurityIntegration integration = new IometeSecurityIntegration("iomete", Map.of(
+                IometeSecurityIntegration.SERVER_URL, "https://core.example.com",
+                IometeSecurityIntegration.DOMAIN, "hands-on"));
         Assertions.assertThrows(SemanticException.class, integration::checkProperty);
     }
 }
