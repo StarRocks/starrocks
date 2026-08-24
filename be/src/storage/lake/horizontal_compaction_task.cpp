@@ -187,21 +187,24 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                 chunk->filter(filter);
             }
         }
-        if (chunk->num_rows() == 0) {
-            chunk->reset();
-            rssid_rowids.clear();
-            continue;
-        }
-        {
-            SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);
-            if (rssid_rowids.empty()) {
-                RETURN_IF_ERROR(writer->write(*chunk));
-            } else {
-                // pk table compaction
-                RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
+        // An empty chunk still consumed input, so it still advances the task. A child whose PK range
+        // filter drops most of the parent's rows produces a long run of them, and skipping the progress
+        // update below left be_cloud_native_compactions reporting 0% for that whole stretch -- which
+        // reads exactly like a stalled task. (The final numbers were never wrong: progress is set to
+        // 100 at the end, and CompactionTaskStats::collect assigns the reader's cumulative counters
+        // rather than accumulating, so the collect after reader.close() already had the true totals.)
+        if (chunk->num_rows() > 0) {
+            {
+                SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);
+                if (rssid_rowids.empty()) {
+                    RETURN_IF_ERROR(writer->write(*chunk));
+                } else {
+                    // pk table compaction
+                    RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
+                }
             }
+            _context->stats->write_chunk_count++;
         }
-        _context->stats->write_chunk_count++;
         chunk->reset();
         rssid_rowids.clear();
 
