@@ -152,6 +152,22 @@ jobs:
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
+      # The author must acknowledge the AI backport recommendation (posted as the
+      # "<!-- backport-advisory -->" comment) before merge. This is the human gate for the
+      # AI advisory (it replaces the backport-PR owner-+1 gate).
+      # Fail UNLESS the CHECKED form is present (not "if the unchecked form is present"):
+      # that way an already-open PR whose body predates the template, or a deleted line,
+      # cannot silently bypass the gate (codex P1). Scoped to main-targeting PRs, since the
+      # advisory is only posted for base==main (codex P2) — release-branch PRs get no
+      # recommendation to confirm.
+      - name: check-ai-backport-confirmed
+        if: >
+          github.base_ref == 'main' &&
+          !contains(toJson(github.event.pull_request.body), '[x] I have reviewed and confirmed the AI backport recommendation')
+        run: |
+          echo "::error::You must review the AI backport recommendation (see the backport-advisory comment) and check the box - I have reviewed and confirmed the AI backport recommendation"
+          exit 1
+
   backport-check:
     runs-on: [self-hosted, light]
     needs: backport-check-subtask
