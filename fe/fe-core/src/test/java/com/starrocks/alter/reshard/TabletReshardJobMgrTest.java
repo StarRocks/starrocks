@@ -588,6 +588,49 @@ public class TabletReshardJobMgrTest {
                 "drain must route a sub-threshold merge candidate to a merge job");
     }
 
+    /**
+     * The merge signal is derived from adjacent tablet PAIRS and knows nothing about colocate, while
+     * the planner refuses a pair that straddles a ColocateRange. A range-colocate table settles at one
+     * tablet per range, so the signal stays permanently actionable against a permanently empty plan --
+     * and without a latch the table re-walks every partition and index under the read lock on every
+     * stat pass, forever. An EmptyReshardPlanException must therefore suppress the retry, and must
+     * re-arm once the signal moves.
+     */
+    @Test
+    public void testEmptyMergePlanSuppressedUntilTheLayoutChanges() throws Exception {
+        int[] mergeAttempts = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause clause)
+                    throws StarRocksException {
+                mergeAttempts[0]++;
+                throw new EmptyReshardPlanException("No tablets need to merge in table t");
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        long pairSize = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, pairSize, 0L, 0);
+        Assertions.assertEquals(1, mergeAttempts[0], "the first actionable signal must be planned");
+
+        // Same signal, same layout: deterministic empty plan, so it must not be re-planned.
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, pairSize, 0L, 0);
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, pairSize, 0L, 0);
+        Assertions.assertEquals(1, mergeAttempts[0],
+                "an unchanged layout and signal must not re-walk the table");
+
+        // A moved signal means the tablet mix (or the parallelism floor) changed, so the plan could
+        // now be non-empty: the latch must re-arm rather than suppress forever.
+        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                0L, pairSize - 1, 0L, 0);
+        Assertions.assertEquals(2, mergeAttempts[0], "a changed signal must re-arm the latch");
+    }
+
     @Test
     public void testAutoSplitSuppressedAfterNoProgress() throws Exception {
         int[] splitCalls = {0};

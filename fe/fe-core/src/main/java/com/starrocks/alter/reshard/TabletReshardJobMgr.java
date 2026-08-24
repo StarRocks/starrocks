@@ -75,6 +75,14 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // addReshardCandidate producers, so no synchronization is needed; cleared on leader demotion.
     private final TableAlignmentLatch sizeSplitLatch = new TableAlignmentLatch();
 
+    // Same mechanism for the merge trigger. Needed because the size signal is derived from adjacent
+    // tablet PAIRS and knows nothing about colocate, while the planner refuses a pair that straddles
+    // a ColocateRange: a range-colocate table settles at one tablet per range, so every adjacent pair
+    // crosses and the signal stays permanently actionable against a permanently empty plan. Without a
+    // latch that table re-walks every partition and index under the read lock on every stat pass,
+    // forever.
+    private final TableAlignmentLatch emptyMergePlanLatch = new TableAlignmentLatch();
+
     // Coalescible reshard candidate for one table, marked by both the publish path and the periodic
     // TabletStatMgr scan: the largest tablet (split), the smallest adjacent fresh-pair sum (merge) and
     // the largest tablet living in an index that still has fewer tablets than the warehouse can drive
@@ -204,6 +212,19 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 .hash().asLong();
     }
 
+    // 64-bit fingerprint of everything a merge plan's emptiness depends on beyond the table layout,
+    // which tableConvergenceSignature already folds (tablet ranges + dataVersion per partition). The
+    // target size is folded because every merge threshold derives from it, and the caller's own signal
+    // because it moves whenever the tablet mix or the parallelism floor does -- the floor itself is
+    // deliberately not resolved here, since skipping that probe is part of what the latch buys.
+    @VisibleForTesting
+    static long mergePlanSignature(long minAdjacentTabletPairSize) {
+        return Hashing.murmur3_128().newHasher()
+                .putLong(Config.tablet_reshard_target_size)
+                .putLong(minAdjacentTabletPairSize)
+                .hash().asLong();
+    }
+
     /**
      * Reshard-trigger decision. The sole caller is {@link #drainReshardCandidates()}, which feeds the
      * signals that both the publish path and the periodic TabletStatMgr scan supplied via
@@ -279,20 +300,35 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 // deterministic no-progress split from re-firing on the next unchanged candidate.
                 sizeSplitLatch.forgetTable(tableId);
             }
-            if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                try {
-                    createTabletReshardJob(db, table, new MergeTabletClause());
-                    LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
-                            db.getFullName(), table.getName(), minAdjacentTabletPairSize);
-                } catch (EmptyReshardPlanException e) {
-                    // Not a failure: the size signal is derived from adjacent tablet PAIRS and knows
-                    // nothing about colocate, while the planner refuses a pair that would straddle a
-                    // ColocateRange. A range-colocate table settles at one tablet per range, so every
-                    // adjacent pair crosses a boundary and this signal stays permanently actionable
-                    // against a permanently empty plan. Log it as the routine outcome it is rather
-                    // than letting the catch below report a stack trace on every scan.
-                    LOG.info("Merge produced no work for table {}.{}: {}",
-                            db.getFullName(), table.getName(), e.getMessage());
+            if (!TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
+                // No merge signal: drop any suppression so future growth re-arms it.
+                emptyMergePlanLatch.forgetTable(tableId);
+            } else {
+                long mergeSignature = ColocateChecker.tableConvergenceSignature(db, table,
+                        mergePlanSignature(minAdjacentTabletPairSize));
+                TableAlignmentLatch.AlignmentDecision mergeDecision =
+                        emptyMergePlanLatch.evaluate(tableId, mergeSignature);
+                if (mergeDecision.fire()) {
+                    try {
+                        createTabletReshardJob(db, table, new MergeTabletClause());
+                        LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
+                                db.getFullName(), table.getName(), minAdjacentTabletPairSize);
+                    } catch (EmptyReshardPlanException e) {
+                        // Deterministic, so latch it: the same layout and configuration produce the
+                        // same empty plan. Otherwise the table re-plans on every scan forever, walking
+                        // every partition and index under the read lock each time. -1 is not a tracked
+                        // job, which the latch's abort and settled probes both resolve to "no job" --
+                        // correct, nothing is running. Mirrors the split path above.
+                        emptyMergePlanLatch.recordFired(tableId, mergeSignature, -1L,
+                                mergeDecision.nextAbortRetries());
+                        LOG.info("Merge produced no work for table {}.{}; suppressing until its layout "
+                                        + "or configuration changes: {}",
+                                db.getFullName(), table.getName(), e.getMessage());
+                    }
+                } else if (emptyMergePlanLatch.claimSuppressionLog(tableId)) {
+                    LOG.info("Auto merge for table {}.{} produced no work on an unchanged layout; "
+                                    + "suppressing further merge attempts until its data changes",
+                            db.getFullName(), table.getName());
                 }
             }
         } catch (Exception e) {
@@ -397,6 +433,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         if (!isLeaderAdmissionOpen()) {
             reshardCandidates.clear();
             sizeSplitLatch.clear();
+            emptyMergePlanLatch.clear();
             return;
         }
         colocateChecker.runOneCycle();
@@ -449,6 +486,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                     .getTable(candidate.dbId(), candidate.tableId());
             if (!(table instanceof OlapTable)) {
                 sizeSplitLatch.forgetTable(tableId);
+                emptyMergePlanLatch.forgetTable(tableId);
                 continue;
             }
             triggerTabletReshard(db, (OlapTable) table, candidate.maxTabletSize(),
