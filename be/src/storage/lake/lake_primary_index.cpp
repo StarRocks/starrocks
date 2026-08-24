@@ -502,9 +502,8 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
         }
         // Only materialize a mask for a segment that actually has one; leaving it empty is what tells
         // the consumer "own every row", and is what every non-cross publish produces.
-        const bool has_mask = std::any_of(slots.begin(), slots.end(), [](const auto& slot) {
-            return !slot->owned.empty();
-        });
+        const bool has_mask =
+                std::any_of(slots.begin(), slots.end(), [](const auto& slot) { return !slot->owned.empty(); });
         if (!has_mask) {
             continue;
         }

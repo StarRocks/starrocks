@@ -110,12 +110,12 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     // a DCG, or materialize the row into a new segment -- cannot be told apart from the rss_rowid
     // alone, so it needs the mask, and the mask only exists if the rows reach the selector.
     ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats,
-                                                                               /*apply_tablet_range=*/false));
+                                                                                /*apply_tablet_range=*/false));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == num_segments);
     // Only a SPLIT child's cross publish gets one; nullptr on every ordinary publish, and then every
     // row is owned. Held by the handler because the iterators keep referencing it.
     ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(*params.metadata, params.tablet_schema,
-                                                                             _rowset_ptr->metadata()));
+                                                                              _rowset_ptr->metadata()));
 
     // Create lazy-load SegmentPKIterators with deferred first load.
     // defer_data_load=true avoids loading the first chunk during init(), so that
@@ -146,7 +146,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     for (uint32_t i = 0; i < num_segments; i++) {
         _partial_update_states[i].src_rss_rowids = std::move(rss_rowids_per_segment[i]);
         _partial_update_states[i].build_rss_rowid_to_update_rowid(pk_iters[i]->physical_rowid_base(),
-                                                                 owned_per_segment[i]);
+                                                                  owned_per_segment[i]);
         _partial_update_states[i].inited = true;
     }
 
@@ -339,7 +339,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     // Unclipped for the same reason site 1 is: the upt rowids in |upt_id_to_rowid_pairs| index into the
     // chunk this reads, so both must address the update segment the same way.
     ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats,
-                                                                               /*apply_tablet_range=*/false));
+                                                                                /*apply_tablet_range=*/false));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {

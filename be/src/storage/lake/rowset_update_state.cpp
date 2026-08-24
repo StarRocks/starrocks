@@ -928,7 +928,7 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
         // entries to SegmentRewriter, which copies the source segment whole and demands exactly that
         // many values; and one mechanism deciding ownership is easier to keep honest than two.
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats,
-                                                                               /*apply_tablet_range=*/false));
+                                                                                /*apply_tablet_range=*/false));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {

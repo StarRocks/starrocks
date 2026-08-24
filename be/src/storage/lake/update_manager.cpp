@@ -1731,8 +1731,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
-        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment,
-                                                     owned_per_segment));
+        st.update(
+                index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment, owned_per_segment));
     }));
     return st;
 }
