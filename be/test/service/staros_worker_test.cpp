@@ -31,20 +31,12 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD:be/test/service/staros_worker_test.cpp
 #include "common/config.h"
+#include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
-=======
-#include "base/utility/defer_op.h"
-#include "common/config_metrics_fwd.h"
-#include "common/logging.h"
-#include "common/shutdown_hook.h"
-#include "common/util/table_metrics.h"
-#include "compute_env/staros/staros_worker_metrics.h"
-#include "compute_env/staros/staros_worker_runtime.h"
->>>>>>> 3b5300a428 ([BugFix] Skip table metrics for non-table StarOS shards (#78116)):be/test/compute_env/staros/staros_worker_test.cpp
+#include "util/table_metrics.h"
 
 namespace starrocks {
 

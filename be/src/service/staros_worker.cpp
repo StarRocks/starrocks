@@ -25,10 +25,10 @@
 #include "common/shutdown_hook.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
+#include "gutil/strings/numbers.h"
 #include "util/await.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -57,9 +57,6 @@ DECLARE_bool(fslib_s3client_use_list_objects_v1);
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
 DECLARE_bool(fs_enable_buffer_prefetch);
-=======
-#include "gutil/strings/numbers.h"
->>>>>>> 3b5300a428 ([BugFix] Skip table metrics for non-table StarOS shards (#78116)):be/src/compute_env/staros/staros_worker.cpp
 
 namespace starrocks {
 
@@ -68,11 +65,12 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
-StarOSWorker::StarOSWorker()
+StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
         : _mtx(),
           _cache_mtx(),
           _shards(),
-          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)),
+          _table_metrics_mgr(table_metrics_mgr) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
@@ -108,17 +106,17 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     StarRocksMetrics::instance()->staros_shard_count.set_value(_shards.size());
     l.unlock();
     if (ret.second) {
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
+        auto* table_metrics_mgr = _table_metrics_mgr;
 #ifndef BE_TEST
-        StarRocksMetrics::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
+        if (table_metrics_mgr == nullptr) {
+            table_metrics_mgr = StarRocksMetrics::instance()->table_metrics_mgr();
+        }
 #endif
-=======
-        if (_table_metrics_mgr != nullptr) {
+        if (table_metrics_mgr != nullptr) {
             if (auto table_id = get_table_id(shard); table_id.has_value()) {
-                _table_metrics_mgr->register_table(*table_id);
+                table_metrics_mgr->register_table(*table_id);
             }
         }
->>>>>>> 3b5300a428 ([BugFix] Skip table metrics for non-table StarOS shards (#78116)):be/src/compute_env/staros/staros_worker.cpp
         // it is an insert op to the map
         // NOTE:
         //  1. Since the following statement is invoked outside the lock, it is possible that
@@ -148,18 +146,17 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
     auto iter = _shards.find(id);
     if (iter != _shards.end()) {
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
+        auto* table_metrics_mgr = _table_metrics_mgr;
 #ifndef BE_TEST
-        uint64_t table_id = get_table_id(iter->second.shard_info);
-        StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(table_id);
+        if (table_metrics_mgr == nullptr) {
+            table_metrics_mgr = StarRocksMetrics::instance()->table_metrics_mgr();
+        }
 #endif
-=======
-        if (_table_metrics_mgr != nullptr) {
+        if (table_metrics_mgr != nullptr) {
             if (auto table_id = get_table_id(iter->second.shard_info); table_id.has_value()) {
-                _table_metrics_mgr->unregister_table(*table_id);
+                table_metrics_mgr->unregister_table(*table_id);
             }
         }
->>>>>>> 3b5300a428 ([BugFix] Skip table metrics for non-table StarOS shards (#78116)):be/src/compute_env/staros/staros_worker.cpp
         _shards.erase(iter);
         StarRocksMetrics::instance()->staros_shard_count.set_value(_shards.size());
     }

@@ -19,11 +19,8 @@
 #include <starlet.h>
 
 #include <memory>
-<<<<<<< HEAD:be/src/service/staros_worker.h
-=======
 #include <mutex>
 #include <optional>
->>>>>>> 3b5300a428 ([BugFix] Skip table metrics for non-table StarOS shards (#78116)):be/src/compute_env/staros/staros_worker.h
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -39,6 +36,7 @@ namespace starrocks {
 
 class Cache;
 class CacheKey;
+class TableMetricsManager;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
@@ -56,7 +54,7 @@ public:
 
     typedef std::function<void(ShardId)> add_shard_listener;
 
-    StarOSWorker();
+    explicit StarOSWorker(TableMetricsManager* table_metrics_mgr = nullptr);
 
     ~StarOSWorker() override;
 
@@ -148,6 +146,7 @@ private:
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
+    TableMetricsManager* _table_metrics_mgr;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
