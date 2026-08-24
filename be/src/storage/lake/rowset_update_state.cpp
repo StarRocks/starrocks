@@ -370,20 +370,19 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
-    // A cross-published child receives its siblings' rows too: not its rows to read an id for, and
-    // resolving one can name a rowset the split pruned away.
+    // A cross-published child receives its siblings' rows too, and resolving one can name a rowset the
+    // split pruned away, so blank those answers out. A sibling's row then looks like a row with no old
+    // value, and it must KEEP looking like one: every such row gets its own slot in the idxes remap
+    // below, and the values filling those slots are fetched per entry of `rowids` -- from this rowset's
+    // own segment, which is always readable. Dropping siblings from `rowids` here would leave the remap
+    // pointing past the end of the fetched column. What a sibling's row must not reach is the delete
+    // decision further down, which is derived from `rowids` and erases keys.
     const Filter& owned = _upserts[segment_id]->standalone_owned();
     mask_unowned_rowids(owned, &_auto_increment_partial_update_states[segment_id].src_rss_rowids);
 
     std::vector<uint32_t> rowids;
     uint32_t n = _auto_increment_partial_update_states[segment_id].src_rss_rowids.size();
     for (uint32_t j = 0; j < n; j++) {
-        if (!owned.empty() && owned[j] == 0) {
-            // Masking left a sibling's row looking like a new row. It is not one: allocating an id for
-            // it would claim a key outside this child's range, and a 0 id would then have this child
-            // erase that key -- the erase #77744 had to clip out of a cross-published del file.
-            continue;
-        }
         uint64_t v = _auto_increment_partial_update_states[segment_id].src_rss_rowids[j];
         uint32_t rssid = v >> 32;
         if (rssid == (uint32_t)-1) {
@@ -444,6 +443,12 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user
     for (unsigned int row_idx : _auto_increment_partial_update_states[segment_id].rowids) {
+        if (!owned.empty() && owned[row_idx] == 0) {
+            // A sibling's row only looks like a new row because its lookup was masked. Erasing its key
+            // is what #77744 had to clip out of a cross-published del file: the key is not this child's,
+            // and its location resolves against sstables inherited from the parent.
+            continue;
+        }
         if (data[row_idx] == 0) {
             delete_idxes.emplace_back(row_idx);
         }
@@ -834,10 +839,6 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &new_rss_rowids, false));
-    // Same restriction the first lookup was given: a sibling's row is not this child's to re-read, and
-    // its location can name a rowset the split pruned away. Masking both sides of the comparison the
-    // same way also means such a row can never look like a conflict.
-    mask_unowned_rowids(_upserts[segment_id]->standalone_owned(), &new_rss_rowids);
 
     size_t total_conflicts = 0;
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
@@ -872,7 +873,15 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
     std::vector<uint32_t> conflict_idxes;
     std::vector<uint64_t> conflict_rowids;
     DCHECK_EQ(num_rows, _partial_update_states[segment_id].src_rss_rowids.size());
+    // A cross-published child holds its siblings' rows too. Their old values were never read (the first
+    // lookup was masked, so they sit at the "no old row" sentinel and the rewrite fills a default), so
+    // there is nothing to re-read for them here either -- and re-reading would resolve against sstables
+    // inherited from the parent, whose location can name a rowset the split pruned away.
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
     for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+        if (!owned.empty() && owned[i] == 0) {
+            continue;
+        }
         uint64_t new_rss_rowid = new_rss_rowids[i];
         uint32_t new_rssid = new_rss_rowid >> 32;
         uint64_t rss_rowid = _partial_update_states[segment_id].src_rss_rowids[i];
@@ -911,10 +920,19 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
     return Status::OK();
 }
 
+// NOT cross-publish aware beyond the erase guard at the end: |new_rss_rowids| arrives unmasked, so a
+// sibling's row that this child's inherited sstables still answer for is re-read from its old location,
+// which the split may have pruned from this child. Masking it here is not enough -- this function
+// rebuilds `rowids` from every sentinel entry in the whole vector while its idxes remap is derived from
+// the conflicting rows alone, so the two have different bases and widening one silently misaligns the
+// fetched column. Whatever relaxes ORDER BY on a range-distributed primary-key table owes this path a
+// rework with tests; until then the mask is all ones here, because the publish iterator is narrowed by
+// the tablet range (see CrossPublishRowSelector).
 Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateStateParams& params,
                                                            const std::vector<uint64_t>& new_rss_rowids,
                                                            uint32_t segment_id, size_t& total_conflicts) {
     uint32_t num_rows = new_rss_rowids.size();
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
     std::vector<uint32_t> conflict_idxes;
     std::vector<uint64_t> conflict_rowids;
     DCHECK_EQ(num_rows, _auto_increment_partial_update_states[segment_id].src_rss_rowids.size());
@@ -997,6 +1015,11 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user
         for (unsigned int row_idx : _auto_increment_partial_update_states[segment_id].rowids) {
+            if (!owned.empty() && owned[row_idx] == 0) {
+                // Not this child's key to erase -- see the same guard in
+                // _prepare_auto_increment_partial_update_states.
+                continue;
+            }
             if (data[row_idx] == 0) {
                 delete_idxes.emplace_back(row_idx);
             }
