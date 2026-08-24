@@ -2388,18 +2388,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         int bucketNum = distributionInfo.getBucketNum();
-        // For hash colocate tables, create the shards already joined to the colocation meta group
-        // (same effect as the later updateMetaGroup join), so the very first placement honors the
+        // For meta-group colocate tables (hash colocate lake tables — the only groups that get a
+        // StarOS meta group), create the shards already joined to the colocation meta group (same
+        // effect as the later updateMetaGroup join), so the very first placement honors the
         // colocation constraint. Otherwise the shards get generic placement first and are only
         // migrated onto the colocate-aligned workers after their shard groups join the meta group
         // (InsertOverwriteJobRunner post-commit / StarMgrMetaSyncer), which runs after the load
         // has finished and therefore orphans the caches the load populated on the original
         // workers.
-        long metaGroupId = 0;
-        if (distributionInfoType == DistributionInfo.DistributionInfoType.HASH
-                && colocateTableIndex.isMetaGroupColocateTable(table.getId())) {
-            metaGroupId = colocateTableIndex.getGroup(table.getId()).grpId;
-        }
+        ColocateTableIndex.GroupId colocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(table.getId());
+        long metaGroupId = colocateGroupId == null ? 0 : colocateGroupId.grpId;
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
