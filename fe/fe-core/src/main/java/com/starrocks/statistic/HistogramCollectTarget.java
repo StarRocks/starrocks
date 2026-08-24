@@ -16,8 +16,8 @@ package com.starrocks.statistic;
 
 /**
  * What a histogram collection strategy needs from the job it collects for, regardless of strategy.
- * Implemented by the job classes themselves, which is why job() exists: it lets a collector take a
- * single collaborator and still reach the job's inherited execution helpers.
+ * Implementations wrap the job rather than being it, which is why job() exists: it lets a collector
+ * take a single collaborator and still reach the job's inherited execution helpers.
  */
 interface HistogramCollectTarget {
     StatisticsCollectJob job();

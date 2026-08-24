@@ -459,11 +459,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
+        HistogramLegacyTarget legacyTarget = new HistogramLegacyTarget(
+                histogramStatisticsCollectJob, StatsConstants.HistogramCollectBucketNdvMode.NONE);
 
         Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
-        String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false);
+        String sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v2', %d, " +
                         "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
@@ -474,8 +476,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Map<String, String> mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v2", IntegerType.BIGINT, false);
+        sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, mostCommonValues, "v2", IntegerType.BIGINT, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                 "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                 "'test" +
@@ -490,8 +492,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v4", DateType.DATE, false);
+        sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, mostCommonValues, "v4", DateType.DATE, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                                 "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
                                 "'test" +
@@ -508,8 +510,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
+        sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -521,8 +523,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
         Config.enable_use_table_sample_collect_statistics = true;
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
+        sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -533,8 +535,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
+        sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -546,8 +548,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
         Config.statistics_sample_ndv_estimator = "LINEAR";
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
+        sql = legacyTarget.buildCollectHistogram(
+                0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -558,7 +560,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+        sql = NativeHistogramSql.buildMcvQuery(
                 db, olapTable, 100L, "v2", 0.1);
         Assertions.assertEquals(normalize.apply("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as " +
                 "BIGINT), " +
@@ -571,8 +573,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectBucketsWithoutNdv",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v6", IntegerType.BIGINT);
+        sql = NativeHistogramSql.buildBucketBoundariesQuery(
+                db, olapTable, histogramStatisticsCollectJob.getCatalogName(), 0.1, 64L, mostCommonValues, "v6",
+                IntegerType.BIGINT);
         Assertions.assertEquals(normalize.apply("select cast(2 as int) as version, cast(10009 as bigint), " +
                         "cast(10060 as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
                         "from " +
@@ -580,8 +583,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "`v6` not in (1,2) order by `v6` limit 10000000) t"),
                 normalize.apply(sql));
 
-        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogramWithHllNdv",
-                db, olapTable, mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
+        sql = legacyTarget.buildCollectHistogramWithHllNdv(
+                mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v6', %d, " +
                         "'test.t0_stats', histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]'),  " +
@@ -597,8 +600,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         boolean originalSample = Config.enable_use_table_sample_collect_statistics;
         try {
             Config.enable_use_table_sample_collect_statistics = false;
-            sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, olapTable, 0.1, 64L, mostCommonValues, "v2", VarcharType.VARCHAR, false);
+            sql = legacyTarget.buildCollectHistogram(
+                    0.1, 64L, mostCommonValues, "v2", VarcharType.VARCHAR, false);
             Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                             "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                             "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +

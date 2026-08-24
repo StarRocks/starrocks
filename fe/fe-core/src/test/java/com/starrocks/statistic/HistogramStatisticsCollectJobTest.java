@@ -224,6 +224,82 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         }
     }
 
+    @Test
+    public void testParseNdvModeNone() {
+        // Given analyze properties carrying a recognised histogram_collect_bucket_ndv_mode
+        // CASE WHEN the mode is "none" THEN NONE WHEN "sample" THEN SAMPLE WHEN "hll" THEN HLL
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "none";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
+                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeSample() {
+        // Given analyze properties carrying a recognised histogram_collect_bucket_ndv_mode
+        // CASE WHEN the mode is "none" THEN NONE WHEN "sample" THEN SAMPLE WHEN "hll" THEN HLL
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "sample";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode =
+                StatsConstants.HistogramCollectBucketNdvMode.SAMPLE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
+                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeHll() {
+        // Given analyze properties carrying a recognised histogram_collect_bucket_ndv_mode
+        // CASE WHEN the mode is "none" THEN NONE WHEN "sample" THEN SAMPLE WHEN "hll" THEN HLL
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "hll";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.HLL;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
+                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeIgnoresCase() {
+        // Given analyze properties whose histogram_collect_bucket_ndv_mode is a mode name in upper case
+        // CASE WHEN the mode matches a known name ignoring case THEN that mode
+        //      ELSE warn and fall back to NONE END
+
+        String ndvModeProperty = "HLL";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.HLL;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
+                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeUnrecognised() {
+        // Given analyze properties whose histogram_collect_bucket_ndv_mode names no known mode
+        // CASE WHEN the mode matches a known name ignoring case THEN that mode
+        //      ELSE warn and fall back to NONE, so an unusable property cannot fail the analyze job END
+
+        String ndvModeProperty = "bogus";
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
+                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
     private static class NativeHistogramBatchFixture implements AutoCloseable {
         private static final String HISTOGRAM = "[[\"1\",\"2\",\"3\",\"4\"]]";
 

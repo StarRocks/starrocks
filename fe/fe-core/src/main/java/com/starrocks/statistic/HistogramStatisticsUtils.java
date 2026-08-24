@@ -247,9 +247,8 @@ public final class HistogramStatisticsUtils {
     }
 
     static String buildBatchInsertPrefix(String tableName) {
-        List<String> targetColumnNames = buildStatsTargetColumnNames(tableName);
         return "INSERT INTO " + StatsConstants.STATISTICS_DB_NAME + "." + tableName +
-                "(" + String.join(", ", targetColumnNames) + ") VALUES ";
+                buildStatsTargetColumnListSql(tableName) + " VALUES ";
     }
 
     static StatementBase createInsertStmt(String tableName, List<List<Expr>> rowsBuffer, String sql) {
@@ -267,6 +266,11 @@ public final class HistogramStatisticsUtils {
         insertStmt.setTargetColumnNames(targetColumnNames);
         insertStmt.setOrigStmt(new OriginStatement(sql, 0));
         return insertStmt;
+    }
+
+    /** The parenthesised target column list of a statistics table, as it appears in an INSERT. */
+    static String buildStatsTargetColumnListSql(String tableName) {
+        return "(" + String.join(", ", buildStatsTargetColumnNames(tableName)) + ")";
     }
 
     static List<String> buildStatsTargetColumnNames(String tableName) {

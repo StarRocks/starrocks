@@ -23,7 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -225,9 +224,12 @@ public class StatisticsSQLTest extends PlanTestBase {
                 db, t0, Lists.newArrayList("b.a", "b.c", "d.c.a"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.INT, IntegerType.INT), StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
+        HistogramLegacyTarget legacyTarget = new HistogramLegacyTarget(
+                histogramStatisticsCollectJob, StatsConstants.HistogramCollectBucketNdvMode.NONE);
+        HistogramBatchedTarget batchedTarget = new HistogramBatchedTarget(
+                histogramStatisticsCollectJob, StatsConstants.HistogramCollectBucketNdvMode.NONE);
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
-                    db, t0, 3L, col, 0.1);
+            String sql = NativeHistogramSql.buildMcvQuery(db, t0, 3L, col, 0.1);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "0:OlapScanNode\n" +
@@ -235,16 +237,16 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
+            String sql = legacyTarget.buildCollectHistogram(
+                    0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
 
-            String querySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildQueryHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
+            String querySql = batchedTarget.buildQueryHistogram(
+                    0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
             plan = getFragmentPlan(querySql);
             assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
@@ -262,9 +264,13 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "hive0", db, t0, columnNames, Lists.newArrayList(IntegerType.INT, IntegerType.INT),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
+        ExternalHistogramLegacyTarget legacyTarget =
+                new ExternalHistogramLegacyTarget(hiveHistogramStatisticsCollectJob);
+        ExternalHistogramBatchedTarget batchedTarget =
+                new ExternalHistogramBatchedTarget(hiveHistogramStatisticsCollectJob);
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildCollectMCV",
-                    db, t0, 3L, col);
+            String sql = ExternalHistogramSql.buildMcvQuery(
+                    db, t0, hiveHistogramStatisticsCollectJob.getCatalogName(), 3L, col);
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, " 0:HdfsScanNode\n" +
@@ -272,16 +278,16 @@ public class StatisticsSQLTest extends PlanTestBase {
         }
 
         for (String col : columnNames) {
-            String sql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
+            String sql = legacyTarget.buildCollectHistogram(
+                    0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
 
-            String querySql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildQueryHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
+            String querySql = batchedTarget.buildQueryHistogram(
+                    0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
             plan = getFragmentPlan(querySql);
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
