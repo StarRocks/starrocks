@@ -191,6 +191,20 @@ public class ResourceGroupClassifier {
         return w;
     }
 
+    public ResourceGroupClassifier copy() {
+        ResourceGroupClassifier classifier = new ResourceGroupClassifier();
+        classifier.id = this.id;
+        classifier.user = this.user;
+        classifier.role = this.role;
+        classifier.queryTypes = this.queryTypes != null ? new HashSet<>(this.queryTypes) : null;
+        classifier.sourceIp = this.sourceIp;
+        classifier.resourceGroupId = this.resourceGroupId;
+        classifier.databaseIds = this.databaseIds != null ? new HashSet<>(this.databaseIds) : null;
+        classifier.planCpuCostRange = this.planCpuCostRange;
+        classifier.planMemCostRange = this.planMemCostRange;
+        return classifier;
+    }
+
     @Override
     public String toString() {
         StringBuilder classifiersStr = new StringBuilder();
