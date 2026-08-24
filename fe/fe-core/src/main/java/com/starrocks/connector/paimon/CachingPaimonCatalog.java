@@ -89,9 +89,9 @@ public class CachingPaimonCatalog extends CachingCatalog {
 
             super.invalidateTable(id);
             super.getTable(id); // repopulate, so queries don't pay for the reload
-            refreshPartitions(id);
+            super.refreshPartitions(id);
             lastRefreshedRevision.put(id, latest);
-            LOG.info("Refreshed paimon table {} of catalog {} to snapshot {} schema {}",
+            LOG.debug("Refreshed paimon table {} of catalog {} to snapshot {} schema {}",
                     id.getFullName(), catalogName, latestSnapshotId, latestSchemaId);
         } catch (Exception e) {
             LOG.warn("Failed to refresh paimon table {} of catalog {}, evict it",

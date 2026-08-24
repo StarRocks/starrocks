@@ -178,9 +178,10 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 LOG.error("Failed to get cachingPaimonCatalog by catalog {}.", catalogName);
                 continue;
             }
-            LOG.info("Start to refresh paimon caching catalog {}", catalogName);
+            long startTime = System.currentTimeMillis();
             paimonCatalog.refreshCatalog();
-            LOG.info("Finish to refresh paimon caching catalog {}", catalogName);
+            LOG.info("Finish to refresh paimon caching catalog {}, cost: {} ms",
+                    catalogName, System.currentTimeMillis() - startTime);
         }
     }
 
