@@ -300,8 +300,17 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 // deterministic no-progress split from re-firing on the next unchanged candidate.
                 sizeSplitLatch.forgetTable(tableId);
             }
-            if (!TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                // No merge signal: drop any suppression so future growth re-arms it.
+            // The feature gate is checked FIRST, before the signature below: that signature takes the
+            // table READ lock and hashes every tablet of every visible index, while the gate itself
+            // lives inside createTabletReshardJob. needMerge does not consult the flag, so a table
+            // carrying only a merge signal is still queued while merge is disabled -- and the
+            // resulting "merge is disabled" is a plain StarRocksException, so the catch below never
+            // fires and the latch never arms. Evaluating the latch first would therefore pay that walk
+            // on every stat pass, forever, for a job that cannot run. Before this feature the same
+            // path threw immediately with no walk at all.
+            if (!Config.tablet_reshard_enable_tablet_merge
+                    || !TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
+                // No merge signal, or merge is off: drop any suppression so it re-arms cleanly.
                 emptyMergePlanLatch.forgetTable(tableId);
             } else {
                 long mergeSignature = ColocateChecker.tableConvergenceSignature(db, table,

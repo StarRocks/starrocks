@@ -582,10 +582,73 @@ public class TabletReshardJobMgrTest {
         long mergePairBelowThreshold =
                 TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold, 0L, 0);
-        mgr.runAfterCatalogReadyForTest();
+        // The trigger now consults tablet_reshard_enable_tablet_merge before planning, so that this
+        // path does not pay a read-locked signature walk for a job that cannot run. The check used to
+        // live inside createTabletReshardJob, which this test mocks out -- so the precondition it
+        // always depended on has to be stated explicitly now.
+        boolean savedMergeFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold, 0L, 0);
+            mgr.runAfterCatalogReadyForTest();
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedMergeFlag;
+        }
         Assertions.assertTrue(mergeCalled[0],
                 "drain must route a sub-threshold merge candidate to a merge job");
+    }
+
+    /**
+     * The merge feature gate must be consulted BEFORE the latch signature is computed. That signature
+     * takes the table READ lock and hashes every tablet of every visible index, while the gate itself
+     * lives inside createTabletReshardJob -- and `needMerge` does not consult the flag, so a table
+     * carrying only a merge signal is still queued while merge is off. Getting the order wrong pays
+     * that walk on every statistics pass, forever, for a job that cannot run; before this feature the
+     * same path threw immediately with no walk at all. Asserting "no job was created" would NOT catch
+     * that, so this counts the signature computation itself.
+     */
+    @Test
+    public void testMergeDisabledSkipsTheLatchSignatureWalk() throws Exception {
+        int[] signatureWalks = {0};
+        new MockUp<ColocateChecker>() {
+            @Mock
+            public long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
+                signatureWalks[0]++;
+                return 1L;
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause clause)
+                    throws StarRocksException {
+                throw new StarRocksException("Tablet merge is disabled.");
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        long pairSize = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+
+        try {
+            Config.tablet_reshard_enable_tablet_merge = false;
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(0, signatureWalks[0],
+                    "merge disabled must skip the read-locked signature walk entirely");
+
+            // Control: with the flag on, the very same signal does compute it -- so the assertion
+            // above is about the gate and not about the signal being unactionable.
+            Config.tablet_reshard_enable_tablet_merge = true;
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(1, signatureWalks[0],
+                    "merge enabled must evaluate the latch for an actionable signal");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
     }
 
     /**
@@ -611,24 +674,32 @@ public class TabletReshardJobMgrTest {
         mockLeaderAdmissionOpen();
         TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         long pairSize = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+        boolean savedMergeFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            // The trigger consults the feature gate before planning, so an automatic merge only gets
+            // this far when merge is enabled.
+            Config.tablet_reshard_enable_tablet_merge = true;
 
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                0L, pairSize, 0L, 0);
-        Assertions.assertEquals(1, mergeAttempts[0], "the first actionable signal must be planned");
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(1, mergeAttempts[0], "the first actionable signal must be planned");
 
-        // Same signal, same layout: deterministic empty plan, so it must not be re-planned.
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                0L, pairSize, 0L, 0);
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                0L, pairSize, 0L, 0);
-        Assertions.assertEquals(1, mergeAttempts[0],
-                "an unchanged layout and signal must not re-walk the table");
+            // Same signal, same layout: deterministic empty plan, so it must not be re-planned.
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(1, mergeAttempts[0],
+                    "an unchanged layout and signal must not re-walk the table");
 
-        // A moved signal means the tablet mix (or the parallelism floor) changed, so the plan could
-        // now be non-empty: the latch must re-arm rather than suppress forever.
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
-                0L, pairSize - 1, 0L, 0);
-        Assertions.assertEquals(2, mergeAttempts[0], "a changed signal must re-arm the latch");
+            // A moved signal means the tablet mix (or the parallelism floor) changed, so the plan
+            // could now be non-empty: the latch must re-arm rather than suppress forever.
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize - 1, 0L, 0);
+            Assertions.assertEquals(2, mergeAttempts[0], "a changed signal must re-arm the latch");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedMergeFlag;
+        }
     }
 
     @Test
