@@ -1,0 +1,7 @@
+fix: [Docs]: Fix typo DISTRUBTE_BUCKET to DISTRIBUTE_BUCKET in tables_confi
+
+- docs\ja\sql-reference\information_schema\tables_config.md: 'DISTRUBTE_BUCKET'->'DISTRIBUTE_BUCKET'
+
+Fixes #75664
+
+Signed-off-by: Vedant Madane <6527493+VedantMadane@users.noreply.github.com>
