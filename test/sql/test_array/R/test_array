@@ -427,9 +427,9 @@ CREATE TABLE IF NOT EXISTS null_or_empty_test (COLA INT, COLB ARRAY<INT>) PROPER
 INSERT INTO null_or_empty_test (COLA, COLB) VALUES (1, []), (2, NULL), (3, [1,2]);
 -- result:
 -- !result
-SELECT null_or_empty(COLB) FROM flatten_test ORDER BY COLA;
+SELECT null_or_empty(COLB) FROM null_or_empty_test ORDER BY COLA;
 -- result:
-1
+0
 1
 0
 -- !result

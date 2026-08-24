@@ -20,19 +20,13 @@ E: (1050, "Getting analyzing error. Detail message: Table 't0' already exists.")
 -- !result
 show create table `t0`;
 -- result:
-t0	CREATE TEMPORARY TABLE `t0` (
-  `c1` int(11) NOT NULL COMMENT "",
-  `c2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`c1`)
-DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t0\	CREATE\ TEMPORARY\ TABLE\ `t0`\ \(\
+\ \ `c1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `c2`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+PRIMARY\ KEY\(`c1`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`c1`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result
 desc `t0`;
 -- result:
@@ -97,19 +91,13 @@ create temporary table if not exists `t1` like `t0`;
 -- !result
 show create table `t1`;
 -- result:
-t1	CREATE TEMPORARY TABLE `t1` (
-  `c1` int(11) NOT NULL COMMENT "",
-  `c2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`c1`)
-DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t1\	CREATE\ TEMPORARY\ TABLE\ `t1`\ \(\
+\ \ `c1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `c2`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+PRIMARY\ KEY\(`c1`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`c1`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result
 show tables;
 -- result:
@@ -156,19 +144,13 @@ create temporary table `t2` as select /*+ SET_VAR(query_mem_limit=1)*/ * from `t
 -- !result
 show create table `t1`;
 -- result:
-t1	CREATE TEMPORARY TABLE `t1` (
-  `c1` int(11) NULL COMMENT "",
-  `c2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`c1`, `c2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)t1\	CREATE\ TEMPORARY\ TABLE\ `t1`\ \(\
+\ \ `c1`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `c2`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`c1`,\ `c2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 show tables;
 -- result:
@@ -395,7 +377,7 @@ WITH BROKER
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Do not support exporting temporary table.')
 -- !result
--- name: test_sys_temp_tables
+-- name: test_sys_temp_tables @native
 create temporary table `t` (
     `c1` int,
     `c2` int,

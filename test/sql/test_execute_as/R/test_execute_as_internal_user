@@ -64,6 +64,7 @@ grant impersonate on user test_impersonate to u2;
 -- !result
 execute as test_impersonate with no revert;
 -- result:
+NONE
 -- !result
 select current_group();
 -- result:
@@ -75,6 +76,7 @@ NONE
 -- !result
 execute as u1 with no revert;
 -- result:
+NONE
 -- !result
 show databases;
 -- result:
@@ -90,6 +92,7 @@ g1_role
 -- !result
 execute as test_impersonate with no revert;
 -- result:
+NONE
 -- !result
 select current_group();
 -- result:
@@ -101,6 +104,7 @@ NONE
 -- !result
 execute as u2 with no revert;
 -- result:
+NONE
 -- !result
 show databases;
 -- result:
@@ -116,6 +120,7 @@ g2_role
 -- !result
 execute as test_impersonate with no revert;
 -- result:
+NONE
 -- !result
 select current_group();
 -- result:
@@ -127,6 +132,7 @@ NONE
 -- !result
 execute as root with no revert;
 -- result:
+NONE
 -- !result
 drop user if exists test_impersonate;
 -- result:

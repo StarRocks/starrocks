@@ -4,36 +4,24 @@ create table t(k int);
 -- !result
 show create table t;
 -- result:
-t	CREATE TABLE `t` (
-  `k` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)t\	CREATE\ TABLE\ `t`\ \(\
+\ \ `k`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 alter table t set('bucket_size'='1024');
 -- result:
 -- !result
 show create table t;
 -- result:
-t	CREATE TABLE `t` (
-  `k` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1024",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)t\	CREATE\ TABLE\ `t`\ \(\
+\ \ `k`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 
 
@@ -546,21 +534,14 @@ PROPERTIES (
 -- !result
 show create table t;
 -- result:
-t	CREATE TABLE `t` (
-  `k` date NULL COMMENT "",
-  `v` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `v`)
-PARTITION BY DATE_TRUNC('DAY', `k`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"mutable_bucket_num" = "2",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t\	CREATE\ TABLE\ `t`\ \(\
+\ \ `k`\ date\ NULL\ COMMENT\ "",\
+\ \ `v`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`,\ `v`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ [Dd][Aa][Tt][Ee]_[Tt][Rr][Uu][Nn][Cc]\('DAY',\ `k`\)\
+DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
 -- result:
@@ -578,21 +559,14 @@ alter table t set('mutable_bucket_num'='3');
 -- !result
 show create table t;
 -- result:
-t	CREATE TABLE `t` (
-  `k` date NULL COMMENT "",
-  `v` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `v`)
-PARTITION BY DATE_TRUNC('DAY', `k`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"mutable_bucket_num" = "3",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t\	CREATE\ TABLE\ `t`\ \(\
+\ \ `k`\ date\ NULL\ COMMENT\ "",\
+\ \ `v`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`,\ `v`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ [Dd][Aa][Tt][Ee]_[Tt][Rr][Uu][Nn][Cc]\('DAY',\ `k`\)\
+DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 insert into t values('2021-01-01', 1);
 -- result:

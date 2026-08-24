@@ -17,7 +17,7 @@ E: (5064, 'Getting analyzing error. Detail message: Random distribution table al
 
 
 
--- name: test_change_partial_partition_distribution
+-- name: test_change_partial_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
@@ -132,7 +132,7 @@ None
 
 
 
--- name: test_online_optimize_table_basic @sequential @slow
+-- name: test_online_optimize_table_basic @sequential @slow @native
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result
@@ -464,7 +464,7 @@ select * from t;
 20	2020-08-01
 21	2020-08-01
 -- !result
--- name: test_online_optimize_table_pk @sequential @slow
+-- name: test_online_optimize_table_pk @sequential @slow @native
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result
@@ -686,7 +686,7 @@ select * from tpk;
 19
 20
 -- !result
--- name: test_online_optimize_table_stream_load @sequential @slow
+-- name: test_online_optimize_table_stream_load @sequential @slow @native
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result
@@ -1000,7 +1000,7 @@ select count(*) from t;
 -- result:
 63
 -- !result
--- name: test_optimize_table_with_special_characters @sequential
+-- name: test_optimize_table_with_special_characters @sequential @native
 create table `t#t`(k int) distributed by hash(k) buckets 10;
 -- result:
 -- !result
@@ -1069,7 +1069,7 @@ admin set frontend config ('enable_online_optimize_table'='true');
 
 
 
--- name: test_online_optimize_table_expr_partition @sequential @slow
+-- name: test_online_optimize_table_expr_partition @sequential @slow @native
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result

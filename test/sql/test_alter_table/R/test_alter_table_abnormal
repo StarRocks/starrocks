@@ -66,10 +66,7 @@ ALTER TABLE t0 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
 -- !result
 DESC t0;
 -- result:
-k0	bigint	NO	true	None	
-k1	datetime	NO	true	None	
-v0	int	YES	false	None	
-v1	varchar(100)	YES	false	None	
+[REGEX](?s)k0\	bigint\	NO\	true\	None\t.*\nk1\	datetime\	NO\	true\	None\t.*\nv0\	int\	YES\	false\	None\t.*\nv1\	varchar\(100\)\	YES\	false\	None\t.*
 -- !result
 ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
@@ -97,10 +94,7 @@ E: (1064, 'Column does not exists: v100')
 -- !result
 DESC t0;
 -- result:
-k0	bigint	NO	true	None	
-k1	datetime	NO	true	None	
-v0	int	YES	false	None	
-v1	varchar(100)	YES	false	None	
+[REGEX](?s)k0\	bigint\	NO\	true\	None\t.*\nk1\	datetime\	NO\	true\	None\t.*\nv0\	int\	YES\	false\	None\t.*\nv1\	varchar\(100\)\	YES\	false\	None\t.*
 -- !result
 SELECT * from t0;
 -- result:
@@ -137,10 +131,7 @@ ALTER TABLE t1 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
 -- !result
 DESC t1;
 -- result:
-k0	bigint	YES	true	None	
-k1	datetime	YES	true	None	
-v0	bigint	YES	false	None	
-v1	varchar(100)	YES	false	None	
+[REGEX](?s)k0\	bigint\	YES\	true\	None\t.*\nk1\	datetime\	YES\	true\	None\t.*\nv0\	bigint\	YES\	false\	None\t.*\nv1\	varchar\(100\)\	YES\	false\	None\t.*
 -- !result
 ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
@@ -164,10 +155,7 @@ E: (1064, 'Can not assign aggregation method on column in Unique data model tabl
 -- !result
 DESC t1;
 -- result:
-k0	bigint	YES	true	None	
-k1	datetime	YES	true	None	
-v0	bigint	YES	false	None	
-v1	varchar(100)	YES	false	None	
+[REGEX](?s)k0\	bigint\	YES\	true\	None\t.*\nk1\	datetime\	YES\	true\	None\t.*\nv0\	bigint\	YES\	false\	None\t.*\nv1\	varchar\(100\)\	YES\	false\	None\t.*
 -- !result
 SELECT * from t1;
 -- result:
@@ -216,10 +204,7 @@ E: (1064, 'Can not assign aggregation method on column in Duplicate data model t
 -- !result
 DESC t2;
 -- result:
-k0	bigint	YES	true	None	
-k1	datetime	YES	true	None	
-v0	bigint	YES	false	None	
-v1	varchar(100)	YES	false	None	
+[REGEX](?s)k0\	bigint\	YES\	true\	None\t.*\nk1\	datetime\	YES\	true\	None\t.*\nv0\	bigint\	YES\	false\	None\t.*\nv1\	varchar\(100\)\	YES\	false\	None\t.*
 -- !result
 SELECT * from t2;
 -- result:

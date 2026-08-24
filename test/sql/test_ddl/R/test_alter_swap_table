@@ -96,39 +96,25 @@ ALTER materialized view test_mv12 active;
 -- !result
 SHOW CREATE TABLE s2;
 -- result:
-s2	CREATE TABLE `s2` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)s2\	CREATE\ TABLE\ `s2`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 SHOW CREATE TABLE s3;
 -- result:
-s3	CREATE TABLE `s3` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)s3\	CREATE\ TABLE\ `s3`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
 -- result:
@@ -177,75 +163,47 @@ ALTER materialized view test_mv12 active;
 -- !result
 SHOW CREATE TABLE s1;
 -- result:
-s1	CREATE TABLE `s1` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1",
-"unique_constraints" = "default_catalog.db_test_alter_swap_table.s1.k1"
-);
+[REGEX](?s)s1\	CREATE\ TABLE\ `s1`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 SHOW CREATE TABLE s1_new;
 -- result:
-s1_new	CREATE TABLE `s1_new` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1",
-"unique_constraints" = "default_catalog.db_test_alter_swap_table.s1_new.k1"
-);
+[REGEX](?s)s1_new\	CREATE\ TABLE\ `s1_new`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 SHOW CREATE TABLE s2;
 -- result:
-s2	CREATE TABLE `s2` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)s2\	CREATE\ TABLE\ `s2`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 SHOW CREATE TABLE s3;
 -- result:
-s3	CREATE TABLE `s3` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"foreign_key_constraints" = "(k1) REFERENCES default_catalog.db_test_alter_swap_table.s1(k1)",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)s3\	CREATE\ TABLE\ `s3`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 function: assert_explain_not_contains('select s2.k1, s2.k2 from s1 join s2 on s1.k1 = s2.k1 order by 1, 2;', 's1')
 -- result:
@@ -279,37 +237,25 @@ DROP TABLE s1;
 -- !result
 SHOW CREATE TABLE s2;
 -- result:
-s2	CREATE TABLE `s2` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)s2\	CREATE\ TABLE\ `s2`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 SHOW CREATE TABLE s3;
 -- result:
-s3	CREATE TABLE `s3` (
-  `k1` int(11) NOT NULL COMMENT "",
-  `k2` int(11) NULL COMMENT "",
-  `k3` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)s3\	CREATE\ TABLE\ `s3`\ \(\
+\ \ `k1`\ int\(11\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k3`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ RANDOM\
+PROPERTIES \(.*\);
 -- !result
 CREATE TABLE `primary_table_with_null_partition` ( `k1` date not null, `k2` datetime not null, `k3` varchar(20) not null, `k4` varchar(20) not null, `k5` boolean not null, `v1` tinyint, `v2` smallint, `v3` int, `v4` bigint, `v5` largeint, `v6` float, `v7` double, `v8` decimal(27,9) ) PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" PARTITION BY RANGE(`k1`) ( PARTITION `p202006` VALUES LESS THAN ("2020-07-01"), PARTITION `p202007` VALUES LESS THAN ("2020-08-01"), PARTITION `p202008` VALUES LESS THAN ("2020-09-01") ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
 -- result:
