@@ -5,6 +5,9 @@ on:
   pull_request_review:
     types:
       - submitted
+      # `dismissed` so the backport gate re-evaluates when an approval is withdrawn
+      # (the other review jobs gate on state == 'approved', so they ignore it).
+      - dismissed
 
 permissions:
   checks: write
@@ -140,3 +143,40 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh
+
+  # Backport author-approval gate (decided flow 2026-08-20): a backport PR must be
+  # approved (+1) by its ORIGINAL author before it can merge. Unlike the review jobs
+  # above, this one INTENTIONALLY runs on mergify/bp/* PRs (they are excluded there).
+  # It re-evaluates on every approving review and reports the `backport/author-approval`
+  # commit status on the PR head SHA. Make that context REQUIRED on the release branches
+  # (branch protection) to activate the gate; until then this is informational only.
+  backport-author-approval:
+    # NOT gated through `info` (which only runs for approved reviews) and NOT limited
+    # to `submitted`: this must re-run for EVERY review change on a backport PR —
+    # including a later CHANGES_REQUESTED or a `dismissed` approval — so it can replace
+    # a now-stale `success` with `failure` while the head SHA is unchanged. The gate
+    # script reads the current effective approvals fresh each run, so re-running on any
+    # event is idempotent and correct.
+    runs-on: [ self-hosted, light ]
+    if: >
+      github.event_name == 'pull_request_review' &&
+      github.event.pull_request.base.ref != 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'mergify/bp/')
+    name: backport-author-approval
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: check author +1 and report status
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          if ./scripts/check-backport-author-approval.sh; then
+            state=success; desc="Approved (+1) by the original author"
+          else
+            state=failure; desc="Waiting for the original author's +1"
+          fi
+          echo "-> backport/author-approval = ${state}"
+          gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="${state}" -f context="backport/author-approval" -f description="${desc}"
