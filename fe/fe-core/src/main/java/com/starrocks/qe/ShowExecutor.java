@@ -2395,8 +2395,9 @@ public class ShowExecutor {
                 throw new SemanticException("Repository " + statement.getRepoName() + " does not exist");
             }
 
-            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(), statement.getTimestamp(),
-                    statement.getSnapshotNames());
+            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(),
+                    statement.getTimestamp(), statement.getSnapshotNames(),
+                    GlobalStateMgr.getCurrentState().getBackupHandler().getRetentionCache());
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), snapshotInfos);
         }
 

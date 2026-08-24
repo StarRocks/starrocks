@@ -203,6 +203,7 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -4399,6 +4400,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitDropRepositoryStatement(
             com.starrocks.sql.parser.StarRocksParser.DropRepositoryStatementContext context) {
         return new DropRepositoryStmt(((Identifier) visit(context.identifier())).getValue(), createPos(context));
+    }
+
+    // ----------------------------------------------- Snapshot Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitDropSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropSnapshotStatementContext context) {
+        String snapshotName = ((Identifier) visit(context.snapshotName)).getValue();
+        String repoName = ((Identifier) visit(context.repoName)).getValue();
+        return new DropSnapshotStmt(snapshotName, repoName, context.FORCE() != null, createPos(context));
     }
 
     // -------------------------------- Sql BlackList And WhiteList Statement ------------------------------------------

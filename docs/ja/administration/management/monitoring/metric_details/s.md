@@ -325,6 +325,18 @@ description: "Alphabetical s"
 - ラベル: `type` (`add_column`、`drop_column`、または `modify_column`)、`is_leader`
 - 説明: ALTER TABLE の列操作の回数を、タイプ別に集計します。1 つのステートメントに複数の操作を含めることができ (例: `ADD COLUMN a, DROP COLUMN b`)、それぞれがタイプ別に個別にカウントされます。列名の変更、列順の変更、コメントのみの変更はカウントされません。報告するのは Leader FE (`is_leader="true"`) のみです。
 
+## `starrocks_fe_backup_snapshot_clean_failed`
+
+- 単位: 個
+- タイプ: 累積
+- 説明: バックアップスナップショットの削除に失敗した合計回数。TTL による自動クリーンアップと DROP SNAPSHOT の両方を含みます。
+
+## `starrocks_fe_backup_snapshot_clean_success`
+
+- 単位: 個
+- タイプ: 累積
+- 説明: リポジトリから削除されたバックアップスナップショットの合計数。TTL による自動クリーンアップと DROP SNAPSHOT の両方を含みます。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 単位: バイト

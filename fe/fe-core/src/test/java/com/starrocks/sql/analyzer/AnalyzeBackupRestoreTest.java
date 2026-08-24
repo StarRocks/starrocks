@@ -22,8 +22,10 @@ import com.starrocks.backup.Repository;
 import com.starrocks.backup.Status;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BackupStmt;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -284,6 +286,19 @@ public class AnalyzeBackupRestoreTest {
         analyzeFail("CANCEL RESTORE;");
         analyzeSuccess("CANCEL BACKUP FOR EXTERNAL CATALOG;");
         analyzeSuccess("CANCEL RESTORE FOR EXTERNAL CATALOG;");
+    }
+
+    @Test
+    public void testBackupTtl() {
+        BackupStmt stmt = (BackupStmt) analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0 ) " +
+                "PROPERTIES (\"type\" = \"full\",\"ttl\" = \"7 DAY\");");
+        Assertions.assertEquals("7 DAY", stmt.getTtl());
+
+        stmt = (BackupStmt) analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0 );");
+        Assertions.assertNull(stmt.getTtl());
+
+        analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0 ) " +
+                "PROPERTIES (\"ttl\" = \"7 fortnights\");");
     }
 
 }
