@@ -19,6 +19,8 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -37,6 +39,83 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SecurityPolicyRewriteRule {
+    /**
+     * Marks all relations in one executable statement for policy lookup during analysis.
+     * Deferred statements such as PREPARE deliberately stay opaque; their executable inner
+     * statement is marked explicitly at the PREPARE metadata and EXECUTE boundaries.
+     */
+    public static void markRelationsForRewrite(ParseNode statement) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(statement);
+    }
+
+    /**
+     * Checks the current authorization context without mutating the analyzed relation. This is
+     * used before reusing a cached prepared point-query plan: active policies require a fresh AST
+     * and a normal policy rewrite.
+     */
+    public static boolean hasPolicy(ConnectContext context, Relation relation) {
+        if (relation instanceof TableRelation && ((TableRelation) relation).isSyncMVQuery()) {
+            return false;
+        }
+
+        List<Column> columns;
+        TableName tableName;
+        if (relation instanceof ViewRelation) {
+            ViewRelation viewRelation = (ViewRelation) relation;
+            columns = viewRelation.getView().getBaseSchema();
+            tableName = viewRelation.getName();
+        } else if (relation instanceof TableRelation) {
+            TableRelation tableRelation = (TableRelation) relation;
+            if (tableRelation.getTable() == null) {
+                return true;
+            }
+            columns = tableRelation.getTable().getBaseSchema();
+            tableName = tableRelation.getName();
+        } else {
+            return true;
+        }
+
+        List<Column> validColumns = columns.stream().filter(c -> !c.getType().isUnknown()).collect(Collectors.toList());
+        Map<String, Expr> maskingExprMap = Authorizer.getColumnMaskingPolicy(context, tableName, validColumns);
+        Expr rowAccessExpr = Authorizer.getRowAccessPolicy(context, tableName);
+        return (maskingExprMap != null && !maskingExprMap.isEmpty()) || rowAccessExpr != null;
+    }
+
+    /**
+     * Checks every physical table or view reachable from an analyzed statement. A point query may
+     * still contain scalar subqueries in its select list, so checking only its outer relation is
+     * not sufficient before reusing a prepared plan.
+     */
+    public static boolean hasPolicy(ConnectContext context, ParseNode statement) {
+        boolean[] policyFound = {false};
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitTable(TableRelation node, Void ignored) {
+                if (!policyFound[0] && SecurityPolicyRewriteRule.hasPolicy(context, node)) {
+                    policyFound[0] = true;
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitView(ViewRelation node, Void ignored) {
+                if (!policyFound[0] && SecurityPolicyRewriteRule.hasPolicy(context, node)) {
+                    policyFound[0] = true;
+                }
+                // A cached plan scans the expanded view definition. Policies newly added to a
+                // base table are therefore just as relevant as policies attached to the view.
+                return super.visitView(node, ignored);
+            }
+        }.visit(statement);
+        return policyFound[0];
+    }
+
     public static QueryStatement buildView(ConnectContext context, Relation relation, TableName tableName) {
         if (relation instanceof TableRelation && ((TableRelation) relation).isSyncMVQuery()) {
             return null;

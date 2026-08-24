@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -49,7 +50,9 @@ public class PrepareAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
             }
             // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an
-            // execution plan
+            // execution plan. This metadata working copy is intentionally separate from the pristine SQL template
+            // used by EXECUTE.
+            SecurityPolicyRewriteRule.markRelationsForRewrite(innerStmt);
             Analyzer.analyze(innerStmt, ConnectContext.get());
         }
     }

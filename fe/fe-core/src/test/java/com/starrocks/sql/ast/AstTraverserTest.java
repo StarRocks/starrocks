@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -46,8 +47,13 @@ public class AstTraverserTest {
     }
 
     private static void assertTablesReached(String sql, int expected) {
-        Assertions.assertEquals(expected, collectTableRelations(parse(sql)).size(),
+        StatementBase statement = parse(sql);
+        List<TableRelation> relations = collectTableRelations(statement);
+        Assertions.assertEquals(expected, relations.size(),
                 "AstTraverser did not reach every table relation in: " + sql);
+        SecurityPolicyRewriteRule.markRelationsForRewrite(statement);
+        Assertions.assertTrue(relations.stream().allMatch(Relation::isNeedRewrittenByPolicy),
+                "Security-policy marker did not mark every table relation in: " + sql);
         // AnalyzerUtils uses its own AstTraverser subclass and is what ColumnPrivilege relies on.
         Assertions.assertEquals(expected, AnalyzerUtils.collectAllTableAndViewRelations(parse(sql)).size(),
                 "collectAllTableAndViewRelations did not reach every table relation in: " + sql);
@@ -73,13 +79,58 @@ public class AstTraverserTest {
     }
 
     @Test
-    public void testReachesRelationInsidePreparedStatement() {
-        assertTablesReached("PREPARE p1 FROM 'select * from db1.tbl1'", 1);
-        assertTablesReached("PREPARE p2 FROM 'select * from db1.tbl1 a join db1.tbl2 b on a.k1 = b.k1'", 2);
+    public void testReachesRelationsInSelectListAndTableFunctionArguments() {
+        assertTablesReached("select (select k1 from db1.tbl1) from db1.tbl2", 2);
+        assertTablesReached("select * from unnest((select array_agg(k1) from db1.tbl1))", 1);
+        assertTablesReached("select count(*) from db1.tbl1 "
+                + "group by (select max(k1) from db1.tbl2)", 2);
+        assertTablesReached("select * from (values ((select max(k1) from db1.tbl1))) v", 1);
     }
 
     @Test
-    public void testReachesRelationInsidePivotWithinPreparedStatement() {
-        assertTablesReached("PREPARE p3 FROM 'select * from db1.tbl1 PIVOT (max(k1) FOR k2 IN (1))'", 1);
+    public void testReachesRelationsInParsedDmlSources() {
+        // The write target is a TableRef, not a source Relation. Only the three source reads are
+        // expected here.
+        assertTablesReached("update db1.target set k1 = (select max(k1) from db1.tbl1) "
+                + "from db1.tbl2 where k2 in (select k2 from db1.tbl3)", 3);
+        assertTablesReached("delete from db1.target using db1.tbl1 "
+                + "where k1 in (select k1 from db1.tbl2)", 2);
+        assertTablesReached("merge into db1.target t using db1.tbl1 s on t.k1 = s.k1 "
+                + "when matched then update set v1 = (select max(v1) from db1.tbl2)", 2);
+    }
+
+    @Test
+    public void testAnalyzedDmlTraversesOnlySynthesizedQuery() {
+        QueryStatement synthesized = (QueryStatement) parse("select * from db1.synthesized_source");
+
+        UpdateStmt update = (UpdateStmt) parse("update db1.target set k1 = 1 from db1.raw_source");
+        update.setQueryStatement(synthesized);
+        Assertions.assertEquals(List.of("synthesized_source"), collectTableRelations(update).stream()
+                .map(x -> x.getName().getTbl()).toList());
+
+        DeleteStmt delete = (DeleteStmt) parse("delete from db1.target using db1.raw_source where k1 = 1");
+        delete.setQueryStatement(synthesized);
+        Assertions.assertEquals(List.of("synthesized_source"), collectTableRelations(delete).stream()
+                .map(x -> x.getName().getTbl()).toList());
+
+        MergeIntoStmt merge = (MergeIntoStmt) parse("merge into db1.target t using db1.raw_source s "
+                + "on t.k1 = s.k1 when matched then delete");
+        merge.setQueryStatement(synthesized);
+        Assertions.assertEquals(List.of("synthesized_source"), collectTableRelations(merge).stream()
+                .map(x -> x.getName().getTbl()).toList());
+    }
+
+    @Test
+    public void testPrepareIsADeferredTraversalBoundary() {
+        PrepareStmt prepareStmt = (PrepareStmt) parse("PREPARE p1 FROM 'select * from db1.tbl1'");
+        Assertions.assertTrue(collectTableRelations(prepareStmt).isEmpty());
+        SecurityPolicyRewriteRule.markRelationsForRewrite(prepareStmt);
+        Assertions.assertFalse(collectTableRelations(prepareStmt.getInnerStmt()).get(0).isNeedRewrittenByPolicy());
+
+        // PREPARE metadata and EXECUTE explicitly mark the inner executable statement.
+        SecurityPolicyRewriteRule.markRelationsForRewrite(prepareStmt.getInnerStmt());
+        List<TableRelation> innerRelations = collectTableRelations(prepareStmt.getInnerStmt());
+        Assertions.assertEquals(1, innerRelations.size());
+        Assertions.assertTrue(innerRelations.get(0).isNeedRewrittenByPolicy());
     }
 }

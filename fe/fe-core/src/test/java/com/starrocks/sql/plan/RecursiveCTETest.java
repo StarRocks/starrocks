@@ -20,6 +20,7 @@ import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
 import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
@@ -43,6 +44,17 @@ public class RecursiveCTETest extends PlanTestBase {
             return executor.explainCTE(sb);
         }
         return getCostExplain(sql);
+    }
+
+    @Test
+    public void testPrepareIsNotExecutedAsRecursiveCte() {
+        String sql = "prepare recursive_stmt from 'with recursive cte(n) as "
+                + "(select 1 union all select n + 1 from cte where n < ?) select * from cte'";
+        PrepareStmt prepareStmt = (PrepareStmt) SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+
+        Assertions.assertFalse(RecursiveCTEAstCheck.hasRecursiveCte(prepareStmt, connectContext));
+        Assertions.assertTrue(RecursiveCTEAstCheck.hasRecursiveCte(prepareStmt.getInnerStmt(), connectContext));
     }
 
     @Test

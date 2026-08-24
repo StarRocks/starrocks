@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.Subquery;
 
 import java.util.HashMap;
 import java.util.List;
@@ -94,6 +95,17 @@ public class QueryStatement extends StatementBase {
 
         if (!(selectRelation.getRelation() instanceof TableRelation)) {
             return false;
+        }
+
+        // The prepared point-query fast path only replans predicates for one direct table scan.
+        // A scalar subquery in the projection adds independent scans and policy state that cannot
+        // safely share that cached plan.
+        if (selectRelation.getOutputExpression() != null) {
+            for (Expr outputExpression : selectRelation.getOutputExpression()) {
+                if (outputExpression.contains(Subquery.class)) {
+                    return false;
+                }
+            }
         }
 
         if (((TableRelation) selectRelation.getRelation()).getTable().getType() != Table.TableType.OLAP) {
