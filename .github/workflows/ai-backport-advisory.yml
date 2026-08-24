@@ -52,11 +52,16 @@ on:
     # is the author's confirm-checkbox + review's job, not a claude run per push.)
     types: [opened, reopened, edited]
 
-# Per-PR concurrency: cancel an older run when a newer open/reopen arrives so an
-# out-of-order finish cannot clobber the advisory with a stale result.
+# Per-PR concurrency: cancel an older run when a newer open/reopen or a real TITLE change
+# arrives, so an out-of-order finish cannot clobber the advisory with a stale result.
+# BUT do NOT cancel for a plain body/label edit (e.g. the author ticking a checkbox):
+# concurrency cancellation happens at the workflow level, BEFORE the compute job's `if`
+# (which skips non-title edits) — so an unconditional cancel-in-progress would let a
+# checkbox tick abort an in-flight advisory that then never reposts. Gate the cancel on
+# the same title-change condition the compute job uses.
 concurrency:
   group: backport-advisory-${{ github.event.number }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event.action != 'edited' || github.event.changes.title != null }}
 
 # Read-only by default: constrains the github.token the AI (claude) job runs under. The
 # apply job overrides token env with secrets.PAT explicitly.
