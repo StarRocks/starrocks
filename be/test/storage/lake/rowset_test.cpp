@@ -478,6 +478,52 @@ TEST_F(LakeRowsetTest, test_ignore_lost_segment_vertical_chunk_size) {
     EXPECT_GT(chunk_size, 0);
 }
 
+// get_read_iterator_num() must answer from the rowset metadata when every segment in its window
+// records num_rows: choose_compaction_algorithm() calls it before every compaction, and the old
+// implementation parsed every input segment's footer only to throw the result away. The segment
+// files are deleted before the call, so a successful count proves no segment was loaded; the
+// legacy fallback is then proven engaged by stripping num_rows from one segment meta and watching
+// the same call fail on the missing files.
+TEST_F(LakeRowsetTest, test_get_read_iterator_num_from_metadata) {
+    create_rowsets_for_testing();
+
+    for (auto& seg_meta : *_tablet_metadata->mutable_rowsets(0)->mutable_segment_metas()) {
+        seg_meta.set_num_rows(44);
+    }
+
+    // Remove the files: only a metadata-based count can still succeed.
+    for (const auto& seg_meta : _tablet_metadata->rowsets(0).segment_metas()) {
+        ASSERT_OK(FileSystem::Default()->delete_file(
+                _tablet_mgr->segment_location(_tablet_metadata->id(), seg_meta.filename())));
+    }
+    _tablet_mgr->metacache()->prune();
+
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto num, rowset->get_read_iterator_num());
+        ASSERT_EQ(3, num); // overlapped rowset: one iterator per non-empty segment
+    }
+
+    // A zero-row segment contributes no iterator, exactly like the footer-based count.
+    {
+        _tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(1)->set_num_rows(0);
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto num, rowset->get_read_iterator_num());
+        ASSERT_EQ(2, num);
+    }
+
+    // Any segment without num_rows (e.g. written by cross-cluster replication) forces the legacy
+    // loading path for the whole rowset -- which must now fail on the deleted files.
+    {
+        _tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(1)->clear_num_rows();
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSERT_FALSE(rowset->get_read_iterator_num().ok());
+    }
+}
+
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     create_rowsets_for_testing();
 

@@ -610,21 +610,52 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 }
 
 StatusOr<size_t> Rowset::get_read_iterator_num() {
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
-
+    // Count from the rowset metadata when every segment in this rowset's window records num_rows
+    // (SegmentFileInfo::to_proto always writes it): choose_compaction_algorithm() calls this before
+    // every compaction, and the load below parses every input segment's footer only to throw the
+    // result away -- on a wide tablet that full parse was the dominant pre-task cost whenever the
+    // metadata cache could not hold the inputs. The window must match what load_segments() would
+    // return: the range slice in segment-range mode, the uncompacted window in partial-compaction
+    // mode, everything otherwise.
+    int32_t seg_start = 0;
+    int32_t seg_end = _metadata->segment_metas_size();
+    if (is_segment_range_mode()) {
+        seg_start = _segment_range_start;
+        seg_end = _segment_range_end;
+    } else if (partial_segments_compaction()) {
+        seg_start = static_cast<int32_t>(metadata().next_compaction_offset());
+        seg_end = std::min(seg_end, seg_start + static_cast<int32_t>(_compaction_segment_limit));
+    }
     size_t segment_num = 0;
-    for (auto& seg_ptr : segments) {
-        // This count is position-agnostic, so a null placeholder slot (e.g. a lost segment dropped by
-        // experimental_lake_ignore_lost_segment) simply contributes no read iterator -- skip it whatever
-        // its cause.
-        if (seg_ptr == nullptr) {
-            continue;
+    bool all_have_num_rows = true;
+    for (int32_t i = seg_start; i < seg_end && all_have_num_rows; i++) {
+        const auto& seg_meta = metadata().segment_metas(i);
+        // A physically-lost segment (experimental_lake_ignore_lost_segment) is still counted here --
+        // the metadata cannot know the file is gone. That only nudges the horizontal-vs-vertical
+        // choice in a disaster-recovery mode, not correctness.
+        all_have_num_rows = seg_meta.has_num_rows();
+        segment_num += seg_meta.num_rows() > 0 ? 1 : 0;
+    }
+
+    if (!all_have_num_rows) {
+        // Some writer did not record num_rows (e.g. rowsets created by cross-cluster replication, or
+        // metadata predating the field): fall back to loading the segments and consulting footers.
+        std::vector<SegmentPtr> segments;
+        RETURN_IF_ERROR(load_segments(&segments, false));
+
+        segment_num = 0;
+        for (auto& seg_ptr : segments) {
+            // This count is position-agnostic, so a null placeholder slot (e.g. a lost segment dropped
+            // by experimental_lake_ignore_lost_segment) simply contributes no read iterator -- skip it
+            // whatever its cause.
+            if (seg_ptr == nullptr) {
+                continue;
+            }
+            if (seg_ptr->num_rows() == 0) {
+                continue;
+            }
+            ++segment_num;
         }
-        if (seg_ptr->num_rows() == 0) {
-            continue;
-        }
-        ++segment_num;
     }
 
     if (segment_num > 1 && !is_overlapped()) {
