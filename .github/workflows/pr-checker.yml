@@ -128,11 +128,11 @@ jobs:
         startsWith(github.event.pull_request.title, '[Enhancement]') ||
         startsWith(github.event.pull_request.title, '[Doc]') ||
         startsWith(github.event.pull_request.title, '[UT]')
-      ) && !contains(github.event.pull_request.title, 'cherry-pick') && !contains(github.event.pull_request.title, 'backport')
+      ) && !startsWith(github.head_ref, 'mergify/bp/')
     strategy:
       fail-fast: false
       matrix:
-        version: ["26.2", "4.1", "4.0", "3.5"]
+        version: ["26.2", "4.1", "4.0"]
     steps:
       - name: add ${{ matrix.version }} label
         if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))
@@ -152,29 +152,39 @@ jobs:
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
-      # The author must acknowledge the AI backport recommendation (posted as the
-      # "<!-- backport-advisory -->" comment) before merge. This is the human gate for the
-      # AI advisory (it replaces the backport-PR owner-+1 gate).
-      # Fail UNLESS the CHECKED form is present (not "if the unchecked form is present"):
-      # that way an already-open PR whose body predates the template, or a deleted line,
-      # cannot silently bypass the gate (codex P1). Scoped to main-targeting PRs, since the
-      # advisory is only posted for base==main (codex P2) — release-branch PRs get no
-      # recommendation to confirm.
+  # Standalone (version-independent) gate: the author must acknowledge the AI backport
+  # recommendation (the "<!-- backport-advisory -->" comment) before merge. It replaces the
+  # backport-PR owner-+1 gate. Kept OUT of the per-version backport-check-subtask matrix so a
+  # failure surfaces directly as "check-ai-backport-confirmed" rather than as every
+  # "backport-check-subtask (X)" leg. Fails UNLESS the CHECKED form is present (not "if the
+  # unchecked form is present") so a body predating the template, or a deleted line, cannot
+  # silently bypass it (codex P1). Same title scope as the subtask; base==main only, since the
+  # advisory is only posted for base==main (codex P2).
+  check-ai-backport-confirmed:
+    needs: title-check
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.base_ref == 'main' &&
+      (
+        startsWith(github.event.pull_request.title, '[BugFix]') ||
+        startsWith(github.event.pull_request.title, '[Enhancement]') ||
+        startsWith(github.event.pull_request.title, '[Doc]') ||
+        startsWith(github.event.pull_request.title, '[UT]')
+      ) && !startsWith(github.head_ref, 'mergify/bp/')
+    steps:
       - name: check-ai-backport-confirmed
-        if: >
-          github.base_ref == 'main' &&
-          !contains(toJson(github.event.pull_request.body), '[x] I have reviewed and confirmed the AI backport recommendation')
+        if: "!contains(toJson(github.event.pull_request.body), '[x] I have reviewed and confirmed the AI backport recommendation')"
         run: |
           echo "::error::You must review the AI backport recommendation (see the backport-advisory comment) and check the box - I have reviewed and confirmed the AI backport recommendation"
           exit 1
 
   backport-check:
     runs-on: [self-hosted, light]
-    needs: backport-check-subtask
-    if: always() && needs.backport-check-subtask.result != 'skipped'
+    needs: [backport-check-subtask, check-ai-backport-confirmed]
+    if: always() && (needs.backport-check-subtask.result != 'skipped' || needs.check-ai-backport-confirmed.result != 'skipped')
     steps:
       - name: Check subtask status
-        if: needs.backport-check-subtask.result == 'failure'
+        if: needs.backport-check-subtask.result == 'failure' || needs.check-ai-backport-confirmed.result == 'failure'
         run: |
           exit 1
 
