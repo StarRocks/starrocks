@@ -340,19 +340,23 @@ class DecodeContext {
 
     }
 
-    private static Function buildFunction(String fnName, List<ScalarOperator> args) {
+    private static CallOperator buildCallOperator(CallOperator call, List<ScalarOperator> args) {
+        String fnName = call.getFnName();
+        final Function fn;
         if (fnName.equals(FunctionSet.NAMED_STRUCT)) {
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function fn = ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_SUPERTYPE_OF).copy();
+            fn = ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_SUPERTYPE_OF).copy();
             List<StructField> fields = Lists.newArrayList();
             for (int i = 0; i < args.size(); i += 2) {
                 fields.add(new StructField(((ConstantOperator) args.get(i)).getVarchar(), argTypes[i + 1]));
             }
             fn.setRetType(new StructType(fields, true));
-            return fn;
+        } else {
+            Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            fn = ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
         }
-        Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        return ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+        return new CallOperator(fnName, fn.getReturnType(), args, fn,
+                call.isDistinct(), call.isRemovedDistinct());
     }
 
     // define mode: means the result column is dict, DictExpr should return int/array<int> type
@@ -484,8 +488,7 @@ class DecodeContext {
                 newChildren = newChildren.stream().map(op -> op.isConstant() ?
                         dictEncodeConstant(op, dictRef.getId()) : op).collect(Collectors.toCollection(ArrayList::new));
             }
-            Function fn = buildFunction(call.getFnName(), newChildren);
-            ScalarOperator result = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn);
+            ScalarOperator result = buildCallOperator(call, newChildren);
 
             if (call.getType().isStringType()) {
                 return processAnchor(result);
@@ -636,9 +639,7 @@ class DecodeContext {
                 return call;
             }
 
-            Function fn = buildFunction(call.getFnName(), newChildren);
-            return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
-                    call.isDistinct(), call.isRemovedDistinct());
+            return buildCallOperator(call, newChildren);
         }
     }
 
