@@ -4907,7 +4907,13 @@ public class Config extends ConfigBase {
             + "table, so size max_broker_load_job_concurrency accordingly when many concurrent "
             + "Broker Loads target a pre-splittable layout. Operator note: the Broker Load remains "
             + "PENDING in SHOW LOAD during the wait and is still subject to its own timeoutSecond — "
-            + "set this well below the smallest Broker Load timeout in normal use.")
+            + "set this well below the smallest Broker Load timeout in normal use. A dynamic INSERT "
+            + "OVERWRITE can spend this budget twice: when the coordinator wait expires while the "
+            + "reshard job it admitted is still active, that overwrite's commit waits for the same "
+            + "job for one more full window measured from the commit, rather than discarding a write "
+            + "that has already completed. So keep the SUM below the statement's own timeout, and "
+            + "note the commit-side window covers only the overwrite's own pre-split job — any other "
+            + "concurrent reshard is still bounded by the statement's remaining budget.")
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "
