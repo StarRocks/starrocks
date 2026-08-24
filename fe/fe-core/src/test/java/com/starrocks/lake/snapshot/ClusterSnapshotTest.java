@@ -851,6 +851,36 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testUnfinishedExternalJobIsNotResumedWhenAutomatedSnapshotIsOff() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgrEPack();
+        mgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);
+        mgr.setAutomatedSnapshotOn(storageVolumeName);
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(nextId.incrementAndGet(),
+                "automated_cluster_snapshot_1", storageVolumeName, System.currentTimeMillis());
+        mgr.addSnapshotJob(job);
+
+        // While the automated snapshot is on, an unfinished external job is resumed after an FE restart.
+        mgr.abortUnfinishedClusterSnapshotJob();
+        Assertions.assertEquals(ClusterSnapshotJobState.INITIALIZING, job.getState());
+        Assertions.assertSame(job, mgr.clusterSnapshotJobScheduler.runningJob);
+
+        // With the automated snapshot off -- e.g. a job inherited from the source cluster's image by a
+        // cross-cluster restore -- resuming it would make this cluster take a snapshot nobody asked for.
+        mgr.clusterSnapshotJobScheduler.setRunningJob(null);
+        mgr.setAutomatedSnapshotOff();
+        mgr.abortUnfinishedClusterSnapshotJob();
+        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+        Assertions.assertNull(mgr.clusterSnapshotJobScheduler.runningJob);
+    }
+
+    @Test
     public void testDeletionControl() {
         new MockUp<RunMode>() {
             @Mock

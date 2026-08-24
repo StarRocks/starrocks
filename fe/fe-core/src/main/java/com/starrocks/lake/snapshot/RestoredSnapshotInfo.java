@@ -19,11 +19,18 @@ public class RestoredSnapshotInfo {
     private String snapshotName;
     private long feJournalId;
     private long starMgrJournalId;
+    private ClusterSnapshotInfo clusterSnapshotInfo;
 
     public RestoredSnapshotInfo(String snapshotName, long feJournalId, long starMgrJournalId) {
+        this(snapshotName, feJournalId, starMgrJournalId, null);
+    }
+
+    public RestoredSnapshotInfo(String snapshotName, long feJournalId, long starMgrJournalId,
+            ClusterSnapshotInfo clusterSnapshotInfo) {
         this.snapshotName = snapshotName;
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
+        this.clusterSnapshotInfo = clusterSnapshotInfo;
     }
 
     public String getSnapshotName() {
@@ -36,5 +43,9 @@ public class RestoredSnapshotInfo {
 
     public long getStarMgrJournalId() {
         return starMgrJournalId;
+    }
+
+    public ClusterSnapshotInfo getClusterSnapshotInfo() {
+        return clusterSnapshotInfo;
     }
 }

@@ -138,6 +138,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             clearFinishedAutomatedClusterSnapshot(null);
         }
 
+        persistAutomatedSnapshotOff();
+    }
+
+    private void persistAutomatedSnapshotOff() {
         ClusterSnapshotLog log = new ClusterSnapshotLog();
         log.setAutomatedSnapshotOff();
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log, wal -> {
@@ -228,14 +232,21 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     /**
-     * Drop every snapshot job inherited from the source cluster's image. The source's history is
-     * not relevant to the target cluster, and any incomplete external job records would otherwise
-     * make {@link ClusterSnapshotJobScheduler#retryPendingCleanup} spin forever (the SV those jobs
-     * reference may not exist in target's storage volume mgr after restore).
+     * Reset inherited cluster-snapshot state with one journal entry, written as an
+     * AUTOMATED_SNAPSHOT_OFF record carrying the reset flag so older FEs can still replay it.
      */
-    public void dropAllInheritedSnapshotJobs() {
+    public void resetSnapshotStateAfterExternalRestore() {
+        ClusterSnapshotLog log = new ClusterSnapshotLog();
+        log.resetSnapshotStateAfterExternalRestore();
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log, wal -> {
+            applyExternalSnapshotStateReset();
+        });
+    }
+
+    protected void applyExternalSnapshotStateReset() {
         int dropped = automatedSnapshotJobs.size();
         automatedSnapshotJobs.clear();
+        setAutomatedSnapshotOff();
         if (dropped > 0) {
             LOG.info("Dropped {} snapshot jobs inherited from source cluster image", dropped);
         }
@@ -513,7 +524,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             // For ExternalClusterSnapshotJob, we rely on its replay() implementation
             // to reconstruct transient state and continue running after restart,
             // so we do NOT mark it as ERROR here.
-            if (lastUnfinishedJob instanceof ExternalClusterSnapshotJob) {
+            //
+            // Only while the automated snapshot is on, though: with it off there is no live
+            // configuration behind the job, and a job inherited from another cluster's image by a
+            // cross-cluster restore would make this cluster produce a snapshot the operator turned
+            // off. Such a job is aborted like any other unfinished one.
+            if (lastUnfinishedJob instanceof ExternalClusterSnapshotJob && isAutomatedSnapshotOn()) {
                 LOG.info("Keep unfinished ExternalClusterSnapshotJob {} in state {} after FE restart",
                         lastUnfinishedJob.getId(), lastUnfinishedJob.getState());
                 clusterSnapshotJobScheduler.setRunningJob(lastUnfinishedJob);
@@ -657,6 +673,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     public void replayLog(ClusterSnapshotLog log) {
         ClusterSnapshotLog.ClusterSnapshotLogType logType = log.getType();
+        if (logType == null) {
+            // A record written by a newer FE: gson maps the unknown enum value to null. Skip it instead
+            // of letting the switch below throw, which would abort journal replay on this FE.
+            LOG.warn("Skip cluster snapshot log with an unknown log type");
+            return;
+        }
         switch (logType) {
             case AUTOMATED_SNAPSHOT_ON: {
                 String storageVolumeName = log.getStorageVolumeName();
@@ -666,7 +688,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 break;
             }
             case AUTOMATED_SNAPSHOT_OFF: {
-                setAutomatedSnapshotOff();
+                if (log.isResetInheritedSnapshotState()) {
+                    applyExternalSnapshotStateReset();
+                } else {
+                    setAutomatedSnapshotOff();
+                }
                 break;
             }
             case AUTOMATED_SNAPSHOT_INTERVAL: {

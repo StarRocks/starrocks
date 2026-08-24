@@ -39,6 +39,11 @@ public class ClusterSnapshotLog implements Writable {
     // For UPDATE_SNAPSHOT_JOB
     @SerializedName(value = "snapshotJob")
     private ClusterSnapshotJob snapshotJob = null;
+    // For AUTOMATED_SNAPSHOT_OFF: also drop the snapshot jobs and requests inherited from the source
+    // cluster's image. Encoded as a flag on a record type every released FE knows, so a downgraded FE
+    // ignores the unknown field and still turns the automated snapshot off instead of failing replay.
+    @SerializedName(value = "resetInheritedSnapshotState")
+    private boolean resetInheritedSnapshotState = false;
 
     public ClusterSnapshotLog() {}
 
@@ -60,6 +65,11 @@ public class ClusterSnapshotLog implements Writable {
     public void setAutomatedSnapshotInterval(long intervalSeconds) {
         this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_INTERVAL;
         this.automatedSnapshotIntervalSeconds = intervalSeconds;
+    }
+
+    public void resetSnapshotStateAfterExternalRestore() {
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF;
+        this.resetInheritedSnapshotState = true;
     }
 
     public void setSnapshotJob(ClusterSnapshotJob job) {
@@ -85,6 +95,10 @@ public class ClusterSnapshotLog implements Writable {
 
     public ClusterSnapshotJob getSnapshotJob() {
         return this.snapshotJob;
+    }
+
+    public boolean isResetInheritedSnapshotState() {
+        return this.resetInheritedSnapshotState;
     }
 
 }

@@ -52,7 +52,6 @@ public class RestoreClusterSnapshotMgr {
     private static final Logger LOG = LogManager.getLogger(RestoreClusterSnapshotMgr.class);
 
     private static RestoreClusterSnapshotMgr instance;
-    
 
     private ClusterSnapshotConfig config;
     private boolean oldStartWithIncompleteMeta;
@@ -106,6 +105,10 @@ public class RestoreClusterSnapshotMgr {
         }
 
         try {
+            if (isExternalSnapshot()) {
+                self.verifyAllImageStorageVolumesAreDeclaredInYaml(
+                        GlobalStateMgr.getCurrentState().getStorageVolumeMgr());
+            }
             self.updateFrontends();
             self.updateComputeNodes();
             if (isExternalSnapshot()) {
@@ -113,12 +116,7 @@ public class RestoreClusterSnapshotMgr {
                 // For in-place restore (source == target) these entries are still valid and
                 // dropping them would erase legitimate brokers and pending automated snapshot jobs.
                 self.dropImageBrokers();
-                self.dropImageSnapshotJobs();
-                // The restored cluster must not keep writing snapshots to the source cluster's
-                // external location, so turn off the automated snapshot for external restores only.
-                // For a local automated snapshot restore the configuration is still valid and is
-                // preserved so it keeps running after the restore.
-                self.disableAutomatedSnapshot();
+                self.resetSnapshotStateAfterExternalRestore();
             }
             self.updateStorageVolumes();
         } finally {
@@ -134,6 +132,16 @@ public class RestoreClusterSnapshotMgr {
             return null;
         }
         return self.restoredSnapshotInfo;
+    }
+
+    public static ClusterSnapshotInfo getClusterSnapshotInfoForRestore() {
+        RestoredSnapshotInfo info = getRestoredSnapshotInfo();
+        if (info != null && info.getClusterSnapshotInfo() != null) {
+            return info.getClusterSnapshotInfo();
+        }
+        LOG.warn("Restored snapshot metadata has no ClusterSnapshotInfo; rebuild it from the loaded image");
+        return SnapshotInfoHelper.buildClusterSnapshotInfo(
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
     }
 
     private void updateConfig() {
@@ -237,7 +245,8 @@ public class RestoreClusterSnapshotMgr {
             ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(localImagePath);
             if (snapshotMeta != null) {
                 return new RestoredSnapshotInfo(snapshotMeta.getSnapshotName(),
-                        snapshotMeta.getFeJournalId(), snapshotMeta.getStarMgrJournalId());
+                        snapshotMeta.getFeJournalId(), snapshotMeta.getStarMgrJournalId(),
+                        snapshotMeta.getClusterSnapshotInfo());
             }
 
             // Fallback: read image version from local image files (old format without meta file)
@@ -314,8 +323,8 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
-    private void dropImageSnapshotJobs() {
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().dropAllInheritedSnapshotJobs();
+    private void resetSnapshotStateAfterExternalRestore() {
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().resetSnapshotStateAfterExternalRestore();
     }
 
     private void updateStorageVolumes() throws StarRocksException {
@@ -323,10 +332,6 @@ public class RestoreClusterSnapshotMgr {
         boolean external = isExternalSnapshot();
 
         if (external) {
-            // Refuse to leave any image SV pointing at the source bucket; tables bound to such an
-            // SV would silently route writes back into the source cluster's storage.
-            verifyAllImageStorageVolumesAreDeclaredInYaml(storageVolumeMgr);
-
             ClusterSnapshotConfig.StorageVolume snapshotStorageVolume = config.getSnapshotStorageVolume();
             String snapshotStorageVolumeName = StorageVolumeMgr.BASE_STORAGE_VOLUME;
             if (storageVolumeMgr.getStorageVolumeByName(snapshotStorageVolumeName) == null) {
@@ -425,8 +430,4 @@ public class RestoreClusterSnapshotMgr {
                         + "--cluster_snapshot:%s", details));
     }
 
-    private void disableAutomatedSnapshot() {
-        ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
-        clusterSnapshotMgr.setAutomatedSnapshotOff();
-    }
 }

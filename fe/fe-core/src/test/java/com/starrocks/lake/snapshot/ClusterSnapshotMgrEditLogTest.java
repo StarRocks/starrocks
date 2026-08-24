@@ -14,10 +14,12 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.gson.JsonObject;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
@@ -84,6 +86,77 @@ public class ClusterSnapshotMgrEditLogTest {
         follower.setAutomatedSnapshotOn("sv_off", 60, new HashMap<>());
         follower.replayLog(log);
         Assertions.assertNull(follower.getAutomatedSnapshotSvName());
+    }
+
+    @Test
+    public void testResetSnapshotStateAfterExternalRestoreEditLogAndReplay() throws Exception {
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        mgr.setAutomatedSnapshotOn("sv_external", 60, new HashMap<>());
+        mgr.addSnapshotJob(new ExternalClusterSnapshotJob(
+                1L, "automated_cluster_snapshot_1", "sv_external", 1L));
+
+        mgr.resetSnapshotStateAfterExternalRestore();
+        Assertions.assertNull(mgr.getAutomatedSnapshotSvName());
+        Assertions.assertTrue(mgr.getAutomatedSnapshotJobs().isEmpty());
+
+        ClusterSnapshotLog log = (ClusterSnapshotLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CLUSTER_SNAPSHOT_LOG);
+        // Written as a record type every released FE knows, with the extra reset carried by a flag.
+        Assertions.assertEquals(ClusterSnapshotLog.ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF, log.getType());
+        Assertions.assertTrue(log.isResetInheritedSnapshotState());
+
+        ClusterSnapshotMgr follower = new ClusterSnapshotMgr();
+        follower.setAutomatedSnapshotOn("sv_external", 60, new HashMap<>());
+        follower.addSnapshotJob(new ExternalClusterSnapshotJob(
+                1L, "automated_cluster_snapshot_1", "sv_external", 1L));
+        follower.replayLog(log);
+        Assertions.assertNull(follower.getAutomatedSnapshotSvName());
+        Assertions.assertTrue(follower.getAutomatedSnapshotJobs().isEmpty());
+    }
+
+    @Test
+    public void testResetSnapshotStateDowngradeReplayKeepsLegacyBehavior() throws Exception {
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        mgr.resetSnapshotStateAfterExternalRestore();
+        ClusterSnapshotLog resetLog = (ClusterSnapshotLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CLUSTER_SNAPSHOT_LOG);
+
+        // Model an older FE schema dropping the unknown reset flag from the actual journal payload.
+        JsonObject legacyJson = GsonUtils.GSON.toJsonTree(resetLog).getAsJsonObject();
+        Assertions.assertTrue(legacyJson.remove("resetInheritedSnapshotState").getAsBoolean());
+        ClusterSnapshotLog legacyLog = GsonUtils.GSON.fromJson(legacyJson, ClusterSnapshotLog.class);
+        Assertions.assertEquals(ClusterSnapshotLog.ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF,
+                legacyLog.getType());
+        Assertions.assertFalse(legacyLog.isResetInheritedSnapshotState());
+
+        ClusterSnapshotMgrEPack legacyFollower = new ClusterSnapshotMgrEPack();
+        legacyFollower.setAutomatedSnapshotOn("sv_external", 60, new HashMap<>());
+        legacyFollower.addSnapshotJob(new ExternalClusterSnapshotJob(
+                1L, "automated_cluster_snapshot_1", "sv_external", 1L));
+        legacyFollower.addManualClusterSnapshotRequest(
+                new ManualClusterSnapshotRequest("manual_request", "sv_external"));
+        legacyFollower.addManualClusterSnapshotJob(
+                new ManualClusterSnapshotJob(2L, "manual_job", "sv_external", 2L));
+
+        Assertions.assertDoesNotThrow(() -> legacyFollower.replayLog(legacyLog));
+        Assertions.assertNull(legacyFollower.getAutomatedSnapshotSvName());
+        Assertions.assertEquals(1, legacyFollower.getAutomatedSnapshotJobs().size());
+        Assertions.assertEquals(1, legacyFollower.getManualClusterSnapshotRequestQueue().size());
+        Assertions.assertEquals(1, legacyFollower.getManualClusterSnapshotJobs().size());
+    }
+
+    @Test
+    public void testReplayLogWithUnknownLogTypeIsSkipped() {
+        // A record written by a newer FE: gson maps the unknown enum value to null, and replay must
+        // skip the record instead of throwing and aborting the journal.
+        ClusterSnapshotLog log = GsonUtils.GSON.fromJson("{\"type\":\"SOME_FUTURE_LOG_TYPE\"}",
+                ClusterSnapshotLog.class);
+        Assertions.assertNull(log.getType());
+
+        ClusterSnapshotMgr follower = new ClusterSnapshotMgr();
+        follower.setAutomatedSnapshotOn("sv_external", 60, new HashMap<>());
+        follower.replayLog(log);
+        Assertions.assertEquals("sv_external", follower.getAutomatedSnapshotSvName());
     }
 
     @Test

@@ -1764,7 +1764,8 @@ public class GlobalStateMgr {
             
             // update FE Storage configuration after loading image for restore
             if (RunMode.isSharedDataMode() && RestoreClusterSnapshotMgr.isExternalSnapshot()) {
-                clusterSnapshotRestoredVersionMgr.init(clusterSnapshotMgr.getLastSuccFullSnapshotInfo());
+                clusterSnapshotRestoredVersionMgr.init(
+                        RestoreClusterSnapshotMgr.getClusterSnapshotInfoForRestore());
             }
             RestoreClusterSnapshotMgr.finishRestoring();
 

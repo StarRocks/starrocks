@@ -202,6 +202,19 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         manualClusterSnapshotJobs.put(job.getId(), job);
     }
 
+    @Override
+    protected void applyExternalSnapshotStateReset() {
+        int droppedRequests = manualClusterSnapshotRequestQueue.size();
+        int droppedJobs = manualClusterSnapshotJobs.size();
+        super.applyExternalSnapshotStateReset();
+        manualClusterSnapshotRequestQueue.clear();
+        manualClusterSnapshotJobs.clear();
+        if (droppedRequests > 0 || droppedJobs > 0) {
+            LOG.info("Dropped {} manual snapshot requests and {} jobs inherited from source cluster image",
+                    droppedRequests, droppedJobs);
+        }
+    }
+
     public void replayManualLog(ManualClusterSnapshotLog log) {
         ManualClusterSnapshotLog.ManualClusterSnapshotLogType logType = log.getType();
         switch (logType) {

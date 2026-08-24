@@ -19,8 +19,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.persist.ClusterSnapshotLog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.Storage;
+import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -41,8 +45,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,6 +58,7 @@ public class RestoreClusterSnapshotMgrTest {
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
+    private static final String INHERITED_JOB_NAME = "automated_cluster_snapshot_1704038400000";
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -177,6 +185,7 @@ public class RestoreClusterSnapshotMgrTest {
 
         RestoreClusterSnapshotMgr.finishRestoring();
         Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+        Assertions.assertNull(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo());
 
         StorageVolume storageVolume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                 .getStorageVolumeByName(sv2.getName());
@@ -226,13 +235,25 @@ public class RestoreClusterSnapshotMgrTest {
                 "leftover_from_source", "S3",
                 Collections.singletonList("s3://defaultbucket/test/"), props,
                 Optional.of(true), "leftover from source image");
+        ClusterSnapshotMgr snapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+        snapshotMgr.setAutomatedSnapshotOn("source_snapshot_sv");
+        snapshotMgr.addSnapshotJob(
+                new ClusterSnapshotJob(123L, INHERITED_JOB_NAME, "source_snapshot_sv", 1704038400000L));
 
         StarRocksException ex = Assertions.assertThrows(StarRocksException.class,
                 RestoreClusterSnapshotMgr::finishRestoring);
-        Assertions.assertTrue(ex.getMessage().contains("leftover_from_source"),
-                "error must list the undeclared SV name; got: " + ex.getMessage());
-        Assertions.assertTrue(ex.getMessage().contains("not declared"),
-                "error must mention undeclared volumes; got: " + ex.getMessage());
+        try {
+            Assertions.assertTrue(ex.getMessage().contains("leftover_from_source"),
+                    "error must list the undeclared SV name; got: " + ex.getMessage());
+            Assertions.assertTrue(ex.getMessage().contains("not declared"),
+                    "error must mention undeclared volumes; got: " + ex.getMessage());
+            Assertions.assertTrue(snapshotMgr.isAutomatedSnapshotOn());
+            Assertions.assertFalse(snapshotMgr.getAutomatedSnapshotJobs().isEmpty());
+        } finally {
+            snapshotMgr.getAutomatedSnapshotJobs().clear();
+            snapshotMgr.setAutomatedSnapshotOff();
+            GlobalStateMgr.getCurrentState().getStorageVolumeMgr().removeStorageVolume("leftover_from_source");
+        }
     }
 
     @Test
@@ -328,9 +349,27 @@ public class RestoreClusterSnapshotMgrTest {
             }
         };
 
+        List<ClusterSnapshotLog> journaledLogs = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logClusterSnapshotLog(ClusterSnapshotLog info, WALApplier applier) {
+                journaledLogs.add(info);
+                applier.apply(info);
+            }
+        };
+
         ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+        Assertions.assertInstanceOf(ClusterSnapshotMgrEPack.class, clusterSnapshotMgr);
+        ClusterSnapshotMgrEPack clusterSnapshotMgrEPack = (ClusterSnapshotMgrEPack) clusterSnapshotMgr;
         clusterSnapshotMgr.setAutomatedSnapshotOn("test_external_sv");
         Assertions.assertTrue(clusterSnapshotMgr.isAutomatedSnapshotOn());
+        // A snapshot job inherited from the source cluster's image, as a restored FE loads it.
+        clusterSnapshotMgr.addSnapshotJob(
+                new ClusterSnapshotJob(1L, INHERITED_JOB_NAME, "test_external_sv", 1704038400000L));
+        clusterSnapshotMgrEPack.addManualClusterSnapshotRequest(
+                new ManualClusterSnapshotRequest("inherited_manual_request", "test_external_sv"));
+        clusterSnapshotMgrEPack.addManualClusterSnapshotJob(
+                new ManualClusterSnapshotJob(2L, "inherited_manual_job", "test_external_sv", 1704038400001L));
 
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/external_cluster_snapshot.yaml", true);
         Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
@@ -343,8 +382,64 @@ public class RestoreClusterSnapshotMgrTest {
         RestoreClusterSnapshotMgr.finishRestoring();
         Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
 
-        // An external (cross-region disaster recovery) snapshot restore must turn off the automated snapshot.
+        // An external (cross-region disaster recovery) snapshot restore must turn off the automated
+        // snapshot and drop the jobs inherited from the source cluster.
         Assertions.assertFalse(clusterSnapshotMgr.isAutomatedSnapshotOn());
+        Assertions.assertTrue(clusterSnapshotMgr.getAutomatedSnapshotJobs().isEmpty());
+        Assertions.assertTrue(clusterSnapshotMgrEPack.getManualClusterSnapshotRequestQueue().isEmpty());
+        Assertions.assertTrue(clusterSnapshotMgrEPack.getManualClusterSnapshotJobs().isEmpty());
+
+        // Both changes must share one journal record. Otherwise a crash between dropping the jobs
+        // and turning the feature off can leave a restored cluster snapshotting with source settings.
+        Assertions.assertEquals(1, journaledLogs.size());
+        Assertions.assertEquals(ClusterSnapshotLog.ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF,
+                journaledLogs.get(0).getType());
+        Assertions.assertTrue(journaledLogs.get(0).isResetInheritedSnapshotState());
+
+        // Replay on top of the source image state, i.e. what a restarted FE or a follower sees.
+        ClusterSnapshotMgrEPack restarted = new ClusterSnapshotMgrEPack();
+        restarted.setAutomatedSnapshotOn("test_external_sv");
+        restarted.addSnapshotJob(new ClusterSnapshotJob(1L, INHERITED_JOB_NAME, "test_external_sv", 1704038400000L));
+        restarted.addManualClusterSnapshotRequest(
+                new ManualClusterSnapshotRequest("inherited_manual_request", "test_external_sv"));
+        restarted.addManualClusterSnapshotJob(
+                new ManualClusterSnapshotJob(2L, "inherited_manual_job", "test_external_sv", 1704038400001L));
+        journaledLogs.forEach(restarted::replayLog);
+        Assertions.assertFalse(restarted.isAutomatedSnapshotOn());
+        Assertions.assertTrue(restarted.getAutomatedSnapshotJobs().isEmpty());
+        Assertions.assertTrue(restarted.getManualClusterSnapshotRequestQueue().isEmpty());
+        Assertions.assertTrue(restarted.getManualClusterSnapshotJobs().isEmpty());
+    }
+
+    @Test
+    public void testSnapshotMetaClusterInfoFlowsThroughRestoreInit() throws Exception {
+        long dbId = 99123L;
+        Map<Long, DatabaseSnapshotInfo> dbInfos = new HashMap<>();
+        dbInfos.put(dbId, new DatabaseSnapshotInfo(dbId, Collections.emptyMap()));
+        ClusterSnapshotInfo expectedInfo = new ClusterSnapshotInfo(dbInfos);
+        ClusterSnapshot snapshot = new ClusterSnapshot(1L, "snapshot_with_cluster_info",
+                ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "test_sv", 1L, 2L, 10L, 20L);
+        snapshot.setClusterSnapshotInfo(expectedInfo);
+
+        File imageDir = new File(GlobalStateMgr.getImageDirPath());
+        Files.createDirectories(imageDir.toPath());
+        File metaFile = new File(imageDir, ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+        Files.write(metaFile.toPath(),
+                GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8));
+        try {
+            RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_manual.yaml", true);
+
+            RestoredSnapshotInfo restored = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
+            Assertions.assertNotNull(restored);
+            Assertions.assertNotNull(restored.getClusterSnapshotInfo());
+            Assertions.assertTrue(restored.getClusterSnapshotInfo().containsDb(dbId));
+            Assertions.assertTrue(RestoreClusterSnapshotMgr.getClusterSnapshotInfoForRestore().containsDb(dbId));
+        } finally {
+            if (RestoreClusterSnapshotMgr.isRestoring()) {
+                RestoreClusterSnapshotMgr.finishRestoring();
+            }
+            Files.deleteIfExists(metaFile.toPath());
+        }
     }
 
     @Test
@@ -370,6 +465,9 @@ public class RestoreClusterSnapshotMgrTest {
         Assertions.assertTrue(restoredSnapshotInfo.getSnapshotName() == null);
         Assertions.assertEquals(20L, restoredSnapshotInfo.getFeJournalId());
         Assertions.assertEquals(30L, restoredSnapshotInfo.getStarMgrJournalId());
+        ClusterSnapshotInfo rebuiltInfo = RestoreClusterSnapshotMgr.getClusterSnapshotInfoForRestore();
+        long existingDbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME).getId();
+        Assertions.assertTrue(rebuiltInfo.containsDb(existingDbId));
 
         RestoreClusterSnapshotMgr.finishRestoring();
         Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
