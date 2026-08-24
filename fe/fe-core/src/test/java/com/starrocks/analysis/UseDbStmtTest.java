@@ -60,6 +60,9 @@ public class UseDbStmtTest {
 
         String sql_4 = "USE hive_catalog.hive_db.hive_table";
         AnalyzeTestUtil.analyzeFail(sql_4);
+
+        String sql_5 = "USE default";
+        AnalyzeTestUtil.analyzeSuccess(sql_5);
     }
 
     @Test
