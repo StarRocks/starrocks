@@ -25,6 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -618,6 +619,10 @@ public class OlapTableSinkTest {
     }
 
     private OlapTableSink buildSinkForReplicaCountTest(TupleDescriptor tuple, short replicationNum) {
+        return buildSinkForReplicaCountTest(tuple, dstTable, replicationNum);
+    }
+
+    private OlapTableSink buildSinkForReplicaCountTest(TupleDescriptor tuple, OlapTable table, short replicationNum) {
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("province", StringType.STRING)));
         listPartitionInfo.setValues(1, Lists.newArrayList("beijing", "shanghai"));
@@ -632,28 +637,28 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
-                dstTable.getId();
+                table.getId();
                 result = 1;
                 minTimes = 0;
-                dstTable.getPartitions();
+                table.getPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 0;
-                dstTable.getPartition(1L);
+                table.getPartition(1L);
                 result = partition;
                 minTimes = 0;
-                dstTable.getPartitionInfo();
+                table.getPartitionInfo();
                 result = listPartitionInfo;
                 minTimes = 0;
-                dstTable.getIdToColumn();
+                table.getIdToColumn();
                 result = idToColumn;
                 minTimes = 0;
-                dstTable.getDefaultDistributionInfo();
+                table.getDefaultDistributionInfo();
                 result = distInfo;
                 minTimes = 0;
             }
         };
 
-        return new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
+        return new OlapTableSink(table, tuple, Lists.newArrayList(1L),
                 TWriteQuorumType.MAJORITY, false, false, false);
     }
 
@@ -695,6 +700,53 @@ public class OlapTableSinkTest {
 
         Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
                 "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * A cross-cluster INSERT whose destination is an ExternalOlapTable backed by a cloud-native
+     * source table is a lake write too -- init() derives is_lake_table from exactly that composite
+     * condition. The replica count has to follow the same predicate: judged only by
+     * isCloudNativeTableOrMaterializedView(), such a destination keeps shipping the source table's
+     * stored replication_num and the quorum threshold stays raised on a single-copy write.
+     */
+    @Test
+    public void testExternalCloudNativeTableReportsSingleReplica(@Injectable ExternalOlapTable extTable,
+                                                                 @Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                extTable.isCloudNativeTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+                extTable.isOlapExternalTable();
+                result = true;
+                minTimes = 0;
+                extTable.isSourceTableCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, extTable, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink thriftSink = sink.toThrift().getOlap_table_sink();
+        // Guard the invariant itself: the two must never disagree.
+        Assertions.assertTrue(thriftSink.isIs_lake_table());
+        Assertions.assertEquals(1, thriftSink.getNum_replicas(),
+                "an external destination backed by a cloud-native table is still a single-copy write");
     }
 
     /** The shared-nothing path must keep using the table's real replication_num. */

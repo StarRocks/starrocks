@@ -241,8 +241,7 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() ||
-                dstTable.isOlapExternalTable() && ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
+        tSink.setIs_lake_table(writesToCloudNativeTable());
         tSink.setKeys_type(ExprToThrift.keysTypeToThrift(dstTable.getKeysType()));
         tSink.setWrite_quorum_type(writeQuorum);
         // If table has Gin index, do not allow replicated storage
@@ -406,6 +405,16 @@ public class OlapTableSink extends DataSink {
         return txnState;
     }
 
+    // True when the load lands in object storage -- either the destination is itself a
+    // cloud-native table, or it is an ExternalOlapTable whose source table is one. This is the
+    // condition `is_lake_table` is derived from; anything that depends on "the BE will treat this
+    // as a lake write" must use the same predicate, or the two views drift apart.
+    private boolean writesToCloudNativeTable() {
+        return dstTable.isCloudNativeTableOrMaterializedView() ||
+                (dstTable.isOlapExternalTable() &&
+                        ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -432,7 +441,7 @@ public class OlapTableSink extends DataSink {
             // tolerated even though the tablets it owned have no data anywhere. Report a single
             // replica for cloud-native tables so any node channel failure aborts the load.
             int numReplicas = 1;
-            if (!dstTable.isCloudNativeTableOrMaterializedView()) {
+            if (!writesToCloudNativeTable()) {
                 Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
                 if (optionalPartition.isPresent()) {
                     long partitionId = optionalPartition.get().getId();

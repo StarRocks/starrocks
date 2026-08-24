@@ -78,6 +78,9 @@ TEST_F(WriteCombinedTxnLogTest, test_refuse_incomplete_combined_txn_log) {
 
     auto st = write_combined_txn_log_parallel(txn_log_map, expected);
     ASSERT_FALSE(st.ok());
+    // The parallel path must hand back the rejection itself, not a re-wrapped IOError: a caller
+    // that retries on IO errors would otherwise keep retrying an invariant violation.
+    ASSERT_TRUE(st.is_internal_error()) << st.to_string();
     const auto msg = st.to_string();
     ASSERT_NE(msg.find("refuse to write incomplete combined txn log"), std::string::npos) << msg;
     ASSERT_NE(msg.find("missing 1 of 3"), std::string::npos) << msg;

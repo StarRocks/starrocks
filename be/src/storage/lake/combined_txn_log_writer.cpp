@@ -56,9 +56,11 @@ std::function<void()> create_txn_log_task(const CombinedTxnLogPB* logs, const st
             Status status = tablet_mgr->put_combined_txn_log(
                     *logs, expected_tablet_ids != nullptr ? *expected_tablet_ids : kNoExpectation);
             if (!status.ok()) {
-                // Surface the real reason: an incomplete-coverage rejection is not an IO error and
-                // must not be flattened into one, or the load fails with a misleading message.
-                throw std::runtime_error(status.to_string());
+                // Report the status as it came back. Throwing here instead would route it through
+                // the handler below and re-wrap it as an IOError, so an incomplete-coverage
+                // rejection -- an invariant violation, not a transient object-store failure --
+                // would reach the caller indistinguishable from one, both in code and in message.
+                mark_failure(status, has_error, final_status);
             }
         } catch (const std::exception& e) {
             mark_failure(Status::IOError(e.what()), has_error, final_status);
