@@ -18,6 +18,7 @@ import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.alter.reshard.presplit.SkipReason;
 import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
@@ -33,6 +34,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
@@ -184,6 +186,21 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             Assertions.assertEquals(rowIdTuple(3001L), ranges.get(2).getRange().getUpperBound());
             Assertions.assertEquals(rowIdTuple(3001L), ranges.get(3).getRange().getLowerBound());
             Assertions.assertTrue(ranges.get(3).getRange().isMaximum(), "last range must close at +infinity");
+
+            RuntimeProfile root = new RuntimeProfile("Load");
+            PreSplitProfile.appendTo(root, fixture.preSplitProfile);
+            RuntimeProfile profile = root.getChild(PreSplitProfile.PROFILE_NAME);
+            Assertions.assertNotNull(profile, "an attempted MV refresh pre-split must attach its profile node");
+            Assertions.assertEquals(1L, profile.getCounter(PreSplitProfile.ATTEMPTS).getValue());
+            Assertions.assertEquals(ESTIMATED_BYTES,
+                    profile.getCounter(PreSplitProfile.ESTIMATED_INPUT_BYTES).getValue());
+            Assertions.assertEquals(1L, profile.getCounter(PreSplitProfile.TARGET_PARTITIONS).getValue());
+            Assertions.assertEquals(3L, profile.getCounter(PreSplitProfile.BOUNDARIES_PLANNED).getValue());
+            Assertions.assertEquals("incremental MV refresh", profile.getInfoString("LoadKinds"));
+            Assertions.assertEquals("mv_row_id", profile.getInfoString("Tables"));
+            Assertions.assertEquals("derived_tier", profile.getInfoString("SourceTiers"));
+            Assertions.assertEquals("SUBMITTED, FINISHED", profile.getInfoString("Outcomes"));
+            Assertions.assertEquals("9301", profile.getInfoString("ReshardJobIds"));
         }
     }
 
@@ -329,6 +346,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
         private final ArgumentCaptor<Map<Long, List<TabletRange>>> rangesCaptor;
         private final LocalMetastore localMetastore;
         private final MaterializedView materializedView;
+        private final PreSplitProfile preSplitProfile;
         private final InsertOverwriteJobRunner runner;
 
         private Fixture(int temporaryPartitionCount) {
@@ -385,6 +403,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             // The admitted job is reported FINISHED so the flow's fail-safe await returns at once
             // instead of polling out the post-submit budget.
             TabletReshardJob reshardJob = mock(TabletReshardJob.class);
+            when(reshardJob.getJobId()).thenReturn(9301L);
             when(reshardJob.getJobState()).thenReturn(TabletReshardJob.JobState.FINISHED);
             TabletReshardJobMgr reshardJobMgr = mock(TabletReshardJobMgr.class);
             when(reshardJobMgr.getTabletReshardJob(anyLong())).thenReturn(reshardJob);
@@ -424,6 +443,9 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             ConnectContext context = mock(ConnectContext.class);
             when(context.getSessionVariable()).thenReturn(ConnectContext.get().getSessionVariable());
             when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
+            this.preSplitProfile = new PreSplitProfile();
+            when(context.getOrCreatePreSplitProfile()).thenReturn(preSplitProfile);
+            when(context.getPreSplitProfile()).thenReturn(preSplitProfile);
 
             InsertOverwriteJob job = new InsertOverwriteJob(
                     /*jobId*/ 501L, insertStmt, DB_ID, MV_ID, WarehouseManager.DEFAULT_WAREHOUSE_ID,
