@@ -277,7 +277,8 @@ public final class TabletPreSplitCoordinator {
         }
 
         PreSplitPipeline.PreparedReshardJob preparedJob = prepared.get();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.JOB_SUBMISSION)) {
             pipeline.submit(preparedJob);
         } catch (StarRocksException submitFailure) {
             // Surfaces the structured error so operators can diagnose admission failures
@@ -361,7 +362,8 @@ public final class TabletPreSplitCoordinator {
             BooleanSupplier shouldAbort)
             throws PreSplitPostSubmitTimeoutException, StarRocksException {
         long postSubmitStartMillis = System.currentTimeMillis();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.RESHARD_WAIT)) {
             pipeline.awaitFinished(preparedJob, timeout, shouldAbort);
         } catch (TimeoutException timeoutException) {
             if (MetricRepo.hasInit) {
@@ -408,11 +410,14 @@ public final class TabletPreSplitCoordinator {
         String loadKindLabel = loadKind.displayName();
         try {
             awaitFinishedAndRecordMetrics(pipeline, preparedJob, postSubmitTimeout, shouldAbort);
+            PreSplitProfile.recordOutcome("FINISHED");
         } catch (PreSplitPostSubmitTimeoutException timeout) {
+            PreSplitProfile.recordOutcome("RESHARD_WAIT_TIMEOUT_FALLBACK");
             LOG.warn("Pre-split awaitFinished timed out for {} on table {} after {}s; "
                             + "load will proceed without abort against the currently visible layout: {}",
                     loadKindLabel, olapTable.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
         } catch (StarRocksException waitFailure) {
+            PreSplitProfile.recordOutcome("RESHARD_WAIT_FAILED_FALLBACK");
             LOG.warn("Pre-split awaitFinished failed for {} on table {}; "
                             + "load will proceed without abort against the currently visible layout: {}",
                     loadKindLabel, olapTable.getName(), waitFailure.getMessage());
@@ -451,9 +456,11 @@ public final class TabletPreSplitCoordinator {
         Instant deadline = Instant.now().plus(postSubmitTimeout);
         long postSubmitStartMillis = System.currentTimeMillis();
         String loadKindLabel = loadKind.displayName();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.RESHARD_WAIT)) {
             while (true) {
                 if (shouldAbort.getAsBoolean()) {
+                    PreSplitProfile.recordOutcome("RESHARD_WAIT_ABORTED_FALLBACK");
                     LOG.info("Pre-split combined-job await abandoned for {} on table {} (caller " +
                                     "signalled abort); load will proceed against the currently visible layout",
                             loadKindLabel, olapTable.getName());
@@ -461,6 +468,7 @@ public final class TabletPreSplitCoordinator {
                 }
                 TabletReshardJob latest = tabletReshardJobManager.getTabletReshardJob(jobId);
                 if (latest == null) {
+                    PreSplitProfile.recordOutcome("RESHARD_JOB_DISAPPEARED_FALLBACK");
                     LOG.warn("Pre-split combined job {} disappeared for {} on table {}; "
                                     + "load will proceed against the currently visible layout",
                             jobId, loadKindLabel, olapTable.getName());
@@ -468,15 +476,18 @@ public final class TabletPreSplitCoordinator {
                 }
                 TabletReshardJob.JobState state = latest.getJobState();
                 if (state == TabletReshardJob.JobState.FINISHED) {
+                    PreSplitProfile.recordOutcome("FINISHED");
                     return;
                 }
                 if (state.isFinalState()) {
+                    PreSplitProfile.recordOutcome("RESHARD_JOB_FAILED_FALLBACK");
                     LOG.warn("Pre-split combined job {} aborted for {} on table {}: {}; "
                                     + "load will proceed against the currently visible layout",
                             jobId, loadKindLabel, olapTable.getName(), latest.getErrorMessage());
                     return;
                 }
                 if (Instant.now().isAfter(deadline)) {
+                    PreSplitProfile.recordOutcome("RESHARD_WAIT_TIMEOUT_FALLBACK");
                     if (MetricRepo.hasInit) {
                         MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
                     }
@@ -489,6 +500,7 @@ public final class TabletPreSplitCoordinator {
                     Thread.sleep(DefaultPreSplitPipeline.DEFAULT_POLL_INTERVAL.toMillis());
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
+                    PreSplitProfile.recordOutcome("RESHARD_WAIT_INTERRUPTED_FALLBACK");
                     LOG.warn("Pre-split combined-job await interrupted for {} on table {}; "
                                     + "load will proceed against the currently visible layout",
                             loadKindLabel, olapTable.getName());
@@ -731,12 +743,15 @@ public final class TabletPreSplitCoordinator {
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         List<PreSplitOutcome> perPartitionResults = new ArrayList<>(partitionSamplesList.size());
 
-        for (PartitionSamples entry : partitionSamplesList) {
-            PreSplitMetrics.recordPartitionCounted();
-            PreSplitOutcome perPartition = planOnePartition(
-                    database, table, entry, activeComputeNodeCount, ctx,
-                    sampledSecondaryIndexMetaIds, temporaryPartition, oldTabletIdToRanges);
-            perPartitionResults.add(perPartition);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
+            for (PartitionSamples entry : partitionSamplesList) {
+                PreSplitMetrics.recordPartitionCounted();
+                PreSplitOutcome perPartition = planOnePartition(
+                        database, table, entry, activeComputeNodeCount, ctx,
+                        sampledSecondaryIndexMetaIds, temporaryPartition, oldTabletIdToRanges);
+                perPartitionResults.add(perPartition);
+            }
         }
 
         if (oldTabletIdToRanges.isEmpty()) {
@@ -746,7 +761,8 @@ public final class TabletPreSplitCoordinator {
         // Phase 3: single combined submit. Any synchronous failure here surfaces as
         // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
         // to a real reshard job so callers see "no pre-split happened".
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.JOB_SUBMISSION)) {
             TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundaries(
                     database, table, oldTabletIdToRanges);
             // Carry the load's acquired compute resource (the one that sized the split) so the job's
@@ -854,6 +870,7 @@ public final class TabletPreSplitCoordinator {
                 if (planResult.isNoSplit()) {
                     continue;
                 }
+                PreSplitProfile.recordBoundariesPlanned(planResult.getBoundaries().size());
                 local.put(target.oldTabletId(),
                         DefaultPreSplitPipeline.buildTabletRanges(planResult.getBoundaries()));
             }

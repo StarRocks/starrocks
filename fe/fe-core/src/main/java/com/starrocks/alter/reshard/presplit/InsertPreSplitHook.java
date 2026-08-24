@@ -82,6 +82,7 @@ public final class InsertPreSplitHook {
         try {
             tryRunPreSplit(parsedStmt, context);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome("FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split (INSERT) hook failed; proceeding without pre-split", unexpected);
         }
     }
@@ -100,6 +101,7 @@ public final class InsertPreSplitHook {
             tryRunEligibleInsert(insertStmt, context, overwriteTransactionId,
                     PreSplitPartitionScope.unrestricted(), false);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome("FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split (dynamic INSERT OVERWRITE) hook failed; "
                     + "proceeding without pre-split", unexpected);
         }
@@ -152,6 +154,7 @@ public final class InsertPreSplitHook {
             }
             tryRunEligibleInsert(insertStmt, context, -1L, partitionScope, true);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome("FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split (static INSERT OVERWRITE) hook failed; "
                     + "proceeding without pre-split", unexpected);
         }
@@ -186,9 +189,12 @@ public final class InsertPreSplitHook {
         if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
             return;
         }
-        PreSplitFlow.runStaticOverwriteMaterializedViewFlow(
-                resolvedTable.database(), resolvedTable.olapTable(), partitionScope, estimates,
-                context.getCurrentComputeResource(), context::isStatementCancelled);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, LoadKind.MV_REFRESH)) {
+            PreSplitProfile.recordTable(resolvedTable.olapTable().getName());
+            PreSplitFlow.runStaticOverwriteMaterializedViewFlow(
+                    resolvedTable.database(), resolvedTable.olapTable(), partitionScope, estimates,
+                    context.getCurrentComputeResource(), context::isStatementCancelled);
+        }
     }
 
     private static void tryRunPreSplit(StatementBase parsedStmt, ConnectContext context)
@@ -224,30 +230,36 @@ public final class InsertPreSplitHook {
         if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
             return;
         }
-        ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
-        if (resolvedTable == null) {
-            return;
-        }
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(resolvedTable.olapTable());
-        if (!targetColumnListIsPreSplitSafe(insertStmt, resolvedTable.olapTable(), sortKeyColumns)) {
-            return;
-        }
-        authorizeTargetSideEffects(resolvedTable, context);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, source.loadKind())) {
+            ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
+            if (resolvedTable == null) {
+                PreSplitProfile.recordOutcome("SKIPPED: TARGET_NOT_ELIGIBLE");
+                return;
+            }
+            PreSplitProfile.recordTable(resolvedTable.olapTable().getName());
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(resolvedTable.olapTable());
+            if (!targetColumnListIsPreSplitSafe(insertStmt, resolvedTable.olapTable(), sortKeyColumns)) {
+                PreSplitProfile.recordOutcome("SKIPPED: UNSUPPORTED_TARGET_COLUMN_LIST");
+                return;
+            }
+            authorizeTargetSideEffects(resolvedTable, context);
 
-        PreSplitFlow.Prepared prepared = source.prepare(
-                insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
-        if (prepared == null) {
-            return;
-        }
-        if (overwriteTransactionId > 0) {
-            PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isStatementCancelled, context, overwriteTransactionId);
-        } else if (staticOverwrite) {
-            PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
-        } else {
-            PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
+            PreSplitFlow.Prepared prepared = source.prepare(
+                    insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
+            if (prepared == null) {
+                PreSplitProfile.recordOutcome("SKIPPED: SOURCE_NOT_ELIGIBLE");
+                return;
+            }
+            if (overwriteTransactionId > 0) {
+                PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+                        prepared, source.loadKind(), context::isStatementCancelled, context, overwriteTransactionId);
+            } else if (staticOverwrite) {
+                PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+                        prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
+            } else {
+                PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
+                        prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
+            }
         }
     }
 

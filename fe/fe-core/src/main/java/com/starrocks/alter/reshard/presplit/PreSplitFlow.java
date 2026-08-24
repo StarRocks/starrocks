@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -107,6 +108,7 @@ final class PreSplitFlow {
             // Manually list/range-partitioned targets do not support pre-creating partitions
             // from sampled values; skip conservatively, let the load proceed.
             if (!Boolean.TRUE.equals(target.supportedAutomaticPartition())) {
+                PreSplitProfile.recordOutcome("SKIPPED: MANUAL_PARTITIONING");
                 return;
             }
             runMultiPartitionFlow(database, target, prepared, loadKind, shouldAbort, context, partitionScope);
@@ -117,6 +119,7 @@ final class PreSplitFlow {
             // partition here would let a statement that goes on to fail analysis reshape the table.
             // Skip conservatively; this is the same shape the pre-scope code rejected outright.
             if (partitionScope.isSpecified()) {
+                PreSplitProfile.recordOutcome("SKIPPED: PARTITION_SCOPE_ON_UNPARTITIONED_TABLE");
                 return;
             }
             runSinglePartitionFlow(database, target, prepared, loadKind, shouldAbort);
@@ -127,6 +130,7 @@ final class PreSplitFlow {
                                        LoadKind loadKind, BooleanSupplier shouldAbort) {
         PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTarget(database, table);
         if (target == null) {
+            PreSplitProfile.recordOutcome("SKIPPED: PARTITION_NOT_ELIGIBLE");
             return;
         }
         runSinglePartitionFlow(target, prepared, loadKind, shouldAbort);
@@ -139,6 +143,7 @@ final class PreSplitFlow {
      */
     static void runSinglePartitionFlow(PreSplitTargets.EligibleTarget target, Prepared prepared,
                                        LoadKind loadKind, BooleanSupplier shouldAbort) {
+        PreSplitProfile.recordTargetPartitions(1L);
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                 target.database(), target.olapTable(), target.indexTargets(), prepared.estimatedBytes(), loadKind,
@@ -169,6 +174,7 @@ final class PreSplitFlow {
         if (!table.getPartitionInfo().isPartitioned()
                 || !Boolean.TRUE.equals(table.supportedAutomaticPartition())
                 || overwriteTransactionId <= 0) {
+            PreSplitProfile.recordOutcome("SKIPPED: DYNAMIC_OVERWRITE_TARGET_NOT_ELIGIBLE");
             return;
         }
         runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
@@ -180,6 +186,7 @@ final class PreSplitFlow {
                                        LoadKind loadKind, BooleanSupplier shouldAbort,
                                        ConnectContext context, PreSplitPartitionScope partitionScope) {
         if (!partitionScope.isSpecified() || !partitionScope.isTemporary()) {
+            PreSplitProfile.recordOutcome("SKIPPED: STATIC_OVERWRITE_TARGET_NOT_ELIGIBLE");
             return;
         }
         if (!table.getPartitionInfo().isPartitioned()) {
@@ -225,6 +232,7 @@ final class PreSplitFlow {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
             return;
         }
+        PreSplitProfile.recordTargetPartitions(1L);
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         DerivedBoundarySource boundarySource =
                 MaterializedViewRowIdBoundaries.sourceFor(table, estimates, activeComputeNodeCount);
@@ -271,7 +279,11 @@ final class PreSplitFlow {
                 loadKind, pipeline, activeComputeNodeCount);
         LOG.info("Sample-Based Tablet Pre-Split ({}) outcome for table {}: {}",
                 loadKind, target.olapTable().getName(), outcome);
+        PreSplitProfile.recordOutcome(outcome);
         if (outcome instanceof PreSplitOutcome.Submitted submitted) {
+            if (submitted.preparedJob().payload() instanceof TabletReshardJob reshardJob) {
+                PreSplitProfile.recordReshardJobId(reshardJob.getJobId());
+            }
             TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
                     loadKind, target.olapTable(), pipeline, submitted.preparedJob(), shouldAbort);
         }
@@ -287,12 +299,14 @@ final class PreSplitFlow {
         // any shape the footer path cannot serve.
         SampleSet samples = runMetaTierMultiPartitionSampler(table, prepared, loadKind);
         if (samples != null) {
+            PreSplitProfile.recordSample(samples);
             LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) served by META tier "
                     + "(row-group footer stats, no data scan) for table {}", loadKind, table.getName());
         } else {
             samples = runDataTierSampler(table, prepared, loadKind);
         }
         if (samples == null) {
+            PreSplitProfile.recordOutcome("SKIPPED: SAMPLE_FAILED");
             return;
         }
         // The authoritative secondary index-id set the sampler projected. The grouper drops any
@@ -300,18 +314,24 @@ final class PreSplitFlow {
         // same set immediately before planning each partition.
         Set<Long> sampledSecondaryIndexMetaIds = new HashSet<>(samples.getSecondaryIndexMetaIds());
         long sampledInputBytes = samples.getEstimates().totalBytes();
-        List<PartitionSamples> groups = overwriteTransactionId > 0
-                ? PartitionSampleGrouper.groupTemporary(
-                        samples, table, context, database.getId(), sampledInputBytes,
-                        sampledSecondaryIndexMetaIds, overwriteTransactionId)
-                : partitionScope.isSpecified()
-                        ? PartitionSampleGrouper.groupSpecified(
-                                samples, table, context, database.getId(), sampledInputBytes,
-                                sampledSecondaryIndexMetaIds, partitionScope)
-                        : PartitionSampleGrouper.group(
-                                samples, table, context, database.getId(), sampledInputBytes,
-                                sampledSecondaryIndexMetaIds);
+        List<PartitionSamples> groups;
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
+            groups = overwriteTransactionId > 0
+                    ? PartitionSampleGrouper.groupTemporary(
+                            samples, table, context, database.getId(), sampledInputBytes,
+                            sampledSecondaryIndexMetaIds, overwriteTransactionId)
+                    : partitionScope.isSpecified()
+                            ? PartitionSampleGrouper.groupSpecified(
+                                    samples, table, context, database.getId(), sampledInputBytes,
+                                    sampledSecondaryIndexMetaIds, partitionScope)
+                            : PartitionSampleGrouper.group(
+                                    samples, table, context, database.getId(), sampledInputBytes,
+                                    sampledSecondaryIndexMetaIds);
+        }
+        PreSplitProfile.recordTargetPartitions(groups.size());
         if (groups.isEmpty()) {
+            PreSplitProfile.recordOutcome("SKIPPED: GROUPER_EMPTY");
             return;
         }
         PreSplitOutcome outcome = overwriteTransactionId > 0
@@ -327,7 +347,9 @@ final class PreSplitFlow {
                                 sampledSecondaryIndexMetaIds);
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
+        PreSplitProfile.recordOutcome(outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
+            PreSplitProfile.recordReshardJobId(submittedCombined.combinedJob().getJobId());
             try {
                 TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
                         loadKind, table, submittedCombined.combinedJob(), shouldAbort);
@@ -344,13 +366,17 @@ final class PreSplitFlow {
     }
 
     static SampleSet runDataTierSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
-        try {
+        PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_DATA_TIER);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.SOURCE_SAMPLING)) {
             SampleRequest request = new SampleRequest(
                     prepared.scanContext(), prepared.sortKeyColumns(), prepared.secondaryIndexSpecs(),
                     prepared.partitionColumns(), Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
             Sampler sampler = new ReservoirSampler(DefaultPreSplitPipeline.sampleSubqueryExecutorFor(loadKind));
-            return sampler.sample(request);
+            SampleSet sampleSet = sampler.sample(request);
+            PreSplitProfile.recordSample(sampleSet);
+            return sampleSet;
         } catch (StarRocksException sampleFailure) {
             LOG.info("Pre-split skipped for table {}: data-tier sampling failed — {}",
                     table.getName(), sampleFailure.getMessage());
@@ -406,7 +432,11 @@ final class PreSplitFlow {
             }
             partitionSourceIndexInSortKey[i] = indexInSortKey;
         }
-        try {
+        // Capability checks above do not touch the source. Once footer fetching starts, retain the
+        // attempted tier even if unusable statistics force a data-tier fallback.
+        PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_META_TIER);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.SOURCE_SAMPLING)) {
             SampleRequest request = new SampleRequest(
                     prepared.scanContext(), sortKeyColumns, prepared.secondaryIndexSpecs(),
                     partitionSourceColumns, Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
