@@ -575,8 +575,7 @@ public class PlanFragmentBuilder {
          *
          * <p> The columns that can be pushed down need to meet:
          * <ul>
-         * <li> All the columns of duplicate-key model.
-         * <li> Keys of primary-key model.
+         * <li> All the columns of duplicate-key and primary-key models, keys and values alike.
          * <li> Keys of agg-key model (aggregation/unique_key model) in the skip-aggr scan stage.
          * </ul>
          *
