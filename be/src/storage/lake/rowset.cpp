@@ -783,18 +783,20 @@ RowsetId Rowset::rowset_id() const {
 }
 
 StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
-    // Lock-free lazy init: callers must serialize calls on a given Rowset (the split morsel queues
-    // hold _mutex; lake Rowsets are per-reader over immutable metadata). Not std::call_once -- that
-    // marks init done even on a transient failure and would defeat the retry (issue #75203).
-    if (_segments_loaded) {
-        return _segments;
-    }
+    // Lazy init guarded by _held_segments_mutex: range-split parallel compaction runs several
+    // subtasks over one shared Rowset instance, and each of them reaches here through
+    // TabletReader::init_compaction_column_paths. Not std::call_once -- that marks init done even on
+    // a transient failure and would defeat the retry (issue #75203). The load itself runs outside
+    // the lock, both to keep remote IO off it and because segments() takes the same (non-recursive)
+    // mutex.
     {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (_segments_loaded) {
+            return _segments;
+        }
         // Reuse the task-held input segments when the compaction read path already loaded them.
         // Otherwise this path loads a second full copy of every input segment AND pushes it into
-        // the shared metadata cache (segments(true)), which is exactly what hold_segments avoids --
-        // TabletReader::init_compaction_column_paths reaches here on every flat-json compaction.
-        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        // the shared metadata cache (segments(true)), which is exactly what hold_segments avoids.
         if (!_held_segments.empty()) {
             _segments = _held_segments;
             _segments_loaded = true;
@@ -804,8 +806,11 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
     // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
     // _segments_loaded stays false so a later call retries.
     ASSIGN_OR_RETURN(auto segs, segments(true));
-    _segments = std::move(segs);
-    _segments_loaded = true;
+    std::lock_guard<std::mutex> l(_held_segments_mutex);
+    if (!_segments_loaded) {
+        _segments = std::move(segs);
+        _segments_loaded = true;
+    }
     return _segments;
 }
 
