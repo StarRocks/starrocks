@@ -153,13 +153,6 @@ public:
     // The slot belongs to the caller: it also carries the encoded column, whose bytes the index
     // keeps referencing after this returns when the upsert runs asynchronously. Both call sites hand
     // over a freshly extended slot, so the append-only scratch inside it always starts empty.
-    // Upsert exactly the rows at `rowids` -- absolute positions in the source segment, in the order
-    // `pks` holds them -- and drain the locations they replace into `deletes`. The rowid-vector
-    // overload is the only one that can express a non-contiguous subset, but it reports replaced
-    // locations through a ParallelPublishContext rather than a DeletesMap; this wraps that difference
-    // for the publish paths that hold a DeletesMap and have already decided which rows to write.
-    Status upsert_rows(uint32_t rssid, const std::vector<uint32_t>& rowids, MutableColumnPtr pks, DeletesMap* deletes);
-
     Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
                         ParallelPublishContext* context);
 

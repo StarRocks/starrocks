@@ -159,6 +159,19 @@ struct RowidSortEntry {
     bool operator<(const RowidSortEntry& rhs) const { return rowid < rhs.rowid; }
 };
 
+void RowsetUpdateState::mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids) {
+    if (owned.empty()) {
+        return;
+    }
+    DCHECK_EQ(owned.size(), rss_rowids->size());
+    const size_t n = std::min(owned.size(), rss_rowids->size());
+    for (size_t i = 0; i < n; i++) {
+        if (owned[i] == 0) {
+            (*rss_rowids)[i] = static_cast<uint64_t>(-1);
+        }
+    }
+}
+
 // group rowids by rssid, and for each group sort by rowid, return as `rowids_by_rssid`
 // num_default: return the number of rows that need to fill in default values
 // idxes: reverse indexes to restore values from (rssid,rowid) order to rowid order
@@ -356,9 +369,20 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
+    // A cross-published child receives its siblings' rows too: not its rows to read an id for, and
+    // resolving one can name a rowset the split pruned away.
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
+    mask_unowned_rowids(owned, &_auto_increment_partial_update_states[segment_id].src_rss_rowids);
+
     std::vector<uint32_t> rowids;
     uint32_t n = _auto_increment_partial_update_states[segment_id].src_rss_rowids.size();
     for (uint32_t j = 0; j < n; j++) {
+        if (!owned.empty() && owned[j] == 0) {
+            // Masking left a sibling's row looking like a new row. It is not one: allocating an id for
+            // it would claim a key outside this child's range, and a 0 id would then have this child
+            // erase that key -- the erase #77744 had to clip out of a cross-published del file.
+            continue;
+        }
         uint64_t v = _auto_increment_partial_update_states[segment_id].src_rss_rowids[j];
         uint32_t rssid = v >> 32;
         if (rssid == (uint32_t)-1) {
@@ -453,37 +477,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     }
 
     // use upsert to get rowids for this segment
-    const Filter& owned = _upserts[segment_id]->standalone_owned();
-    if (owned.empty()) {
-        RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-                params.tablet->id(), _base_versions[segment_id], segment_pk_column, &src_rss_rowids, need_lock));
-    } else {
-        // A cross-published child receives its siblings' rows too, and looking one up would resolve
-        // against sstables this child inherited -- the location can name a rowset the split pruned
-        // away, and get_column_values below would then fail the publish on an unknown rssid. Ask only
-        // about the rows this child owns and leave the rest at the "no old row" sentinel, which
-        // plan_read_by_rssid turns into default values. Those rows fall outside this child's key
-        // range, so nothing reads them from here anyway.
-        std::vector<uint32_t> owned_positions;
-        owned_positions.reserve(owned.size());
-        for (size_t i = 0; i < owned.size(); ++i) {
-            if (owned[i]) {
-                owned_positions.push_back(static_cast<uint32_t>(i));
-            }
-        }
-        std::fill(src_rss_rowids.begin(), src_rss_rowids.end(), static_cast<uint64_t>(-1));
-        if (!owned_positions.empty()) {
-            auto owned_pk_column = segment_pk_column->clone_empty();
-            TRY_CATCH_BAD_ALLOC(owned_pk_column->append_selective(*segment_pk_column, owned_positions.data(), 0,
-                                                                  owned_positions.size()));
-            std::vector<uint64_t> owned_rss_rowids(owned_positions.size());
-            RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-                    params.tablet->id(), _base_versions[segment_id], owned_pk_column, &owned_rss_rowids, need_lock));
-            for (size_t k = 0; k < owned_positions.size(); ++k) {
-                src_rss_rowids[owned_positions[k]] = owned_rss_rowids[k];
-            }
-        }
-    }
+    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+            params.tablet->id(), _base_versions[segment_id], segment_pk_column, &src_rss_rowids, need_lock));
+    // A cross-published child receives its siblings' rows too. Those are not its rows to merge, and
+    // resolving one can name a rowset the split pruned away, so leave them at the "no old row"
+    // sentinel -- plan_read_by_rssid turns it into default values, and rewrite_segment then writes a
+    // default in the column this write does not carry.
+    mask_unowned_rowids(_upserts[segment_id]->standalone_owned(), &src_rss_rowids);
 
     size_t num_default = 0;
     std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
@@ -696,6 +696,10 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &new_rss_rowids, false));
+    // Same restriction the first lookup was given: a sibling's row is not this child's to re-read, and
+    // its location can name a rowset the split pruned away. Masking both sides of the comparison the
+    // same way also means such a row can never look like a conflict.
+    mask_unowned_rowids(_upserts[segment_id]->standalone_owned(), &new_rss_rowids);
 
     size_t total_conflicts = 0;
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
