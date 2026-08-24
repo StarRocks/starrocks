@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
@@ -29,7 +30,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AlterResourceGroupLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -81,11 +81,11 @@ public class ResourceGroupMgr implements Writable {
 
     // ---------------------------------------------------------------------------
     // Immutable holder for all three CopyOnWrite index maps.
-    // A single volatile write of this object provides an atomic, consistent view
-    // of every index — eliminating the window where three separate volatile writes
+    // A single write to the AtomicReference provides an atomic, consistent view
+    // of every index — eliminating the window where three separate writes
     // could be observed in a torn order by a lock-free reader (Issue 2).
     // ---------------------------------------------------------------------------
-    private static final class ResourceGroupSnapshot {
+    static final class ResourceGroupSnapshot {
         static final ResourceGroupSnapshot EMPTY = new ResourceGroupSnapshot(
                 Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), null);
 
@@ -117,10 +117,10 @@ public class ResourceGroupMgr implements Writable {
     private final AtomicReference<ResourceGroupSnapshot> snapshot =
             new AtomicReference<>(ResourceGroupSnapshot.EMPTY);
 
-    // Package-private: used by unit tests to construct and inject snapshot
-    // state without reflection.  Avoids fragile string-based class lookups
-    // flagged by SonarCloud S2589.
-    static Object newSnapshotForTest(
+    // Package-private test hooks: used by unit tests to construct and inject
+    // snapshot state with strong typing and without reflection.
+    @VisibleForTesting
+    static ResourceGroupSnapshot newSnapshotForTest(
             Map<String, ResourceGroup> byName,
             Map<Long, ResourceGroup> byId,
             Map<Long, ResourceGroupClassifier> byClassifier,
@@ -129,8 +129,14 @@ public class ResourceGroupMgr implements Writable {
                 byName, byId, byClassifier, shortQueryResourceGroup);
     }
 
-    void setSnapshotForTest(Object snap) {
-        this.snapshot.set((ResourceGroupSnapshot) snap);
+    @VisibleForTesting
+    void setSnapshotForTest(ResourceGroupSnapshot snap) {
+        this.snapshot.set(snap);
+    }
+
+    @VisibleForTesting
+    ResourceGroupSnapshot getSnapshotForTest() {
+        return this.snapshot.get();
     }
 
     private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
@@ -142,11 +148,13 @@ public class ResourceGroupMgr implements Writable {
     private volatile boolean hasCreatedDefaultResourceGroups = false;
 
 
-    private void writeLock() {
+    @VisibleForTesting
+    void writeLock() {
         lock.writeLock().lock();
     }
 
-    private void writeUnlock() {
+    @VisibleForTesting
+    void writeUnlock() {
         lock.writeLock().unlock();
     }
 
@@ -652,31 +660,28 @@ public class ResourceGroupMgr implements Writable {
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 alterResourceGroupLog.setVersion(GlobalStateMgr.getCurrentState().getNextId());
             }
-            // updateResourceGroup returns the new ResourceGroup (deep copy with mutations applied).
-            // Capture it via an array to cross the lambda boundary, then use it for resourceGroupOps
-            // so BEs receive the post-alter state rather than the pre-alter state.
-            ResourceGroup[] newWgHolder = new ResourceGroup[] {wg};
+            // Pre-compute the altered ResourceGroup copy before logging to EditLog.
+            // This ensures all object creation/deep-copying happens before the durable WAL write,
+            // so the WAL applier callback only performs an infallible in-memory snapshot update.
+            ResourceGroup alteredWg = applyAlterToResourceGroup(wg, alterResourceGroupLog);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterResourceGroup(
-                    alterResourceGroupLog, wal -> newWgHolder[0] = updateResourceGroup(wg, alterResourceGroupLog));
-            resourceGroupOps.add(new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, newWgHolder[0]).toThrift());
+                    alterResourceGroupLog, wal -> replaceResourceGroupInternal(name, alteredWg));
+            resourceGroupOps.add(new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, alteredWg).toThrift());
         } finally {
             writeUnlock();
         }
     }
 
     /**
-     * Applies the alter log to a deep copy of {@code wg} and atomically publishes the result
-     * via {@link #removeResourceGroupInternal}/{@link #addResourceGroupInternal}.
+     * Applies the alter log to a deep copy of {@code wg}.
      *
-     * <p>The deep copy (Issue 1 fix) ensures that threads holding a snapshot captured before
+     * <p>The deep copy ensures that threads holding a snapshot captured before
      * this call continue to observe the pre-alter {@link ResourceGroup} object unmodified.
      *
-     * @return the new, post-alter {@link ResourceGroup} that was inserted into the snapshot.
+     * @return the new, post-alter {@link ResourceGroup}.
      */
-    private ResourceGroup updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
-        // GSON round-trip deep-copy: mutations go to newWg only.
-        // Old-snapshot holders retain a reference to the original, unmodified wg object.
-        ResourceGroup newWg = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(wg), ResourceGroup.class);
+    private ResourceGroup applyAlterToResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+        ResourceGroup newWg = wg.copy();
 
         if (log.getClassifiers() != null) {
             newWg.setClassifiers(log.getClassifiers());
@@ -725,9 +730,6 @@ public class ResourceGroupMgr implements Writable {
             newWg.setVersion(log.getVersion());
         }
 
-        // Single volatile write: atomically removes old indexing and inserts new.
-        // Lock-free readers never observe a transient window where the group is absent.
-        replaceResourceGroupInternal(wg.getName(), newWg);
         return newWg;
     }
 
@@ -750,7 +752,7 @@ public class ResourceGroupMgr implements Writable {
     public void dropResourceGroupUnlocked(String name) {
         ResourceGroup wg = snapshot.get().byName.get(name);
         // Deep-copy before setting version so that snapshot holders see the pre-drop version.
-        ResourceGroup wgForOp = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(wg), ResourceGroup.class);
+        ResourceGroup wgForOp = wg.copy();
         wgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
         ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wgForOp);
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -771,7 +773,7 @@ public class ResourceGroupMgr implements Writable {
                     removeResourceGroupInternal(workgroup.getName());
                     break;
                 case WORKGROUP_OP_ALTER:
-                    // Single volatile write — no transient absence window for lock-free readers.
+                    // Single atomic write — no transient absence window for lock-free readers.
                     replaceResourceGroupInternal(workgroup.getName(), workgroup);
                     break;
             }
@@ -788,13 +790,15 @@ public class ResourceGroupMgr implements Writable {
             if (wg == null) {
                 return;
             }
-            updateResourceGroup(wg, log); // return value intentionally ignored for replay
+            ResourceGroup alteredWg = applyAlterToResourceGroup(wg, log);
+            replaceResourceGroupInternal(log.getName(), alteredWg);
         } finally {
             writeUnlock();
         }
     }
 
-    private void removeResourceGroupInternal(String name) {
+    @VisibleForTesting
+    void removeResourceGroupInternal(String name) {
         // CopyOnWrite: build new snapshot from old then atomically publish via set().
         ResourceGroupSnapshot old = this.snapshot.get();
         ResourceGroup wg = old.byName.get(name);
@@ -815,7 +819,8 @@ public class ResourceGroupMgr implements Writable {
         this.snapshot.set(new ResourceGroupSnapshot(newByName, newById, newByClassifier, shortQuery));
     }
 
-    private void addResourceGroupInternal(ResourceGroup wg) {
+    @VisibleForTesting
+    void addResourceGroupInternal(ResourceGroup wg) {
         // CopyOnWrite: build new snapshot from old then atomically publish via set().
         ResourceGroupSnapshot old = this.snapshot.get();
         Map<String, ResourceGroup> newByName = new HashMap<>(old.byName);
@@ -845,7 +850,8 @@ public class ResourceGroupMgr implements Writable {
      *
      * <p>Must be called under {@link #writeLock()}.
      */
-    private void replaceResourceGroupInternal(String oldName, ResourceGroup newWg) {
+    @VisibleForTesting
+    void replaceResourceGroupInternal(String oldName, ResourceGroup newWg) {
         ResourceGroupSnapshot old = this.snapshot.get();
         ResourceGroup oldWg = old.byName.get(oldName);
 

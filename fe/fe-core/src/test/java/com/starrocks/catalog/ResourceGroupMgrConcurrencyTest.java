@@ -27,13 +27,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,39 +70,19 @@ public class ResourceGroupMgrConcurrencyTest {
         return stmt;
     }
 
-    @SuppressWarnings("unchecked")
-    private <T> T field(String name) throws Exception {
-        Field f = ResourceGroupMgr.class.getDeclaredField(name);
-        f.setAccessible(true);
-        return (T) f.get(mgr);
+    private Map<String, ResourceGroup> byName() {
+        return mgr.getSnapshotForTest().byName;
     }
 
-    @SuppressWarnings("unchecked")
-    private Object getSnapshot() throws Exception {
-        AtomicReference<Object> ref = field("snapshot");
-        return ref.get();
+    private Map<Long, ResourceGroup> byId() {
+        return mgr.getSnapshotForTest().byId;
     }
 
-    @SuppressWarnings("unchecked")
-    private <T> T snapField(Object snap, String fieldName) throws Exception {
-        Field f = snap.getClass().getDeclaredField(fieldName);
-        f.setAccessible(true);
-        return (T) f.get(snap);
+    private Map<Long, ResourceGroupClassifier> byClassifier() {
+        return mgr.getSnapshotForTest().byClassifier;
     }
 
-    private Map<String, ResourceGroup> byName() throws Exception {
-        return snapField(getSnapshot(), "byName");
-    }
-
-    private Map<Long, ResourceGroup> byId() throws Exception {
-        return snapField(getSnapshot(), "byId");
-    }
-
-    private Map<Long, ResourceGroupClassifier> byClassifier() throws Exception {
-        return snapField(getSnapshot(), "byClassifier");
-    }
-
-    private void injectRgIntoMap(Object... namesAndGroups) throws Exception {
+    private void injectRgIntoMap(Object... namesAndGroups) {
         Map<String, ResourceGroup> bName = new LinkedHashMap<>();
         Map<Long, ResourceGroup>   bId   = new HashMap<>();
         for (int i = 0; i < namesAndGroups.length; i += 2) {
@@ -111,7 +90,7 @@ public class ResourceGroupMgrConcurrencyTest {
             bName.put((String) namesAndGroups[i], rg);
             bId.put(rg.getId(), rg);
         }
-        Object snap = ResourceGroupMgr.newSnapshotForTest(
+        ResourceGroupMgr.ResourceGroupSnapshot snap = ResourceGroupMgr.newSnapshotForTest(
                 bName, bId, Collections.emptyMap(), null);
         mgr.setSnapshotForTest(snap);
     }
@@ -134,15 +113,15 @@ public class ResourceGroupMgrConcurrencyTest {
 
     @Test
     public void testAddResourceGroupInternalReplacesAllThreeMaps() throws Exception {
-        Object snapBefore = getSnapshot();
-        Map<String, ResourceGroup> rgBefore = snapField(snapBefore, "byName");
-        Map<Long, ResourceGroup>   idBefore = snapField(snapBefore, "byId");
+        ResourceGroupMgr.ResourceGroupSnapshot snapBefore = mgr.getSnapshotForTest();
+        Map<String, ResourceGroup> rgBefore = snapBefore.byName;
+        Map<Long, ResourceGroup>   idBefore = snapBefore.byId;
 
         mgr.createResourceGroup(mvStmt("rg_add_test", "1"));
 
-        Object snapAfter = getSnapshot();
-        Map<String, ResourceGroup> rgAfter = snapField(snapAfter, "byName");
-        Map<Long, ResourceGroup>   idAfter = snapField(snapAfter, "byId");
+        ResourceGroupMgr.ResourceGroupSnapshot snapAfter = mgr.getSnapshotForTest();
+        Map<String, ResourceGroup> rgAfter = snapAfter.byName;
+        Map<Long, ResourceGroup>   idAfter = snapAfter.byId;
 
         Assertions.assertNotSame(snapBefore, snapAfter);
         Assertions.assertNotSame(rgBefore, rgAfter);
@@ -154,15 +133,15 @@ public class ResourceGroupMgrConcurrencyTest {
     @Test
     public void testRemoveResourceGroupInternalReplacesAllThreeMaps() throws Exception {
         mgr.createResourceGroup(mvStmt("rg_remove_test", "1"));
-        Object snapBefore = getSnapshot();
-        Map<String, ResourceGroup> rgBefore = snapField(snapBefore, "byName");
-        Map<Long, ResourceGroup>   idBefore = snapField(snapBefore, "byId");
+        ResourceGroupMgr.ResourceGroupSnapshot snapBefore = mgr.getSnapshotForTest();
+        Map<String, ResourceGroup> rgBefore = snapBefore.byName;
+        Map<Long, ResourceGroup>   idBefore = snapBefore.byId;
 
         mgr.dropResourceGroup(new DropResourceGroupStmt("rg_remove_test", false));
 
-        Object snapAfter = getSnapshot();
-        Map<String, ResourceGroup> rgAfter = snapField(snapAfter, "byName");
-        Map<Long, ResourceGroup>   idAfter = snapField(snapAfter, "byId");
+        ResourceGroupMgr.ResourceGroupSnapshot snapAfter = mgr.getSnapshotForTest();
+        Map<String, ResourceGroup> rgAfter = snapAfter.byName;
+        Map<Long, ResourceGroup>   idAfter = snapAfter.byId;
 
         Assertions.assertNotSame(snapBefore, snapAfter);
         Assertions.assertNotSame(rgBefore, rgAfter);
@@ -185,14 +164,31 @@ public class ResourceGroupMgrConcurrencyTest {
     @Test
     public void testGetResourceGroupByNameLockFree() throws Exception {
         mgr.createResourceGroup(mvStmt("rg_by_name", "1"));
-        ResourceGroup rg = mgr.getResourceGroup("rg_by_name");
-        Assertions.assertNotNull(rg);
-        Assertions.assertEquals("rg_by_name", rg.getName());
-        Field lockField = ResourceGroupMgr.class.getDeclaredField("lock");
-        lockField.setAccessible(true);
-        java.util.concurrent.locks.ReentrantReadWriteLock rwLock =
-                (java.util.concurrent.locks.ReentrantReadWriteLock) lockField.get(mgr);
-        Assertions.assertEquals(0, rwLock.getReadLockCount());
+        CountDownLatch writeLockHeld = new CountDownLatch(1);
+        CountDownLatch releaseWriteLock = new CountDownLatch(1);
+        Thread writer = new Thread(() -> {
+            mgr.writeLock();
+            try {
+                writeLockHeld.countDown();
+                releaseWriteLock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                mgr.writeUnlock();
+            }
+        });
+        writer.start();
+        try {
+            Assertions.assertTrue(writeLockHeld.await(5, TimeUnit.SECONDS));
+            CompletableFuture<ResourceGroup> future =
+                    CompletableFuture.supplyAsync(() -> mgr.getResourceGroup("rg_by_name"));
+            ResourceGroup rg = future.get(2, TimeUnit.SECONDS);
+            Assertions.assertNotNull(rg);
+            Assertions.assertEquals("rg_by_name", rg.getName());
+        } finally {
+            releaseWriteLock.countDown();
+            writer.join(5000);
+        }
     }
 
     @Test
@@ -200,27 +196,63 @@ public class ResourceGroupMgrConcurrencyTest {
         mgr.createResourceGroup(mvStmt("rg_by_id", "1"));
         ResourceGroup rgByName = mgr.getResourceGroup("rg_by_id");
         Assertions.assertNotNull(rgByName);
-        ResourceGroup rg = mgr.getResourceGroup(rgByName.getId());
-        Assertions.assertNotNull(rg);
-        Assertions.assertEquals(rgByName.getId(), rg.getId());
-        Field lockField = ResourceGroupMgr.class.getDeclaredField("lock");
-        lockField.setAccessible(true);
-        java.util.concurrent.locks.ReentrantReadWriteLock rwLock =
-                (java.util.concurrent.locks.ReentrantReadWriteLock) lockField.get(mgr);
-        Assertions.assertEquals(0, rwLock.getReadLockCount());
+        long id = rgByName.getId();
+
+        CountDownLatch writeLockHeld = new CountDownLatch(1);
+        CountDownLatch releaseWriteLock = new CountDownLatch(1);
+        Thread writer = new Thread(() -> {
+            mgr.writeLock();
+            try {
+                writeLockHeld.countDown();
+                releaseWriteLock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                mgr.writeUnlock();
+            }
+        });
+        writer.start();
+        try {
+            Assertions.assertTrue(writeLockHeld.await(5, TimeUnit.SECONDS));
+            CompletableFuture<ResourceGroup> future =
+                    CompletableFuture.supplyAsync(() -> mgr.getResourceGroup(id));
+            ResourceGroup rg = future.get(2, TimeUnit.SECONDS);
+            Assertions.assertNotNull(rg);
+            Assertions.assertEquals(id, rg.getId());
+        } finally {
+            releaseWriteLock.countDown();
+            writer.join(5000);
+        }
     }
 
     @Test
     public void testChooseResourceGroupByNameLockFree() throws Exception {
         mgr.createResourceGroup(mvStmt("rg_choose_name", "1"));
-        TWorkGroup twg = mgr.chooseResourceGroupByName(null, "rg_choose_name");
-        Assertions.assertNotNull(twg);
-        Assertions.assertEquals("rg_choose_name", twg.getName());
-        Field lockField = ResourceGroupMgr.class.getDeclaredField("lock");
-        lockField.setAccessible(true);
-        java.util.concurrent.locks.ReentrantReadWriteLock rwLock =
-                (java.util.concurrent.locks.ReentrantReadWriteLock) lockField.get(mgr);
-        Assertions.assertEquals(0, rwLock.getReadLockCount());
+        CountDownLatch writeLockHeld = new CountDownLatch(1);
+        CountDownLatch releaseWriteLock = new CountDownLatch(1);
+        Thread writer = new Thread(() -> {
+            mgr.writeLock();
+            try {
+                writeLockHeld.countDown();
+                releaseWriteLock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                mgr.writeUnlock();
+            }
+        });
+        writer.start();
+        try {
+            Assertions.assertTrue(writeLockHeld.await(5, TimeUnit.SECONDS));
+            CompletableFuture<TWorkGroup> future =
+                    CompletableFuture.supplyAsync(() -> mgr.chooseResourceGroupByName(null, "rg_choose_name"));
+            TWorkGroup twg = future.get(2, TimeUnit.SECONDS);
+            Assertions.assertNotNull(twg);
+            Assertions.assertEquals("rg_choose_name", twg.getName());
+        } finally {
+            releaseWriteLock.countDown();
+            writer.join(5000);
+        }
     }
 
     @Test
@@ -228,13 +260,79 @@ public class ResourceGroupMgrConcurrencyTest {
         mgr.createResourceGroup(mvStmt("rg_choose_id", "1"));
         ResourceGroup rg = mgr.getResourceGroup("rg_choose_id");
         Assertions.assertNotNull(rg);
-        TWorkGroup twg = mgr.chooseResourceGroupByID(null, rg.getId());
-        Assertions.assertNotNull(twg);
-        Field lockField = ResourceGroupMgr.class.getDeclaredField("lock");
-        lockField.setAccessible(true);
-        java.util.concurrent.locks.ReentrantReadWriteLock rwLock =
-                (java.util.concurrent.locks.ReentrantReadWriteLock) lockField.get(mgr);
-        Assertions.assertEquals(0, rwLock.getReadLockCount());
+        long id = rg.getId();
+
+        CountDownLatch writeLockHeld = new CountDownLatch(1);
+        CountDownLatch releaseWriteLock = new CountDownLatch(1);
+        Thread writer = new Thread(() -> {
+            mgr.writeLock();
+            try {
+                writeLockHeld.countDown();
+                releaseWriteLock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                mgr.writeUnlock();
+            }
+        });
+        writer.start();
+        try {
+            Assertions.assertTrue(writeLockHeld.await(5, TimeUnit.SECONDS));
+            CompletableFuture<TWorkGroup> future =
+                    CompletableFuture.supplyAsync(() -> mgr.chooseResourceGroupByID(null, id));
+            TWorkGroup twg = future.get(2, TimeUnit.SECONDS);
+            Assertions.assertNotNull(twg);
+        } finally {
+            releaseWriteLock.countDown();
+            writer.join(5000);
+        }
+    }
+
+    @Test
+    public void testAllHotPathReadMethodsLockFreeUnderWriteLock() throws Exception {
+        mgr.createResourceGroup(mvStmt("rg_all_lockfree", "1"));
+        ResourceGroup rg = mgr.getResourceGroup("rg_all_lockfree");
+        Assertions.assertNotNull(rg);
+        long id = rg.getId();
+
+        CountDownLatch writeLockHeld = new CountDownLatch(1);
+        CountDownLatch releaseWriteLock = new CountDownLatch(1);
+        Thread writer = new Thread(() -> {
+            mgr.writeLock();
+            try {
+                writeLockHeld.countDown();
+                releaseWriteLock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                mgr.writeUnlock();
+            }
+        });
+        writer.start();
+        try {
+            Assertions.assertTrue(writeLockHeld.await(5, TimeUnit.SECONDS));
+
+            com.starrocks.qe.ConnectContext ctx = new com.starrocks.qe.ConnectContext();
+            ctx.setRemoteIP("127.0.0.1");
+            ctx.setQualifiedUser("test_user");
+
+            CompletableFuture<Void> allReads = CompletableFuture.runAsync(() -> {
+                Assertions.assertNotNull(mgr.getResourceGroup("rg_all_lockfree"));
+                Assertions.assertNotNull(mgr.getResourceGroup(id));
+                Assertions.assertNotNull(mgr.chooseResourceGroupByName(null, "rg_all_lockfree"));
+                Assertions.assertNotNull(mgr.chooseResourceGroupByID(null, id));
+                Assertions.assertTrue(mgr.getAllResourceGroupNames().contains("rg_all_lockfree"));
+                Assertions.assertTrue(mgr.getResourceGroupIds().contains(id));
+                mgr.chooseResourceGroup(ctx, null, null);
+                Assertions.assertFalse(mgr.showOneResourceGroup("rg_all_lockfree", false).isEmpty());
+                Assertions.assertFalse(mgr.showAllResourceGroups(null, false, true).isEmpty());
+            });
+
+            Assertions.assertDoesNotThrow(() -> allReads.get(2, TimeUnit.SECONDS));
+        } finally {
+            releaseWriteLock.countDown();
+            writer.join(5000);
+        }
     }
 
     @Test
@@ -269,9 +367,9 @@ public class ResourceGroupMgrConcurrencyTest {
     public void testReadSnapshotConsistencyUnderWrite() throws Exception {
         mgr.createResourceGroup(mvStmt("rg_snap_a", "1"));
         mgr.createResourceGroup(mvStmt("rg_snap_b", "1"));
-        Object preWriteSnap = getSnapshot();
-        Map<String, ResourceGroup> snapshotBefore   = snapField(preWriteSnap, "byName");
-        Map<Long, ResourceGroup>   idSnapshotBefore = snapField(preWriteSnap, "byId");
+        ResourceGroupMgr.ResourceGroupSnapshot preWriteSnap = mgr.getSnapshotForTest();
+        Map<String, ResourceGroup> snapshotBefore   = preWriteSnap.byName;
+        Map<Long, ResourceGroup>   idSnapshotBefore = preWriteSnap.byId;
         for (Map.Entry<String, ResourceGroup> e : snapshotBefore.entrySet()) {
             Assertions.assertTrue(idSnapshotBefore.containsKey(e.getValue().getId()));
         }
@@ -287,15 +385,6 @@ public class ResourceGroupMgrConcurrencyTest {
         for (int i = 0; i < 5; i++) {
             mgr.createResourceGroup(mvStmt("rg_conc_" + i, "1"));
         }
-        Field snapField = ResourceGroupMgr.class.getDeclaredField("snapshot");
-        snapField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        AtomicReference<Object> snapRef =
-                (AtomicReference<Object>) snapField.get(mgr);
-        Class<?> snapClass = snapRef.get().getClass();
-        Constructor<?> snapCtor = snapClass.getDeclaredConstructor(
-                Map.class, Map.class, Map.class, ResourceGroup.class);
-        snapCtor.setAccessible(true);
 
         int readerCount = 8;
         int writerCount = 2;
@@ -312,9 +401,7 @@ public class ResourceGroupMgrConcurrencyTest {
                         mgr.getAllResourceGroupNames();
                         mgr.getResourceGroup("rg_conc_0");
                         mgr.chooseResourceGroupByName(null, "rg_conc_0");
-                        @SuppressWarnings("unchecked")
-                        Map<String, ResourceGroup> snap =
-                                (Map<String, ResourceGroup>) snapField(snapRef.get(), "byName");
+                        Map<String, ResourceGroup> snap = mgr.getSnapshotForTest().byName;
                         for (ResourceGroup rg : snap.values()) {
                             Assertions.assertNotNull(rg.getName());
                         }
@@ -334,9 +421,7 @@ public class ResourceGroupMgrConcurrencyTest {
                     startLatch.await();
                     int counter = 0;
                     while (!stop.get() && !Thread.currentThread().isInterrupted()) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, ResourceGroup> current =
-                                (Map<String, ResourceGroup>) snapField(snapRef.get(), "byName");
+                        Map<String, ResourceGroup> current = mgr.getSnapshotForTest().byName;
                         Map<String, ResourceGroup> copy = new java.util.HashMap<>(current);
                         String key = "rg_transient_" + (counter % 3);
                         if (copy.containsKey(key)) {
@@ -344,9 +429,9 @@ public class ResourceGroupMgrConcurrencyTest {
                         } else if (!current.isEmpty()) {
                             copy.put(key, current.values().iterator().next());
                         }
-                        Object newSnap = snapCtor.newInstance(copy,
-                                Collections.emptyMap(), Collections.emptyMap(), null);
-                        snapRef.set(newSnap);
+                        ResourceGroupMgr.ResourceGroupSnapshot newSnap = ResourceGroupMgr.newSnapshotForTest(
+                                copy, Collections.emptyMap(), Collections.emptyMap(), null);
+                        mgr.setSnapshotForTest(newSnap);
                         counter++;
                     }
                 } catch (InterruptedException e) {
@@ -472,24 +557,21 @@ public class ResourceGroupMgrConcurrencyTest {
     public void testSingleWriteAlterSnapshotReplacement() throws Exception {
         mgr.createResourceGroup(mvStmt("rg_alter_single_write", "1"));
 
-        // Latch-synchronised concurrent reader: captures a snapshot reference during the alter
-        // and checks the group is present in that snapshot. With the old double-write code a
-        // reader that captured a snapshot between the remove and add would see null here.
+        // Latch-synchronised concurrent reader: repeatedly queries the group during the alter
+        // and checks the group remains present throughout.
         AtomicReference<String> readerFailure = new AtomicReference<>();
         CountDownLatch readerReady  = new CountDownLatch(1);
         CountDownLatch writerDone   = new CountDownLatch(1);
         CountDownLatch readerDone   = new CountDownLatch(1);
+        AtomicBoolean  active       = new AtomicBoolean(true);
 
         Thread reader = new Thread(() -> {
             try {
                 readerReady.countDown();
-                // spin until alter is in-flight; the barrier is best-effort for race coverage
-                writerDone.await();
-                // Check every snapshot we can capture after the alter completed.
-                for (int i = 0; i < 1000; i++) {
+                while (active.get() || !writerDone.await(0, TimeUnit.MILLISECONDS)) {
                     ResourceGroup rg = mgr.getResourceGroup("rg_alter_single_write");
                     if (rg == null) {
-                        readerFailure.set("Group absent in iteration " + i);
+                        readerFailure.set("Group absent during concurrent alter");
                         break;
                     }
                 }
@@ -506,13 +588,13 @@ public class ResourceGroupMgrConcurrencyTest {
         mgr.alterResourceGroup(new com.starrocks.sql.ast.AlterResourceGroupStmt("rg_alter_single_write",
                 new com.starrocks.sql.ast.AlterResourceGroupStmt.AlterProperties(
                         Collections.singletonMap("mem_limit", "0.6"))));
+        active.set(false);
         writerDone.countDown();
         readerDone.await(5, TimeUnit.SECONDS);
 
         Assertions.assertNull(readerFailure.get(), readerFailure.get());
 
-        Object snapAfter = getSnapshot();
-        Map<String, ResourceGroup> byNameAfter = snapField(snapAfter, "byName");
+        Map<String, ResourceGroup> byNameAfter = mgr.getSnapshotForTest().byName;
         Assertions.assertTrue(byNameAfter.containsKey("rg_alter_single_write"),
                 "Group must remain continuously present in snapshot after alter");
     }
@@ -533,13 +615,9 @@ public class ResourceGroupMgrConcurrencyTest {
         classifier.setUser("test_user");
         sqGroup.setClassifiers(Collections.singletonList(classifier));
 
-        java.lang.reflect.Method addMethod =
-                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
-        addMethod.setAccessible(true);
-        addMethod.invoke(mgr, sqGroup);
+        mgr.addResourceGroupInternal(sqGroup);
 
-        Object snap = getSnapshot();
-        ResourceGroup sqFromSnap = snapField(snap, "shortQueryResourceGroup");
+        ResourceGroup sqFromSnap = mgr.getSnapshotForTest().shortQueryResourceGroup;
         Assertions.assertNotNull(sqFromSnap, "shortQueryResourceGroup must be populated in snapshot");
         Assertions.assertEquals("sq_rg", sqFromSnap.getName());
     }
@@ -553,10 +631,7 @@ public class ResourceGroupMgrConcurrencyTest {
         sqGroup.setMemLimit(0.5);
         sqGroup.setClassifiers(Collections.emptyList());
 
-        java.lang.reflect.Method addMethod =
-                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
-        addMethod.setAccessible(true);
-        addMethod.invoke(mgr, sqGroup);
+        mgr.addResourceGroupInternal(sqGroup);
 
         Map<String, String> props = Maps.newHashMap();
         props.put("cpu_weight", "1");
@@ -606,7 +681,7 @@ public class ResourceGroupMgrConcurrencyTest {
                     mgr.alterResourceGroup(new com.starrocks.sql.ast.AlterResourceGroupStmt(
                             "rg_alter_stress",
                             new com.starrocks.sql.ast.AlterResourceGroupStmt.AlterProperties(
-                                    Collections.singletonMap("mem_limit", memLimit))));
+                                     Collections.singletonMap("mem_limit", memLimit))));
                 }
             } catch (Throwable t) {
                 firstError.compareAndSet(null, t);
@@ -695,14 +770,11 @@ public class ResourceGroupMgrConcurrencyTest {
         sqGroup.setCpuWeight(1);
         sqGroup.setClassifiers(Collections.emptyList());
 
-        java.lang.reflect.Method addMethod =
-                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
-        addMethod.setAccessible(true);
-        addMethod.invoke(mgr, sqGroup);
+        mgr.addResourceGroupInternal(sqGroup);
 
-        Assertions.assertNotNull(snapField(getSnapshot(), "shortQueryResourceGroup"));
+        Assertions.assertNotNull(mgr.getSnapshotForTest().shortQueryResourceGroup);
         Assertions.assertEquals("sq_replace",
-                ((ResourceGroup) snapField(getSnapshot(), "shortQueryResourceGroup")).getName());
+                mgr.getSnapshotForTest().shortQueryResourceGroup.getName());
 
         // Replace short_query group with MV group.
         // Validates that shortQueryResourceGroup in snapshot becomes null when a WG_SHORT_QUERY group is replaced.
@@ -716,7 +788,7 @@ public class ResourceGroupMgrConcurrencyTest {
 
         mgr.createResourceGroup(stmt2);
 
-        ResourceGroup sqReplaced = snapField(getSnapshot(), "shortQueryResourceGroup");
+        ResourceGroup sqReplaced = mgr.getSnapshotForTest().shortQueryResourceGroup;
         Assertions.assertNull(sqReplaced,
                 "shortQueryResourceGroup must become null when WG_SHORT_QUERY group is replaced with WG_MV");
         ResourceGroup rgReplaced = mgr.getResourceGroup("sq_replace");
@@ -745,10 +817,7 @@ public class ResourceGroupMgrConcurrencyTest {
         sqExisting.setResourceGroupType(TWorkGroupType.WG_SHORT_QUERY);
         sqExisting.setMemLimit(0.5);
         sqExisting.setClassifiers(Collections.emptyList());
-        java.lang.reflect.Method addMethod =
-                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
-        addMethod.setAccessible(true);
-        addMethod.invoke(mgr, sqExisting);
+        mgr.addResourceGroupInternal(sqExisting);
 
         // Attempt replacing rg_valid_test with short_query type when another short_query group sq_existing exists.
         Map<String, String> propsBad = Maps.newHashMap();
@@ -778,11 +847,8 @@ public class ResourceGroupMgrConcurrencyTest {
         rgNullCls.setMemLimit(0.5);
         rgNullCls.setClassifiers(null);
 
-        java.lang.reflect.Method addMethod =
-                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
-        addMethod.setAccessible(true);
         // Must not throw NPE when classifiers is null
-        Assertions.assertDoesNotThrow(() -> addMethod.invoke(mgr, rgNullCls));
+        Assertions.assertDoesNotThrow(() -> mgr.addResourceGroupInternal(rgNullCls));
 
         ResourceGroup rgNew = new ResourceGroup();
         rgNew.setName("rg_null_cls");
@@ -791,11 +857,8 @@ public class ResourceGroupMgrConcurrencyTest {
         rgNew.setMemLimit(0.6);
         rgNew.setClassifiers(null);
 
-        java.lang.reflect.Method replaceMethod =
-                ResourceGroupMgr.class.getDeclaredMethod("replaceResourceGroupInternal", String.class, ResourceGroup.class);
-        replaceMethod.setAccessible(true);
         // Must not throw NPE when replacing group with null classifiers
-        Assertions.assertDoesNotThrow(() -> replaceMethod.invoke(mgr, "rg_null_cls", rgNew));
+        Assertions.assertDoesNotThrow(() -> mgr.replaceResourceGroupInternal("rg_null_cls", rgNew));
         Assertions.assertEquals(0.6, mgr.getResourceGroup("rg_null_cls").getMemLimit());
     }
 
