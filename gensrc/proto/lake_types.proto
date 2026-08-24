@@ -419,19 +419,11 @@ message TabletMetadataPB {
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
 
-<<<<<<< HEAD
     // CDC: metadata ancestor chain for reverse traversal.
     // chain[0] = direct parent version; subsequent elements = older ancestors.
     // Length capped at max(1, cloud_native_tablet_metadata_ancestors_recorded) (default 5).
     repeated int64 metadata_ancestors = 50;
     optional CdcMetadataPB cdc_metadata = 51;
-=======
-    // Tags 50, 51 are occupied by downstream distributions and already persisted
-    // in downstream tablet metadata. Placeholders are declared here (unused by
-    // upstream) so that no upstream field is ever allocated on these tags.
-    repeated int64 placeholder_50 = 50;
-    optional bytes placeholder_51 = 51;
->>>>>>> 49dd85ab3c0... [Enhancement] Add placeholders for tags occupied by downstream distributions (EncryptionKeyTypePB 21-23, TabletMetadataPB 50-51, BuiltinInvertedIndexPB 2-4) (#76714)
 }
 
 message MetadataUpdateInfoPB {
