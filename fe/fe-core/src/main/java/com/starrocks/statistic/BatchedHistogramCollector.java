@@ -44,7 +44,7 @@ import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
 final class BatchedHistogramCollector {
     private static final Logger LOG = LogManager.getLogger(BatchedHistogramCollector.class);
 
-    private final BatchedCollectTarget target;
+    private final BatchedStatsCollectionUtils target;
     private final HistogramCollectParams params;
 
     private final List<List<Expr>> rowsBuffer = new ArrayList<>();
@@ -52,7 +52,7 @@ final class BatchedHistogramCollector {
     private final List<String> columnsBuffer = new ArrayList<>();
     private final List<String> insertedColumns = new ArrayList<>();
 
-    BatchedHistogramCollector(BatchedCollectTarget target, HistogramCollectParams params) {
+    BatchedHistogramCollector(BatchedStatsCollectionUtils target, HistogramCollectParams params) {
         this.target = target;
         this.params = params;
     }
@@ -79,7 +79,7 @@ final class BatchedHistogramCollector {
                     Map<String, String> mostCommonValues =
                             buildMostCommonValues(mcv, target.mcvCountScaleRatio(params));
 
-                    String histogramQuery = target.buildBatchedHistogramQuery(
+                    String histogramQuery = target.buildSqlCmd(
                             context, analyzeStatus, params, columnName, columnType, mostCommonValues);
 
                     String buckets = getSingleHistogramResult(

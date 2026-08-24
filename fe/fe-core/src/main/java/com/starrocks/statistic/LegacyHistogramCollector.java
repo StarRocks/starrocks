@@ -33,10 +33,10 @@ import static com.starrocks.statistic.HistogramStatisticsUtils.buildMostCommonVa
  * @see BatchedHistogramCollector
  */
 final class LegacyHistogramCollector {
-    private final LegacyCollectTarget target;
+    private final LegacyStatsCollectionUtils target;
     private final HistogramCollectParams params;
 
-    LegacyHistogramCollector(LegacyCollectTarget target, HistogramCollectParams params) {
+    LegacyHistogramCollector(LegacyStatsCollectionUtils target, HistogramCollectParams params) {
         this.target = target;
         this.params = params;
     }
@@ -58,7 +58,7 @@ final class LegacyHistogramCollector {
             Map<String, String> mostCommonValues =
                     buildMostCommonValues(mcv, target.mcvCountScaleRatio(params));
 
-            String sql = target.buildLegacyCollectSql(
+            String sql = target.buildSqlCmd(
                     context, statisticExecutor, params, columnName, columnType, mostCommonValues);
             job.collectStatisticSync(sql, context, analyzeStatus);
             target.afterColumnInserted(context, statisticExecutor, columnName);

@@ -25,7 +25,7 @@ import java.util.Map;
  * The job-specific half of the batched (query the buckets, then INSERT ... VALUES) strategy.
  * @see BatchedHistogramCollector
  */
-interface BatchedCollectTarget extends HistogramCollectTarget {
+interface BatchedStatsCollectionUtils extends HistogramStatsCollectionUtils {
     /** Statistics table the buffered rows are inserted into. */
     String statsTableName();
 
@@ -36,7 +36,7 @@ interface BatchedCollectTarget extends HistogramCollectTarget {
      * SQL for the query whose single row carries this column's buckets. May itself run
      * intermediate queries (native HLL mode derives bucket boundaries first).
      */
-    String buildBatchedHistogramQuery(ConnectContext context, AnalyzeStatus analyzeStatus,
+    String buildSqlCmd(ConnectContext context, AnalyzeStatus analyzeStatus,
                                       HistogramCollectParams params, String columnName, Type columnType,
                                       Map<String, String> mostCommonValues) throws Exception;
 

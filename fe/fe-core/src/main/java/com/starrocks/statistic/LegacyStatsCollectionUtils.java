@@ -21,18 +21,21 @@ import java.util.Map;
 
 /**
  * The job-specific half of the legacy (one INSERT ... SELECT per column) strategy.
+ *
  * @see LegacyHistogramCollector
  */
-interface LegacyCollectTarget extends HistogramCollectTarget {
+interface LegacyStatsCollectionUtils extends HistogramStatsCollectionUtils {
     /**
      * The complete INSERT statement for one column. Receives the collector's StatisticExecutor
      * because some variants (native HLL mode) run an intermediate query to derive bucket
      * boundaries before the INSERT can be built, and must do so on the same executor.
      */
-    String buildLegacyCollectSql(ConnectContext context, StatisticExecutor executor, HistogramCollectParams params,
-                                 String columnName, Type columnType, Map<String, String> mostCommonValues)
+    String buildSqlCmd(ConnectContext context, StatisticExecutor executor, HistogramCollectParams params,
+                       String columnName, Type columnType, Map<String, String> mostCommonValues)
             throws Exception;
 
-    /** Hook run after a column's row is written. No-op unless the flavour needs per-column cleanup. */
+    /**
+     * Hook run after a column's row is written. No-op unless the flavour needs per-column cleanup.
+     */
     void afterColumnInserted(ConnectContext context, StatisticExecutor executor, String columnName);
 }

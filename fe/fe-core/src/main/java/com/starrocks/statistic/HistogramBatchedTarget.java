@@ -51,7 +51,7 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
  *
  * @see BatchedHistogramCollector
  */
-final class HistogramBatchedTarget implements BatchedCollectTarget {
+final class HistogramBatchedTarget implements BatchedStatsCollectionUtils {
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as INT)," +
                     " cast($dbId as BIGINT), cast($tableId as BIGINT), '$columnNameStr'," +
@@ -113,7 +113,7 @@ final class HistogramBatchedTarget implements BatchedCollectTarget {
     }
 
     @Override
-    public String buildBatchedHistogramQuery(ConnectContext context, AnalyzeStatus analyzeStatus,
+    public String buildSqlCmd(ConnectContext context, AnalyzeStatus analyzeStatus,
                                              HistogramCollectParams params, String columnName, Type columnType,
                                              Map<String, String> mostCommonValues) throws Exception {
         if (StatisticsCollectJob.shouldSkipHistogramBuckets(columnType)) {

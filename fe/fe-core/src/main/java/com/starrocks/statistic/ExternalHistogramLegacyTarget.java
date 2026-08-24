@@ -39,7 +39,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTI
  *
  * @see LegacyHistogramCollector
  */
-final class ExternalHistogramLegacyTarget implements LegacyCollectTarget {
+final class ExternalHistogramLegacyTarget implements LegacyStatsCollectionUtils {
     private static final Logger LOG = LogManager.getLogger(ExternalHistogramLegacyTarget.class);
 
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
@@ -89,7 +89,7 @@ final class ExternalHistogramLegacyTarget implements LegacyCollectTarget {
     }
 
     @Override
-    public String buildLegacyCollectSql(ConnectContext context, StatisticExecutor executor,
+    public String buildSqlCmd(ConnectContext context, StatisticExecutor executor,
                                         HistogramCollectParams params, String columnName, Type columnType,
                                         Map<String, String> mostCommonValues) {
         // Skipping the buckets leaves one tail bucket holding all values - sum(MCVs).

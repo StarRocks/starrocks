@@ -41,7 +41,7 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
  *
  * @see LegacyHistogramCollector
  */
-final class HistogramLegacyTarget implements LegacyCollectTarget {
+final class HistogramLegacyTarget implements LegacyStatsCollectionUtils {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName'," +
                     " $histogramFunction, " +
@@ -100,7 +100,7 @@ final class HistogramLegacyTarget implements LegacyCollectTarget {
     }
 
     @Override
-    public String buildLegacyCollectSql(ConnectContext context, StatisticExecutor executor,
+    public String buildSqlCmd(ConnectContext context, StatisticExecutor executor,
                                         HistogramCollectParams params, String columnName, Type columnType,
                                         Map<String, String> mostCommonValues) throws Exception {
         if (StatisticsCollectJob.shouldSkipHistogramBuckets(columnType)) {

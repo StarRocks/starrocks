@@ -46,7 +46,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTI
  *
  * @see BatchedHistogramCollector
  */
-final class ExternalHistogramBatchedTarget implements BatchedCollectTarget {
+final class ExternalHistogramBatchedTarget implements BatchedStatsCollectionUtils {
     private static final Logger LOG = LogManager.getLogger(ExternalHistogramBatchedTarget.class);
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
@@ -101,7 +101,7 @@ final class ExternalHistogramBatchedTarget implements BatchedCollectTarget {
     }
 
     @Override
-    public String buildBatchedHistogramQuery(ConnectContext context, AnalyzeStatus analyzeStatus,
+    public String buildSqlCmd(ConnectContext context, AnalyzeStatus analyzeStatus,
                                              HistogramCollectParams params, String columnName, Type columnType,
                                              Map<String, String> mostCommonValues) {
         return StatisticsCollectJob.shouldSkipHistogramBuckets(columnType)
