@@ -8,7 +8,11 @@ on:
 
     branches:
       - main
+      # Both release lines and patch lines: BUILD is a required status check on
+      # branch-X.Y.Z too, so this workflow must fire there or those PRs never
+      # get a BUILD result and stay blocked forever.
       - 'branch-[0-9]+.[0-9]+'
+      - 'branch-[0-9]+.[0-9]+.[0-9]+'
 
 concurrency:
   group: ${{ github.event.number }}-sync-checker
