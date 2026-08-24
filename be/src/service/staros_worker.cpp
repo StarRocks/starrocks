@@ -28,6 +28,7 @@
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
+#include "gutil/strings/numbers.h"
 #include "util/await.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -64,34 +65,31 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
-StarOSWorker::StarOSWorker()
+StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
         : _mtx(),
           _cache_mtx(),
           _shards(),
-          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)),
+          _table_metrics_mgr(table_metrics_mgr) {}
 
 StarOSWorker::~StarOSWorker() = default;
-
-static const uint64_t kUnknownTableId = UINT64_MAX;
 
 void StarOSWorker::set_fs_cache_capacity(int32_t capacity) {
     _fs_cache->set_capacity(capacity);
 }
 
-uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
-    const auto& properties = shard.properties;
-    auto iter = properties.find("tableId");
-    if (iter == properties.end()) {
-        DCHECK(false) << "tableId doesn't exist in shard properties";
-        return kUnknownTableId;
+std::optional<uint64_t> StarOSWorker::get_table_id(const ShardInfo& shard) {
+    const auto iter = shard.properties.find("tableId");
+    if (iter == shard.properties.end()) {
+        return std::nullopt;
     }
-    const auto& tableId = properties.at("tableId");
-    try {
-        return std::stoull(tableId);
-    } catch (const std::exception& e) {
-        DCHECK(false) << "failed to parse tableId: " << tableId << ", " << e.what();
-        return kUnknownTableId;
+
+    uint64_t table_id = 0;
+    if (iter->second.find('\0') != std::string::npos || !safe_strtou64(iter->second, &table_id)) {
+        LOG(WARNING) << "failed to parse tableId: " << iter->second;
+        return std::nullopt;
     }
+    return table_id;
 }
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
@@ -108,9 +106,17 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     StarRocksMetrics::instance()->staros_shard_count.set_value(_shards.size());
     l.unlock();
     if (ret.second) {
+        auto* table_metrics_mgr = _table_metrics_mgr;
 #ifndef BE_TEST
-        StarRocksMetrics::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
+        if (table_metrics_mgr == nullptr) {
+            table_metrics_mgr = StarRocksMetrics::instance()->table_metrics_mgr();
+        }
 #endif
+        if (table_metrics_mgr != nullptr) {
+            if (auto table_id = get_table_id(shard); table_id.has_value()) {
+                table_metrics_mgr->register_table(*table_id);
+            }
+        }
         // it is an insert op to the map
         // NOTE:
         //  1. Since the following statement is invoked outside the lock, it is possible that
@@ -140,10 +146,17 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
     auto iter = _shards.find(id);
     if (iter != _shards.end()) {
+        auto* table_metrics_mgr = _table_metrics_mgr;
 #ifndef BE_TEST
-        uint64_t table_id = get_table_id(iter->second.shard_info);
-        StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(table_id);
+        if (table_metrics_mgr == nullptr) {
+            table_metrics_mgr = StarRocksMetrics::instance()->table_metrics_mgr();
+        }
 #endif
+        if (table_metrics_mgr != nullptr) {
+            if (auto table_id = get_table_id(iter->second.shard_info); table_id.has_value()) {
+                table_metrics_mgr->unregister_table(*table_id);
+            }
+        }
         _shards.erase(iter);
         StarRocksMetrics::instance()->staros_shard_count.set_value(_shards.size());
     }

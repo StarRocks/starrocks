@@ -19,6 +19,8 @@
 #include <starlet.h>
 
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -34,6 +36,7 @@ namespace starrocks {
 
 class Cache;
 class CacheKey;
+class TableMetricsManager;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
@@ -51,7 +54,7 @@ public:
 
     typedef std::function<void(ShardId)> add_shard_listener;
 
-    StarOSWorker();
+    explicit StarOSWorker(TableMetricsManager* table_metrics_mgr = nullptr);
 
     ~StarOSWorker() override;
 
@@ -120,7 +123,7 @@ private:
             _add_shard_listener(shardId);
         }
     }
-    uint64_t get_table_id(const ShardInfo& shared_info);
+    std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
 
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
@@ -143,6 +146,7 @@ private:
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
+    TableMetricsManager* _table_metrics_mgr;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
