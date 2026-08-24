@@ -524,6 +524,50 @@ TEST_F(LakeRowsetTest, test_get_read_iterator_num_from_metadata) {
     }
 }
 
+// The held input set stays resident for the whole task, so calculate_chunk_size_for_column_group
+// must size the read chunks from what is left of compaction_memory_limit_per_worker after the held
+// set, and only when holding -- the kill-switch leg keeps the pre-hold sizing. The budget is set to
+// half the held set's measured size, so the subtraction must clamp the holding leg to the minimum
+// chunk size while the non-holding leg still sizes from the full budget.
+TEST_F(LakeRowsetTest, test_chunk_size_budget_subtracts_held_segments) {
+    create_rowsets_for_testing();
+
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    const bool saved_parallel = config::enable_load_segment_parallel;
+    config::enable_load_segment_parallel = false;
+    DeferOp restore([&]() {
+        config::compaction_memory_limit_per_worker = saved_mem_limit;
+        config::enable_load_segment_parallel = saved_parallel;
+    });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+
+    // Measure what the held set will cost, the same way the implementation does.
+    int64_t held_bytes = 0;
+    {
+        ASSIGN_OR_ABORT(auto segments, rs->segments(false));
+        for (const auto& seg : segments) {
+            held_bytes += static_cast<int64_t>(seg->mem_usage());
+        }
+    }
+    ASSERT_GT(held_bytes, 4);
+    // Half the held set: safely below whatever the implementation measures on its own instances,
+    // so the subtraction clamps the remaining budget to its floor.
+    config::compaction_memory_limit_per_worker = held_bytes / 2;
+
+    task._hold_input_segments = false;
+    ASSIGN_OR_ABORT(auto chunk_no_hold, task.calculate_chunk_size_for_column_group({0}));
+
+    task._hold_input_segments = true;
+    ASSIGN_OR_ABORT(auto chunk_hold, task.calculate_chunk_size_for_column_group({0}));
+
+    EXPECT_LT(chunk_hold, chunk_no_hold);
+    EXPECT_LE(chunk_hold, 2); // 1 byte of remaining budget: the minimum chunk size
+}
+
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     create_rowsets_for_testing();
 

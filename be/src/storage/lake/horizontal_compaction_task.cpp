@@ -14,6 +14,8 @@
 
 #include "storage/lake/horizontal_compaction_task.h"
 
+#include <algorithm>
+
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
@@ -263,6 +265,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
+    int64_t held_segments_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
@@ -279,6 +282,10 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                                    .fill_metadata_cache = !_hold_input_segments,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
+        // Only a rowset that actually holds pins its set for the task; one that cannot (segment-range
+        // mode) had its holding downgraded inside segments() and stays on the evictable shared cache,
+        // so it must not be charged against the read-buffer budget below.
+        const bool rowset_holds = rowset->can_hold_segments();
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
             // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
@@ -287,6 +294,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                 LOG(WARNING) << "horizontal compaction chunk-size estimation skips a null (lost) segment, tablet: "
                              << _tablet.id() << ", rowset: " << rowset->id();
                 continue;
+            }
+            if (rowset_holds) {
+                held_segments_bytes += static_cast<int64_t>(segment->mem_usage());
             }
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();
@@ -299,9 +309,16 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         }
     }
 
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
-                                                config::lake_compaction_chunk_size, total_num_rows, total_mem_footprint,
-                                                total_input_segs);
+    // The held input set stays resident for the whole task, so it comes out of the same per-worker
+    // budget the read buffers are sized from; without the subtraction the chunk sizing would plan as
+    // if that memory were still free. Only when holding: the kill-switch leg re-loads per pass and
+    // keeps the pre-hold sizing. A non-positive limit means "no memory cap" and must stay that way.
+    int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    if (_hold_input_segments && mem_limit > 0) {
+        mem_limit = std::max<int64_t>(1, mem_limit - held_segments_bytes);
+    }
+    return CompactionUtils::get_read_chunk_size(mem_limit, config::lake_compaction_chunk_size, total_num_rows,
+                                                total_mem_footprint, total_input_segs);
 }
 
 } // namespace starrocks::lake
