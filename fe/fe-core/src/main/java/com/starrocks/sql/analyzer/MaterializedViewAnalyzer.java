@@ -352,6 +352,87 @@ public class MaterializedViewAnalyzer {
                 || (distributionDesc == null && enableRangeDistribution);
     }
 
+    /**
+     * The CREATE analysis writes straight into the statement, so AUTO can only retry as PCT from a statement
+     * rolled back to what the parser produced. A field that analysis writes and this misses survives the
+     * rollback and corrupts the PCT pass; {@code MvAnalysisStateTest} fails when a new one appears.
+     */
+    private record MvAnalysisState(KeysType keysType,
+                                   RowIdStrategy rowIdStrategy,
+                                   MaterializedView.RefreshMode currentRefreshMode,
+                                   int encodeRowIdVersion,
+                                   List<BaseTableInfo> baseTableInfos,
+                                   List<String> sortKeys,
+                                   List<Column> mvColumnItems,
+                                   List<Integer> queryOutputIndices,
+                                   List<Index> mvIndexes,
+                                   List<Column> partitionColumns,
+                                   List<Expr> partitionRefTableExpr,
+                                   List<Expr> partitionByExprs,
+                                   PartitionType partitionType,
+                                   boolean refBaseTablePartitionWithTransform,
+                                   Map<String, String> properties,
+                                   Map<Integer, Column> generatedPartitionCols,
+                                   Map<Expr, Expr> partitionByExprToAdjustExprMap,
+                                   DistributionDesc distributionDesc) {
+
+        static MvAnalysisState capture(CreateMaterializedViewStatement statement) {
+            return new MvAnalysisState(statement.getKeysType(),
+                    statement.getRowIdStrategy(),
+                    statement.getCurrentRefreshMode(),
+                    statement.getEncodeRowIdVersion(),
+                    statement.getBaseTableInfos(),
+                    statement.getSortKeys(),
+                    statement.getMvColumnItems(),
+                    statement.getQueryOutputIndices(),
+                    statement.getMvIndexes(),
+                    statement.getPartitionColumns(),
+                    statement.getPartitionRefTableExpr(),
+                    statement.getPartitionByExprs(),
+                    statement.getPartitionType(),
+                    statement.isRefBaseTablePartitionWithTransform(),
+                    statement.getProperties() == null ? null : Maps.newHashMap(statement.getProperties()),
+                    Maps.newHashMap(statement.getGeneratedPartitionCols()),
+                    Maps.newHashMap(statement.getPartitionByExprToAdjustExprMap()),
+                    statement.getDistributionDesc());
+        }
+
+        void restore(CreateMaterializedViewStatement statement, ConnectContext context) {
+            // IVMAnalyzer mutates the query relation in place, so the captured reference is not a rollback --
+            // re-parse the definition string, which was built before the rewrite ran.
+            QueryStatement parsedQuery = (QueryStatement) SqlParser.parse(statement.getInlineViewDef(),
+                    context.getSessionVariable()).get(0);
+            Analyzer.analyze(parsedQuery, context);
+            statement.setQueryStatement(parsedQuery);
+
+            statement.setKeysType(keysType);
+            statement.setRowIdStrategy(rowIdStrategy);
+            statement.setCurrentRefreshMode(currentRefreshMode);
+            statement.setEncodeRowIdVersion(encodeRowIdVersion);
+            statement.setBaseTableInfos(baseTableInfos);
+            statement.setSortKeys(sortKeys);
+            statement.setMvColumnItems(mvColumnItems);
+            statement.setQueryOutputIndices(queryOutputIndices);
+            statement.setMvIndexes(mvIndexes);
+            statement.setPartitionColumns(partitionColumns);
+            statement.setPartitionRefTableExpr(partitionRefTableExpr);
+            statement.setPartitionByExprs(partitionByExprs);
+            statement.setPartitionType(partitionType);
+            statement.setRefBaseTablePartitionWithTransform(refBaseTablePartitionWithTransform);
+            statement.setProperties(properties);
+            statement.setDistributionDesc(distributionDesc);
+
+            // No setter: the analysis fills these through the getter, so the rollback has to refill in place.
+            refill(statement.getGeneratedPartitionCols(), generatedPartitionCols);
+            refill(statement.getPartitionByExprToAdjustExprMap(), partitionByExprToAdjustExprMap);
+        }
+
+        private static <K, V> void refill(Map<K, V> target, Map<K, V> captured) {
+            target.clear();
+            target.putAll(captured);
+        }
+    }
+
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -425,30 +506,58 @@ public class MaterializedViewAnalyzer {
             statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex(),
                     statement.getQueryStopIndex()));
 
-            MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
-            if (refreshMode.isIncrementalOrAuto()) {
+            MaterializedView.RefreshMode requestedMode = IVMAnalyzer.getRefreshMode(statement);
+            if (requestedMode.isAuto()) {
+                analyzeAutoMvDefinition(statement, context, catalog, dbName);
+            } else {
+                analyzeMvDefinition(statement, context, requestedMode, catalog, dbName);
+            }
+            return null;
+        }
+
+        /**
+         * Analyses the definition strictly as INCREMENTAL and, if that is rejected, rolls the statement back
+         * to what the parser produced and re-analyses it as PCT.
+         */
+        private void analyzeAutoMvDefinition(CreateMaterializedViewStatement statement,
+                                             ConnectContext context,
+                                             String catalog,
+                                             String dbName) {
+            MvAnalysisState parsedState = MvAnalysisState.capture(statement);
+            try {
+                analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.INCREMENTAL,
+                        catalog, dbName);
+                statement.setCurrentRefreshMode(MaterializedView.RefreshMode.AUTO);
+            } catch (SemanticException e) {
+                // IvmTrialRewriter reports an internal rewriter failure as a rejection too, so a bug in the
+                // incremental path degrades silently unless it is logged here.
+                LOG.warn("Incremental analysis rejected mv {}, creating it as PCT",
+                        statement.getTblName(), e);
+                parsedState.restore(statement, context);
+                analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.PCT, catalog, dbName);
+            }
+        }
+
+        private void analyzeMvDefinition(CreateMaterializedViewStatement statement,
+                                         ConnectContext context,
+                                         MaterializedView.RefreshMode refreshMode,
+                                         String catalog,
+                                         String dbName) {
+            QueryStatement queryStatement = statement.getQueryStatement();
+            if (refreshMode.isIncremental()) {
                 IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement, statement.getQueryStatement());
-                Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
-                if (ivmAnalyzeResult.isPresent()) {
-                    IVMAnalyzer.IVMAnalyzeResult result = ivmAnalyzeResult.get();
-                    queryStatement = result.queryStatement();
-                    // re-analyze again
-                    Analyzer.analyze(queryStatement, context);
-                    statement.setQueryStatement(queryStatement);
-                    // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
-                    statement.setKeysType(KeysType.PRIMARY_KEYS);
-                    statement.setRowIdStrategy(result.rowIdStrategy());
-                    statement.setCurrentRefreshMode(result.currentRefreshMode());
-                } else {
-                    // AUTO mode swallows the IVM SemanticException and falls back to PCT, but the trial may
-                    // have prepended __ROW_ID__ to the query in place before bailing. Re-parse the pre-trial
-                    // SQL so the PCT MV is built from the original query, not the half-rewritten one.
-                    queryStatement = (QueryStatement) SqlParser.parse(statement.getInlineViewDef(),
-                            context.getSessionVariable()).get(0);
-                    Analyzer.analyze(queryStatement, context);
-                    statement.setQueryStatement(queryStatement);
-                    statement.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
-                }
+                // AUTO reaches this as INCREMENTAL, which rejects by throwing rather than by returning
+                // empty, so the caller's rollback is the only fallback path.
+                IVMAnalyzer.IVMAnalyzeResult result = ivmAnalyzer.rewrite(refreshMode)
+                        .orElseThrow(() -> new SemanticException("Failed to rewrite the query for IVM"));
+                queryStatement = result.queryStatement();
+                // re-analyze again
+                Analyzer.analyze(queryStatement, context);
+                statement.setQueryStatement(queryStatement);
+                // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
+                statement.setKeysType(KeysType.PRIMARY_KEYS);
+                statement.setRowIdStrategy(result.rowIdStrategy());
+                statement.setCurrentRefreshMode(result.currentRefreshMode());
             } else {
                 statement.setCurrentRefreshMode(refreshMode);
             }
@@ -538,11 +647,9 @@ public class MaterializedViewAnalyzer {
             // check and analyze distribution
             checkDistribution(context, statement, aliasTableMap);
             // The trial target must observe the final target schema and normalized distribution.
-            // AUTO retains its existing fallback contract and does not run CREATE-time trial compilation.
             if (refreshMode.isIncremental()) {
                 IvmTrialRewriter.runTrial(context, statement, queryStatement);
             }
-            return null;
         }
 
         /**

@@ -17,7 +17,9 @@ package com.starrocks.sql.analyzer.mv;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangeDistributionInfo;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -973,23 +975,177 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                                             CreateMaterializedViewStatement stmt,
                                             QueryStatement rewrittenQuery) {
                     autoTrialInvocationCount++;
-                    throw new AssertionError("AUTO CREATE analysis must not invoke the IVM trial");
                 }
             };
             CreateMaterializedViewStatement supported = analyzeMvDdl(incrementalMvDdl("mv_auto_supported", "", ""));
             assertEquals(MaterializedView.RefreshMode.AUTO, supported.getCurrentRefreshMode());
             assertTrue(supported.getDistributionDesc() instanceof RangeDistributionDesc);
-            assertEquals(0, autoTrialInvocationCount, "supported AUTO must not invoke the IVM trial");
+            assertEquals(1, autoTrialInvocationCount, "AUTO must compile the IVM plan at CREATE");
 
             String unsupportedDdl = "CREATE MATERIALIZED VIEW mv_auto_unsupported "
                     + "REFRESH DEFERRED MANUAL AS SELECT id, COUNT(DISTINCT c1) "
                     + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
             CreateMaterializedViewStatement unsupported = analyzeMvDdl(unsupportedDdl);
             assertEquals(MaterializedView.RefreshMode.PCT, unsupported.getCurrentRefreshMode());
-            assertEquals(0, autoTrialInvocationCount, "AUTO-to-PCT fallback must not invoke the IVM trial");
+            assertEquals(1, autoTrialInvocationCount,
+                    "a query the IVM rewrite rejects never reaches the trial");
         } finally {
             connectContext.getSessionVariable().setEnableRangeDistribution(previous);
         }
+    }
+
+    @Test
+    public void testAutoFallsBackToPctWhenRangeDistributionRejectsOrderBy() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+        try {
+            CreateMaterializedViewStatement stmt =
+                    analyzeMvDdl(autoMvDdl("mv_auto_order_by_range", "", "ORDER BY (id) "));
+            assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
+        }
+    }
+
+    @Test
+    public void testAutoFallsBackToPctWhenTrialRejectsIvmPlan() throws Exception {
+        new MockUp<IvmTrialRewriter>() {
+            @Mock
+            public static void runTrial(com.starrocks.qe.ConnectContext context,
+                                        CreateMaterializedViewStatement stmt,
+                                        QueryStatement rewrittenQuery) {
+                throw new SemanticException("injected trial rejection");
+            }
+        };
+        CreateMaterializedViewStatement stmt =
+                analyzeMvDdl(autoMvDdl("mv_auto_trial_reject", "DISTRIBUTED BY HASH(id) BUCKETS 3 ", ""));
+
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        assertEquals(KeysType.DUP_KEYS, stmt.getKeysType());
+        assertNull(stmt.getRowIdStrategy());
+        assertFalse(stmt.getMvColumnItems().stream()
+                        .anyMatch(col -> IvmOpUtils.isIvmInternalColumn(col.getName())),
+                "a degraded mv must carry no IVM-internal column: "
+                        + stmt.getMvColumnItems().stream().map(Column::getName).collect(Collectors.toList()));
+    }
+
+    @Test
+    public void testDegradedAutoPartitionedMvMatchesDirectPctAnalysis() throws Exception {
+        new MockUp<IvmTrialRewriter>() {
+            @Mock
+            public static void runTrial(com.starrocks.qe.ConnectContext context,
+                                        CreateMaterializedViewStatement stmt,
+                                        QueryStatement rewrittenQuery) {
+                throw new SemanticException("injected trial rejection");
+            }
+        };
+        String body = " REFRESH DEFERRED MANUAL PARTITION BY date "
+                + "PROPERTIES (\"refresh_mode\" = \"%s\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t2` WHERE id > 1";
+        CreateMaterializedViewStatement degraded = analyzeMvDdl(
+                "CREATE MATERIALIZED VIEW mv_auto_part_degraded" + String.format(body, "auto"));
+        CreateMaterializedViewStatement direct = analyzeMvDdl(
+                "CREATE MATERIALIZED VIEW mv_pct_part_direct" + String.format(body, "pct"));
+
+        assertEquals(MaterializedView.RefreshMode.PCT, degraded.getCurrentRefreshMode());
+        assertEquals(analyzedShape(direct), analyzedShape(degraded),
+                "a degraded AUTO mv must be indistinguishable from one created as PCT");
+    }
+
+    /** Every statement field the AUTO rollback has to clear, rendered so a mismatch reads as a diff. */
+    private static String analyzedShape(CreateMaterializedViewStatement stmt) {
+        return "keysType=" + stmt.getKeysType()
+                + "\nrowIdStrategy=" + stmt.getRowIdStrategy()
+                + "\nencodeRowIdVersion=" + stmt.getEncodeRowIdVersion()
+                + "\ncolumns=" + columnNames(stmt.getMvColumnItems())
+                + "\nsortKeys=" + stmt.getSortKeys()
+                + "\nqueryOutputIndices=" + stmt.getQueryOutputIndices()
+                + "\nmvIndexes=" + stmt.getMvIndexes()
+                + "\npartitionType=" + stmt.getPartitionType()
+                + "\npartitionColumns=" + columnNames(stmt.getPartitionColumns())
+                + "\npartitionByExprs=" + stmt.getPartitionByExprs()
+                + "\ngeneratedPartitionCols=" + generatedColDescriptions(stmt)
+                + "\npartitionByExprToAdjustExprMap=" + stmt.getPartitionByExprToAdjustExprMap().size()
+                + "\nrefBaseTablePartitionWithTransform=" + stmt.isRefBaseTablePartitionWithTransform()
+                + "\ndistribution=" + (stmt.getDistributionDesc() == null
+                        ? null : stmt.getDistributionDesc().getClass().getSimpleName());
+    }
+
+    private static List<String> generatedColDescriptions(CreateMaterializedViewStatement stmt) {
+        return stmt.getGeneratedPartitionCols().entrySet().stream()
+                .map(e -> e.getKey() + ":" + e.getValue().getName() + ":" + e.getValue().getType())
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private static List<String> columnNames(List<Column> columns) {
+        return columns == null ? null : columns.stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    @Test
+    public void testDegradedAutoListPartitionedMvMatchesDirectPctAnalysis() throws Exception {
+        new MockUp<IvmTrialRewriter>() {
+            @Mock
+            public static void runTrial(com.starrocks.qe.ConnectContext context,
+                                        CreateMaterializedViewStatement stmt,
+                                        QueryStatement rewrittenQuery) {
+                throw new SemanticException("injected trial rejection");
+            }
+        };
+        // A list-partitioned mv over a function-call partition expression is the one shape that fills
+        // CreateMaterializedViewStatement's generated-partition maps, which have no setter to roll back.
+        boolean previous = Config.enable_mv_list_partition_for_external_table;
+        Config.enable_mv_list_partition_for_external_table = true;
+        try {
+            String body = " REFRESH DEFERRED MANUAL PARTITION BY date_trunc('month', date) "
+                    + "PROPERTIES (\"refresh_mode\" = \"%s\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t2`";
+            CreateMaterializedViewStatement degraded = analyzeMvDdl(
+                    "CREATE MATERIALIZED VIEW mv_auto_list_degraded" + String.format(body, "auto"));
+            CreateMaterializedViewStatement direct = analyzeMvDdl(
+                    "CREATE MATERIALIZED VIEW mv_pct_list_direct" + String.format(body, "pct"));
+
+            assertEquals(PartitionType.LIST, direct.getPartitionType(), "fixture no longer exercises the maps");
+            assertFalse(direct.getGeneratedPartitionCols().isEmpty(), "fixture no longer fills the maps");
+            assertEquals(MaterializedView.RefreshMode.PCT, degraded.getCurrentRefreshMode());
+            assertEquals(analyzedShape(direct), analyzedShape(degraded),
+                    "a degraded AUTO mv must be indistinguishable from one created as PCT");
+        } finally {
+            Config.enable_mv_list_partition_for_external_table = previous;
+        }
+    }
+
+    @Test
+    public void testAutoFallsBackToPctWhenExplicitColumnListOmitsIvmColumns() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_auto_col_list (sm, id, c1, av) "
+                + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"auto\") "
+                + "AS SELECT SUM(c2) AS sm, id, c1, AVG(c2) AS av "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
+        CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+    }
+
+    /**
+     * The counterpart of {@link #testTrialRewriteCatchesRewriterFailure}: the same simulated drift that
+     * fails an INCREMENTAL CREATE degrades an AUTO one, because the trial reports it as a rejection. The
+     * fault is injected inside the trial rather than in place of it, so the production wrapper runs.
+     */
+    @Test
+    public void testAutoDegradesWhenTrialHitsRewriterDrift() throws Exception {
+        new MockUp<IvmOpUtils>() {
+            @Mock
+            public ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,
+                                                                ScalarOperator intermediateAgg,
+                                                                ScalarOperator aggStateRef) {
+                throw new IllegalArgumentException(
+                        "simulated rewriter drift: state union types do not match");
+            }
+        };
+        CreateMaterializedViewStatement stmt = analyzeMvDdl(
+                autoMvDdl("mv_auto_trial_drift", "DISTRIBUTED BY HASH(id) BUCKETS 3 ", ""));
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
+        assertEquals(KeysType.DUP_KEYS, stmt.getKeysType());
     }
 
     @Test
@@ -1642,9 +1798,17 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
      * and a range-distributed incremental mv rejects {@code ORDER BY}, so those callers pass none.
      */
     private static String incrementalMvDdl(String name, String distributionClause, String orderByClause) {
+        return mvDdl(name, distributionClause, orderByClause, "incremental");
+    }
+
+    private static String autoMvDdl(String name, String distributionClause, String orderByClause) {
+        return mvDdl(name, distributionClause, orderByClause, "auto");
+    }
+
+    private static String mvDdl(String name, String distributionClause, String orderByClause, String refreshMode) {
         return "CREATE MATERIALIZED VIEW " + name + " " + distributionClause
                 + "REFRESH DEFERRED MANUAL " + orderByClause
-                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "PROPERTIES (\"refresh_mode\" = \"" + refreshMode + "\") "
                 + "AS SELECT SUM(c2) AS sm, id, c1, AVG(c2) AS av "
                 + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
     }

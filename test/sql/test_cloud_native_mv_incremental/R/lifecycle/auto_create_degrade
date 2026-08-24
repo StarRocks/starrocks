@@ -1,0 +1,183 @@
+-- name: test_ivm_auto_create_degrades_on_column_list @cloud
+CREATE TABLE cl_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO cl_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cl (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM cl_base GROUP BY dt, k;
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cl';
+-- result:
+true
+-- !result
+SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cl' ORDER BY ORDINAL_POSITION;
+-- result:
+d
+kk
+sv
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cl';
+[UC]REFRESH MATERIALIZED VIEW mv_cl WITH SYNC MODE;
+INSERT INTO cl_base VALUES ('2026-08-02',2,5),('2026-08-03',3,7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_cl WITH SYNC MODE;
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+-- result:
+0
+-- !result
+SELECT d, kk, sv FROM mv_cl ORDER BY d, kk;
+-- result:
+2026-08-01	1	1
+2026-08-02	2	6
+2026-08-03	3	7
+-- !result
+SELECT dt, k, sum(v) FROM cl_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-08-01	1	1
+2026-08-02	2	6
+2026-08-03	3	7
+-- !result
+-- name: test_ivm_incremental_rejects_column_list @cloud
+CREATE TABLE cr_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cr (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM cr_base GROUP BY dt, k;
+-- result:
+[REGEX].*View's SELECT and view's field list have different column counts.*
+-- !result
+-- name: test_ivm_auto_create_degrades_on_order_by @cloud
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE ob_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ob_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ob
+REFRESH DEFERRED MANUAL
+ORDER BY (dt)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM ob_base GROUP BY dt, k;
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ob';
+-- result:
+true
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ob';
+[UC]REFRESH MATERIALIZED VIEW mv_ob WITH SYNC MODE;
+INSERT INTO ob_base VALUES ('2026-08-03',3,7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ob WITH SYNC MODE;
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+-- result:
+0
+-- !result
+SELECT dt, k, v FROM mv_ob ORDER BY dt, k;
+-- result:
+2026-08-01	1	1
+2026-08-02	2	1
+2026-08-03	3	7
+-- !result
+SELECT dt, k, sum(v) FROM ob_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-08-01	1	1
+2026-08-02	2	1
+2026-08-03	3	7
+-- !result
+-- name: test_ivm_incremental_rejects_order_by @cloud
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE orj_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_orj
+REFRESH DEFERRED MANUAL
+ORDER BY (dt)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM orj_base GROUP BY dt, k;
+-- result:
+[REGEX].*ORDER BY is not supported on a range-distributed incremental materialized view.*
+-- !result
+-- name: test_ivm_auto_supported_query_stays_incremental @cloud
+CREATE TABLE sp_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO sp_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sp
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM sp_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_sp';
+[UC]REFRESH MATERIALIZED VIEW mv_sp WITH SYNC MODE;
+INSERT INTO sp_base VALUES ('2026-08-03',3,7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_sp WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT dt, k, v FROM mv_sp ORDER BY dt, k;
+-- result:
+2026-08-01	1	1
+2026-08-02	2	1
+2026-08-03	3	7
+-- !result
+SELECT dt, k, sum(v) FROM sp_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-08-01	1	1
+2026-08-02	2	1
+2026-08-03	3	7
+-- !result
+-- name: test_ivm_auto_degraded_view_cannot_return_to_auto @cloud
+CREATE TABLE sw_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sw (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM sw_base GROUP BY dt, k;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_sw SET ('refresh_mode' = 'auto');
+-- result:
+[REGEX].*Altering refresh_mode from PCT to AUTO is not supported.*
+-- !result
+ALTER MATERIALIZED VIEW mv_sw SET ('refresh_mode' = 'pct');
+-- result:
+-- !result

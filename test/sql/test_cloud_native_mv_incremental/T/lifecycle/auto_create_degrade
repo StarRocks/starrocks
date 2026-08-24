@@ -1,0 +1,108 @@
+-- refresh_mode = AUTO at CREATE: a definition the incremental analyzer rejects is built as a PCT
+-- view instead of failing the CREATE. The same definition under refresh_mode = INCREMENTAL is
+-- still rejected -- that contrast is the point of the mode.
+-- A degraded view is PCT for good: the refresh factory dispatches on the persisted mode, so the
+-- cases below assert that no run of such a view is ever INCREMENTAL, not merely that the last
+-- one was not.
+
+-- name: test_ivm_auto_create_degrades_on_column_list @cloud
+CREATE TABLE cl_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO cl_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- The incremental rewrite appends __ROW_ID__ and __AGG_STATE_* to the query, so an explicit column
+-- list can no longer match it positionally. AUTO builds a PCT view rather than rejecting the DDL.
+CREATE MATERIALIZED VIEW mv_cl (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM cl_base GROUP BY dt, k;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cl';
+SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cl' ORDER BY ORDINAL_POSITION;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cl';
+[UC]REFRESH MATERIALIZED VIEW mv_cl WITH SYNC MODE;
+INSERT INTO cl_base VALUES ('2026-08-02',2,5),('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_cl WITH SYNC MODE;
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+SELECT d, kk, sv FROM mv_cl ORDER BY d, kk;
+SELECT dt, k, sum(v) FROM cl_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_incremental_rejects_column_list @cloud
+-- The same definition the AUTO case above absorbs, under INCREMENTAL: rejected at CREATE.
+CREATE TABLE cr_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_cr (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM cr_base GROUP BY dt, k;
+
+-- name: test_ivm_auto_create_degrades_on_order_by @cloud
+SET enable_range_distribution = true;
+CREATE TABLE ob_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ob_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- An omitted DISTRIBUTED BY selects range distribution, whose sort key must equal the primary key
+-- -- __ROW_ID__ for an incremental view -- leaving the ORDER BY nowhere to go.
+CREATE MATERIALIZED VIEW mv_ob
+REFRESH DEFERRED MANUAL
+ORDER BY (dt)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM ob_base GROUP BY dt, k;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ob';
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ob';
+[UC]REFRESH MATERIALIZED VIEW mv_ob WITH SYNC MODE;
+INSERT INTO ob_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_ob WITH SYNC MODE;
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+SELECT dt, k, v FROM mv_ob ORDER BY dt, k;
+SELECT dt, k, sum(v) FROM ob_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_incremental_rejects_order_by @cloud
+SET enable_range_distribution = true;
+CREATE TABLE orj_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_orj
+REFRESH DEFERRED MANUAL
+ORDER BY (dt)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM orj_base GROUP BY dt, k;
+
+-- name: test_ivm_auto_supported_query_stays_incremental @cloud
+-- Guard on the other side: CREATE now compiles the incremental plan for AUTO too, and a definition
+-- that compiles must still be maintained incrementally.
+CREATE TABLE sp_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO sp_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+CREATE MATERIALIZED VIEW mv_sp
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM sp_base GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_sp';
+-- the first run has no TVR baseline, so PCT builds one
+[UC]REFRESH MATERIALIZED VIEW mv_sp WITH SYNC MODE;
+INSERT INTO sp_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_sp WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT dt, k, v FROM mv_sp ORDER BY dt, k;
+SELECT dt, k, sum(v) FROM sp_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_auto_degraded_view_cannot_return_to_auto @cloud
+-- ALTER compares against the mode the view actually runs in, so a degraded view is refused the mode
+-- its own DDL asked for, and accepts the one it ended up with. Rebuilding is the only way back.
+CREATE TABLE sw_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_sw (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM sw_base GROUP BY dt, k;
+ALTER MATERIALIZED VIEW mv_sw SET ('refresh_mode' = 'auto');
+ALTER MATERIALIZED VIEW mv_sw SET ('refresh_mode' = 'pct');
