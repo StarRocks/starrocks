@@ -61,6 +61,7 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.BrokerTable;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.DistributionInfo;
@@ -103,6 +104,9 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -111,6 +115,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -119,15 +124,19 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -1030,6 +1039,121 @@ public class AstToStringBuilder {
             if (StringUtils.isNotEmpty(label)) {
                 sb.append("WITH LABEL `").append(label).append("` ");
             }
+        }
+
+        @Override
+        public String visitCreateTableAsSelectStatement(CreateTableAsSelectStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            CreateTableStmt createStmt = stmt.getCreateTableStmt();
+            sb.append("CREATE ");
+            if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
+                sb.append("TEMPORARY ");
+            }
+            sb.append("TABLE ");
+            if (createStmt.isSetIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(createStmt.getDbTbl().toSql());
+
+            // The parenthesized clause carries column names, index definitions, or both.
+            List<String> parenthesizedItems = new ArrayList<>();
+            if (CollectionUtils.isNotEmpty(stmt.getColumnNames())) {
+                stmt.getColumnNames().forEach(c -> parenthesizedItems.add(ParseUtil.backquote(c)));
+            }
+            if (CollectionUtils.isNotEmpty(createStmt.getIndexDefs())) {
+                createStmt.getIndexDefs().forEach(d -> parenthesizedItems.add(d.toSql()));
+            }
+            if (!parenthesizedItems.isEmpty()) {
+                sb.append(" (").append(String.join(",", parenthesizedItems)).append(")");
+            }
+
+            String engineName = createStmt.getEngineName();
+            if (StringUtils.isNotEmpty(engineName) && !createStmt.isOlapEngine()) {
+                sb.append(" ENGINE = ").append(engineName);
+            }
+
+            KeysDesc keysDesc = createStmt.getKeysDesc();
+            if (keysDesc != null && CollectionUtils.isNotEmpty(keysDesc.getKeysColumnNames())) {
+                sb.append(" ").append(keysDesc.getKeysType().toSql())
+                        .append("(").append(joinBackQuoted(keysDesc.getKeysColumnNames())).append(")");
+            }
+
+            if (StringUtils.isNotEmpty(createStmt.getComment())) {
+                sb.append(" COMMENT \"")
+                        .append(CatalogUtils.addEscapeCharacter(createStmt.getComment()))
+                        .append("\"");
+            }
+
+            if (createStmt.getPartitionDesc() != null) {
+                String partitionSql = partitionDescToSql(createStmt.getPartitionDesc());
+                if (StringUtils.isNotEmpty(partitionSql)) {
+                    sb.append(" ").append(partitionSql);
+                }
+            }
+
+            if (createStmt.getDistributionDesc() != null) {
+                sb.append(" ").append(createStmt.getDistributionDesc());
+            }
+
+            if (CollectionUtils.isNotEmpty(createStmt.getOrderByElements())) {
+                String orderByColumns = createStmt.getOrderByElements().stream()
+                        .map(e -> visit(e.getExpr()))
+                        .collect(Collectors.joining(","));
+                sb.append(" ORDER BY (").append(orderByColumns).append(")");
+            }
+
+            Map<String, String> properties = createStmt.getProperties();
+            if (properties != null && !properties.isEmpty()) {
+                sb.append(" PROPERTIES (")
+                        .append(new PrintableMap<>(properties, "=", true, false, hideCredential))
+                        .append(")");
+            }
+
+            sb.append(" AS ").append(visit(stmt.getQueryStatement(), context));
+            return sb.toString();
+        }
+
+        /**
+         * PartitionDesc#toSql() is unimplemented across its subclasses, so render the
+         * PARTITION BY clause here. Partition definitions are omitted because this output
+         * is for display in profiles and audit logs, rather than for re-execution.
+         */
+        private String partitionDescToSql(PartitionDesc partitionDesc) {
+            if (partitionDesc instanceof ExpressionPartitionDesc) {
+                return "PARTITION BY " + visit(((ExpressionPartitionDesc) partitionDesc).getExpr());
+            }
+            if (partitionDesc instanceof ListPartitionDesc) {
+                ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                if (CollectionUtils.isNotEmpty(listPartitionDesc.getMultiDescList())) {
+                    String partitionItems = listPartitionDesc.getMultiDescList().stream()
+                            .map(this::visit)
+                            .collect(Collectors.joining(","));
+                    return "PARTITION BY (" + partitionItems + ")";
+                }
+                if (CollectionUtils.isNotEmpty(listPartitionDesc.getPartitionColNames())) {
+                    // On these branches the parser represents an explicit LIST clause as a
+                    // RangePartitionDesc. A ListPartitionDesc with column names therefore comes
+                    // from PARTITION BY (cols), even before analysis sets the automatic flag.
+                    if (listPartitionDesc.isAutoPartitionTable()
+                            || CollectionUtils.isEmpty(listPartitionDesc.getPartitionDescs())) {
+                        return "PARTITION BY (" + joinBackQuoted(listPartitionDesc.getPartitionColNames()) + ")";
+                    }
+                    return "PARTITION BY LIST(" + joinBackQuoted(listPartitionDesc.getPartitionColNames()) + ")";
+                }
+            }
+            if (partitionDesc instanceof RangePartitionDesc) {
+                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+                if (CollectionUtils.isNotEmpty(rangePartitionDesc.getPartitionColNames())) {
+                    return "PARTITION BY RANGE(" + joinBackQuoted(rangePartitionDesc.getPartitionColNames()) + ") ()";
+                }
+            }
+            return null;
+        }
+
+        private static String joinBackQuoted(List<String> names) {
+            return names.stream()
+                    .map(ParseUtil::backquote)
+                    .collect(Collectors.joining(","));
         }
 
         @Override
