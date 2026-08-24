@@ -83,8 +83,7 @@ TEST(ProcessMemoryMetricsTest, UpdateMemoryMetricsReadsRuntimeEnvTrackers) {
     auto* env = RuntimeEnv::GetInstance();
     auto test_tracker = std::make_shared<MemTracker>(MemTrackerType::PROCESS, -1, "process");
     auto previous_process_mem_tracker = env->swap_process_mem_tracker_for_test(test_tracker);
-    DeferOp restore_process_mem_tracker(
-            [&] { env->swap_process_mem_tracker_for_test(previous_process_mem_tracker); });
+    DeferOp restore_process_mem_tracker([&] { env->swap_process_mem_tracker_for_test(previous_process_mem_tracker); });
 
     test_tracker->consume(123);
 
