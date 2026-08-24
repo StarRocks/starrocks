@@ -35,6 +35,7 @@
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
@@ -46,6 +47,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/disjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "storage_primitive/primary_key_encoding_types.h"
 #include "test_util.h"
@@ -904,6 +906,67 @@ TEST_F(LakeRowsetTest, test_rowset_range_overrides_tablet_range) {
 
     // If rowset range takes precedence, keep keys [11,13) => each segment contributes 11,12
     ASSERT_EQ(count_rows_from_iters(iters), 3 * 2);
+}
+
+// When a compaction task holds its inputs it also turns fill_metadata_cache off, and read() on a
+// rowset that cannot hold (segment-range mode, partial compaction) skips the prepared-segments
+// path. That per-read load must re-apply the segments() downgrade -- fill the shared metadata
+// cache -- or such a rowset would be read with neither a held set nor a cache, reloading and
+// reparsing every segment from remote storage on every column-group pass.
+TEST_F(LakeRowsetTest, test_read_fills_metadata_cache_for_unholdable_rowset) {
+    create_rowsets_for_testing();
+
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+    ASSERT_FALSE(rowset->can_hold_segments());
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.lake_io_opts = {.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_EQ(count_rows_from_iters(iters), 2 * (22 + 12));
+
+    // The read went through the per-read load path with the downgrade applied: segments cached.
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    for (int i = 1; i < 3; i++) {
+        EXPECT_TRUE(cache->lookup_segment(_tablet_mgr->segment_location(
+                            _tablet_metadata->id(), rs_meta.segment_metas(i).filename())) != nullptr);
+    }
+}
+
+// The compaction read path hands its delvec loader the metadata this Rowset was built from, so a
+// primary-key read does not re-fetch the tablet metadata once per segment: on the hold_segments leg
+// the loader runs with fill_cache off, so nothing would ever repopulate a cold or crowded metacache
+// and every miss would be a remote read of the same metadata file.
+TEST_F(LakeRowsetTest, test_delvec_loader_reuses_rowset_metadata) {
+    create_rowsets_for_testing();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.is_primary_keys = true;
+    rs_opts.version = _tablet_metadata->version();
+    rs_opts.lake_io_opts = {.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+
+    SegmentReadOptions seg_options;
+    ASSERT_OK(rowset->init_segment_read_options(rs_opts, rs_opts.lake_io_opts, DisjunctivePredicates{}, &stats,
+                                                &seg_options));
+    auto* loader = static_cast<LakeDelvecLoader*>(seg_options.delvec_loader.get());
+    ASSERT_TRUE(loader != nullptr);
+    // -fno-access-control lets the test pin the wiring directly: the loader must reuse this
+    // Rowset's metadata instance and carry the task-scoped delvec holder.
+    EXPECT_EQ(_tablet_metadata.get(), loader->_cached_metadata.get());
+    EXPECT_TRUE(loader->_holder != nullptr);
 }
 
 // Regression: after a metadata-only trailing sort-key add (N -> N+1), a reshard that runs later

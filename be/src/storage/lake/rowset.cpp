@@ -305,11 +305,21 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     // first caller pays the load once. The prepared path indexes segments by metadata position:
     // can_hold_segments() rules out the modes whose segment vector is not a full metadata-ordered
     // set, and segments() only holds a set it could put in metadata order.
-    if (options.lake_io_opts.hold_segments && can_hold_segments()) {
-        ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
-        if (held.size() == static_cast<size_t>(num_segments())) {
-            return do_read(schema, options, ReadContext{.prepared_segments = &held});
+    if (options.lake_io_opts.hold_segments) {
+        if (can_hold_segments()) {
+            ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
+            if (held.size() == static_cast<size_t>(num_segments())) {
+                return do_read(schema, options, ReadContext{.prepared_segments = &held});
+            }
         }
+        // A rowset that cannot hold (partial compaction, segment-range mode) loads its segments on
+        // every read, and the compaction tasks turned fill_metadata_cache off in favour of holding.
+        // Restore it for this per-read load path -- the same downgrade segments() applies -- or these
+        // reads would have neither a held set nor a cache, reloading and reparsing every segment on
+        // every column-group pass. hold_segments stays set so the delvec holder still engages.
+        RowsetReadOptions cache_options = options;
+        cache_options.lake_io_opts.fill_metadata_cache = true;
+        return do_read(schema, cache_options, ReadContext{});
     }
     return do_read(schema, options, ReadContext{});
 }
@@ -391,9 +401,14 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
         // fill_metadata_cache for the segment objects.
         const bool delvec_fill_cache =
                 segment_options->lake_io_opts.fill_data_cache && !segment_options->lake_io_opts.hold_segments;
+        // Hand the loader the metadata this Rowset was built from: every delvec load at the read
+        // version would otherwise call get_tablet_metadata once per segment, and with fill_cache off
+        // (the hold_segments leg) a cold or crowded metacache turns that into one remote read of the
+        // same metadata file per segment. The loader only uses it when (tablet_id, version) match.
         segment_options->delvec_loader =
                 std::make_shared<LakeDelvecLoader>(_tablet_mgr, nullptr, delvec_fill_cache,
-                                                   segment_options->lake_io_opts, nullptr, std::move(delvec_holder));
+                                                   segment_options->lake_io_opts, _tablet_metadata,
+                                                   std::move(delvec_holder));
         segment_options->dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     }
     // The Index Delta Group (ADD INDEX fast-path) sidecar applies to ALL lake
