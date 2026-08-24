@@ -425,9 +425,20 @@ Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<
         }
         return Status::OK();
     }
-    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) &&
-        _metadata->segment_metas(segment_idx).shared() && shared_segment_range.has_value()) {
-        segment_options->tablet_range = *shared_segment_range;
+    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) && shared_segment_range.has_value()) {
+        // A segment needs the range when it can hold rows this tablet does not own. `shared` says so
+        // directly: the split handed that segment to every child. A rowset carrying its OWN range says
+        // so too, and it is not the same set -- convert_txn_log_for_splitting stamps this tablet's range
+        // onto a cross-published op_write, and the segment a row-mode partial update rewrites out of one
+        // is private to this tablet (MetaFileBuilder clears `shared`, because the file really is not
+        // shared) while still holding every row of the source segment, the siblings' rows included.
+        // Without this a reader would serve those rows. A rowset this tablet wrote itself carries no
+        // range of its own and is in range by construction, so it stays unclipped and pays nothing.
+        const bool may_hold_rows_of_other_tablets =
+                _metadata->segment_metas(segment_idx).shared() || _metadata->has_range();
+        if (may_hold_rows_of_other_tablets) {
+            segment_options->tablet_range = *shared_segment_range;
+        }
     }
     return Status::OK();
 }
@@ -640,7 +651,8 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                          OlapReaderStatistics* stats) {
+                                                                          OlapReaderStatistics* stats,
+                                                                          bool apply_tablet_range) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
@@ -655,7 +667,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
-    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
+    std::optional<SeekRange> shared_segment_range;
+    if (apply_tablet_range) {
+        ASSIGN_OR_RETURN(shared_segment_range, get_seek_range());
+    }
 
     // Contract: callers downstream (SegmentPKIterator + LakePrimaryIndex
     // publish) require each emitted chunk's physical rowids to form a single
@@ -686,7 +701,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
                                               tablet_id(), metadata().id(), i));
             continue;
         }
-        RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
+        if (apply_tablet_range) {
+            RETURN_IF_ERROR(set_segment_tablet_range(segments[i].segment_meta_pos, shared_segment_range, &seg_options));
+        }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             // Leave seg_iterators[i] as the default null placeholder, preserving alignment.

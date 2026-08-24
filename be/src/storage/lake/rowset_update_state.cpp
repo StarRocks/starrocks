@@ -922,7 +922,13 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
         // is what lets it hold its encode buffer across chunks.
         ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(
                                                 *params.metadata, params.tablet_schema, params.op_write.rowset()));
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
+        // Emit every row of a shared segment and let the selector answer per row, rather than letting
+        // the tablet range narrow the iterator first. Two reasons, both about this state's own shape:
+        // it must stay one entry per row of the source segment, because rewrite_segment hands those
+        // entries to SegmentRewriter, which copies the source segment whole and demands exactly that
+        // many values; and one mechanism deciding ownership is easier to keep honest than two.
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats,
+                                                                               /*apply_tablet_range=*/false));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {
@@ -935,13 +941,11 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
 // Drop the delete keys that fall outside this tablet's key range.
 //
 // A del file is cross-published verbatim to every SPLIT child: each child reads the SAME parent del
-// file and erases every key in it from its OWN primary index. The upsert side does not have this
-// problem because it is clipped at read time -- convert_txn_log_for_splitting stamps this tablet's
-// range onto op_write.rowset, and get_each_segment_iterator turns it into
-// SegmentReadOptions::tablet_range, which _apply_tablet_range resolves to a rowid range via the
-// short key index so out-of-range rows are never even read. A del file is a flat serialized PK
-// column with no index and no guaranteed key order, so it gets no such pruning and every child sees
-// every key.
+// file and erases every key in it from its OWN primary index. The upsert side solves the same problem
+// per row instead: prepare() asks get_each_segment_iterator NOT to narrow the segment and installs a
+// CrossPublishRowSelector, so every consumer of _upserts is handed a mask of the rows this tablet
+// owns. A del file is a flat serialized PK column with no index and no guaranteed key order, so it
+// cannot be masked against the index lookup -- it is clipped against the range directly, here.
 //
 // Erasing a key it does not own is not merely wasted work: the child's primary index still carries
 // the ancestor entries inherited through its shared sstables (the tablet-range gate on those runs

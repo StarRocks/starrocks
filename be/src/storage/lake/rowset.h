@@ -195,8 +195,16 @@ public:
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
+    // |apply_tablet_range|: whether to narrow a shared (post-split) segment to this tablet's slice of
+    // it before the first row is emitted. True is the historical behaviour and what every caller that
+    // does not select rows itself needs. A cross publish consumer that decides ownership PER ROW
+    // (CrossPublishRowSelector, installed on the SegmentPKIterator) passes false: it needs every row
+    // of the segment, both because its own state has to stay one entry per source row --
+    // SegmentRewriter copies the source segment whole and demands exactly that many values -- and
+    // because clipping and masking are then two mechanisms deciding the same question.
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      bool apply_tablet_range = true);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates

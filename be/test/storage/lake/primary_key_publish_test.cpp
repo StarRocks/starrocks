@@ -1332,9 +1332,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
         delta_writer->close();
         return txn_id;
     };
-    // What convert_txn_log_for_splitting leaves behind: the segments stay the parent's and every child
-    // publishes the same ones, so each has to select its own rows out of them.
-    auto mark_segments_shared = [&](int64_t txn_id) {
+    // Both halves of what convert_txn_log_for_splitting leaves behind: the segments stay the parent's
+    // (every child publishes the same ones, so each has to select its own rows out of them) and this
+    // child's range is stamped onto the rowset, which is how the publish and the read path later learn
+    // that the rowset holds rows this child does not own.
+    auto make_txn_log_cross_published = [&](int64_t txn_id) {
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         auto shared_log = std::make_shared<TxnLog>(*txn_log);
         auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
@@ -1342,6 +1344,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
         // The non-SST condition merge is the path under test; prebuilt ssts would route the publish
         // into _do_update_with_condition_parallel instead.
         ASSERT_EQ(0, shared_log->op_write().ssts_size());
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }
@@ -1368,7 +1371,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
     // v3: cross publish a condition update whose every new value beats the old one (c1 = key + 100
     // against key), so every row this child compares wins and displaces its old row.
     auto condition_txn = write_txn(make_op_chunk(n, /*value_shift=*/100, true, _slot_cid_map), "c1");
-    mark_segments_shared(condition_txn);
+    make_txn_log_cross_published(condition_txn);
     ASSERT_OK(publish_single_version(tablet_id, 3, condition_txn).status());
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
@@ -1464,6 +1467,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_delvecs_lo
         auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
         ASSERT_GT(rowset->segment_metas_size(), 0);
         ASSERT_EQ(0, shared_log->op_write().ssts_size());
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }

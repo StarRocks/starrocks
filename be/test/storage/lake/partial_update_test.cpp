@@ -2148,8 +2148,18 @@ TEST_P(LakePartialUpdateTest, test_partial_update_rewrite_with_apportioned_num_r
 //
 // c2 is the witness: it is not in the partial write, so a row whose old location was read carries the
 // old c2 (key * 4) and a row left at the sentinel carries c2's declared default (10). The assertion
-// opens the rewritten segment rather than reading the tablet, because MetaFileBuilder clears `shared`
-// on a rewrite output -- it is private to this tablet -- so a reader no longer clips it to the range.
+// opens the rewritten segment directly because a reader must NOT see the siblings' rows in it, which
+// is the other half of what this covers.
+//
+// It is also a regression test for the rewrite's row-count contract. SegmentRewriter::rewrite_partial_update
+// copies the source segment's own columns verbatim -- all of its rows -- and appends the merged ones,
+// so SegmentWriter::finalize_columns fails the publish outright ("num rows written mismatch") unless
+// the state holds exactly one value per SOURCE row. Narrowing the publish iterator to this child's
+// slice produced fewer, so the range is stamped on the rowset here exactly as
+// convert_txn_log_for_splitting does: that is what used to trigger the narrowing, and now the
+// ownership mask does the selecting instead. MetaFileBuilder clears `shared` on the rewrite output
+// (the file really is private), so what keeps the siblings' rows out of reads is that the ROWSET
+// carries a range -- Rowset::set_segment_tablet_range clips on either.
 TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_only_owned_rows) {
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
         GTEST_SKIP() << "column mode resolves the unmodified columns through DCGs, not this lookup";
@@ -2234,6 +2244,7 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
         auto shared_log = std::make_shared<TxnLog>(*txn_log);
         auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
         ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(*range_pb);
         for (auto& segment_meta : *rowset->mutable_segment_metas()) {
             segment_meta.set_shared(true);
         }
@@ -2247,6 +2258,14 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     // Guards the staging as much as the fix: only the owned keys were re-indexed, so only their old
     // rows were displaced. All n here would mean the selector never engaged.
     EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
+
+    // The rewrite output is private (no `shared` flag) but its rowset carries the range, so reads clip
+    // it: the siblings' rows are in the file and must not come back. Every key appears exactly once --
+    // the owned ones from the rewrite, the rest still from the baseline rowset.
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  return owned ? (c1 == c0 * 5 && c2 == c0 * 4) : (c1 == c0 * 3 && c2 == c0 * 4);
+              }));
 
     const auto& rewritten = metadata->rowsets(1);
     ASSERT_EQ(1, rewritten.segment_metas_size());

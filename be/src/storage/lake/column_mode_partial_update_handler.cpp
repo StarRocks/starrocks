@@ -105,8 +105,17 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
 
     // Create segment iterators for update files
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats));
+    // Emit every row of a shared segment and answer ownership per row instead of letting the tablet
+    // range narrow the iterator: the two branches this handler takes below -- apply the update through
+    // a DCG, or materialize the row into a new segment -- cannot be told apart from the rss_rowid
+    // alone, so it needs the mask, and the mask only exists if the rows reach the selector.
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats,
+                                                                               /*apply_tablet_range=*/false));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == num_segments);
+    // Only a SPLIT child's cross publish gets one; nullptr on every ordinary publish, and then every
+    // row is owned. Held by the handler because the iterators keep referencing it.
+    ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(*params.metadata, params.tablet_schema,
+                                                                             _rowset_ptr->metadata()));
 
     // Create lazy-load SegmentPKIterators with deferred first load.
     // defer_data_load=true avoids loading the first chunk during init(), so that
@@ -115,6 +124,8 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     std::vector<SegmentPKIteratorPtr> pk_iters(num_segments);
     for (uint32_t i = 0; i < num_segments; i++) {
         pk_iters[i] = std::make_unique<SegmentPKIterator>();
+        // Must precede init(): the selection is built inside _load().
+        pk_iters[i]->set_row_selector(_row_selector.get());
         RETURN_IF_ERROR(pk_iters[i]->init(segment_iters[i], pkey_schema, true /*lazy_load*/, pk_encoding_type,
                                           true /*defer_data_load*/));
     }
@@ -122,8 +133,10 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     // Parallel query PK index: each segment's PKs are loaded chunk-by-chunk (lazy)
     // and each chunk is queried against the index in parallel via thread pool.
     std::vector<std::vector<uint64_t>> rss_rowids_per_segment;
+    std::vector<Filter> owned_per_segment;
     RETURN_IF_ERROR(params.tablet->update_mgr()->batch_get_rss_rowids_from_pkindex(
-            params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/));
+            params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/,
+            &owned_per_segment));
 
     // Build rss_rowid_to_update_rowid mapping for each update segment. Pass each
     // segment's physical rowid base (range_start, captured by the iterator during
@@ -132,7 +145,8 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     _partial_update_states.resize(num_segments);
     for (uint32_t i = 0; i < num_segments; i++) {
         _partial_update_states[i].src_rss_rowids = std::move(rss_rowids_per_segment[i]);
-        _partial_update_states[i].build_rss_rowid_to_update_rowid(pk_iters[i]->physical_rowid_base());
+        _partial_update_states[i].build_rss_rowid_to_update_rowid(pk_iters[i]->physical_rowid_base(),
+                                                                 owned_per_segment[i]);
         _partial_update_states[i].inited = true;
     }
 
@@ -322,7 +336,10 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+    // Unclipped for the same reason site 1 is: the upt rowids in |upt_id_to_rowid_pairs| index into the
+    // chunk this reads, so both must address the update segment the same way.
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats,
+                                                                               /*apply_tablet_range=*/false));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
