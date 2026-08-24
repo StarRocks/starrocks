@@ -115,9 +115,9 @@ public class SlotManager extends BaseSlotManager {
                     long minExpiredTimeMs = slotTracker.getMinExpiredTimeMs();
                     long nowMs = System.currentTimeMillis();
                     try {
-                        if (minExpiredTimeMs == 0) {
-                            newTask = requests.take();
-                        } else if (nowMs < minExpiredTimeMs) {
+                        if (minExpiredTimeMs == 0 || nowMs >= minExpiredTimeMs) {
+                            newTask = requests.poll(1000, TimeUnit.MILLISECONDS);
+                        } else {
                             newTask = requests.poll(minExpiredTimeMs - nowMs, TimeUnit.MILLISECONDS);
                         }
                     } catch (InterruptedException e) {
@@ -141,8 +141,8 @@ public class SlotManager extends BaseSlotManager {
                     while (isAllocatedSlots) {
                         isAllocatedSlots = schedule();
                     }
-                } catch (Exception e) {
-                    LOG.warn("[Slot] RequestWorker throws unexpected error", e);
+                } catch (Throwable t) {
+                    LOG.warn("[Slot] RequestWorker throws unexpected error", t);
                 }
             }
         }
