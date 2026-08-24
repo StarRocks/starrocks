@@ -466,9 +466,11 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
     DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
            read_params.column_access_paths->empty());
     // Bail out before touching any segment when this read has no JSON column: get_segments() below
-    // loads every input segment with fill_metadata_cache=true, so on JSON-free tables this path
-    // would fully load and cache the whole input set for nothing (500 wide segments ≈ 350MB pushed
-    // into the shared metacache per compaction, evicting neighbors' entries).
+    // loads every input segment, so on JSON-free tables this path would fully load the whole input
+    // set for nothing (500 wide segments ≈ 350MB). Without a held set it also loads them with
+    // fill_metadata_cache=true, pushing that whole set into the shared metacache and evicting
+    // neighbors' entries; a compaction task that holds its inputs reuses them here instead
+    // (Rowset::get_segments_checked).
     bool has_json_column = false;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);

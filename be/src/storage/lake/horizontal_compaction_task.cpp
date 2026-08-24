@@ -44,6 +44,11 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     _context->stats->compaction_type = "horizontal";
     _context->publish_stats_snapshot();
 
+    // Snapshot the mutable config once for the whole task so the chunk-size pass and the read pass
+    // never disagree: holding on one side and cache-filling off on the other would make the read
+    // pass reload every segment from remote storage.
+    _hold_input_segments = config::lake_compaction_hold_input_segments;
+
     int64_t total_num_rows = 0;
     int64_t input_bytes = 0;
     int32_t chunk_size = 0;
@@ -79,13 +84,13 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // caching off. With hold_segments the task reuses the Segment objects held on the Rowset
     // instance (calculate_chunk_size() loaded them), so the shared metadata cache is not needed and
     // filling it would only evict neighbors' entries with soon-to-be-deleted input segments. With
-    // the kill switch off, filling stays on as the only cross-phase reuse mechanism. Snapshot the
-    // mutable config once so fill and hold never disagree mid-task.
-    const bool hold_segments = config::lake_compaction_hold_input_segments;
+    // the kill switch off, filling stays on as the only cross-phase reuse mechanism.
+    // `_hold_input_segments` is the task-wide snapshot taken at the top of execute(), so fill and
+    // hold never disagree mid-task.
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                  .fill_metadata_cache = !hold_segments,
-                                  .hold_segments = hold_segments};
+                                  .fill_metadata_cache = !_hold_input_segments,
+                                  .hold_segments = _hold_input_segments};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction. TabletReader requires
@@ -267,12 +272,12 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // would only evict neighbors' entries with soon-to-be-deleted input segments. With the kill
         // switch off, filling is the only way execute() avoids re-reading every footer from remote
         // storage (TabletManager::load_segment always probes the metacache but only inserts when
-        // asked). Snapshot the mutable config once so fill and hold never disagree mid-task.
-        const bool hold_segments = config::lake_compaction_hold_input_segments;
+        // asked). `_hold_input_segments` is the task-wide snapshot taken at the top of execute(), so
+        // fill and hold never disagree mid-task.
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = !hold_segments,
-                                   .hold_segments = hold_segments};
+                                   .fill_metadata_cache = !_hold_input_segments,
+                                   .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by

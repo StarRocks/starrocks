@@ -238,6 +238,13 @@ public:
     // Check if this rowset uses segment range mode (for large rowset split compaction)
     [[nodiscard]] bool is_segment_range_mode() const { return _segment_range_end > 0; }
 
+    // Whether LakeIOOptions::hold_segments can be honoured for this rowset. Holding only pays off
+    // when read() can feed the held set through the prepared-segments path, and that path indexes
+    // segments by metadata position: partial-compaction trims the head of the loaded vector and
+    // segment-range mode starts it at _segment_range_start, so neither can be indexed that way.
+    // Those rowsets keep the original load-per-read path (and therefore the metadata cache).
+    [[nodiscard]] bool can_hold_segments() const { return !partial_segments_compaction() && !is_segment_range_mode(); }
+
     // Get segment range [start, end), only valid when is_segment_range_mode() returns true
     [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
     [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }

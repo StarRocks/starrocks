@@ -243,6 +243,80 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     }
 }
 
+// LakeIOOptions::hold_segments memoizes the loaded Segment objects on the Rowset, so every later
+// pass of the same compaction task reuses those instances instead of reloading them; and because
+// the held set replaces the shared metadata cache as the reuse mechanism, nothing is pushed into
+// that cache. get_segments() (the flat-json compaction path) must reuse the held set too, or the
+// task keeps a second full copy of every input segment and caches it after all.
+TEST_F(LakeRowsetTest, test_hold_segments_reuses_and_skips_metacache) {
+    create_rowsets_for_testing();
+
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSERT_EQ(3, rowset->num_segments());
+    ASSERT_TRUE(rowset->can_hold_segments());
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    ASSIGN_OR_ABORT(auto first, rowset->segments(lake_io_opts));
+    ASSERT_EQ(3, first.size());
+    for (const auto& seg : first) {
+        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) == nullptr);
+    }
+
+    // Second call: the very same Segment instances, no reload.
+    ASSIGN_OR_ABORT(auto second, rowset->segments(lake_io_opts));
+    ASSERT_EQ(first.size(), second.size());
+    for (size_t i = 0; i < first.size(); i++) {
+        EXPECT_EQ(first[i].get(), second[i].get());
+    }
+
+    // get_segments() must hand back the held set rather than loading (and caching) a second copy.
+    auto via_get_segments = rowset->get_segments();
+    ASSERT_EQ(first.size(), via_get_segments.size());
+    for (size_t i = 0; i < first.size(); i++) {
+        EXPECT_EQ(first[i].get(), via_get_segments[i].get());
+    }
+    for (const auto& seg : first) {
+        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) == nullptr);
+    }
+}
+
+// A segment-range rowset (large-rowset split subtask of parallel compaction) cannot use the
+// prepared-segments path, because that path derives each segment's metadata position from its index
+// in the vector and this rowset's vector starts at _segment_range_start. Holding for it would pin a
+// set the read path never consults -- and, since the compaction tasks turn the metadata cache off
+// whenever they ask for holding, would leave every column-group pass reloading every segment from
+// remote storage. hold_segments must therefore degrade to the pre-hold behavior here: no held set,
+// metadata cache filled.
+TEST_F(LakeRowsetTest, test_hold_segments_falls_back_for_segment_range_rowset) {
+    create_rowsets_for_testing();
+
+    auto* cache = _tablet_mgr->metacache();
+    cache->prune();
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+    ASSERT_EQ(2, rowset->num_segments());
+    ASSERT_FALSE(rowset->can_hold_segments());
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    ASSIGN_OR_ABORT(auto first, rowset->segments(lake_io_opts));
+    ASSERT_EQ(2, first.size());
+    // The fallback keeps filling the shared metadata cache, which is what the read pass relies on.
+    for (const auto& seg : first) {
+        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) != nullptr);
+    }
+    // And the reuse still works, through the cache rather than through a held set.
+    ASSIGN_OR_ABORT(auto second, rowset->segments(lake_io_opts));
+    ASSERT_EQ(first.size(), second.size());
+    for (size_t i = 0; i < first.size(); i++) {
+        EXPECT_EQ(first[i].get(), second[i].get());
+    }
+}
+
 // experimental_lake_ignore_lost_segment: when a segment file is physically missing, load_segments
 // must (a) fail hard when the flag is off, and (b) when the flag is on, skip the lost segment while
 // keeping the result positionally aligned -- a null placeholder in the lost slot, size unchanged --

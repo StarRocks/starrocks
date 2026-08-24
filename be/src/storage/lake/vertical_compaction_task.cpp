@@ -50,6 +50,11 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     _context->stats->compaction_type = "vertical";
     _context->publish_stats_snapshot();
 
+    // Snapshot the mutable config once for the whole task so every column-group pass agrees:
+    // holding on one pass and cache-filling off on the next would make the remaining passes reload
+    // every segment from remote storage.
+    _hold_input_segments = config::lake_compaction_hold_input_segments;
+
     int64_t input_bytes = 0;
     {
         SCOPED_RAW_TIMER(&_context->stats->input_prepare_ns);
@@ -208,12 +213,12 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // With hold_segments the task keeps its input Segment objects alive on the Rowset instance,
         // so the cross-pass reuse above no longer needs the shared metadata cache. Filling it would
         // only push soon-to-be-deleted input segments into a node-wide cache, evicting neighbors'
-        // entries. Snapshot the mutable config once so fill and hold never disagree mid-task.
-        const bool hold_segments = config::lake_compaction_hold_input_segments;
+        // entries. `_hold_input_segments` is the task-wide snapshot taken at the top of execute(), so
+        // fill and hold never disagree mid-task.
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = !hold_segments,
-                                   .hold_segments = hold_segments};
+                                   .fill_metadata_cache = !_hold_input_segments,
+                                   .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
@@ -280,7 +285,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                  .hold_segments = config::lake_compaction_hold_input_segments};
+                                  .hold_segments = _hold_input_segments};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and

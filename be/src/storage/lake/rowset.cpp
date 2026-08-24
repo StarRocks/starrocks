@@ -302,10 +302,10 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
     // With hold_segments, feed the held segments through the prepared-segments path so the
     // per-pass segment loading in do_read() is skipped as well; segments() memoizes, so the
-    // first caller pays the load once. The prepared path indexes segments by metadata position,
-    // which only matches the loaded order in the regular full-rowset mode -- partial compaction
-    // and segment-range reads keep the original loading path.
-    if (options.lake_io_opts.hold_segments && !partial_segments_compaction() && _segment_range_end == 0) {
+    // first caller pays the load once. The prepared path indexes segments by metadata position:
+    // can_hold_segments() rules out the modes whose segment vector is not a full metadata-ordered
+    // set, and segments() only holds a set it could put in metadata order.
+    if (options.lake_io_opts.hold_segments && can_hold_segments()) {
         ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
         if (held.size() == static_cast<size_t>(num_segments())) {
             return do_read(schema, options, ReadContext{.prepared_segments = &held});
@@ -789,6 +789,18 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
     if (_segments_loaded) {
         return _segments;
     }
+    {
+        // Reuse the task-held input segments when the compaction read path already loaded them.
+        // Otherwise this path loads a second full copy of every input segment AND pushes it into
+        // the shared metadata cache (segments(true)), which is exactly what hold_segments avoids --
+        // TabletReader::init_compaction_column_paths reaches here on every flat-json compaction.
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (!_held_segments.empty()) {
+            _segments = _held_segments;
+            _segments_loaded = true;
+            return _segments;
+        }
+    }
     // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
     // _segments_loaded stays false so a later call retries.
     ASSIGN_OR_RETURN(auto segs, segments(true));
@@ -810,7 +822,18 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
-    if (lake_io_opts.hold_segments) {
+    LakeIOOptions effective_opts = lake_io_opts;
+    // A rowset that cannot use the prepared-segments path (partial compaction, segment-range mode)
+    // reloads its segments on every read anyway, so holding would pin a second copy for the whole
+    // task and buy nothing. Worse, turning the metadata cache off for it -- as the compaction tasks
+    // do whenever hold_segments is set -- would leave those reads with neither a held set nor a
+    // cache, reloading and reparsing every segment on every column-group pass. Keep the pre-hold
+    // behavior for them.
+    if (effective_opts.hold_segments && !can_hold_segments()) {
+        effective_opts.hold_segments = false;
+        effective_opts.fill_metadata_cache = true;
+    }
+    if (effective_opts.hold_segments) {
         std::lock_guard<std::mutex> l(_held_segments_mutex);
         if (!_held_segments.empty()) {
             return _held_segments;
@@ -818,20 +841,41 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     }
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
-    seg_options.lake_io_opts = lake_io_opts;
+    seg_options.lake_io_opts = effective_opts;
     RETURN_IF_ERROR(load_segments(&loaded, seg_options, nullptr));
     std::vector<SegmentPtr> segments;
     segments.reserve(loaded.size());
     for (auto& ls : loaded) {
         segments.emplace_back(std::move(ls.segment));
     }
-    if (lake_io_opts.hold_segments) {
-        std::lock_guard<std::mutex> l(_held_segments_mutex);
-        if (_held_segments.empty()) {
-            _held_segments = segments;
-        }
+    if (!effective_opts.hold_segments) {
+        return segments;
     }
-    return segments;
+    // read() feeds the held set through the prepared-segments path, which derives each segment's
+    // metadata position from its index in the vector. load_segments() appends in metadata order
+    // except when a parallel-load submit falls back to a serial load mid-loop
+    // (enable_load_segment_parallel): that segment lands ahead of the futures still pending.
+    // can_hold_segments() has already ruled out the partial-compaction and segment-range modes, so
+    // the loaded positions here are exactly [0, size) and reordering by segment_meta_pos restores
+    // the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per read
+    // rather than indexing a set whose positions it cannot trust.
+    std::vector<SegmentPtr> ordered(segments.size());
+    for (size_t i = 0; i < loaded.size(); i++) {
+        const int32_t pos = loaded[i].segment_meta_pos;
+        if (pos < 0 || static_cast<size_t>(pos) >= ordered.size()) {
+            LOG(WARNING) << "loaded segments are not a full metadata-ordered set, not holding them. tablet: "
+                         << _tablet_id << ", rowset: " << metadata().id();
+            return segments;
+        }
+        ordered[pos] = segments[i];
+    }
+    std::lock_guard<std::mutex> l(_held_segments_mutex);
+    if (_held_segments.empty()) {
+        _held_segments = std::move(ordered);
+    }
+    // Return the held set rather than the local one: a caller that lost the race must not keep a
+    // second copy of every input segment alive for the rest of the task.
+    return _held_segments;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
