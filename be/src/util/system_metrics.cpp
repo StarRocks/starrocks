@@ -277,6 +277,8 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("jemalloc_resident_bytes", &_memory_metrics->jemalloc_resident_bytes);
     registry->register_metric("jemalloc_mapped_bytes", &_memory_metrics->jemalloc_mapped_bytes);
     registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_retained_bytes);
+    registry->register_metric("jemalloc_dirty_bytes", &_memory_metrics->jemalloc_dirty_bytes);
+    registry->register_metric("jemalloc_muzzy_bytes", &_memory_metrics->jemalloc_muzzy_bytes);
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
@@ -361,6 +363,23 @@ void SystemMetrics::update_memory_metrics() {
     }
     if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_retained_bytes.set_value(value);
+    }
+    // stats.arenas.<i>.{pdirty,pmuzzy} report page counts, not bytes, and are only
+    // exposed per-arena. MALLCTL_ARENAS_ALL selects the summation across all arenas.
+    size_t page_size = 0;
+    sz = sizeof(page_size);
+    if (je_mallctl("arenas.page", &page_size, &sz, nullptr, 0) == 0 && page_size > 0) {
+        size_t npages = 0;
+        sz = sizeof(npages);
+        char mib_name[64];
+        snprintf(mib_name, sizeof(mib_name), "stats.arenas.%d.pdirty", MALLCTL_ARENAS_ALL);
+        if (je_mallctl(mib_name, &npages, &sz, nullptr, 0) == 0) {
+            _memory_metrics->jemalloc_dirty_bytes.set_value(npages * page_size);
+        }
+        snprintf(mib_name, sizeof(mib_name), "stats.arenas.%d.pmuzzy", MALLCTL_ARENAS_ALL);
+        if (je_mallctl(mib_name, &npages, &sz, nullptr, 0) == 0) {
+            _memory_metrics->jemalloc_muzzy_bytes.set_value(npages * page_size);
+        }
     }
 #endif
 
