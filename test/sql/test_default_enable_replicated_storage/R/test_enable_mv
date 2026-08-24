@@ -16,17 +16,17 @@ create materialized view tvd distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvd;
 -- result:
-tvd	CREATE MATERIALIZED VIEW `tvd` (`k`, `sum(v)`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 10 
-REFRESH ASYNC
-PROPERTIES (
-"replication_num" = "3",
-"replicated_storage" = "true",
-"storage_medium" = "HDD"
-)
-AS SELECT `t1`.`k`, sum(`t1`.`v`) AS `sum(v)`
-FROM `test_default_enable_mv`.`t1`
-GROUP BY `t1`.`k`;
+[REGEX](?s)tvd\	CREATE\ MATERIALIZED\ VIEW\ `tvd`\ \(`k`,\ `sum\(v\)`\)\
+DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 10\ \
+REFRESH\ ASYNC\
+PROPERTIES\ \(\
+"replication_num"\ =\ "3",\
+"replicated_storage"\ =\ "true",\
+"storage_medium"\ =\ "HDD"\
+\)\
+AS\ SELECT\ `t1`\.`k`,\ sum\(`t1`\.`v`\)\ AS\ `sum\(v\)`\
+FROM\ `test_default_enable_mv`\.`t1`\
+GROUP\ BY\ `t1`\.`k`;
 -- !result
 admin set frontend config('enable_replicated_storage_as_default_engine'='false');
 -- result:
@@ -36,17 +36,17 @@ create materialized view tvb distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvb;
 -- result:
-tvb	CREATE MATERIALIZED VIEW `tvb` (`k`, `sum(v)`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 10 
-REFRESH ASYNC
-PROPERTIES (
-"replication_num" = "3",
-"replicated_storage" = "false",
-"storage_medium" = "HDD"
-)
-AS SELECT `t1`.`k`, sum(`t1`.`v`) AS `sum(v)`
-FROM `test_default_enable_mv`.`t1`
-GROUP BY `t1`.`k`;
+[REGEX](?s)tvb\	CREATE\ MATERIALIZED\ VIEW\ `tvb`\ \(`k`,\ `sum\(v\)`\)\
+DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 10\ \
+REFRESH\ ASYNC\
+PROPERTIES\ \(\
+"replication_num"\ =\ "3",\
+"replicated_storage"\ =\ "false",\
+"storage_medium"\ =\ "HDD"\
+\)\
+AS\ SELECT\ `t1`\.`k`,\ sum\(`t1`\.`v`\)\ AS\ `sum\(v\)`\
+FROM\ `test_default_enable_mv`\.`t1`\
+GROUP\ BY\ `t1`\.`k`;
 -- !result
 admin set frontend config('enable_replicated_storage_as_default_engine'='true');
 -- result:

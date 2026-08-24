@@ -34,6 +34,3 @@ select k, row_number() over(partition by k order by v) as rn from t0 order by k,
 1	2
 2	1
 -- !result
-CLEANUP {
-  admin disable failpoint 'analytor_prepare_failed';
-} END CLEANUP

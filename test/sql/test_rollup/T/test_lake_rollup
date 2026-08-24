@@ -37,7 +37,7 @@ CREATE TABLE tbl2 (
     PARTITION p1 values [('2020-01-01'),('2020-02-01')),
     PARTITION p2 values [('2020-02-01'),('2020-03-01')))
     DISTRIBUTED BY HASH(k1) BUCKETS 3
-    PROPERTIES('replication_num' = '1', 'file_bundling' = 'false');
+    PROPERTIES('replication_num' = '1');
 
 INSERT INTO tbl2
 VALUES

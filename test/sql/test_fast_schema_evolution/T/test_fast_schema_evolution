@@ -96,7 +96,7 @@ drop table tab1;
 drop database test_fast_schema_evolution;
 
 
--- name: test_meta_scan
+-- name: test_meta_scan @native
 create database meta_scan;
 use meta_scan;
 CREATE TABLE `reproducex4` (
@@ -161,7 +161,7 @@ function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 fro
 drop database meta_scan;
 
 
--- name: test_fast_schema_evolution_and_alter
+-- name: test_fast_schema_evolution_and_alter @native
 
 create database test_fast_schema_evolution_and_alter;
 use test_fast_schema_evolution_and_alter;

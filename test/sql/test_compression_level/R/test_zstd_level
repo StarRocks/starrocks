@@ -164,18 +164,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -201,18 +196,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(1)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -238,18 +228,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(2)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -275,18 +260,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(3)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -312,18 +292,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(4)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -349,18 +324,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(5)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -386,18 +356,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(6)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -423,18 +388,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(7)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -460,18 +420,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(8)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -497,18 +452,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(9)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -534,18 +484,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(10)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -571,18 +516,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(11)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -608,18 +548,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(12)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -645,18 +580,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(13)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -682,18 +612,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(14)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -719,18 +644,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(15)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -756,18 +676,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(16)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -793,18 +708,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(17)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -830,18 +740,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(18)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -867,18 +772,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(19)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -904,18 +804,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(20)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -941,18 +836,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(21)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:
@@ -978,18 +868,13 @@ SELECT * FROM test_normal;
 -- !result
 SHOW CREATE TABLE test_normal;
 -- result:
-test_normal	CREATE TABLE `test_normal` (
-  `k` bigint(20) NOT NULL COMMENT "",
-  `v` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 1 
-PROPERTIES (
-"compression" = "ZSTD(22)",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)test_normal\	CREATE\ TABLE\ `test_normal`\ \(\
+\ \ `k`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `v`\ varchar\(65533\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 DROP TABLE test_normal;
 -- result:

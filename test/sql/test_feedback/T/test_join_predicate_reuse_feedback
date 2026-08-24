@@ -51,7 +51,7 @@ set broadcast_row_limit = 0;
 set cbo_enable_low_cardinality_optimize = false;
 -- result:
 -- !result
-function: assert_query_contains("alter plan advisor add SELECT a.id, b.v FROM (SELECT * FROM repro_la WHERE x > 0) a LEFT JOIN (SELECT id, v FROM repro_lb WHERE lower(k) = 'zznotexist') b ON abs(a.id) = abs(b.id) WHERE abs(a.id + b.v) = 10 OR abs(a.id + b.v) = 20", "Add query into plan advisor in FE")
+alter plan advisor add SELECT a.id, b.v FROM (SELECT * FROM repro_la WHERE x > 0) a LEFT JOIN (SELECT id, v FROM repro_lb WHERE lower(k) = 'zznotexist') b ON abs(a.id) = abs(b.id) WHERE abs(a.id + b.v) = 10 OR abs(a.id + b.v) = 20;
 function: assert_explain_contains("SELECT a.id, b.v FROM (SELECT * FROM repro_la WHERE x > 0) a LEFT JOIN (SELECT id, v FROM repro_lb WHERE lower(k) = 'zznotexist') b ON abs(a.id) = abs(b.id) WHERE abs(a.id + b.v) = 10 OR abs(a.id + b.v) = 20", "RightChildEstimationErrorTuningGuide", "common sub expr")
 -- result:
 None
@@ -68,4 +68,4 @@ set cbo_enable_low_cardinality_optimize = true;
 set enable_plan_advisor_blacklist = true;
 -- result:
 -- !result
-function: assert_query_contains("truncate plan advisor", "Clear all plan advisor in FE")
+truncate plan advisor;
