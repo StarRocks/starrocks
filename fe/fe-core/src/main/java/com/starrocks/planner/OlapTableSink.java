@@ -424,11 +424,20 @@ public class OlapTableSink extends DataSink {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
         try {
+            // In shared-data mode a tablet has exactly one writer and exactly one copy in object
+            // storage, so `replication_num` carries no write redundancy there -- RunMode.SharedData
+            // already defaults it to 1. A cloud-native table created with an explicit
+            // replication_num > 1 (typically carried over from a shared-nothing DDL) would
+            // otherwise raise the sink's write-quorum threshold, letting a failed node channel be
+            // tolerated even though the tablets it owned have no data anywhere. Report a single
+            // replica for cloud-native tables so any node channel failure aborts the load.
             int numReplicas = 1;
-            Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
-            if (optionalPartition.isPresent()) {
-                long partitionId = optionalPartition.get().getId();
-                numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+            if (!dstTable.isCloudNativeTableOrMaterializedView()) {
+                Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+                if (optionalPartition.isPresent()) {
+                    long partitionId = optionalPartition.get().getId();
+                    numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+                }
             }
             if (enableAutomaticPartition && enableDynamicOverwrite) {
                 tSink.setDynamic_overwrite(true);
