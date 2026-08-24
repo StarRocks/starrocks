@@ -323,6 +323,13 @@ TEST_F(SystemMetricsTest, concurrent_update) {
     // After releasing the mutex, update() should succeed and populate metrics.
     metrics.update();
     ASSERT_STRNE("0", cpu_user->to_string().c_str());
+
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+    ASSERT_NE(nullptr, registry.get_metric("jemalloc_dirty_bytes"));
+    ASSERT_NE(nullptr, registry.get_metric("jemalloc_muzzy_bytes"));
+    ASSERT_GE(metrics.memory_metrics()->jemalloc_dirty_bytes.value(), 0);
+    ASSERT_GE(metrics.memory_metrics()->jemalloc_muzzy_bytes.value(), 0);
+#endif
 }
 
 } // namespace starrocks
