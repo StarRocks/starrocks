@@ -243,6 +243,8 @@ std::string dump_memory_tracker() {
     DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())
     DUMP_METRIC(jemalloc_metadata, mem_metrics->jemalloc_metadata_bytes.value())
     DUMP_METRIC(jemalloc_rss, mem_metrics->jemalloc_resident_bytes.value())
+    DUMP_METRIC(jemalloc_dirty, mem_metrics->jemalloc_dirty_bytes.value())
+    DUMP_METRIC(jemalloc_muzzy, mem_metrics->jemalloc_muzzy_bytes.value())
 
     return fmt::to_string(buffer);
 }
