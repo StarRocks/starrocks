@@ -54,6 +54,12 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
     private final OlapTable table;
     private final MergeTabletClause mergeTabletClause;
 
+    // Set when a tablet was skipped only because its size statistics were older than the partition's
+    // visible version. That makes an empty plan TRANSIENT rather than deterministic, which decides
+    // which exception the empty case throws -- see createTabletReshardJob. A new factory is built per
+    // invocation, so this is per-plan state, not shared.
+    private boolean sawStaleTabletStats;
+
     public MergeTabletJobFactory(Database db, OlapTable table, MergeTabletClause mergeTabletClause) {
         this.db = db;
         this.table = table;
@@ -105,6 +111,14 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions =
                 createReshardingPhysicalPartitions(parallelismFloor);
         if (reshardingPhysicalPartitions.isEmpty()) {
+            if (sawStaleTabletStats) {
+                // Transient, so it must stay retriable: a plain StarRocksException is not latched by
+                // the caller. Signalling "deterministic" here would suppress this table until its
+                // layout or configuration changed, which a statistics refresh does not do.
+                throw new StarRocksException("No tablets need to merge in table "
+                        + db.getFullName() + '.' + table.getName()
+                        + " (tablet size statistics are stale; will retry)");
+            }
             // Deterministic: the same layout and configuration produce the same empty plan, so the
             // caller may treat it as a normal outcome rather than a failure. That matters for a
             // range-colocate table, whose steady state is one tablet per ColocateRange -- every
@@ -365,8 +379,15 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             }
 
             long dataSize = tablet.getDataSize(true);
-            if (dataSize >= pairThresh
-                    || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
+            boolean staleStats = ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime;
+            if (staleStats) {
+                // A compaction publish advances visibleVersionTime without touching dataVersion, so a
+                // tablet can be skipped here purely because its statistics have not caught up yet.
+                // Remember it: the resulting empty plan is transient, and latching it would suppress a
+                // merge that becomes valid as soon as the next statistics pass lands.
+                sawStaleTabletStats = true;
+            }
+            if (dataSize >= pairThresh || staleStats) {
                 flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;

@@ -948,7 +948,17 @@ public class MergeTabletJobTest {
         MergeTabletClause clause = new MergeTabletClause();
         clause.setTabletReshardTargetSize(100L);
         MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
-        Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+        // An empty plan caused by STALE statistics is transient, not deterministic: a compaction
+        // publish advances visibleVersionTime without touching dataVersion, so the next statistics
+        // pass can make this very same plan non-empty. It must therefore NOT be an
+        // EmptyReshardPlanException, which TabletReshardJobMgr latches -- latching it would suppress
+        // the merge until the layout or configuration changed, which a stats refresh does not do.
+        StarRocksException thrown =
+                Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+        Assertions.assertFalse(thrown instanceof EmptyReshardPlanException,
+                "a stale-statistics empty plan must stay retriable, got: " + thrown);
+        Assertions.assertTrue(thrown.getMessage().contains("statistics are stale"),
+                "expected the stale-stats reason, got: " + thrown.getMessage());
     }
 
     /**
