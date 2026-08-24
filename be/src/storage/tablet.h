@@ -109,7 +109,7 @@ public:
     void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
     Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
-                              const std::vector<Version>& versions_to_delete);
+                              const std::vector<Version>& versions_to_delete, int32_t donor_double_write_phase);
 
     const int64_t cumulative_layer_point() const;
     void set_cumulative_layer_point(int64_t new_point);
@@ -248,6 +248,30 @@ public:
     void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_all_candicate_rowsets(std::vector<RowsetSharedPtr>* candidate_rowsets);
+
+    // Compaction on this tablet is suspended between its first double-write publish and the
+    // publish of the online optimize job's pinned version-overwrite, so that no rowset can be
+    // created that straddles the (not yet known) overwrite version, which overwrite_rowset()
+    // would then delete whole, losing every version past the overwrite point.
+    // Once the overwrite has been applied no further overwrite can arrive for this tablet, so
+    // the double-writes that keep flowing until the partition swap must NOT re-suspend it —
+    // the swap itself is invisible to the backend and nothing would ever lift the suspension.
+    // The phase is persisted in the tablet meta so a restart cannot forget it in either
+    // direction: forgetting ACTIVE would let compaction resume and form a straddling rowset
+    // before the next double-write publish re-arms the suspension, and forgetting OVERWRITTEN
+    // would let a double-write between the overwrite and the partition swap re-suspend the
+    // swapped-in tablet for good. Clone repair and replication rebuild the tablet's content from
+    // another replica, so revise_tablet_meta() merges the donor's phase with the local one by
+    // taking the larger: the phase only ever moves forward (NONE < ACTIVE < OVERWRITTEN), so a
+    // mid-job clone can never drop the suspension that protects the cloned double-written
+    // rowsets, while a donor that already applied the overwrite lifts a suspension the local
+    // replica could never lift itself (it missed the overwrite publish, which is never re-sent).
+    // The first publish arms the phase under _meta_lock and saves the meta before it stores
+    // the atomic, so no publisher can persist a double-written rowset ahead of the phase.
+    void note_double_write_publish();
+    bool compaction_suspended_for_double_write() const {
+        return _double_write_phase.load(std::memory_order_acquire) == kDoubleWriteActive;
+    }
 
     void calculate_cumulative_point();
 
@@ -420,6 +444,12 @@ private:
     std::shared_mutex _migration_lock;
     // should use with migration lock.
     std::atomic<bool> _is_migrating{false};
+
+    // See note_double_write_publish().
+    static constexpr int kDoubleWriteNone = 0;        // never double-written
+    static constexpr int kDoubleWriteActive = 1;      // double-writes flowing: compaction suspended
+    static constexpr int kDoubleWriteOverwritten = 2; // overwrite applied: suspension permanently over
+    std::atomic<int> _double_write_phase{kDoubleWriteNone};
 
     // explain how these two locks work together.
     mutable std::shared_mutex _meta_lock;
