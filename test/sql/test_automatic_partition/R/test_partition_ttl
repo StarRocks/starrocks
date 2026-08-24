@@ -1,4 +1,4 @@
--- name: test_partition_ttl
+-- name: test_partition_ttl @native
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) PROPERTIES("partition_ttl" = "3 month");
 -- result:
 -- !result
@@ -45,7 +45,7 @@ PROPERTIES (
 
 
 
--- name: test_multi_partition_ttl
+-- name: test_multi_partition_ttl @native
 create database db_${uuid0};
 -- result:
 -- !result
@@ -188,7 +188,7 @@ select count(*) from ss1;
 -- result:
 1
 -- !result
--- name: test_multi_partition_ttl_with_str2date
+-- name: test_multi_partition_ttl_with_str2date @native
 create database db_${uuid0};
 -- result:
 -- !result

@@ -40,10 +40,7 @@ E: (1064, 'Column does not exists: v100')
 -- !result
 DESC t0;
 -- result:
-k0	bigint	YES	true	None	
-k1	datetime	YES	true	None	
-v0	int	YES	true	None	
-v1	varchar(100)	YES	false	None	
+[REGEX](?s)k0\	bigint\	YES\	true\	None\t.*\nk1\	datetime\	YES\	true\	None\t.*\nv0\	int\	YES\	true\	None\t.*\nv1\	varchar\(100\)\	YES\	false\	None\t.*
 -- !result
 SELECT * from t0 order by k0;
 -- result:

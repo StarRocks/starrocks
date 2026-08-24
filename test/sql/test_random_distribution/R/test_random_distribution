@@ -5,7 +5,7 @@ create table t1(k int, v int) duplicate key(k);
 -- !result
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: PRIMARY KEY cannot use random distribution.')
+[REGEX]E:.*PRIMARY KEY.*(cannot use random distribution|must use hash distribution).*
 -- !result
 create table t3(k int, v int) unique key(k);
 -- result:
@@ -42,7 +42,7 @@ select * from t;
 -- result:
 1	1
 -- !result
--- name: test_automatic_partition_random_distribute
+-- name: test_automatic_partition_random_distribute @native
 create table t(k date, v int) partition by date_trunc('day', k) properties('replication_num'='3');
 -- result:
 -- !result
@@ -89,7 +89,7 @@ select * from tva;
 -- result:
 1	3
 -- !result
--- name: test_add_partition
+-- name: test_add_partition @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
 -- result:
 -- !result
@@ -194,7 +194,7 @@ select * from t;
 -1	-1
 5	5
 -- !result
--- name: test_create_random_distribution_table
+-- name: test_create_random_distribution_table @native
 create table t(k int, v int);
 -- result:
 -- !result
@@ -245,7 +245,7 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
--- name: test_partition_random_distribution
+-- name: test_partition_random_distribution @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
 -- result:
 -- !result

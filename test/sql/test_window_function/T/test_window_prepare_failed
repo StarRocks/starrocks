@@ -24,6 +24,3 @@ admin disable failpoint 'analytor_prepare_failed';
 select k, sum(v) over(partition by k order by v) as s from t0 order by k, v;
 select k, row_number() over(partition by k order by v) as rn from t0 order by k, v;
 
-CLEANUP {
-  admin disable failpoint 'analytor_prepare_failed';
-} END CLEANUP
