@@ -28,6 +28,17 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
         return null;
     }
 
+    @Override
+    public R visitPrepareStatement(PrepareStmt statement, C context) {
+        // The statement being prepared is the one that actually reads tables, so consumers of this
+        // traverser (security policy marking, column privilege collection, meta locking, ...) have
+        // to see the relations inside it.
+        if (statement.getInnerStmt() != null) {
+            visit(statement.getInnerStmt(), context);
+        }
+        return null;
+    }
+
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     @Override
@@ -175,6 +186,24 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
     @Override
     public R visitSubqueryRelation(SubqueryRelation node, C context) {
         return visit(node.getQueryStatement(), context);
+    }
+
+    @Override
+    public R visitPivotRelation(PivotRelation node, C context) {
+        if (node.getAggregateFunctions() != null) {
+            node.getAggregateFunctions().forEach(x -> visit(x.getFunctionCallExpr(), context));
+        }
+
+        if (node.getPivotColumns() != null) {
+            node.getPivotColumns().forEach(x -> visit(x, context));
+        }
+
+        // The pivoted relation is the one that actually reads the table, so it must be visited for
+        // the same reasons as any other nested relation.
+        if (node.getQuery() != null) {
+            return visit(node.getQuery(), context);
+        }
+        return null;
     }
 
     @Override
