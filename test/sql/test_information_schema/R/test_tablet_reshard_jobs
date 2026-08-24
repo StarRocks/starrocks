@@ -1,8 +1,4 @@
 -- name: test_tablet_reshard_jobs
-<<<<<<< HEAD
-SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database();
-=======
 SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs WHERE JOB_ID < 0;
->>>>>>> b9a25f230e8... [Enhancement] Pre-split the target partition of an incremental MV refresh (#78041)
 -- result:
 -- !result
