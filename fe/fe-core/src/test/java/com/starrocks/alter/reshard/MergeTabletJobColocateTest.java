@@ -280,8 +280,12 @@ public class MergeTabletJobColocateTest {
         // tC now runs from inside R1 past the R1/R2 boundary.
         tabletC.setRange(new TabletRange(Range.of(twoCol(250, 0), twoCol(350, 0), true, false)));
 
-        StarRocksException thrown =
-                Assertions.assertThrows(StarRocksException.class, this::buildAutoMergeJob);
+        // EmptyReshardPlanException specifically, not a bare StarRocksException: this is the routine
+        // outcome for a range-colocate table (its steady state is one tablet per range, so the
+        // size-based signal keeps firing at a permanently empty plan), and TabletReshardJobMgr keys
+        // on the type to log it as normal rather than as a failure with a stack trace.
+        EmptyReshardPlanException thrown =
+                Assertions.assertThrows(EmptyReshardPlanException.class, this::buildAutoMergeJob);
         Assertions.assertTrue(thrown.getMessage().contains("No tablets need to merge"),
                 "expected an empty merge plan, got: " + thrown.getMessage());
     }

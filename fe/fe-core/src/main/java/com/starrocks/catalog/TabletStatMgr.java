@@ -57,7 +57,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -102,82 +101,6 @@ public class TabletStatMgr extends FrontendDaemon {
     // counts cover (see Tablet#getRowCountAtVersion), and that method is gone with its last caller.
     public LocalDateTime getLastWorkTimestamp() {
         return lastWorkTimestamp;
-    }
-
-    /**
-     * The table-level range-colocate snapshot the merge signal is filtered against.
-     *
-     * <p>{@code ranges == null} means the table IS range-colocate but cannot be classified right now —
-     * an unstable group, a range record not yet replayed, or a failed lookup. That is deliberately
-     * distinct from a {@code null} context, which means the table is not range-colocate at all: the
-     * first must withhold the merge signal entirely, while the second keeps the ordinary
-     * boundary-blind behavior. Collapsing the two is what would let an unstable group keep proposing
-     * merges the factory rejects on every scan.
-     */
-    private record RangeColocateSignalContext(@Nullable List<ColocateRange> ranges, int colocateColumnCount) {
-        private static final RangeColocateSignalContext UNUSABLE = new RangeColocateSignalContext(null, 0);
-
-        /**
-         * Binds the ranges to one index's sort key, or {@code null} when that cannot be done. Every
-         * failure mode here is a metadata race or a schema this signal simply cannot classify (an
-         * index meta that vanished, a sort key shorter than the colocate prefix), and the caller
-         * treats a null classifier on a range-colocate table as "withhold the merge signal".
-         */
-        @Nullable
-        ColocateRangeUtils.Classifier classifierFor(OlapTable olapTable, long indexMetaId) {
-            if (ranges == null) {
-                return null;
-            }
-            try {
-                return ColocateRangeUtils.Classifier.of(ranges,
-                        MetaUtils.getRangeDistributionColumns(olapTable, indexMetaId), colocateColumnCount);
-            } catch (Exception e) {
-                LOG.warn("cannot classify index meta {} of table {} against its colocate ranges; "
-                        + "withholding its merge signal", indexMetaId, olapTable.getId(), e);
-                return null;
-            }
-        }
-    }
-
-    /**
-     * The table's range-colocate ranges plus colocate column count; {@code null} when the table is not
-     * range-colocate, or {@link RangeColocateSignalContext#UNUSABLE} when it is but cannot be
-     * classified (unstable group, ranges not yet replayed, or a failed lookup).
-     *
-     * <p>Fail-soft on purpose. The scan loop that calls this has no per-table {@code catch} — only a
-     * {@code finally} that releases the lock — so an unchecked failure here would skip
-     * {@code setRowCount} for every table ordered after this one, on every cycle. The lookups really
-     * can fail: {@code getRangeColocateGroupId} and {@code getGroupSchema} take the colocate index
-     * lock separately, so a group dropped between them yields a null schema.
-     *
-     * <p>An UNSTABLE group is withheld rather than signalled: {@code MergeTabletJobFactory} refuses to
-     * plan a merge while any peer is unstable, so signalling one would only produce a rejected job and
-     * a stack trace in the log on every scan for as long as alignment takes.
-     */
-    @Nullable
-    private static RangeColocateSignalContext resolveRangeColocateSignalContext(long tableId) {
-        try {
-            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-            ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
-            if (groupId == null) {
-                return null;
-            }
-            List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
-            ColocateGroupSchema schema = colocateTableIndex.getGroupSchema(groupId);
-            // Empty ranges means the group is registered but its range record has not been replayed
-            // yet, so there is no topology to filter against.
-            if (ranges.isEmpty() || schema == null
-                    || colocateTableIndex.isAnyGroupWithSameColocateGroupIdUnstable(groupId.grpId)) {
-                return RangeColocateSignalContext.UNUSABLE;
-            }
-            return new RangeColocateSignalContext(ranges, schema.getColocateColumnCount());
-        } catch (Exception e) {
-            // Withhold rather than guess: a suppressed merge signal costs one scan, a boundary-blind
-            // one costs a rejected job every scan.
-            LOG.warn("failed to resolve the range-colocate context of table {}; "
-                    + "withholding its merge signal this pass", tableId, e);
-            return RangeColocateSignalContext.UNUSABLE;
-        }
     }
 
     @Override
@@ -233,26 +156,6 @@ public class TabletStatMgr extends FrontendDaemon {
                 int parallelismFloor = computeNodeCount == 0 ? 0
                         : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
                 int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount, maxSplitCount);
-                // A merge that joined two tablets from different ColocateRanges would produce a tablet
-                // no colocate scan can dispatch, so MergeTabletJobFactory refuses that pair. Signalling
-                // one here would therefore only schedule a merge plan that comes out empty -- on every
-                // scan, since the steady state of a range-colocate table is one tablet per range and
-                // every adjacent pair then crosses a boundary. Resolved once per table, and only inside
-                // the eligibility gate: a follower, a shared-nothing table and a non-range table pay
-                // nothing for it.
-                RangeColocateSignalContext colocateContext = reshardEligible
-                        ? resolveRangeColocateSignalContext(table.getId()) : null;
-                // One Classifier per index meta, not per (physical partition x index): its inputs are
-                // the table-level range snapshot and the index meta's sort key, both fixed for this
-                // walk, so a table with hundreds of partitions would otherwise rebuild an identical
-                // expansion for each one. A null value is cached too, so a table whose sort key cannot
-                // be resolved is not retried once per partition.
-                Map<Long, ColocateRangeUtils.Classifier> classifierByIndexMeta = new HashMap<>();
-                // A single unclassifiable index withholds the WHOLE table's merge signal, not just its
-                // own: MergeTabletJobFactory walks every visible index, so it would hit that same index
-                // and reject the entire job. Emitting a signal another index earned would just recreate
-                // and re-reject the candidate on every scan.
-                boolean tableMergeSignalUsable = true;
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -286,42 +189,6 @@ public class TabletStatMgr extends FrontendDaemon {
                                         ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
                                                 Config.tablet_reshard_target_size, adaptiveBound)
                                         : 0;
-                                // Expanded once per index, since the per-tablet classification below
-                                // binary-searches these. Each visible index carries its own sort-key
-                                // arity -- a rollup or MV can have a strict prefix of the base index's,
-                                // and the base arity would misclassify its tablets -- so resolve it from
-                                // the index's own (reshard-stable) meta id. An index that cannot
-                                // contribute a pair at all is not classified.
-                                // Resolved for EVERY range-colocate index, including one at or below
-                                // the parallelism floor. MergeTabletJobFactory walks every visible
-                                // index and builds the same classifier before it consults the merge
-                                // budget, so an index this producer skipped would still fail there and
-                                // reject the whole job -- the signal has to notice the failures its
-                                // consumer will hit, not just the ones on indexes it can merge. Only
-                                // the per-tablet classification below is skipped when ineligible;
-                                // that is where the per-tablet cost is.
-                                ColocateRangeUtils.Classifier classifier = null;
-                                if (colocateContext != null) {
-                                    long indexMetaId = index.getMetaId();
-                                    if (classifierByIndexMeta.containsKey(indexMetaId)) {
-                                        classifier = classifierByIndexMeta.get(indexMetaId);
-                                    } else {
-                                        classifier = colocateContext.classifierFor(olapTable, indexMetaId);
-                                        classifierByIndexMeta.put(indexMetaId, classifier);
-                                    }
-                                }
-                                // Accumulate this index's merge signal separately so a classification
-                                // failure part-way through can discard it without losing the row counts
-                                // collected alongside it -- and so a range-colocate index we cannot
-                                // classify contributes NO signal rather than falling back to the
-                                // boundary-blind pairing, which is what the factory would then reject.
-                                long indexMinAdjacentPairSize = Long.MAX_VALUE;
-                                // A null classifier on a range-colocate table now means exactly one
-                                // thing -- construction failed -- because it is attempted for every
-                                // index regardless of eligibility.
-                                boolean indexMergeSignalUsable =
-                                        colocateContext == null || classifier != null;
-                                int prevColocateRangeIndex = -1;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
@@ -338,46 +205,12 @@ public class TabletStatMgr extends FrontendDaemon {
                                         prevFreshTabletSize = -1L;
                                         continue;
                                     }
-                                    if (classifier != null && eligibleForMerge) {
-                                        // Break the adjacency chain at every colocate boundary. A -1
-                                        // (a tablet already spanning a boundary, or a prefix no range
-                                        // covers) breaks it too: such a tablet is already misaligned,
-                                        // and merging it can only make it worse.
-                                        int colocateRangeIndex;
-                                        try {
-                                            colocateRangeIndex = classifier.indexOf(tablet);
-                                        } catch (Exception e) {
-                                            // A malformed or racing TabletRange must not escape into
-                                            // the caller's catch-less loop and cost every later table
-                                            // its row-count update. Give up on this index's signal and
-                                            // keep collecting row counts.
-                                            LOG.warn("cannot classify tablet {} of table {} against its "
-                                                    + "colocate ranges; withholding the merge signal for "
-                                                    + "index {}", tablet.getId(), table.getId(),
-                                                    index.getId(), e);
-                                            indexMergeSignalUsable = false;
-                                            classifier = null;
-                                            prevFreshTabletSize = dataSize;
-                                            continue;
-                                        }
-                                        if (colocateRangeIndex < 0
-                                                || colocateRangeIndex != prevColocateRangeIndex) {
-                                            prevFreshTabletSize = -1L;
-                                        }
-                                        prevColocateRangeIndex = colocateRangeIndex;
-                                    }
-                                    if (indexMergeSignalUsable && prevFreshTabletSize >= 0 && eligibleForMerge) {
-                                        indexMinAdjacentPairSize = Math.min(indexMinAdjacentPairSize,
+                                    if (prevFreshTabletSize >= 0 && eligibleForMerge) {
+                                        minAdjacentTabletPairSize = Math.min(minAdjacentTabletPairSize,
                                                 prevFreshTabletSize + dataSize);
                                     }
                                     prevFreshTabletSize = dataSize;
                                 } // end for tablets
-                                if (indexMergeSignalUsable) {
-                                    minAdjacentTabletPairSize =
-                                            Math.min(minAdjacentTabletPairSize, indexMinAdjacentPairSize);
-                                } else {
-                                    tableMergeSignalUsable = false;
-                                }
                                 indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
                                         indexRowCount);
                                 if (!olapTable.isTempPartition(partition.getId())) {
@@ -386,9 +219,6 @@ public class TabletStatMgr extends FrontendDaemon {
                             } // end for indices
                         } // end for physical partitions
                     } // end for partitions
-                    if (!tableMergeSignalUsable) {
-                        minAdjacentTabletPairSize = Long.MAX_VALUE;
-                    }
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
                 } finally {

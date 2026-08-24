@@ -280,9 +280,20 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                 sizeSplitLatch.forgetTable(tableId);
             }
             if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                createTabletReshardJob(db, table, new MergeTabletClause());
-                LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
-                        db.getFullName(), table.getName(), minAdjacentTabletPairSize);
+                try {
+                    createTabletReshardJob(db, table, new MergeTabletClause());
+                    LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
+                            db.getFullName(), table.getName(), minAdjacentTabletPairSize);
+                } catch (EmptyReshardPlanException e) {
+                    // Not a failure: the size signal is derived from adjacent tablet PAIRS and knows
+                    // nothing about colocate, while the planner refuses a pair that would straddle a
+                    // ColocateRange. A range-colocate table settles at one tablet per range, so every
+                    // adjacent pair crosses a boundary and this signal stays permanently actionable
+                    // against a permanently empty plan. Log it as the routine outcome it is rather
+                    // than letting the catch below report a stack trace on every scan.
+                    LOG.info("Merge produced no work for table {}.{}: {}",
+                            db.getFullName(), table.getName(), e.getMessage());
+                }
             }
         } catch (Exception e) {
             LOG.warn("Failed to create tablet reshard job for table {}.{}.",

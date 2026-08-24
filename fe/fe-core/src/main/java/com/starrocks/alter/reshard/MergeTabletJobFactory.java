@@ -90,7 +90,7 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         // not-colocate: merging without boundary knowledge would create SPREAD-only shards and, once
         // the topology appears, nothing repairs them -- ColocateChecker only visits UNSTABLE groups,
         // and a merge that never marked one leaves no trace. Merge is an optimization, so declining it
-        // costs nothing. This matches TabletStatMgr, which withholds the merge signal in the same state.
+        // costs nothing.
         if (myGroupId != null && colocateTableIndex.getColocateRanges(myGroupId.grpId).isEmpty()) {
             throw new StarRocksException("Cannot merge tablets for range-colocate group "
                     + myGroupId.grpId + ": its colocate ranges are not available yet");
@@ -105,7 +105,12 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions =
                 createReshardingPhysicalPartitions(parallelismFloor);
         if (reshardingPhysicalPartitions.isEmpty()) {
-            throw new StarRocksException("No tablets need to merge in table "
+            // Deterministic: the same layout and configuration produce the same empty plan, so the
+            // caller may treat it as a normal outcome rather than a failure. That matters for a
+            // range-colocate table, whose steady state is one tablet per ColocateRange -- every
+            // adjacent pair then crosses a boundary, so the size-based signal keeps firing while this
+            // plan stays legitimately empty. Mirrors SplitTabletJobFactory's empty-plan contract.
+            throw new EmptyReshardPlanException("No tablets need to merge in table "
                     + db.getFullName() + '.' + table.getName());
         }
 
