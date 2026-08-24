@@ -252,10 +252,12 @@ public class MergeTabletJobColocateTest {
             long indexId) {
         ReshardingPhysicalPartition reshardingPartition =
                 job.getReshardingPhysicalPartitions().get(partitionId);
-        Assertions.assertNotNull(reshardingPartition);
+        Assertions.assertNotNull(reshardingPartition, "the job planned nothing for partition " + partitionId);
         ReshardingMaterializedIndex reshardingIndex =
                 reshardingPartition.getReshardingIndexes().get(indexId);
-        Assertions.assertNotNull(reshardingIndex);
+        Assertions.assertNotNull(reshardingIndex, "index " + indexId + " contributed no merge group to "
+                + "partition " + partitionId + "; an index whose tablets all classify as uncontained "
+                + "produces no entry here");
         return reshardingIndex;
     }
 

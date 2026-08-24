@@ -1119,14 +1119,15 @@ public class TabletReshardJobMgrTest {
     public void mergePlanSignatureChangesForEachNewInput() {
         long savedTarget = Config.tablet_reshard_target_size;
         try {
-            long pairSize = savedTarget / 2;
-            long base = TabletReshardJobMgr.mergePlanSignature(pairSize);
+            // Literal, not derived from the config another test in this class may have moved: two
+            // pair sums that happen to be equal would make the first assertion vacuous.
+            long base = TabletReshardJobMgr.mergePlanSignature(1024L);
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(pairSize * 4),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(4096L),
                     "a different adjacent-pair sum changes the size rule's answer");
 
-            Config.tablet_reshard_target_size = savedTarget * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(pairSize),
+            Config.tablet_reshard_target_size = savedTarget * 2 + 1;
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(1024L),
                     "target_size moves every merge threshold, so a suppressed table must re-arm");
         } finally {
             Config.tablet_reshard_target_size = savedTarget;
