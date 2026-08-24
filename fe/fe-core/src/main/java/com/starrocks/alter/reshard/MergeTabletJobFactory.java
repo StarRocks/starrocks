@@ -117,7 +117,7 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                 // layout or configuration changed, which a statistics refresh does not do.
                 throw new StarRocksException("No tablets need to merge in table "
                         + db.getFullName() + '.' + table.getName()
-                        + " (tablet size statistics are stale; will retry)");
+                        + " (tablet size statistics are stale)");
             }
             // Deterministic: the same layout and configuration produce the same empty plan, so the
             // caller may treat it as a normal outcome rather than a failure. That matters for a
@@ -143,17 +143,16 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
 
         // Snapshot the colocate ranges once for the whole plan so every index is classified against
-        // the same topology. Null ranges means the table is not range-colocate, and every tablet is
-        // then treated as belonging to one implicit range (pre-colocate behavior).
+        // the same topology. Null means the table has no range-colocate group, and every tablet is then
+        // treated as belonging to one implicit range (pre-colocate behavior); a registered group whose
+        // ranges are not available was already refused by createTabletReshardJob.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateTableIndex.GroupId colocateGroupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
-        // An empty range list means the group is registered but its range record has not been replayed
-        // yet; treat it as not-colocate rather than rejecting every group as uncontained.
-        List<ColocateRange> rawRanges = colocateGroupId == null ? null
+        List<ColocateRange> colocateRanges = colocateGroupId == null ? null
                 : colocateTableIndex.getColocateRanges(colocateGroupId.grpId);
-        List<ColocateRange> colocateRanges = rawRanges == null || rawRanges.isEmpty() ? null : rawRanges;
-        int colocateColumnCount = colocateRanges == null ? 0
+        int colocateColumnCount = colocateGroupId == null ? 0
                 : colocateTableIndex.getGroupSchema(colocateGroupId).getColocateColumnCount();
+        Map<Long, ColocateRangeUtils.Classifier> classifiers = new HashMap<>();
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             if (table.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -176,7 +175,7 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                         }
                         List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex,
                                 mergeTabletGroupsForIndex,
-                                classifierFor(oldIndex, colocateRanges, colocateColumnCount));
+                                classifierFor(classifiers, oldIndex, colocateRanges, colocateColumnCount));
                         if (reshardingTablets.isEmpty()) {
                             continue;
                         }
@@ -216,7 +215,7 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         ColocateRangeUtils.Classifier classifier =
-                                classifierFor(oldIndex, colocateRanges, colocateColumnCount);
+                                classifierFor(classifiers, oldIndex, colocateRanges, colocateColumnCount);
                         List<List<Long>> mergeTabletGroupsForIndex = createMergeTabletGroups(
                                 physicalPartition, oldIndex, targetSize, parallelismFloor, classifier);
                         if (mergeTabletGroupsForIndex.isEmpty()) {
@@ -380,13 +379,11 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
 
             long dataSize = tablet.getDataSize(true);
             boolean staleStats = ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime;
-            if (staleStats) {
-                // A compaction publish advances visibleVersionTime without touching dataVersion, so a
-                // tablet can be skipped here purely because its statistics have not caught up yet.
-                // Remember it: the resulting empty plan is transient, and latching it would suppress a
-                // merge that becomes valid as soon as the next statistics pass lands.
-                sawStaleTabletStats = true;
-            }
+            // A compaction publish advances visibleVersionTime without touching dataVersion, so a
+            // tablet can be skipped here purely because its statistics have not caught up yet. Remember
+            // it: the resulting empty plan is transient, and latching it would suppress a merge that
+            // becomes valid as soon as the next statistics pass lands.
+            sawStaleTabletStats |= staleStats;
             if (dataSize >= pairThresh || staleStats) {
                 flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
@@ -430,12 +427,19 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
      * range-colocate group. Resolved per index rather than from the base index because a rollup / MV
      * can have a shorter sort key, and classifying its tablets against the base arity would compare
      * bounds of different widths.
+     *
+     * <p>Memoized on {@code classifiers} by index meta id, since the expansion depends on nothing else:
+     * this runs once per (physical partition, index) under the table READ lock, and on a table with
+     * many partitions rebuilding it per partition dominates the walk's cost.
      */
     @Nullable
-    private ColocateRangeUtils.Classifier classifierFor(MaterializedIndex index,
-            @Nullable List<ColocateRange> colocateRanges, int colocateColumnCount) {
-        return ColocateRangeUtils.Classifier.of(colocateRanges,
-                MetaUtils.getRangeDistributionColumns(table, index.getMetaId()), colocateColumnCount);
+    private ColocateRangeUtils.Classifier classifierFor(Map<Long, ColocateRangeUtils.Classifier> classifiers,
+            MaterializedIndex index, @Nullable List<ColocateRange> colocateRanges, int colocateColumnCount) {
+        if (colocateRanges == null) {
+            return null;
+        }
+        return classifiers.computeIfAbsent(index.getMetaId(), metaId -> ColocateRangeUtils.Classifier.of(
+                colocateRanges, MetaUtils.getRangeDistributionColumns(table, metaId), colocateColumnCount));
     }
 
     private static void flushMergeTabletGroup(List<List<Long>> groups, List<Long> currentGroup) {

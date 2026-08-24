@@ -1116,6 +1116,24 @@ public class TabletReshardJobMgrTest {
     }
 
     @Test
+    public void mergePlanSignatureChangesForEachNewInput() {
+        long savedTarget = Config.tablet_reshard_target_size;
+        try {
+            long pairSize = savedTarget / 2;
+            long base = TabletReshardJobMgr.mergePlanSignature(pairSize);
+
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(pairSize * 4),
+                    "a different adjacent-pair sum changes the size rule's answer");
+
+            Config.tablet_reshard_target_size = savedTarget * 2;
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(pairSize),
+                    "target_size moves every merge threshold, so a suppressed table must re-arm");
+        } finally {
+            Config.tablet_reshard_target_size = savedTarget;
+        }
+    }
+
+    @Test
     public void theTriggerReusesTheBoundItsProducerAlreadyResolved() {
         mockLeaderAdmissionOpen();
         stubCountingNodeCount();

@@ -301,6 +301,15 @@ public class ColocateRangeUtilsTest {
     }
 
     @Test
+    public void testClassifierRangeTooShortForPrefix() {
+        // A mixed-version or faulty BE can publish a range whose lower tuple is shorter than the
+        // colocate prefix, tripping extractColocatePrefix's precondition. indexOf must absorb that
+        // into -1: its callers run past points of no return where an escaping exception cannot be
+        // unwound, and the only sensible answer there is "uncontained" anyway.
+        Assertions.assertEquals(-1, threeRangeClassifier().indexOf(Range.ge(new Tuple(List.of()))));
+    }
+
+    @Test
     public void testClassifierZeroColocateColumns() {
         // colocateColumnCount == 0 is the degenerate single-[MIN,MAX) shape. The prefix must stay null
         // (indexOf maps null to the first range); calling extractColocatePrefix unconditionally would

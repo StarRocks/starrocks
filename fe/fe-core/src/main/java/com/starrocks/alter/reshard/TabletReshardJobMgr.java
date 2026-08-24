@@ -308,11 +308,8 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             // fires and the latch never arms. Evaluating the latch first would therefore pay that walk
             // on every stat pass, forever, for a job that cannot run. Before this feature the same
             // path threw immediately with no walk at all.
-            if (!Config.tablet_reshard_enable_tablet_merge
-                    || !TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                // No merge signal, or merge is off: drop any suppression so it re-arms cleanly.
-                emptyMergePlanLatch.forgetTable(tableId);
-            } else {
+            if (Config.tablet_reshard_enable_tablet_merge
+                    && TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
                 long mergeSignature = ColocateChecker.tableConvergenceSignature(db, table,
                         mergePlanSignature(minAdjacentTabletPairSize));
                 TableAlignmentLatch.AlignmentDecision mergeDecision =
@@ -327,7 +324,9 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                         // same empty plan. Otherwise the table re-plans on every scan forever, walking
                         // every partition and index under the read lock each time. -1 is not a tracked
                         // job, which the latch's abort and settled probes both resolve to "no job" --
-                        // correct, nothing is running. Mirrors the split path above.
+                        // correct, nothing is running. This mirrors the empty-plan half of the split
+                        // path above and only that half: a merge job that does start is not recorded,
+                        // so an aborting merge re-fires exactly as it did before this latch existed.
                         emptyMergePlanLatch.recordFired(tableId, mergeSignature, -1L,
                                 mergeDecision.nextAbortRetries());
                         LOG.info("Merge produced no work for table {}.{}; suppressing until its layout "
@@ -339,6 +338,9 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
                                     + "suppressing further merge attempts until its data changes",
                             db.getFullName(), table.getName());
                 }
+            } else {
+                // No merge signal, or merge is off: drop any suppression so it re-arms cleanly.
+                emptyMergePlanLatch.forgetTable(tableId);
             }
         } catch (Exception e) {
             LOG.warn("Failed to create tablet reshard job for table {}.{}.",

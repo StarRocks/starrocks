@@ -196,23 +196,33 @@ public class MergeTabletJobColocateTest {
      * the only pair inside one colocate range.
      */
     private void installFourTablets() {
-        for (long tabletId : baseIndex.getTabletIdsInOrder()) {
-            baseIndex.removeTablet(tabletId);
-            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
-        }
+        clearTablets(baseIndex);
         tabletA = addTablet(Range.lt(canonical(200)));                          // R0
         tabletB = addTablet(Range.of(canonical(200), twoCol(250, 0), true, false));   // R1
         tabletC = addTablet(Range.of(twoCol(250, 0), canonical(300), true, false));   // R1
         tabletD = addTablet(Range.ge(canonical(300)));                          // R2
     }
 
+    private static void clearTablets(MaterializedIndex index) {
+        for (long tabletId : index.getTabletIdsInOrder()) {
+            index.removeTablet(tabletId);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
+        }
+    }
+
     private LakeTablet addTablet(Range<Tuple> range) {
+        return addTablet(table, physicalPartition, baseIndex, range);
+    }
+
+    /** A merge-candidate tablet: small enough on size, and fresh enough against its partition. */
+    private static LakeTablet addTablet(OlapTable owner, PhysicalPartition partition,
+            MaterializedIndex index, Range<Tuple> range) {
         LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(),
                 new TabletRange(range));
         tablet.setDataSize(SMALL_TABLET_SIZE);
-        tablet.setDataSizeUpdateTime(physicalPartition.getVisibleVersionTime());
-        baseIndex.addTablet(tablet, new TabletMeta(db.getId(), table.getId(), physicalPartition.getId(),
-                baseIndex.getId(), TStorageMedium.HDD, true));
+        tablet.setDataSizeUpdateTime(partition.getVisibleVersionTime());
+        index.addTablet(tablet, new TabletMeta(db.getId(), owner.getId(), partition.getId(),
+                index.getId(), TStorageMedium.HDD, true));
         return tablet;
     }
 
@@ -237,21 +247,32 @@ public class MergeTabletJobColocateTest {
         return (MergeTabletJob) new MergeTabletJobFactory(db, table, clause).createTabletReshardJob();
     }
 
-    /** The old-tablet id groups the job will actually merge, in index order. */
-    private List<List<Long>> mergedGroupsOf(MergeTabletJob job) {
-        List<List<Long>> merged = new ArrayList<>();
+    /** The resharding index the job planned for one (partition, index) pair. */
+    private static ReshardingMaterializedIndex reshardingIndexOf(MergeTabletJob job, long partitionId,
+            long indexId) {
         ReshardingPhysicalPartition reshardingPartition =
-                job.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+                job.getReshardingPhysicalPartitions().get(partitionId);
         Assertions.assertNotNull(reshardingPartition);
         ReshardingMaterializedIndex reshardingIndex =
-                reshardingPartition.getReshardingIndexes().get(baseIndex.getId());
+                reshardingPartition.getReshardingIndexes().get(indexId);
         Assertions.assertNotNull(reshardingIndex);
-        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+        return reshardingIndex;
+    }
+
+    /** The old-tablet id groups the job will actually merge, in index order. */
+    private static List<List<Long>> mergedGroupsOf(MergeTabletJob job, long partitionId, long indexId) {
+        List<List<Long>> merged = new ArrayList<>();
+        for (ReshardingTablet reshardingTablet : reshardingIndexOf(job, partitionId, indexId)
+                .getReshardingTablets()) {
             if (reshardingTablet.getMergingTablet() != null) {
                 merged.add(reshardingTablet.getMergingTablet().getOldTabletIds());
             }
         }
         return merged;
+    }
+
+    private List<List<Long>> mergedGroupsOf(MergeTabletJob job) {
+        return mergedGroupsOf(job, physicalPartition.getId(), baseIndex.getId());
     }
 
     /**
@@ -334,22 +355,14 @@ public class MergeTabletJobColocateTest {
                 .getTable(db.getFullName(), tableName);
         PhysicalPartition plainPartition = plainTable.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex plainIndex = plainPartition.getLatestBaseIndex();
-        for (long tabletId : plainIndex.getTabletIdsInOrder()) {
-            plainIndex.removeTablet(tabletId);
-            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
-        }
+        clearTablets(plainIndex);
         // The same four ranges that straddle two colocate boundaries on the colocate table.
         for (Range<Tuple> range : List.of(
                 Range.<Tuple>lt(canonical(200)),
                 Range.of(canonical(200), twoCol(250, 0), true, false),
                 Range.of(twoCol(250, 0), canonical(300), true, false),
                 Range.<Tuple>ge(canonical(300)))) {
-            LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(),
-                    new TabletRange(range));
-            tablet.setDataSize(SMALL_TABLET_SIZE);
-            tablet.setDataSizeUpdateTime(plainPartition.getVisibleVersionTime());
-            plainIndex.addTablet(tablet, new TabletMeta(db.getId(), plainTable.getId(),
-                    plainPartition.getId(), plainIndex.getId(), TStorageMedium.HDD, true));
+            addTablet(plainTable, plainPartition, plainIndex, range);
         }
 
         MergeTabletClause clause = new MergeTabletClause();
@@ -358,14 +371,7 @@ public class MergeTabletJobColocateTest {
         MergeTabletJob job = (MergeTabletJob) factory.createTabletReshardJob();
 
         List<Long> orderedTabletIds = plainIndex.getTabletIdsInOrder();
-        List<List<Long>> merged = new ArrayList<>();
-        for (ReshardingTablet reshardingTablet : job.getReshardingPhysicalPartitions()
-                .get(plainPartition.getId()).getReshardingIndexes().get(plainIndex.getId())
-                .getReshardingTablets()) {
-            if (reshardingTablet.getMergingTablet() != null) {
-                merged.add(reshardingTablet.getMergingTablet().getOldTabletIds());
-            }
-        }
+        List<List<Long>> merged = mergedGroupsOf(job, plainPartition.getId(), plainIndex.getId());
         // How far the group extends depends on the cluster's parallelism floor, so assert the
         // property under test instead of an exact grouping: on a table with no colocate group the
         // 200 boundary means nothing, so a group still spans it.
@@ -401,28 +407,14 @@ public class MergeTabletJobColocateTest {
                 Range.ge(prefix(300)));
         List<Long> rollupTabletIds = new ArrayList<>();
         for (Range<Tuple> range : rollupRanges) {
-            LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(),
-                    new TabletRange(range));
-            tablet.setDataSize(SMALL_TABLET_SIZE);
-            tablet.setDataSizeUpdateTime(physicalPartition.getVisibleVersionTime());
-            rollupIndex.addTablet(tablet, new TabletMeta(db.getId(), table.getId(),
-                    physicalPartition.getId(), rollupIndex.getId(), TStorageMedium.HDD, true));
-            rollupTabletIds.add(tablet.getId());
+            rollupTabletIds.add(addTablet(table, physicalPartition, rollupIndex, range).getId());
         }
 
         MergeTabletJob job = buildAutoMergeJob();
-        ReshardingMaterializedIndex reshardingRollup = job.getReshardingPhysicalPartitions()
-                .get(physicalPartition.getId()).getReshardingIndexes().get(rollupIndex.getId());
-        Assertions.assertNotNull(reshardingRollup,
-                "the rollup index must contribute a merge group; a base-arity expansion makes every "
-                        + "one of its tablets uncontained and this map entry disappears");
-
-        List<List<Long>> rollupGroups = new ArrayList<>();
-        for (ReshardingTablet reshardingTablet : reshardingRollup.getReshardingTablets()) {
-            if (reshardingTablet.getMergingTablet() != null) {
-                rollupGroups.add(reshardingTablet.getMergingTablet().getOldTabletIds());
-            }
-        }
+        // reshardingIndexOf asserts the entry exists: a base-arity expansion makes every rollup tablet
+        // uncontained, the index contributes no merge group, and this map entry disappears.
+        List<List<Long>> rollupGroups =
+                mergedGroupsOf(job, physicalPartition.getId(), rollupIndex.getId());
         Assertions.assertEquals(List.of(List.of(rollupTabletIds.get(1), rollupTabletIds.get(2))),
                 rollupGroups, "only the rollup's own R1 pair may merge");
 
@@ -570,8 +562,7 @@ public class MergeTabletJobColocateTest {
     }
 
     private MaterializedIndex newIndexOf(MergeTabletJob job) {
-        return job.getReshardingPhysicalPartitions().get(physicalPartition.getId())
-                .getReshardingIndexes().get(baseIndex.getId()).getMaterializedIndex();
+        return reshardingIndexOf(job, physicalPartition.getId(), baseIndex.getId()).getMaterializedIndex();
     }
 
     private long expectedPackGroupOf(Tablet newTablet) {
@@ -606,6 +597,22 @@ public class MergeTabletJobColocateTest {
                 "expected a ranges-unavailable refusal, got: " + thrown.getMessage());
     }
 
+    /**
+     * The same empty range list can appear AFTER that refusal: shard creation runs in runPendingJob,
+     * possibly on a leader promoted in between. Creating SPREAD-only shards there would strand them
+     * for the same reason, so shard resolution fails closed instead -- the job is still PENDING, so
+     * the throw aborts it cleanly.
+     */
+    @Test
+    public void testCreateShardsFailsClosedWhenColocateRangesVanish() throws Exception {
+        MergeTabletJob job = buildAutoMergeJob();
+        GlobalStateMgr.getCurrentState().getColocateTableIndex().getColocateRangeMgr()
+                .setColocateRanges(groupId.grpId, List.of());
+
+        Assertions.assertThrows(IllegalStateException.class, () -> captureCreatedShardGroupIds(job),
+                "an unknowable topology must not silently produce SPREAD-only shards");
+    }
+
     // ---- post-publish backstop ----
 
     private void invokeBackstop(MergeTabletJob job) {
@@ -618,11 +625,10 @@ public class MergeTabletJobColocateTest {
 
     /**
      * A mixed-version or faulty BE can publish a range whose lower tuple is shorter than the colocate
-     * prefix, which trips extractColocatePrefix's precondition inside Classifier.indexOf. The backstop
+     * prefix; Classifier.indexOf absorbs that into -1. This is the caller that needs it: the backstop
      * runs AFTER updateNextVersions crossed the no-abort boundary, so an escaping exception cannot
      * abort the job -- canAbort() is PENDING-only -- and the scheduler would re-enter runRunningJob
-     * every cycle, pinning the table in TABLET_RESHARD forever. It must be classified as misaligned
-     * instead.
+     * every cycle, pinning the table in TABLET_RESHARD forever.
      */
     @Test
     public void testUnclassifiableRangeIsTreatedAsMisalignedNotThrown() throws Exception {
@@ -740,9 +746,8 @@ public class MergeTabletJobColocateTest {
     }
 
     private long mergedNewTabletId(MergeTabletJob job) {
-        for (ReshardingTablet reshardingTablet : job.getReshardingPhysicalPartitions()
-                .get(physicalPartition.getId()).getReshardingIndexes().get(baseIndex.getId())
-                .getReshardingTablets()) {
+        for (ReshardingTablet reshardingTablet : reshardingIndexOf(job, physicalPartition.getId(),
+                baseIndex.getId()).getReshardingTablets()) {
             if (reshardingTablet.getMergingTablet() != null) {
                 return reshardingTablet.getMergingTablet().getNewTabletId();
             }

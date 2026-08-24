@@ -750,11 +750,13 @@ public class MergeTabletJob extends TabletReshardJob {
         // them, and every shard of this job must be placed against the same topology.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateTableIndex.GroupId colocateGroupId = colocateTableIndex.getRangeColocateGroupId(tableId);
-        // An empty range list means the group is registered but its range record has not been replayed
-        // yet. Treat that as not-colocate and create SPREAD-only shards -- the colocate checker places
-        // them once the ranges exist -- rather than failing every merge on this table.
+        // Null means the table has no range-colocate group. An EMPTY list is different and must not
+        // be flattened into it: the group is registered but its ranges have not been replayed yet, and
+        // creating SPREAD-only shards there would strand them -- ColocateChecker only visits UNSTABLE
+        // groups, and a merge that never marked one leaves no trace. resolveShardGroupIds fails closed
+        // on that list instead, which aborts a still-PENDING job. Mirrors SplitTabletJob.
         List<ColocateRange> colocateRanges = colocateGroupId == null ? null
-                : emptyToNull(colocateTableIndex.getColocateRanges(colocateGroupId.grpId));
+                : colocateTableIndex.getColocateRanges(colocateGroupId.grpId);
         int colocateColumnCount = colocateRanges == null ? 0
                 : colocateTableIndex.getGroupSchema(colocateGroupId).getColocateColumnCount();
         try {
@@ -796,12 +798,6 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
-    /** Null for a group with no usable range topology, so every caller treats it as not-colocate. */
-    @Nullable
-    private static List<ColocateRange> emptyToNull(List<ColocateRange> colocateRanges) {
-        return colocateRanges == null || colocateRanges.isEmpty() ? null : colocateRanges;
-    }
-
     /**
      * The index SPREAD group, plus the PACK shard group of the colocate range this new tablet
      * belongs to when the table is range-colocate.
@@ -813,7 +809,7 @@ public class MergeTabletJob extends TabletReshardJob {
      * replacement carries its source tablet's range unchanged.
      */
     private static List<Long> resolveShardGroupIds(MaterializedIndex newIndex, long newTabletId,
-            List<ColocateRange> colocateRanges, int colocateColumnCount) {
+            @Nullable List<ColocateRange> colocateRanges, int colocateColumnCount) {
         if (colocateRanges == null) {
             return List.of(newIndex.getShardGroupId());
         }
@@ -849,14 +845,17 @@ public class MergeTabletJob extends TabletReshardJob {
             return;
         }
         long grpId = groupId.grpId;
-        List<ColocateRange> colocateRanges = emptyToNull(colocateTableIndex.getColocateRanges(grpId));
-        if (colocateRanges == null) {
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(grpId);
+        if (colocateRanges.isEmpty()) {
             return;
         }
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
 
         long crossingTabletId = -1;
         Range<Tuple> crossingRange = null;
+        // One Classifier per index meta, not per (partition, index): the expansion depends on nothing
+        // else, and this scan walks every partition of the job under the table READ lock.
+        Map<Long, ColocateRangeUtils.Classifier> classifiers = new HashMap<>();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             scan:
@@ -874,27 +873,17 @@ public class MergeTabletJob extends TabletReshardJob {
                     // Bound per index: a rollup / MV can have a shorter sort key than the base index,
                     // and classifying its tablets against the base arity would compare bounds of
                     // different widths.
-                    ColocateRangeUtils.Classifier classifier = ColocateRangeUtils.Classifier.of(colocateRanges,
-                            MetaUtils.getRangeDistributionColumns(olapTable, newIndex.getMetaId()),
-                            colocateColumnCount);
+                    ColocateRangeUtils.Classifier classifier = classifiers.computeIfAbsent(
+                            newIndex.getMetaId(), metaId -> ColocateRangeUtils.Classifier.of(colocateRanges,
+                                    MetaUtils.getRangeDistributionColumns(olapTable, metaId),
+                                    colocateColumnCount));
+                    // indexOf reports an unclassifiable range as -1 rather than throwing, which
+                    // matters most here: this runs after updateNextVersions crossed the no-abort
+                    // boundary, so an escaping exception would leave the scheduler re-entering
+                    // runRunningJob every cycle -- pinning the table in TABLET_RESHARD and blocking
+                    // all DDL on it.
                     for (Tablet tablet : newIndex.getTablets()) {
-                        int colocateRangeIndex;
-                        try {
-                            colocateRangeIndex = classifier.indexOf(tablet);
-                        } catch (Exception e) {
-                            // A mixed-version or faulty BE can publish a range whose lower tuple is
-                            // shorter than the colocate prefix, which trips extractColocatePrefix's
-                            // precondition. Such a tablet IS misaligned, so classify it as crossing
-                            // rather than letting the exception escape: this runs after
-                            // updateNextVersions crossed the no-abort boundary, so run() would catch
-                            // it, canAbort() is PENDING-only and cannot abort a RUNNING job, and the
-                            // scheduler would re-enter runRunningJob every cycle -- pinning the table
-                            // in TABLET_RESHARD indefinitely and blocking all DDL on it.
-                            LOG.warn("Cannot classify tablet {} of table {} against colocate group {}; "
-                                    + "treating it as misaligned.", tablet.getId(), tableId, grpId, e);
-                            colocateRangeIndex = -1;
-                        }
-                        if (colocateRangeIndex < 0) {
+                        if (classifier.indexOf(tablet) < 0) {
                             crossingTabletId = tablet.getId();
                             crossingRange = tablet.getRange() == null ? null : tablet.getRange().getRange();
                             break scan;

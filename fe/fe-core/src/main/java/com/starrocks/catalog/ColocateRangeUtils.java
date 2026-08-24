@@ -16,6 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Range;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,7 @@ import javax.annotation.Nullable;
  * Utility methods for range distribution colocate operations.
  */
 public class ColocateRangeUtils {
+    private static final Logger LOG = LogManager.getLogger(ColocateRangeUtils.class);
 
     /**
      * Expands a colocate range (on colocate column prefix) to a full sort key range
@@ -187,22 +190,6 @@ public class ColocateRangeUtils {
     }
 
     /**
-     * Expands every colocate range to the full sort key, positionally matching {@code ranges}.
-     * {@link Classifier} uses it to expand once per index; a caller that needs the expanded topology
-     * itself (rather than a classification) can call it directly.
-     */
-    public static List<Range<Tuple>> expandColocateRanges(List<ColocateRange> ranges,
-                                                          List<Column> sortKeyColumns,
-                                                          int colocateColumnCount) {
-        List<Range<Tuple>> expandedRanges = new ArrayList<>(ranges.size());
-        for (ColocateRange colocateRange : ranges) {
-            expandedRanges.add(expandToFullSortKey(
-                    colocateRange.getRange(), sortKeyColumns, colocateColumnCount));
-        }
-        return expandedRanges;
-    }
-
-    /**
      * Binds a colocate group's ranges to ONE materialized index's sort key, so a tablet of that index
      * can be classified without the caller having to keep the pieces consistent by hand.
      *
@@ -240,31 +227,48 @@ public class ColocateRangeUtils {
             if (ranges == null || ranges.isEmpty()) {
                 return null;
             }
-            return new Classifier(ranges,
-                    expandColocateRanges(ranges, sortKeyColumns, colocateColumnCount), colocateColumnCount);
+            // Expand once per index, so the per-tablet path below only compares.
+            List<Range<Tuple>> expandedRanges = new ArrayList<>(ranges.size());
+            for (ColocateRange colocateRange : ranges) {
+                expandedRanges.add(expandToFullSortKey(
+                        colocateRange.getRange(), sortKeyColumns, colocateColumnCount));
+            }
+            return new Classifier(ranges, expandedRanges, colocateColumnCount);
         }
 
         /**
          * Index of the {@link ColocateRange} that FULLY contains {@code tabletRange}, or {@code -1}
-         * when none does: a null range, a colocate prefix no range covers, or a range that already
-         * spans a boundary.
+         * when none does: a null range, a range too short to carry the colocate prefix, a prefix no
+         * range covers, or a range that already spans a boundary. Never throws, so a caller that has
+         * already crossed a point of no return can act on the answer instead of unwinding.
          *
          * <p>Same containment rule as {@link #isContainedInOwningColocateRange} and the scan-time guard
          * in {@code RangeColocateScanDispatch}, so a caller deciding what may be merged agrees with the
          * guard deciding what may be dispatched. The two are kept in step by an equivalence case in
          * {@code ColocateRangeUtilsTest} rather than by expressing one in terms of the other, which
-         * would either change the zero-column behavior below or expand every range where
-         * {@code isContainedInOwningColocateRange} expands only the matched one.
+         * would make {@code isContainedInOwningColocateRange} expand every range where it now expands
+         * only the matched one -- a per-tablet cost at its callers in {@code SplitTabletJob}.
          */
         public int indexOf(@Nullable Range<Tuple> tabletRange) {
             if (tabletRange == null) {
                 return -1;
             }
-            // colocateColumnCount == 0 must keep the prefix null (indexOf maps null to the first
-            // range); extractColocatePrefix requires a positive count.
-            Tuple lowerPrefix = colocateColumnCount > 0
-                    ? extractColocatePrefix(tabletRange, colocateColumnCount)
-                    : null;
+            Tuple lowerPrefix;
+            try {
+                // colocateColumnCount == 0 must keep the prefix null (indexOf maps null to the first
+                // range); extractColocatePrefix requires a positive count.
+                lowerPrefix = colocateColumnCount > 0
+                        ? extractColocatePrefix(tabletRange, colocateColumnCount)
+                        : null;
+            } catch (RuntimeException e) {
+                // A mixed-version or faulty BE can publish a range whose lower tuple is shorter than
+                // the colocate prefix, which trips extractColocatePrefix's precondition. Such a range
+                // IS misaligned, so report it as uncontained rather than throwing at callers whose
+                // only sensible response would be to report it as uncontained anyway.
+                LOG.warn("Cannot extract the {}-column colocate prefix of range {}; "
+                        + "treating it as uncontained.", colocateColumnCount, tabletRange, e);
+                return -1;
+            }
             int idx = ColocateRangeMgr.indexOf(ranges, lowerPrefix);
             if (idx < 0) {
                 return -1;
