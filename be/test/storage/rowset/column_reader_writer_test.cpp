@@ -1348,8 +1348,6 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
     EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
-<<<<<<< HEAD
-=======
 // End-to-end read of a column that carries a compression dictionary.
 //
 // This build has no writer for such a column -- that is the point of splitting the
@@ -1501,5 +1499,4 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
     ASSERT_EQ(values[kRowsPerPage * 3 + 7], one->get(0).get_slice().to_string());
 }
 
->>>>>>> 811ea998535... [Enhancement] Read support for per-column ZSTD compression dictionaries (#77355)
 } // namespace starrocks
