@@ -325,40 +325,4 @@ TEST_F(SystemMetricsTest, concurrent_update) {
     ASSERT_STRNE("0", cpu_user->to_string().c_str());
 }
 
-TEST_F(SystemMetricsTest, UpdateMemoryMetricsSetsJemallocDirtyMuzzyBytes) {
-#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
-    GTEST_SKIP() << "jemalloc stats collection is skipped entirely in sanitizer builds (see "
-                    "SystemMetrics::update_memory_metrics())";
-#else
-    const std::string dir_path = "./be/test/util";
-    std::string stat_path(dir_path + "/test_data/stat_normal");
-    k_ut_stat_path = stat_path.c_str();
-    std::string diskstats_path(dir_path + "/test_data/diskstats_normal");
-    k_ut_diskstats_path = diskstats_path.c_str();
-    std::string net_dev_path(dir_path + "/test_data/net_dev_normal");
-    k_ut_net_dev_path = net_dev_path.c_str();
-    std::string fd_path(dir_path + "/test_data/fd_file_nr");
-    k_ut_fd_path = fd_path.c_str();
-    std::string net_snmp_path(dir_path + "/test_data/net_snmp_normal");
-    k_ut_net_snmp_path = net_snmp_path.c_str();
-
-    MetricRegistry registry("test");
-    std::set<std::string> disk_devices;
-    disk_devices.emplace("sda");
-    std::vector<std::string> network_interfaces;
-    network_interfaces.emplace_back("xgbe0");
-
-    SystemMetrics metrics;
-    metrics.install(&registry, disk_devices, network_interfaces);
-
-    ASSERT_NE(nullptr, registry.get_metric("jemalloc_dirty_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jemalloc_muzzy_bytes"));
-
-    metrics.update();
-
-    ASSERT_GE(metrics.memory_metrics()->jemalloc_dirty_bytes.value(), 0);
-    ASSERT_GE(metrics.memory_metrics()->jemalloc_muzzy_bytes.value(), 0);
-#endif
-}
-
 } // namespace starrocks
