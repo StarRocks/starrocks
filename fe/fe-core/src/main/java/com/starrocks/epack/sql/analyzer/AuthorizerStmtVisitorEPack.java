@@ -3,7 +3,10 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -43,6 +46,7 @@ import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
@@ -62,6 +66,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -593,5 +598,41 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
             checkWarehouseUsagePrivilege(warehouseName, context);
         }
         return null;
+    }
+
+    // --------------------------------- Warehouse Statement ---------------------------------
+
+    /**
+     * `db_admin` may tune warehouse properties without holding ALTER on the warehouse, so that
+     * database administrators can adjust knobs such as the query queue settings and the warehouse
+     * session variables themselves instead of going through a cluster administrator.
+     * <p>
+     * The exemption is scoped to `ALTER WAREHOUSE ... SET (...)`. Every other warehouse operation
+     * -- DROP / SUSPEND / RESUME, and the CNGROUP statements -- keeps requiring its own privilege.
+     */
+    @Override
+    public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+        if (hasActivatedDbAdminRole(context)) {
+            return null;
+        }
+        return super.visitAlterWarehouseStatement(statement, context);
+    }
+
+    /**
+     * Whether `db_admin` is among the roles activated on this session, following role inheritance:
+     * activating a role that was granted `db_admin`, directly or through a chain of roles, counts.
+     */
+    private static boolean hasActivatedDbAdminRole(ConnectContext context) {
+        if (context.getCurrentUserIdentity() == null) {
+            return false;
+        }
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            return authorizationMgr.getEffectiveRoleIds(context.getCurrentUserIdentity(), context.getGroups(),
+                    context.getCurrentRoleIds()).contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID);
+        } catch (PrivilegeException e) {
+            // the user is unknown to the authorization manager, so it holds no role at all
+            return false;
+        }
     }
 }
