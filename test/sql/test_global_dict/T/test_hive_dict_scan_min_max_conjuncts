@@ -1,0 +1,61 @@
+-- name: test_hive_dict_scan_min_max_conjuncts
+
+-- Regression for https://github.com/StarRocks/starrocks/pull/77772.
+-- OptExternalPartitionPruner builds minMaxConjuncts/nonPartitionConjuncts/noEvalPartitionConjuncts
+-- on ScanOperatorPredicates separately from the scan's own predicate; DecodeCollector used to only
+-- collect operator.getPredicate(), so these extra conjunct lists were never registered as
+-- dictionary expressions. A range bound (c2 > 'a') is built with the same shape as the source
+-- predicate and got rewritten to DictDecode(...) "by accident"; the = and IN bounds are built with
+-- a different shape (different binary type, or constants that never appear in the source
+-- predicate) and stayed on decoded strings before the fix. This has no effect on query
+-- correctness -- only on whether the min/max pruning bound compares dictionary codes or decoded
+-- strings -- so the only observable signal is the plan text, checked below via wait_plan_contains.
+-- NOTE: "DictDecode(" alone appears in BOTH shapes (before and after the fix) -- the operator
+-- sits outside the brackets, decoding then comparing strings, when unrewritten, and inside the
+-- brackets, comparing dictionary codes directly, when rewritten.
+-- NOTE: wait_plan_contains checks each expected substring against the WHOLE explain output
+-- independently, not against a single line, so a bare "[<place-holder> <op> 'const']" substring
+-- is not always enough on its own: for c2 > 'a' the synthesized min/max bound is structurally
+-- identical to the scan's own (always-correct) NON-PARTITION PREDICATES entry, so that substring
+-- would be unconditionally present via the unrelated line even if MIN/MAX PREDICATES regressed.
+-- To make every check unambiguous, all three below match one contiguous string spanning
+-- "MIN/MAX PREDICATES: " through the closing bracket(s), which can only occur on the MIN/MAX
+-- PREDICATES line itself -- taken verbatim from a live cluster's explain verbose output for this
+-- exact table shape ("6: c2" is the dict column id that query/schema assigns on a fresh session;
+-- rerun with -r and adjust the id here if it differs in your environment).
+
+set low_cardinality_optimize_on_lake = true;
+set always_collect_low_card_dict_on_lake = true;
+
+create external catalog hive_dict_conjuncts_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+create database if not exists hive_dict_conjuncts_${uuid0}.hive_test_db_${uuid0};
+use hive_dict_conjuncts_${uuid0}.hive_test_db_${uuid0};
+
+drop table if exists t1_${uuid0} force;
+create table t1_${uuid0} (
+    c1 int,
+    c2 string
+);
+
+insert into t1_${uuid0} values (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+
+select count(c2) from t1_${uuid0};
+function: wait_global_dict_ready('c2', 't1_${uuid0}')
+
+-- equality: normalized into <= and >= bounds with a different binary type than the collected
+-- predicate -- before the fix this never matched anything and the min/max bound stayed a plain
+-- string comparison instead of DictDecode(...).
+function: wait_plan_contains("verbose select count(*) from t1_${uuid0} where c2 = 'a'", "MIN/MAX PREDICATES: DictDecode(6: c2, [<place-holder> <= 'a']), DictDecode(6: c2, [<place-holder> >= 'a'])")
+
+-- IN: normalized into >= min / <= max over constants that never literally appear in the source
+-- predicate -- same failure mode as the equality case above.
+function: wait_plan_contains("verbose select count(*) from t1_${uuid0} where c2 in ('a', 'b')", "MIN/MAX PREDICATES: DictDecode(6: c2, [<place-holder> >= 'a']), DictDecode(6: c2, [<place-holder> <= 'b'])")
+
+-- range: the synthesized bound is structurally identical to the source predicate, so it matched
+-- "by accident" even before the fix. Kept as a guard against regressing that shape.
+function: wait_plan_contains("verbose select count(*) from t1_${uuid0} where c2 > 'a'", "MIN/MAX PREDICATES: DictDecode(6: c2, [<place-holder> > 'a'])")
+
+drop table t1_${uuid0} force;
+drop database if exists hive_dict_conjuncts_${uuid0}.hive_test_db_${uuid0} force;
+drop catalog hive_dict_conjuncts_${uuid0};
+set catalog default_catalog;
