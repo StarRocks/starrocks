@@ -25,12 +25,12 @@
 #include <string_view>
 #include <utility>
 
+#include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "connector/hive/paimon/paimon_evaluator.h"
 #include "connector/hive/paimon/paimon_file_system.h"
-#include "connector/hive/paimon/paimon_memory_pool.h"
-#include "exprs/column_ref.h"
+#include "connector/hive/paimon/tracked_paimon_memory_pool.h"
 #include "exprs/expr_context.h"
 #include "formats/arrow/arrow_column_converter.h"
 #include "runtime/descriptors_ext.h"
@@ -40,7 +40,6 @@ namespace starrocks {
 namespace {
 
 constexpr int64_t kPaimonReadBatchSize = 10000;
-constexpr int32_t kPaimonRowToBatchThreadNumMax = 256;
 constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
 constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
 constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
@@ -72,18 +71,16 @@ void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemSta
 
 } // namespace
 
-PaimonScanner::~PaimonScanner() {
-    _close_reader();
-}
+PaimonScanner::~PaimonScanner() = default;
 
 Status PaimonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
-    _max_chunk_size = runtime_state->chunk_size() > 0 ? runtime_state->chunk_size() : 4096;
-    _convert_context.timezone = runtime_state->timezone();
-    _convert_context.current_file = scanner_ctx.file_path;
     return Status::OK();
 }
 
 Status PaimonScanner::do_open(RuntimeState* runtime_state) {
+    _memory_pool = std::make_shared<TrackedPaimonMemoryPool>(runtime_state->query_mem_tracker_ptr().get());
+    _max_chunk_size = runtime_state->chunk_size() ? runtime_state->chunk_size() : 4096;
+    _convert_context.timezone = runtime_state->timezone();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     const THdfsScanRange& scan_range = *_scanner_ctx->scan_range;
     const auto* table_descriptor = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx->hive_table);
@@ -113,35 +110,20 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     const int64_t parquet_cache_range_size_limit = query_options.__isset.paimon_parquet_read_cache_range_size_limit
                                                            ? query_options.paimon_parquet_read_cache_range_size_limit
                                                            : kPaimonParquetCacheRangeSizeLimit;
-    if (row_to_batch_thread_num <= 0 || row_to_batch_thread_num > kPaimonRowToBatchThreadNumMax) {
-        return Status::InvalidArgument("paimon_native_reader_row_to_batch_thread_num must be between 1 and 256");
-    }
-    if (parquet_cache_range_size_limit <= parquet_cache_hole_size_limit) {
-        return Status::InvalidArgument(
-                "paimon_parquet_read_cache_range_size_limit must be greater than "
-                "paimon_parquet_read_cache_hole_size_limit");
-    }
-
-    _memory_pool = std::make_shared<TrackedPaimonMemoryPool>(runtime_state->query_mem_tracker_ptr().get());
     _paimon_file_system = std::make_shared<PaimonFileSystem>(_scanner_ctx->fs, _scanner_ctx->datacache_options);
 
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
     std::vector<std::string> field_names;
-    std::vector<SlotDescriptor*> read_slots;
     field_names.reserve(materialized_columns.size());
-    read_slots.reserve(materialized_columns.size());
     _convert_functions.reserve(materialized_columns.size());
     _cast_exprs.resize(materialized_columns.size(), nullptr);
     for (const auto& materialized_column : materialized_columns) {
         field_names.emplace_back(materialized_column.name());
-        read_slots.emplace_back(materialized_column.slot_desc);
         _convert_functions.emplace_back(std::make_unique<ConvertFuncTree>());
     }
 
     paimon::ReadContextBuilder context_builder(table_path);
-    if (!field_names.empty()) {
-        context_builder.SetReadFieldNames(field_names);
-    }
+    context_builder.SetReadFieldNames(field_names);
     if (table_descriptor != nullptr && !table_descriptor->get_paimon_table_schema_json().empty()) {
         context_builder.SetTableSchema(std::string(table_descriptor->get_paimon_table_schema_json()));
     }
@@ -153,7 +135,7 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         }
     }
     if (!conjuncts.empty()) {
-        PaimonEvaluator evaluator(read_slots);
+        PaimonEvaluator evaluator(_scanner_ctx->tuple_desc->slots());
         auto predicate = evaluator.evaluate(&conjuncts);
         if (predicate != nullptr) {
             context_builder.SetPredicate(predicate);
@@ -207,62 +189,93 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     }
     _reader = std::move(reader_result).value();
     _read_chunk = std::make_shared<Chunk>();
-    _chunk_filter.reserve(_max_chunk_size);
+    for (size_t i = 0; i < materialized_columns.size(); ++i) {
+        SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        std::shared_ptr<arrow::DataType> arrow_type;
+        if (slot_desc->type().type == TYPE_DATE) {
+            arrow_type = arrow::date32();
+        } else if (slot_desc->type().type == TYPE_DATETIME) {
+            arrow_type = arrow::timestamp(arrow::TimeUnit::MICRO);
+        } else {
+            RETURN_IF_ERROR(convert_to_arrow_type(slot_desc->type(), &arrow_type));
+        }
+        MutableColumnPtr column;
+        RETURN_IF_ERROR(create_arrow_column(arrow_type.get(), slot_desc, &column, _convert_functions[i].get(),
+                                            &_cast_exprs[i], _pool, true));
+        column->reserve(_max_chunk_size);
+        _read_chunk->append_column(std::move(column), slot_desc->id());
+    }
+    _chunk_filter.reserve(0);
+    _batch_start_idx = 0;
+    _chunk_start_idx = 0;
+    _scanner_eof = false;
     return Status::OK();
 }
 
 Status PaimonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     _read_chunk->reset();
     _chunk_filter.clear();
-    _chunk_start_idx = 0;
-    while (_chunk_start_idx < _max_chunk_size) {
-        if (_batch_is_exhausted()) {
-            RETURN_IF_CANCELLED(runtime_state);
-            RETURN_IF_ERROR(_next_batch());
+    if (_batch_is_exhausted()) {
+        while (true) {
+            Status status = _next_batch();
             if (_scanner_eof) {
+                return status;
+            }
+            if (status.ok()) {
                 break;
             }
+            return status;
         }
+    }
+    while (!_scanner_eof) {
         RETURN_IF_ERROR(_append_batch_to_chunk());
+        if (_chunk_is_full()) {
+            break;
+        }
+        Status status = _next_batch();
+        if (status.ok()) {
+            continue;
+        }
+        if (!status.is_end_of_file()) {
+            return status;
+        }
+        if (_read_chunk->num_rows() > 0) {
+            break;
+        }
+        return status;
     }
-    if (_chunk_start_idx == 0 && _scanner_eof) {
-        return Status::EndOfFile("Paimon reader reached end of split");
-    }
-    return _finish_chunk(chunk);
-}
-
-void PaimonScanner::do_prepare_close() noexcept {
-    _close_reader();
+    *chunk = _read_chunk->clone_empty_with_slot(_max_chunk_size);
+    RETURN_IF_ERROR(_fill_dst_chunk(chunk));
+    _chunk_start_idx = 0;
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_or_update_not_existed_columns_to_chunk(
+            chunk, (*chunk)->num_rows()));
+    _scanner_ctx->format_scan_context.append_or_update_partition_column_to_chunk(chunk, (*chunk)->num_rows());
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_on_conjunct_ctxs_by_slot(chunk, &_conjunct_filter));
+    return Status::OK();
 }
 
 void PaimonScanner::do_close(RuntimeState*) noexcept {
-    _close_reader();
+    _arrow_batch.reset();
+    if (_reader != nullptr) {
+        _reader->Close();
+        _reader.reset();
+    }
     _read_chunk.reset();
     _convert_functions.clear();
     _cast_exprs.clear();
     _chunk_filter.clear();
-    _reader_metrics.reset();
+    _conjunct_filter.clear();
     _paimon_file_system.reset();
     _memory_pool.reset();
     _pool.clear();
 }
 
-void PaimonScanner::_close_reader() noexcept {
-    if (_reader_closed) {
-        return;
-    }
-    _reader_closed = true;
-    _arrow_batch.reset();
-    if (_reader != nullptr) {
-        _reader->Close();
-        _reader_metrics = _reader->GetReaderMetrics();
-        _reader.reset();
-    }
-}
-
 void PaimonScanner::do_update_counter(HdfsScannerProfile* profile) {
     RuntimeProfile* runtime_profile = profile->runtime_profile;
-    auto metrics = _reader != nullptr ? _reader->GetReaderMetrics() : _reader_metrics;
+    auto metrics = _reader != nullptr ? _reader->GetReaderMetrics() : nullptr;
     if (metrics != nullptr) {
         const std::string paimon_section = "PaimonNativeReader";
         ADD_COUNTER(runtime_profile, paimon_section, TUnit::NONE);
@@ -276,7 +289,7 @@ void PaimonScanner::do_update_counter(HdfsScannerProfile* profile) {
                 counter_value *= 1000;
             }
             auto* counter = ADD_CHILD_COUNTER(runtime_profile, key, unit, paimon_section);
-            COUNTER_UPDATE(counter, counter_value);
+            COUNTER_SET(counter, counter_value);
         }
     }
     if (_paimon_file_system == nullptr) {
@@ -325,50 +338,24 @@ Status PaimonScanner::_next_batch() {
     SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
     SCOPED_RAW_TIMER(&_app_stats.io_ns);
     ++_app_stats.io_count;
-    _arrow_batch.reset();
     _batch_start_idx = 0;
     auto batch_result = _reader->NextBatch();
-    if (!batch_result.ok()) {
-        return Status::InternalError(
-                fmt::format("Paimon reader failed to read next batch: {}", batch_result.status().ToString()));
-    }
-    auto batch = std::move(batch_result).value();
-    if (paimon::BatchReader::IsEofBatch(batch)) {
-        _scanner_eof = true;
+    if (batch_result.ok()) {
+        auto& batch = batch_result.value();
+        if (paimon::BatchReader::IsEofBatch(batch)) {
+            _scanner_eof = true;
+            return Status::EndOfFile("no data");
+        }
+        auto arrow_result = arrow::ImportRecordBatch(batch.first.get(), batch.second.get());
+        if (!arrow_result.ok()) {
+            return Status::InternalError(
+                    fmt::format("failed to import Paimon Arrow batch: {}", arrow_result.status().ToString()));
+        }
+        _arrow_batch = std::move(arrow_result).ValueOrDie();
         return Status::OK();
     }
-    auto arrow_result = arrow::ImportRecordBatch(batch.first.get(), batch.second.get());
-    if (!arrow_result.ok()) {
-        return Status::InternalError(
-                fmt::format("failed to import Paimon Arrow batch: {}", arrow_result.status().ToString()));
-    }
-    _arrow_batch = std::move(arrow_result).ValueOrDie();
-    if (!_converters_initialized) {
-        RETURN_IF_ERROR(_initialize_converters());
-    }
-    return Status::OK();
-}
-
-Status PaimonScanner::_initialize_converters() {
-    DCHECK(_arrow_batch != nullptr);
-    DCHECK_EQ(_read_chunk->num_columns(), 0);
-    const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
-    for (size_t i = 0; i < materialized_columns.size(); ++i) {
-        SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
-        MutableColumnPtr column;
-        const auto arrow_column = _arrow_batch->GetColumnByName(std::string(materialized_columns[i].name()));
-        if (arrow_column == nullptr) {
-            column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-            _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
-        } else {
-            RETURN_IF_ERROR(create_arrow_column(arrow_column->type().get(), slot_desc, &column,
-                                                _convert_functions[i].get(), &_cast_exprs[i], _pool, true));
-        }
-        column->reserve(_max_chunk_size);
-        _read_chunk->append_column(std::move(column), slot_desc->id());
-    }
-    _converters_initialized = true;
-    return Status::OK();
+    return Status::InternalError(
+            fmt::format("Paimon reader failed to read next batch: {}", batch_result.status().ToString()));
 }
 
 Status PaimonScanner::_append_batch_to_chunk() {
@@ -380,16 +367,12 @@ Status PaimonScanner::_append_batch_to_chunk() {
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
+        if (slot_desc == nullptr) {
+            continue;
+        }
         _convert_context.set_current_column(slot_desc->col_name(), slot_desc->type());
         Column* column = _read_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id());
         const auto arrow_column = _arrow_batch->GetColumnByName(std::string(materialized_columns[i].name()));
-        if (arrow_column == nullptr) {
-            if (!column->append_nulls(num_rows)) {
-                return Status::InvalidArgument(
-                        fmt::format("Paimon batch is missing non-nullable column {}", slot_desc->col_name()));
-            }
-            continue;
-        }
         RETURN_IF_ERROR(convert_arrow_array_to_column(_convert_functions[i].get(), num_rows, arrow_column.get(), column,
                                                       _batch_start_idx, _chunk_start_idx, &_chunk_filter,
                                                       &_convert_context));
@@ -400,25 +383,28 @@ Status PaimonScanner::_append_batch_to_chunk() {
     return Status::OK();
 }
 
-Status PaimonScanner::_finish_chunk(ChunkPtr* chunk) {
+Status PaimonScanner::_fill_dst_chunk(ChunkPtr* chunk) {
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
     const size_t row_count = _read_chunk->filter(_chunk_filter);
     _app_stats.late_materialize_skip_rows += _chunk_start_idx - row_count;
 
-    ChunkPtr output = _read_chunk->clone_empty_with_slot(_max_chunk_size);
     {
         SCOPED_RAW_TIMER(&_app_stats.cast_chunk_ns);
         for (size_t i = 0; i < materialized_columns.size(); ++i) {
             SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
+            if (slot_desc == nullptr) {
+                continue;
+            }
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, _read_chunk.get()));
             column = ColumnHelper::unfold_const_column(slot_desc->type(), row_count, column);
-            output->get_column_by_slot_id(slot_desc->id())->swap_column(*column);
+            (*chunk)->get_column_by_slot_id(slot_desc->id())->swap_column(*column);
         }
     }
-    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(&output, row_count));
-    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(&output));
-    *chunk = std::move(output);
     return Status::OK();
+}
+
+bool PaimonScanner::_chunk_is_full() const {
+    return _chunk_start_idx >= _max_chunk_size;
 }
 
 bool PaimonScanner::_batch_is_exhausted() const {

@@ -1329,7 +1329,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：启用 `paimon_native_reader_enable_multi_thread_row_to_batch` 后，Row-to-Batch 转换使用的线程数。
 * 默认值：1
 * 类型：Integer
-* 取值范围：[1, 256]
 * 引入版本：v4.2
 
 ### paimon_parquet_read_cache_hole_size_limit

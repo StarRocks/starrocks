@@ -92,21 +92,13 @@ public class SessionVariableTest {
         Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
                 SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY, "invalid"));
         Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM, "0"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM, "257"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
                 SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, "-1"));
         Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
                 SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT, "0"));
         Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
                 SessionVariable.PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT, "-1"));
         Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM, "not-a-number"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
                 SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, "not-a-number"));
-        Assertions.assertEquals("2", VariableVarConverters.convert(
-                SessionVariable.PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM, "2"));
         Assertions.assertEquals("1024", VariableVarConverters.convert(
                 SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, "1024"));
     }

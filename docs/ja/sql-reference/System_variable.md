@@ -1285,7 +1285,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: `paimon_native_reader_enable_multi_thread_row_to_batch` が有効な場合に Row-to-Batch 変換で使用するスレッド数です。
 * **デフォルト**: 1
 * **データ型**: Integer
-* **値の範囲**: [1, 256]
 * **導入バージョン**: v4.2
 
 ### paimon_parquet_read_cache_hole_size_limit

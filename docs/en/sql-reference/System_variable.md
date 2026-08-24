@@ -1561,7 +1561,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: The number of threads used for row-to-batch conversion when `paimon_native_reader_enable_multi_thread_row_to_batch` is enabled.
 * **Default**: 1
 * **Data type**: Integer
-* **Value range**: [1, 256]
 * **Introduced in**: v4.2
 
 ### paimon_parquet_read_cache_hole_size_limit

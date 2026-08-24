@@ -100,10 +100,6 @@ TEST_F(PaimonFileSystemTest, OpenReadSeekAndReadAsync) {
     EXPECT_EQ(3, read_result.value());
     EXPECT_EQ("fgh", positional_buffer);
 
-    position_result = input->GetPos();
-    ASSERT_TRUE(position_result.ok()) << position_result.status().ToString();
-    EXPECT_EQ(4, position_result.value());
-
     EXPECT_TRUE(input->Seek(2, paimon::FS_SEEK_SET).ok());
     EXPECT_TRUE(input->Seek(2, paimon::FS_SEEK_CUR).ok());
     position_result = input->GetPos();
@@ -176,7 +172,7 @@ TEST_F(PaimonFileSystemTest, ReadsThroughDataCache) {
     DataCacheOptions cache_options{.enable_datacache = true, .enable_populate_datacache = true};
     PaimonFileSystem file_system(&memory_fs, cache_options);
 
-    auto open_result = file_system.Open("/cached.bin", _content.size());
+    auto open_result = file_system.Open("/cached.bin");
     ASSERT_TRUE(open_result.ok()) << open_result.status().ToString();
     auto input = std::move(open_result).value();
 
@@ -193,7 +189,7 @@ TEST_F(PaimonFileSystemTest, ReadsThroughDataCache) {
     EXPECT_EQ(_content.size(), position_result.value());
     input.reset();
 
-    open_result = file_system.Open("/cached.bin", _content.size());
+    open_result = file_system.Open("/cached.bin");
     ASSERT_TRUE(open_result.ok()) << open_result.status().ToString();
     input = std::move(open_result).value();
     std::string positional_buffer(4, '\0');
@@ -202,7 +198,7 @@ TEST_F(PaimonFileSystemTest, ReadsThroughDataCache) {
     EXPECT_EQ("abcd", positional_buffer);
     input.reset();
 
-    open_result = file_system.Open("/cached.bin", _content.size());
+    open_result = file_system.Open("/cached.bin");
     ASSERT_TRUE(open_result.ok()) << open_result.status().ToString();
     input = std::move(open_result).value();
     const auto finalized_cache_reads_before_async = file_system.get_stats().datacache.read_block_cache_count;

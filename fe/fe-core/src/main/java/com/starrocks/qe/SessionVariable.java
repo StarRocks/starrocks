@@ -778,7 +778,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "paimon_native_reader_enable_multi_thread_row_to_batch";
     public static final String PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM =
             "paimon_native_reader_row_to_batch_thread_num";
-    public static final int PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM_MAX = 256;
     public static final String PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT =
             "paimon_parquet_read_cache_hole_size_limit";
     public static final String PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT =

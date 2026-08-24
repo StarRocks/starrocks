@@ -107,7 +107,6 @@ public:
     ~PaimonFileSystem() override = default;
 
     paimon::Result<std::unique_ptr<paimon::InputStream>> Open(const std::string& path) const override;
-    paimon::Result<std::unique_ptr<paimon::InputStream>> Open(const std::string& path, int64_t file_size) const;
     paimon::Result<std::unique_ptr<paimon::OutputStream>> Create(const std::string& path,
                                                                  bool overwrite) const override;
     paimon::Status Mkdirs(const std::string& path) const override;

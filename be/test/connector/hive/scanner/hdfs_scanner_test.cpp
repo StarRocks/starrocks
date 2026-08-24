@@ -82,38 +82,9 @@ protected:
     int _debug_rows_per_call = 1;
 };
 
-class CloseOrderScanner final : public HdfsScanner {
-public:
-    bool prepared() const { return _prepared; }
-    bool close_observed_prepare() const { return _close_observed_prepare; }
-
-    Status do_open(RuntimeState*) override { return Status::OK(); }
-    void do_close(RuntimeState*) noexcept override { _close_observed_prepare = _prepared; }
-    Status do_get_next(RuntimeState*, ChunkPtr*) override { return Status::EndOfFile(""); }
-    Status do_init(RuntimeState*, const HdfsScannerContext&) override { return Status::OK(); }
-    void do_prepare_close() noexcept override { _prepared = true; }
-
-private:
-    bool _prepared = false;
-    bool _close_observed_prepare = false;
-};
-
 void HdfsScannerTest::_create_runtime_profile() {
     _runtime_profile = _pool.add(new RuntimeProfile("test"));
     _runtime_profile->set_metadata(1);
-}
-
-TEST_F(HdfsScannerTest, PrepareCloseRunsBeforeClose) {
-    auto* range = _pool.add(new THdfsScanRange());
-    auto* context = _pool.add(new HdfsScannerContext());
-    context->scan_range = range;
-
-    CloseOrderScanner scanner;
-    ASSERT_OK(scanner.init(_runtime_state, context));
-    scanner.close();
-
-    ASSERT_TRUE(scanner.prepared());
-    ASSERT_TRUE(scanner.close_observed_prepare());
 }
 
 void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
