@@ -2015,7 +2015,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_unshare_subta
 Status TabletParallelCompactionManager::_validate_unshare_group_coverage(const std::vector<RowsetPtr>& rowsets,
                                                                          const std::vector<SubtaskGroup>& groups) {
     struct Coverage {
-        int32_t segment_count = 0;
+        int64_t segment_count = 0;
         bool whole_rowset = false;
         std::vector<std::pair<int32_t, int32_t>> segment_ranges;
     };
