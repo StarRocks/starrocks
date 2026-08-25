@@ -83,6 +83,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -596,6 +597,20 @@ public class IcebergApiConverter {
         }
     }
 
+    // Iceberg spec (Appendix D, single-value serialization) requires a decimal bound to be the unscaled
+    // value as two's-complement big-endian binary using the minimum number of bytes. BE always emits a
+    // fixed-width buffer (4/8 bytes for decimal32/64, or the Parquet FIXED_LEN_BYTE_ARRAY width for
+    // decimal128), so re-encode it here to the minimal form. `new BigInteger(bytes)` interprets its input
+    // as big-endian two's-complement of any length, and `toByteArray()` returns the canonical minimal form.
+    private static ByteBuffer trimDecimalBound(ByteBuffer buf) {
+        if (buf == null || buf.remaining() == 0) {
+            return buf;
+        }
+        byte[] bytes = new byte[buf.remaining()];
+        buf.duplicate().get(bytes);
+        return ByteBuffer.wrap(new BigInteger(bytes).toByteArray());
+    }
+
     public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile, org.apache.iceberg.Table nativeTable) {
         Map<Integer, Long> columnSizes = new HashMap<>();
         Map<Integer, Long> valueCounts = new HashMap<>();
@@ -626,11 +641,17 @@ public class IcebergApiConverter {
             // the decimal128/uuid data sinked with physical type fixed_len_byte_array will be stored as big endian
             // decimal64/32 are sinked with physical type int as little endian
             // iceberg data file's upper/lower bound treat decimal/uuid's byte buffer as big endian.
-            if (dataFile.getFormat().equalsIgnoreCase("PARQUET")
-                    && field.type() instanceof Types.DecimalType && ((Types.DecimalType) field.type()).precision() <= 18) {
-                //change to BigEndian
-                reverseBuffer(lowerBounds.get(field.fieldId()));
-                reverseBuffer(upperBounds.get(field.fieldId()));
+            if (dataFile.getFormat().equalsIgnoreCase("PARQUET") && field.type() instanceof Types.DecimalType) {
+                int fieldId = field.fieldId();
+                if (((Types.DecimalType) field.type()).precision() <= 18) {
+                    //change to BigEndian
+                    reverseBuffer(lowerBounds.get(fieldId));
+                    reverseBuffer(upperBounds.get(fieldId));
+                }
+                // Trim the fixed-width buffer down to the spec-mandated minimum-length encoding, regardless
+                // of precision -- strict Iceberg REST catalogs (e.g. Unity Catalog) reject non-minimal bounds.
+                lowerBounds.computeIfPresent(fieldId, (id, buf) -> trimDecimalBound(buf));
+                upperBounds.computeIfPresent(fieldId, (id, buf) -> trimDecimalBound(buf));
             }
         }
 
