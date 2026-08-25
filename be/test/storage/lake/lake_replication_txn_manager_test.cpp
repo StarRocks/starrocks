@@ -2082,8 +2082,8 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSourceSegmentIsReencryp
 
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(source_ciphertext);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     const std::string source_segment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e1.dat";
@@ -2152,7 +2152,8 @@ TEST_F(LakeReplicationRemoteStorageTest, EncryptedPrivateSequentialSidecarsAreRe
 
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(source_ciphertext);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_delvec = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e2.delvec";
     const std::string source_sst = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e3.sst";
@@ -2202,7 +2203,8 @@ TEST_F(LakeReplicationRemoteStorageTest, UnencryptedPrivateSourceIsEncryptedAtTa
     const std::string plaintext = "unencrypted-source-encrypted-target";
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(plaintext);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_segment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e4.dat";
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -2242,7 +2244,8 @@ TEST_F(LakeReplicationRemoteStorageTest, MalformedSourceEncryptionMetadataFailsB
     config::enable_transparent_data_encryption = false;
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>("unused-source");
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_segment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e5.dat";
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -2287,7 +2290,8 @@ TEST_F(LakeReplicationRemoteStorageTest, MissingParentSourceEncryptionKeyFailsBe
 
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>("unused-source");
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_segment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e6.dat";
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -2317,7 +2321,8 @@ TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialSourceReadFailureClean
     config::lake_replication_max_file_copy_retry = 1;
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>("source-sidecar", true);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_sst = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e7.sst";
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -2348,7 +2353,8 @@ TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialTargetCloseFailureClea
     config::lake_replication_max_file_copy_retry = 1;
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>("source-sidecar");
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_sst = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e8.sst";
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -2379,7 +2385,8 @@ TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialTargetCloseFailureClea
 TEST_F(LakeReplicationRemoteStorageTest, PrivateSequentialCopyIsCleanedWhenTxnLogWriteFails) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>("source-sidecar");
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        *static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg) = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
     const std::string source_sst = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000e9.sst";
     auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);

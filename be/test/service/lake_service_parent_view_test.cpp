@@ -66,7 +66,7 @@ public:
                                                                  RuntimeEnv::GetInstance()->diagnose_daemon(),
                                                                  PlatformEnv::GetInstance()->brpc_stub_cache())),
               _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager(),
-                            _load_channel_mgr.get()) {
+                            _load_channel_mgr.get(), nullptr) {
         CHECK_OK(_load_channel_mgr->init(RuntimeEnv::GetInstance()->load_mem_tracker()));
         // The tablet manager is a process-wide singleton: point it at this fixture's own root and put
         // the previous provider back on the way out, or every test that runs afterwards resolves its
