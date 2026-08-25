@@ -87,15 +87,10 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     const THdfsScanRange& scan_range = *_scanner_ctx->scan_range;
     const auto* table_descriptor = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx->hive_table);
-    std::string table_path;
-    if (table_descriptor != nullptr && !table_descriptor->get_paimon_table_path().empty()) {
-        table_path = table_descriptor->get_paimon_table_path();
-    } else if (scan_range.__isset.paimon_table_path) {
-        table_path = scan_range.paimon_table_path;
+    if (table_descriptor == nullptr || table_descriptor->get_paimon_table_path().empty()) {
+        return Status::InvalidArgument("Paimon native scan is missing table path in PaimonTableDescriptor");
     }
-    if (table_path.empty()) {
-        return Status::InvalidArgument("Paimon native scan range is missing paimon_table_path");
-    }
+    std::string table_path(table_descriptor->get_paimon_table_path());
     if (!scan_range.__isset.paimon_split_info_binary || scan_range.paimon_split_info_binary.empty()) {
         return Status::InvalidArgument("Paimon native scan range is missing paimon_split_info_binary");
     }
@@ -117,7 +112,7 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
 
     paimon::ReadContextBuilder context_builder(table_path);
     context_builder.SetReadFieldNames(field_names);
-    if (table_descriptor != nullptr && !table_descriptor->get_paimon_table_schema_json().empty()) {
+    if (!table_descriptor->get_paimon_table_schema_json().empty()) {
         context_builder.SetTableSchema(std::string(table_descriptor->get_paimon_table_schema_json()));
     }
 

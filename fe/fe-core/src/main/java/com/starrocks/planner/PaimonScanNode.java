@@ -372,9 +372,7 @@ public class PaimonScanNode extends ScanNode {
             } catch (IOException e) {
                 throw new RuntimeException("Failed to serialize Paimon data split", e);
             }
-            String tableLocation = paimonTable.getTableLocation();
-            hdfsScanRange.setFull_path(tableLocation);
-            hdfsScanRange.setPaimon_table_path(tableLocation);
+            hdfsScanRange.setFull_path(paimonTable.getTableLocation());
         } else {
             hdfsScanRange.setUse_paimon_jni_reader(true);
             hdfsScanRange.setUse_paimon_native_reader(false);

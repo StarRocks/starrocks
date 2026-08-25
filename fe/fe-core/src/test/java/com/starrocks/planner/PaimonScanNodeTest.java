@@ -202,7 +202,6 @@ public class PaimonScanNodeTest {
         Assertions.assertEquals(THdfsFileFormat.UNKNOWN, hdfsScanRange.getFile_format());
         Assertions.assertTrue(hdfsScanRange.isUse_paimon_jni_reader());
         Assertions.assertFalse(hdfsScanRange.isUse_paimon_native_reader());
-        Assertions.assertFalse(hdfsScanRange.isSetPaimon_table_path());
         Assertions.assertFalse(hdfsScanRange.isSetPaimon_split_info_binary());
         Assertions.assertEquals(com.starrocks.qe.SessionVariable.PaimonReaderMode.AUTO,
                 ctx.getSessionVariable().getPaimonReaderMode());
@@ -235,7 +234,6 @@ public class PaimonScanNodeTest {
             Assertions.assertFalse(hdfsScanRange.isUse_paimon_jni_reader());
             Assertions.assertTrue(hdfsScanRange.isUse_paimon_native_reader());
             Assertions.assertEquals(tablePath, hdfsScanRange.getFull_path());
-            Assertions.assertEquals(tablePath, hdfsScanRange.getPaimon_table_path());
             Assertions.assertTrue(hdfsScanRange.isSetPaimon_split_info_binary());
             Assertions.assertNotNull(hdfsScanRange.getPaimon_split_info_binary());
             Assertions.assertTrue(hdfsScanRange.getPaimon_split_info_binary().length > 0);
@@ -261,7 +259,6 @@ public class PaimonScanNodeTest {
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertTrue(jniScanRange.isUse_paimon_jni_reader());
             Assertions.assertFalse(jniScanRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(jniScanRange.isSetPaimon_table_path());
             Assertions.assertFalse(jniScanRange.isSetPaimon_split_info_binary());
         } finally {
             ConnectContext.remove();
@@ -345,7 +342,7 @@ public class PaimonScanNodeTest {
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertTrue(nativeRange.isUse_paimon_native_reader());
             Assertions.assertTrue(nativeRange.isSetPaimon_split_info_binary());
-            Assertions.assertEquals(tablePath, nativeRange.getPaimon_table_path());
+            Assertions.assertEquals(tablePath, nativeRange.getFull_path());
 
             THdfsScanRange nonDataSplitRange = scanNode.getScanRangeLocations(10).get(1)
                     .getScan_range().getHdfs_scan_range();
