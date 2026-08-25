@@ -825,8 +825,7 @@ Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
 
 StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex::merge_sstables(
         std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-        const TabletMetadataPtr& metadata, bool contain_shared_sstables, KeyValueMergerOutputMode output_mode,
-        bool enable_multiple_output_files) {
+        const TabletMetadataPtr& metadata, bool contain_shared_sstables, bool enable_multiple_output_files) {
     SstSeekRange seek_range;
     // adjust sst seek range by tablet range
     if (contain_shared_sstables) {
@@ -846,7 +845,7 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     sstable::Options options;
     auto merger =
             std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), base_level_merge,
-                                             tablet_mgr, metadata->id(), enable_multiple_output_files, output_mode);
+                                             tablet_mgr, metadata->id(), enable_multiple_output_files);
     while (iter_ptr->Valid()) {
         const Slice cur_key = iter_ptr->key();
         if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
@@ -858,71 +857,6 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     }
     RETURN_IF_ERROR(iter_ptr->status());
     return merger->finish();
-}
-
-Status LakePersistentIndex::append_duplicate_key_overlay_for_tablet_merge(TabletManager* tablet_mgr,
-                                                                          TabletMetadataPB* metadata) {
-    if (metadata->sstable_meta().sstables_size() < 2) {
-        return Status::OK();
-    }
-
-    auto input_metadata = std::make_shared<TabletMetadata>(*metadata);
-    std::vector<PersistentIndexSstablePB> inputs;
-    inputs.reserve(input_metadata->sstable_meta().sstables_size());
-    uint64_t overlay_watermark = 0;
-    for (const auto& input : input_metadata->sstable_meta().sstables()) {
-        inputs.push_back(input);
-        overlay_watermark = std::max(overlay_watermark, input.max_rss_rowid());
-    }
-
-    std::vector<std::shared_ptr<PersistentIndexSstable>> opened_inputs;
-    std::unique_ptr<sstable::Iterator> merging_iter;
-    bool contain_shared_sstables = false;
-    auto prepare_st = prepare_merging_iterator_for_sstables(tablet_mgr, input_metadata, inputs, &opened_inputs,
-                                                            &merging_iter, &contain_shared_sstables,
-                                                            false /* overlay owns its corruption metric */);
-    if (!prepare_st.ok()) {
-        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), inputs, "tablet-merge overlay", prepare_st);
-        return prepare_st;
-    }
-    if (!merging_iter->Valid()) {
-        auto st = merging_iter->status();
-        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), inputs, "tablet-merge overlay", st);
-        return st;
-    }
-
-    auto outputs_or = merge_sstables(std::move(merging_iter), false, tablet_mgr, input_metadata,
-                                     contain_shared_sstables, KeyValueMergerOutputMode::kDuplicateKeysOnly, true);
-    if (!outputs_or.ok()) {
-        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), inputs, "tablet-merge overlay",
-                                                outputs_or.status());
-        return outputs_or.status();
-    }
-    if (outputs_or->empty()) {
-        return Status::OK();
-    }
-
-    const auto fileset_id = UniqueId::gen_uid().to_proto();
-    std::vector<PersistentIndexSstablePB> overlay_sstables;
-    overlay_sstables.reserve(outputs_or->size());
-    for (const auto& output : *outputs_or) {
-        PersistentIndexSstablePB overlay;
-        overlay.set_filename(output.filename);
-        overlay.set_filesize(output.filesize);
-        overlay.set_encryption_meta(output.encryption_meta);
-        overlay.set_max_rss_rowid(overlay_watermark);
-        overlay.mutable_range()->set_start_key(output.start_key);
-        overlay.mutable_range()->set_end_key(output.end_key);
-        overlay.mutable_fileset_id()->CopyFrom(fileset_id);
-        overlay.set_shared(false);
-        overlay.set_rssid_offset(0);
-        overlay.set_generation_version(metadata->version());
-        overlay_sstables.emplace_back(std::move(overlay));
-    }
-    for (const auto& overlay : overlay_sstables) {
-        metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(overlay);
-    }
-    return Status::OK();
 }
 
 // During large import, we may have many sst files to ingest and get, so we do parallel compaction to speedup the process.
