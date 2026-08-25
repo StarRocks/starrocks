@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/time/tz_offset_cache.h"
 #include "column/column_builder.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/builtin_functions.h"
@@ -972,6 +973,12 @@ private:
         bool is_valid = false;
         cctz::time_zone from_tz;
         cctz::time_zone to_tz;
+    };
+
+    // Per-execution-thread holder for convert_tz_const's TzOffsetCache (see
+    // base/time/tz_offset_cache.h for why this needs to be per-thread rather than shared).
+    struct ConvertTzThreadState : FunctionThreadState {
+        TzOffsetCache cache;
     };
 
     // fmt for string format like "%Y-%m-%d" and "%Y-%m-%d %H:%i:%s"
