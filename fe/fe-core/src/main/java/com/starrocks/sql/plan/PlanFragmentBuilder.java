@@ -143,7 +143,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.JoinOperator;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -613,8 +612,7 @@ public class PlanFragmentBuilder {
          *
          * <p> The columns that can be pushed down need to meet:
          * <ul>
-         * <li> All the columns of duplicate-key model.
-         * <li> Keys of primary-key model.
+         * <li> All the columns of duplicate-key and primary-key models, keys and values alike.
          * <li> Keys of agg-key model (aggregation/unique_key model) in the skip-aggr scan stage.
          * </ul>
          *
@@ -662,8 +660,7 @@ public class PlanFragmentBuilder {
             // ------------------------------------------------------------------------------------
             // Get mv use columns
             // ------------------------------------------------------------------------------------
-            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
-                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
+            if (materializedIndexMeta.getKeysType().isAggregationFamily()) {
                 Map<String, Integer> columnNameToId = scanNode.getSlots().stream().collect(Collectors.toMap(
                         slot -> slot.getColumn().getName(),
                         slot -> slot.getId().asInt()
