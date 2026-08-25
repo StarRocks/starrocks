@@ -511,8 +511,6 @@ private:
 
     Status _encode_to_global_id(ScanContext* ctx);
 
-    StatusOr<const Chunk*> _delete_predicate_eval_chunk(const Chunk* chunk, Chunk* view) const;
-
     FieldPtr _make_field(size_t i);
 
     Status _switch_context(ScanContext* to);
@@ -659,9 +657,6 @@ private:
 
     // initial number of columns of |_opts.pred_tree|.
     int _predicate_columns = 0;
-
-    // Delete-predicate columns that FE pruned from |output_schema|; borrowed from |_dict_chunk| to filter on.
-    std::vector<ColumnId> _pruned_delete_pred_columns;
 
     // the next rowid to read
     rowid_t _cur_rowid = 0;
@@ -3105,11 +3100,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         size_t old_sz = chunk->num_rows();
         // NOTE: risk of using _selection.data() without initialization
         // if the delete_predicates do nothing to the selection.
-        {
-            Chunk eval_view;
-            ASSIGN_OR_RETURN(const Chunk* eval_chunk, _delete_predicate_eval_chunk(chunk, &eval_view));
-            RETURN_IF_ERROR(_opts.delete_predicates.evaluate(eval_chunk, _selection.data()));
-        }
+        RETURN_IF_ERROR(_opts.delete_predicates.evaluate(chunk, _selection.data()));
         size_t deletes = SIMD::count_nonzero(_selection.data(), old_sz);
         // When brute-force vector fallback is active and FE pruned the vector
         // column from output_schema, the vector data column lives in
@@ -4033,20 +4024,11 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
 
-    // A pruned delete column must be a predicate column, so early-materialized and decoded; verify, don't assume.
-    _pruned_delete_pred_columns.clear();
+    // The chunk source keeps delete-predicate columns out of the unused set, so they must reach the output.
     for (ColumnId cid : delete_pred_columns) {
-        if (output_columns.count(cid) != 0) {
-            continue;
-        }
-        auto index_it = ctx->_column_ids_to_index.find(cid);
-        RETURN_IF(index_it == ctx->_column_ids_to_index.end(),
-                  Status::InternalError(strings::Substitute(
-                          "delete predicate column $0 is pruned from the output but not early-materialized", cid)));
-        RETURN_IF(ctx->_skip_dict_decode_indexes[index_it->second],
-                  Status::InternalError(strings::Substitute(
-                          "delete predicate column $0 is pruned from the output but left dict-encoded", cid)));
-        _pruned_delete_pred_columns.emplace_back(cid);
+        RETURN_IF(output_columns.count(cid) == 0,
+                  Status::InternalError(
+                          strings::Substitute("delete predicate column $0 is missing from the output schema", cid)));
     }
 
     // build index map
@@ -4061,7 +4043,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
     }
 
-    // |read_indexes| also carries delete-predicate columns absent from the output, so walk the output schema.
+    // |_read_index_map| is indexed by output schema position, so size and walk it by the output schema.
     const size_t num_output_fields = output_schema().num_fields();
     ctx->_read_index_map.reserve(num_output_fields);
     for (size_t i = 0; i < num_output_fields; i++) {
@@ -4315,34 +4297,6 @@ Status SegmentIterator::_rewrite_predicates() {
     }
 
     return Status::OK();
-}
-
-// Borrowing from |_dict_chunk| keeps the pruned delete column out of the outgoing chunk's contractual schema.
-StatusOr<const Chunk*> SegmentIterator::_delete_predicate_eval_chunk(const Chunk* chunk, Chunk* view) const {
-    if (_pruned_delete_pred_columns.empty()) {
-        return chunk;
-    }
-    const size_t num_rows = chunk->num_rows();
-    for (const auto& [cid, index] : chunk->get_column_id_to_index_map()) {
-        view->append_column(chunk->columns()[index], cid, true);
-    }
-    const Chunk* read_chunk = _context->_dict_chunk.get();
-    for (ColumnId cid : _pruned_delete_pred_columns) {
-        if (view->is_cid_exist(cid)) {
-            continue;
-        }
-        // Never fall through to evaluating without the column: that would silently keep deleted rows.
-        RETURN_IF(read_chunk == nullptr || !read_chunk->is_cid_exist(cid),
-                  Status::InternalError(strings::Substitute(
-                          "delete predicate column $0 missing from both output and read chunk", cid)));
-        const ColumnPtr& col = read_chunk->get_column_by_id(cid);
-        RETURN_IF(col == nullptr || col->size() != num_rows,
-                  Status::InternalError(strings::Substitute(
-                          "delete predicate column $0 borrowed from the read chunk holds $1 rows, chunk holds $2", cid,
-                          col == nullptr ? 0 : col->size(), num_rows)));
-        view->append_column(col, cid, true);
-    }
-    return view;
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {

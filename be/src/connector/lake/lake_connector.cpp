@@ -15,6 +15,7 @@
 #include "connector/lake/lake_connector.h"
 
 #include <atomic>
+#include <set>
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -53,6 +54,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/predicate_parser.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
 #include "storage/query/split_morsel_queue_builder.h"
@@ -534,6 +536,13 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
     for (const auto& cid : _non_pushdown_pred_tree.column_ids()) {
+        _unused_output_column_ids.erase(cid);
+    }
+
+    // The delete filter evaluates these on the outgoing chunk, so they must survive into the output schema.
+    std::set<ColumnId> delete_pred_cids;
+    RETURN_IF_ERROR(lake::delete_predicate_column_ids(*_tablet.metadata(), *_tablet_schema, &delete_pred_cids));
+    for (ColumnId cid : delete_pred_cids) {
         _unused_output_column_ids.erase(cid);
     }
 

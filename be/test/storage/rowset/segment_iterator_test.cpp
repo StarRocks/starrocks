@@ -537,9 +537,9 @@ TEST_F(SegmentIteratorTest, TestForceGlobalDictEncodeWithTrailingUnusedColumn) {
     res_chunk->reset();
 }
 
-// A DELETE turns `c2` into a delete-predicate column while the query still prunes it from the output,
-// which is what `hasDelete` used to keep the BE from ever seeing.
-TEST_F(SegmentIteratorTest, TestDeletePredicateOnPrunedOutputColumn) {
+// The chunk source keeps delete-predicate columns out of the unused set; bypassing it must fail the scan
+// loudly rather than evaluate the delete filter against a column that is not in the outgoing chunk.
+TEST_F(SegmentIteratorTest, TestDeletePredicateColumnPrunedFromOutputFails) {
     using namespace starrocks::test;
 
     std::string file_name = kSegmentDir + "/delete_predicate_on_pruned_output_column";
@@ -600,35 +600,16 @@ TEST_F(SegmentIteratorTest, TestDeletePredicateOnPrunedOutputColumn) {
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
     ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
-    // c2 is a predicate-only column, so it is both pruned from the output and needed by the delete filter.
+    // c2 is a predicate-only column, so filter_unused_columns would prune it from the output on its own.
     std::unordered_set<uint32_t> unused_output_column_ids{2};
     ASSERT_OK(chunk_iter->init_output_schema(unused_output_column_ids));
     ASSERT_EQ(2, chunk_iter->output_schema().num_fields());
 
-    std::vector<int32_t> got_c0;
-    std::vector<int32_t> got_c1;
     auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
-    while (true) {
-        res_chunk->reset();
-        auto st = chunk_iter->get_next(res_chunk.get());
-        if (st.is_end_of_file()) {
-            break;
-        }
-        ASSERT_OK(st);
-        ASSERT_EQ(2, res_chunk->num_columns());
-        const auto& c0 = res_chunk->get_column_by_index(0);
-        const auto& c1 = res_chunk->get_column_by_index(1);
-        for (size_t i = 0; i < res_chunk->num_rows(); ++i) {
-            got_c0.emplace_back(c0->get(i).get_int32());
-            got_c1.emplace_back(c1->get(i).get_int32());
-        }
-    }
-
-    ASSERT_EQ(num_rows / 2, got_c0.size());
-    for (size_t i = 0; i < got_c0.size(); ++i) {
-        EXPECT_EQ(static_cast<int32_t>(i * 2), got_c0[i]);
-        EXPECT_EQ(static_cast<int32_t>(i * 20), got_c1[i]);
-    }
+    auto st = chunk_iter->get_next(res_chunk.get());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error()) << st.to_string();
+    ASSERT_NE(std::string::npos, st.to_string().find("missing from the output schema")) << st.to_string();
 }
 
 // Verify predicate late materialization keeps non-predicate columns correct.
