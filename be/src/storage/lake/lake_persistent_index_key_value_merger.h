@@ -33,20 +33,16 @@ namespace lake {
 
 class TabletManager;
 
-enum class KeyValueMergerOutputMode { kAllKeys, kDuplicateKeysOnly };
-
 class KeyValueMerger {
 public:
     explicit KeyValueMerger(std::string key, uint64_t max_rss_rowid, bool merge_base_level, TabletManager* tablet_mgr,
-                            int64_t tablet_id, bool enable_multiple_output_files,
-                            KeyValueMergerOutputMode output_mode = KeyValueMergerOutputMode::kAllKeys)
+                            int64_t tablet_id, bool enable_multiple_output_files)
             : _key(std::move(key)),
               _max_rss_rowid(max_rss_rowid),
               _merge_base_level(merge_base_level),
               _tablet_mgr(tablet_mgr),
               _tablet_id(tablet_id),
-              _enable_multiple_output_files(enable_multiple_output_files),
-              _output_mode(output_mode) {}
+              _enable_multiple_output_files(enable_multiple_output_files) {}
 
     ~KeyValueMerger();
 
@@ -87,8 +83,6 @@ private:
     // per key, so storing it inline avoids the per-key heap allocation pair
     // that std::list<IndexValueWithVer> would incur on every input row.
     std::optional<IndexValueWithVer> _current_value;
-    // Whether multiple parsed, live, and projected occurrences share the current key.
-    bool _current_key_has_duplicate = false;
     // If do merge base level, that means we can delete NullIndexValue items safely.
     bool _merge_base_level = false;
     TabletManager* _tablet_mgr = nullptr;
@@ -96,7 +90,6 @@ private:
     // Enable multiple output files. We will generate multiple output files when
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
-    KeyValueMergerOutputMode _output_mode = KeyValueMergerOutputMode::kAllKeys;
     std::vector<TableBuilderWrapper> _output_builders;
     bool _outputs_released = false;
     // Scratch buffers reused across merge()/flush() to avoid per-key protobuf

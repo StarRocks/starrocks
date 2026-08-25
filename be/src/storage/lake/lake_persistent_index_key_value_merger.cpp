@@ -113,20 +113,13 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
         }
         // `max_rss_rowid` already lives in the source sstable's effective id
-        // space (per the canonical convention documented at
-        // tablet_merger.cpp::project_source_max_rss_rowid). It must NOT be
-        // shifted by rssid_offset again — doing so double-counts the offset
-        // and inflates the apparent watermark above the true effective max,
-        // which can flip the same-version tie-break below to pick the wrong
-        // input sstable.
+        // space. It must not be shifted by rssid_offset again because that
+        // would double-count the offset in the same-version tie-break below.
     }
 
     auto version = index_value_ver.values(0).version();
     auto index_value = build_index_value(index_value_ver.values(0));
     if (Slice(_key) == key) {
-        if (_current_value.has_value()) {
-            _current_key_has_duplicate = true;
-        }
         if (!_current_value.has_value()) {
             _max_rss_rowid = max_rss_rowid;
             _current_value.emplace(version, index_value);
@@ -180,21 +173,18 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
         _key.assign(key.data, key.size);
         _max_rss_rowid = max_rss_rowid;
         _current_value.emplace(version, index_value);
-        _current_key_has_duplicate = false;
     }
     return Status::OK();
 }
 
 Status KeyValueMerger::flush() {
     if (!_current_value.has_value()) {
-        _current_key_has_duplicate = false;
         return Status::OK();
     }
 
     const auto& current = *_current_value;
     const bool skip_tombstone = _merge_base_level && current.second == IndexValue(NullIndexValue);
-    const bool emit_key = _output_mode == KeyValueMergerOutputMode::kAllKeys || _current_key_has_duplicate;
-    if (emit_key && !skip_tombstone) {
+    if (!skip_tombstone) {
         // Reuse scratch protobuf and serialization buffer to avoid allocating fresh
         // RepeatedField storage and a new std::string on every flushed key.
         IndexValuesWithVerPB& index_value_pb = _flush_pb_scratch;
@@ -217,7 +207,6 @@ Status KeyValueMerger::flush() {
         RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_flush_serialized_scratch)));
     }
     _current_value.reset();
-    _current_key_has_duplicate = false;
 
     return Status::OK();
 }
