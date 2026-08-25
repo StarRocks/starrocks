@@ -270,7 +270,7 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_online_optimize_table`
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
