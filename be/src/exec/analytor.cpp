@@ -2013,11 +2013,10 @@ StatusOr<ChunkPtr> Analytor::store_pull_chunk(RuntimeState* state, bool allow_sh
         }
         if (ctx.out_rows_total != pushed || ctx.out_rows_total != published ||
             partitions_consumed != partitions_published) {
-            return Status::InternalError(
-                    strings::Substitute("analytic spill replay accounting mismatch: pushed=$0 published=$1 "
-                                        "replayed=$2 partitions published=$3 consumed=$4",
-                                        pushed, published, ctx.out_rows_total, partitions_published,
-                                        partitions_consumed));
+            return Status::InternalError(strings::Substitute(
+                    "analytic spill replay accounting mismatch: pushed=$0 published=$1 "
+                    "replayed=$2 partitions published=$3 consumed=$4",
+                    pushed, published, ctx.out_rows_total, partitions_published, partitions_consumed));
         }
         _store_eos = true;
         return nullptr;
@@ -2070,8 +2069,8 @@ StatusOr<ChunkPtr> Analytor::store_pull_chunk(RuntimeState* state, bool allow_sh
             if (ctx.descriptor_idx >= ctx.descriptor_batch->num_rows()) {
                 // Batch fully consumed: release it eagerly (the spans hold
                 // their own references) and return its bytes to the backlog.
-                _store_descriptor_bytes_consumed.fetch_add(
-                        static_cast<int64_t>(ctx.descriptor_batch->memory_usage()), std::memory_order_relaxed);
+                _store_descriptor_bytes_consumed.fetch_add(static_cast<int64_t>(ctx.descriptor_batch->memory_usage()),
+                                                           std::memory_order_relaxed);
                 ctx.descriptor_batch.reset();
                 ctx.descriptor_idx = 0;
             }

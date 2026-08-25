@@ -58,12 +58,10 @@ StatusOr<ChunkPtr> SpillableAnalyticSourceOperator::pull_chunk(RuntimeState* sta
     // never drops it, whereas runtime_in_filters() is rebound (and cleared) by
     // set_precondition_ready -- once a filter has appeared, keep copying.
     const auto* bloom_filters = _runtime_access->get_runtime_bloom_filters();
-    _output_may_be_filtered |= !runtime_in_filters().empty() ||
-                               (bloom_filters != nullptr && !bloom_filters->empty()) ||
+    _output_may_be_filtered |= !runtime_in_filters().empty() || (bloom_filters != nullptr && !bloom_filters->empty()) ||
                                !_runtime_access->get_filter_null_value_columns().empty();
 
-    ASSIGN_OR_RETURN(auto chunk,
-                     _analytor->store_pull_chunk(state, /*allow_share_columns=*/!_output_may_be_filtered));
+    ASSIGN_OR_RETURN(auto chunk, _analytor->store_pull_chunk(state, /*allow_share_columns=*/!_output_may_be_filtered));
     if (chunk != nullptr && !chunk->is_empty()) {
         [[maybe_unused]] const size_t rows_before = chunk->num_rows();
         eval_runtime_bloom_filters(chunk.get());

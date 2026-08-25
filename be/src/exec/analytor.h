@@ -259,9 +259,7 @@ public:
     static bool tnode_supports_spill(const TPlanNode& tnode);
     bool spill_supported() const { return _spill_supported; }
     bool partition_streams_enabled() const { return _input_run != nullptr; }
-    void set_input_run(std::shared_ptr<pipeline::MemLimitedChunkQueue> input_run) {
-        _input_run = std::move(input_run);
-    }
+    void set_input_run(std::shared_ptr<pipeline::MemLimitedChunkQueue> input_run) { _input_run = std::move(input_run); }
     const std::shared_ptr<pipeline::MemLimitedChunkQueue>& input_run() const { return _input_run; }
     AnalyticDescriptorQueue& descriptor_queue() { return _descriptor_queue; }
     // Sink side. False while a stream flush is in flight, while the
