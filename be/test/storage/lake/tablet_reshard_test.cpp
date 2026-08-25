@@ -411,8 +411,8 @@ protected:
         const bool identical = shape == MetadataOnlyMergeShape::kIdentical;
         const std::string segment_a = "metadata_only_a.dat";
         const std::string segment_b = identical ? segment_a : "metadata_only_b.dat";
-        const uint64_t segment_a_size = write_two_column_segment(
-                source_a_id, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+        const uint64_t segment_a_size =
+                write_two_column_segment(source_a_id, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
         uint64_t segment_b_size = segment_a_size;
         if (!identical) {
             segment_b_size = write_two_column_segment(
@@ -9879,8 +9879,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_wr
     auto merged = tablet_metadatas.at(merged_tablet);
     ASSERT_EQ(std::numeric_limits<int32_t>::max(), merged->next_rowset_id());
 
-    const uint64_t write_segment_size = write_two_column_segment(
-            merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
+    const uint64_t write_segment_size =
+            write_two_column_segment(merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
     TxnLogPB write_log;
     write_log.set_tablet_id(merged_tablet);
     write_log.set_txn_id(2);
