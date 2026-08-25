@@ -16,11 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "base/utility/defer_op.h"
 #include "common/config_scan_io_fwd.h"
 #include "io/io_test_base.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -184,6 +187,150 @@ TEST_F(SharedBufferedInputStreamTest, test_orc) {
             "SharedBuffer raw_offset=22420223, raw_size=197, offset=22282240, size=262144, ref_count=2, "
             "buffer_capacity=0",
             sb.value()->debug_string());
+}
+
+namespace {
+
+bool g_sb_prefetch_test_env_initialized = false;
+MemTracker* g_sb_prefetch_test_mem_tracker = nullptr;
+
+bool sb_prefetch_test_env_initialized() {
+    return g_sb_prefetch_test_env_initialized;
+}
+
+MemTracker* sb_prefetch_test_mem_tracker() {
+    return g_sb_prefetch_test_mem_tracker;
+}
+
+} // namespace
+
+// prefetch_registered() loads buffers through get_bytes(), which consults the thread-local
+// mem tracker, so these tests install one the same way cache_input_stream_test.cpp does.
+class SharedBufferedInputStreamPrefetchTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        g_sb_prefetch_test_env_initialized = true;
+        g_sb_prefetch_test_mem_tracker = &_mem_tracker;
+        CurrentThread::set_mem_tracker_source(sb_prefetch_test_env_initialized, sb_prefetch_test_mem_tracker);
+        tls_mem_tracker = nullptr;
+    }
+
+    void TearDown() override {
+        tls_thread_status.set_mem_tracker(nullptr);
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        g_sb_prefetch_test_env_initialized = false;
+        g_sb_prefetch_test_mem_tracker = nullptr;
+    }
+
+protected:
+    // Registers four small ranges over a 1MB backing file that coalesce into three buffers
+    // (no alignment, so buffer sizes equal the raw range bytes):
+    //   [0k, 8k)      <- two adjacent 4k ranges merged into one buffer
+    //   [200k, 204k)
+    //   [400k, 404k)
+    // max_dist_size=64k keeps the three groups from merging with each other.
+    std::shared_ptr<SharedBufferedInputStream> make_registered_stream() {
+        auto in = std::make_shared<io::TestInputStream>(_content, kFileSize);
+        auto sb_stream = std::make_shared<SharedBufferedInputStream>(in, "test", kFileSize);
+        SharedBufferedInputStream::CoalesceOptions options;
+        options.max_dist_size = 64 * 1024;
+        sb_stream->set_coalesce_options(options);
+        std::vector<SharedBufferedInputStream::IORange> ranges;
+        ranges.emplace_back(0, 4 * 1024);
+        ranges.emplace_back(4 * 1024, 4 * 1024);
+        ranges.emplace_back(200 * 1024, 4 * 1024);
+        ranges.emplace_back(400 * 1024, 4 * 1024);
+        CHECK_OK(sb_stream->set_io_ranges(ranges));
+        return sb_stream;
+    }
+
+    static constexpr int64_t kFileSize = 1 * 1024 * 1024;
+    static constexpr int64_t kBufferCount = 3;
+    static constexpr int64_t kTotalRegisteredBytes = (8 + 4 + 4) * 1024;
+
+    const std::string _content = io::random_string(kFileSize);
+
+private:
+    MemTracker _mem_tracker;
+};
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_ample_budget) {
+    auto sb_stream = make_registered_stream();
+    std::atomic<int64_t> budget{kFileSize};
+    ASSIGN_OR_ABORT(bool all_loaded, sb_stream->prefetch_registered(&budget));
+    ASSERT_TRUE(all_loaded);
+    ASSERT_EQ(kBufferCount, sb_stream->shared_io_count());
+    ASSERT_EQ(kTotalRegisteredBytes, sb_stream->shared_io_bytes());
+    ASSERT_EQ(kFileSize - kTotalRegisteredBytes, budget.load());
+
+    // every registered buffer is resident now, so reading a registered range must not
+    // trigger another shared IO.
+    std::vector<uint8_t> out(4 * 1024);
+    ASSERT_OK(sb_stream->read_at_fully(200 * 1024, out.data(), out.size()));
+    ASSERT_EQ(kBufferCount, sb_stream->shared_io_count());
+    ASSERT_EQ(kTotalRegisteredBytes, sb_stream->shared_io_bytes());
+}
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_zero_budget) {
+    auto sb_stream = make_registered_stream();
+    std::atomic<int64_t> budget{0};
+    ASSIGN_OR_ABORT(bool all_loaded, sb_stream->prefetch_registered(&budget));
+    ASSERT_FALSE(all_loaded);
+    ASSERT_EQ(0, sb_stream->shared_io_count());
+    ASSERT_EQ(0, sb_stream->shared_io_bytes());
+    // the failed reservation is refunded.
+    ASSERT_EQ(0, budget.load());
+}
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_partial_budget) {
+    auto sb_stream = make_registered_stream();
+    // enough for the first two buffers (8k + 4k) but not the third (4k).
+    const int64_t initial_budget = 8 * 1024 + 4 * 1024 + 100;
+    std::atomic<int64_t> budget{initial_budget};
+    ASSIGN_OR_ABORT(bool all_loaded, sb_stream->prefetch_registered(&budget));
+    ASSERT_FALSE(all_loaded);
+    ASSERT_EQ(2, sb_stream->shared_io_count());
+    // reserve-before-load: the loaded bytes never exceed the initial budget.
+    ASSERT_LE(sb_stream->shared_io_bytes(), initial_budget);
+    ASSERT_EQ(12 * 1024, sb_stream->shared_io_bytes());
+    // the failed reservation is refunded, leaving the un-spent remainder.
+    ASSERT_GE(budget.load(), 0);
+    ASSERT_EQ(100, budget.load());
+}
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_idempotent) {
+    auto sb_stream = make_registered_stream();
+    std::atomic<int64_t> budget{kFileSize};
+    ASSIGN_OR_ABORT(bool all_loaded, sb_stream->prefetch_registered(&budget));
+    ASSERT_TRUE(all_loaded);
+    ASSERT_EQ(kBufferCount, sb_stream->shared_io_count());
+
+    // already-resident buffers consume no budget, so a second call succeeds even with
+    // nothing left to spend.
+    std::atomic<int64_t> zero_budget{0};
+    ASSIGN_OR_ABORT(bool still_loaded, sb_stream->prefetch_registered(&zero_budget));
+    ASSERT_TRUE(still_loaded);
+    ASSERT_EQ(kBufferCount, sb_stream->shared_io_count());
+    ASSERT_EQ(kTotalRegisteredBytes, sb_stream->shared_io_bytes());
+    ASSERT_EQ(0, zero_budget.load());
+}
+
+TEST_F(SharedBufferedInputStreamPrefetchTest, test_prefetch_registered_read_correctness) {
+    auto sb_stream = make_registered_stream();
+    std::atomic<int64_t> budget{kFileSize};
+    ASSIGN_OR_ABORT(bool all_loaded, sb_stream->prefetch_registered(&budget));
+    ASSERT_TRUE(all_loaded);
+
+    const std::vector<std::pair<int64_t, int64_t>> registered_ranges = {
+            {0, 4 * 1024}, {4 * 1024, 4 * 1024}, {200 * 1024, 4 * 1024}, {400 * 1024, 4 * 1024}};
+    for (const auto& [offset, size] : registered_ranges) {
+        std::vector<uint8_t> out(size);
+        ASSERT_OK(sb_stream->read_at_fully(offset, out.data(), size));
+        ASSERT_EQ(0, memcmp(out.data(), _content.data() + offset, size)) << "offset=" << offset;
+    }
+    // every read above was served from the prefetched shared buffers.
+    ASSERT_EQ(0, sb_stream->direct_io_count());
+    ASSERT_EQ(kBufferCount, sb_stream->shared_io_count());
 }
 
 } // namespace starrocks
