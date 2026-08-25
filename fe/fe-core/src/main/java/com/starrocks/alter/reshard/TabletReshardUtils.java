@@ -29,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 public class TabletReshardUtils {
     private static final Logger LOG = LogManager.getLogger(TabletReshardUtils.class);
@@ -237,13 +238,19 @@ public class TabletReshardUtils {
      * Max source tablets one split job may take for this table. Unbounded unless the split drags an
      * UNSHARE rewrite behind it, in which case it defaults to the warehouse's compute-node count so a
      * single UNSHARE spreads over the cluster instead of monopolizing one partition's compaction slot.
+     *
+     * <p>The resource is a supplier because most calls never read it: an ordinary split answers
+     * {@code Integer.MAX_VALUE} without looking, and a configured bound answers from the config.
+     * Resolving one eagerly would send every split through the warehouse availability probe -- a
+     * StarMgr round trip -- for an answer that does not depend on it, and would let a StarMgr blip
+     * fail a split that never needed the warehouse at all.
      */
-    public static int maxSplitTabletsPerJob(OlapTable table, ComputeResource computeResource) {
+    public static int maxSplitTabletsPerJob(OlapTable table, Supplier<ComputeResource> computeResource) {
         if (!splitRewritesEveryShard(table)) {
             return Integer.MAX_VALUE;
         }
         int configured = Config.tablet_reshard_orderby_max_split_tablets_per_job;
-        return configured > 0 ? configured : computeNodeCount(computeResource);
+        return configured > 0 ? configured : computeNodeCount(computeResource.get());
     }
 
     /**

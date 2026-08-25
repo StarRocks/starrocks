@@ -68,6 +68,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     private final SplitTabletClause splitTabletClause;
 
     private int adaptiveBound = -1;
+    private int tabletBudget = -1;
 
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
         this.db = db;
@@ -177,6 +178,25 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         return splitCounts;
     }
 
+    /**
+     * Source tablets this job may take, resolved lazily and at most once.
+     *
+     * <p>Resolved outside the locked planning section for the reason {@link #adaptiveBound()} is: when
+     * the answer is the warehouse's compute-node count it goes through the availability probe, which
+     * reaches StarMgr, and planning holds a table read lock that publish waits on. The supplier keeps
+     * the other two answers -- an ordinary split, or a configured bound -- from paying for a round trip
+     * they never read, which also keeps a StarMgr blip from failing a split that has no use for the
+     * warehouse.
+     */
+    private int tabletBudget() {
+        if (tabletBudget < 0) {
+            tabletBudget = TabletReshardUtils.maxSplitTabletsPerJob(table,
+                    () -> GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                            .getBackgroundComputeResource(table.getId()));
+        }
+        return tabletBudget;
+    }
+
     /*
      * Create a tablet reshard job and return it.
      * New shareds are created for new tablets.
@@ -185,10 +205,11 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     public TabletReshardJob createTabletReshardJob() throws StarRocksException {
         validateTableLevel(db, table);
 
-        // Resolved before the locked planning section: the resolver goes through the warehouse
+        // Resolved before the locked planning section: these resolvers go through the warehouse
         // availability probe, which reaches StarMgr, and that section holds a table read lock that
         // publish waits on. The merge factory resolves its own floor the same way.
         adaptiveBound();
+        tabletBudget();
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
         if (reshardingPhysicalPartitions.isEmpty()) {
             throw new EmptyReshardPlanException("No tablets need to split in table "
@@ -515,15 +536,13 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             // fan out (read amplification per generation) and how many tablets one job may take (how long
             // that job holds the partition's only compaction slot). Both are no-ops for an ordinary split.
             final int maxSplitCount = TabletReshardUtils.effectiveMaxSplitCount(table);
-            final int tabletBudget = TabletReshardUtils.maxSplitTabletsPerJob(
-                    table, GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getBackgroundComputeResource(table.getId()));
+            final int budget = tabletBudget();
 
             // Plan every eligible source tablet first, then spend the budget on the largest of them.
             // Spending it while walking would give it to whichever partition the traversal reached
             // first, so a small tablet there could crowd out a much larger one in a later partition --
             // the opposite of the largest-first rule the budget exists to serve.
-            return materializeSplits(electLargestWithinBudget(planSplits(maxSplitCount), tabletBudget));
+            return materializeSplits(electLargestWithinBudget(planSplits(maxSplitCount), budget));
         }
     }
 

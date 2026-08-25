@@ -27,6 +27,7 @@ import org.mockito.MockedStatic;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -106,15 +107,24 @@ public class TabletReshardOrderBySplitBoundsTest {
     public void testPerJobTabletBudget() {
         OlapTable table = bundlingTable();
         ComputeResource cr = mock(ComputeResource.class);
+        // The resource reaches StarMgr through the warehouse availability probe, so the budget must
+        // ask for it only when the answer actually depends on it.
+        AtomicLong resourceReads = new AtomicLong();
+        Supplier<ComputeResource> resource = () -> {
+            resourceReads.incrementAndGet();
+            return cr;
+        };
 
         try (MockedStatic<MetaUtils> ignored = separateSortKey(false)) {
-            Assertions.assertEquals(Integer.MAX_VALUE, TabletReshardUtils.maxSplitTabletsPerJob(table, cr),
+            Assertions.assertEquals(Integer.MAX_VALUE, TabletReshardUtils.maxSplitTabletsPerJob(table, resource),
                     "an ordinary split must stay unbounded");
         }
         try (MockedStatic<MetaUtils> ignored = separateSortKey(true)) {
             Config.tablet_reshard_orderby_max_split_tablets_per_job = 5;
-            Assertions.assertEquals(5, TabletReshardUtils.maxSplitTabletsPerJob(table, cr));
+            Assertions.assertEquals(5, TabletReshardUtils.maxSplitTabletsPerJob(table, resource));
         }
+        Assertions.assertEquals(0, resourceReads.get(),
+                "neither an ordinary split nor a configured bound may pay for the warehouse probe");
     }
 
     private static SplitTabletJobFactory.SplitCandidate candidate(Tablet tablet) {
