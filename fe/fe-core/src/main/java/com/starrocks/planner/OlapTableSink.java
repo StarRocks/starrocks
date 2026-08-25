@@ -275,7 +275,7 @@ public class OlapTableSink extends DataSink {
 
     // Resolve the effective single-tablet write parallelism for this sink. Returns NO_SHARD_WRITE
     // whenever any precondition of the feature is not met.
-    private int shardWriteParallelism(TransactionState txnState) {
+    private int shardWriteParallelism(TOlapTableSink tSink, TransactionState txnState) {
         if (!dstTable.isCloudNativeTableOrMaterializedView()) {
             return NO_SHARD_WRITE;
         }
@@ -285,9 +285,22 @@ public class OlapTableSink extends DataSink {
         if (txnState == null || !txnState.isUseCombinedTxnLog()) {
             return NO_SHARD_WRITE;
         }
-        // Partial update rewrites segments at publish using per-node rowset txn metadata; splitting one
-        // tablet's rows across nodes is not supported there.
+        // A load that makes BE attach RowsetTxnMetaPB to its op_write cannot have its txn logs folded
+        // across nodes: that publish rewrites segments from per-node rowset metadata. BE attaches it in
+        // exactly three cases (see DeltaWriterImpl::finish_with_txnlog), all of which are decided here:
+        // a partial update, a condition update, and a load missing the auto-increment column. BE's fold
+        // refuses such a log rather than corrupt the rowset, so a load FE spread but BE cannot fold FAILS
+        // -- these checks are what keep it on the single-node path in the first place.
+        if (!sinkWritesEveryColumn() || tSink.isSetMerge_condition() || missAutoIncrementColumn) {
+            return NO_SHARD_WRITE;
+        }
         if (partialUpdateMode != null && partialUpdateMode != TPartialUpdateMode.UNKNOWN_MODE) {
+            return NO_SHARD_WRITE;
+        }
+        // While a schema change is in flight the load also writes a shadow index whose column count
+        // differs from the base schema, so sinkWritesEveryColumn() below cannot be trusted to predict
+        // what BE will see.
+        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
             return NO_SHARD_WRITE;
         }
         ConnectContext context = ConnectContext.get();
@@ -295,6 +308,24 @@ public class OlapTableSink extends DataSink {
             return NO_SHARD_WRITE;
         }
         return Math.max(NO_SHARD_WRITE, context.getSessionVariable().getTabletWriteParallelism());
+    }
+
+    // Mirror of DeltaWriterImpl::init_write_schema: BE counts the sink's slots, drops a trailing `__op`,
+    // and calls the load a partial update when what is left is narrower than the table. DELETE on a
+    // primary-key table lands here too -- it is written as the key columns plus `__op`.
+    private boolean sinkWritesEveryColumn() {
+        if (tupleDescriptor == null) {
+            return false;
+        }
+        List<SlotDescriptor> slots = tupleDescriptor.getSlots();
+        int writeColumns = slots.size();
+        if (!slots.isEmpty()) {
+            Column lastColumn = slots.get(slots.size() - 1).getColumn();
+            if (lastColumn != null && Load.LOAD_OP_COLUMN.equalsIgnoreCase(lastColumn.getName())) {
+                writeColumns--;
+            }
+        }
+        return writeColumns >= dstTable.getBaseSchema().size();
     }
 
     private static boolean hasMultiNodeTablet(TOlapTableLocationParam location) {
@@ -496,7 +527,7 @@ public class OlapTableSink extends DataSink {
                     enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState, targetWriteIndexId);
             tSink.setPartition(partitionParam);
             TOlapTableLocationParam location = createLocation(dstTable, partitionParam, enableReplicatedStorage,
-                    computeResource, txnState, shardWriteParallelism(txnState));
+                    computeResource, txnState, shardWriteParallelism(tSink, txnState));
             tSink.setLocation(location);
             // In shared-data mode a tablet normally carries exactly one node, so more than one can only
             // come from the shard-write path above. Deriving the flag from the location keeps it true to
