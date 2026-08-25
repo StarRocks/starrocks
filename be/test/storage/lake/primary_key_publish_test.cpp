@@ -237,6 +237,21 @@ public:
         }
     }
 
+    void expect_unique_filenames(const std::vector<std::string>& filenames) {
+        EXPECT_EQ(filenames.size(), std::set<std::string>(filenames.begin(), filenames.end()).size());
+    }
+
+    void expect_exact_callback_filenames(const std::vector<std::string>& registered,
+                                         const std::vector<std::string>& aborted) {
+        expect_unique_filenames(registered);
+        expect_unique_filenames(aborted);
+        auto sorted_registered = registered;
+        auto sorted_aborted = aborted;
+        std::sort(sorted_registered.begin(), sorted_registered.end());
+        std::sort(sorted_aborted.begin(), sorted_aborted.end());
+        EXPECT_EQ(sorted_registered, sorted_aborted);
+    }
+
     void assert_key_value_rows(int64_t tablet_id, int64_t version, int expected_chunks) {
         ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
         ASSERT_EQ(static_cast<size_t>(expected_chunks * kChunkSize), chunk->num_rows());
@@ -3589,6 +3604,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_session_finish_restores_cach
     // flush. Every recovery output must already be handed off exactly once.
     ASSERT_EQ(1, begin_count.load());
     ASSERT_FALSE(registered.empty());
+    expect_unique_filenames(registered);
     EXPECT_EQ(registered.size(), handed_off);
     std::multiset<std::string> first_outgoing;
     for (const auto& sstable : first_writer_metadata->sstable_meta().sstables()) {
@@ -3718,8 +3734,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_current_operation_failure_cl
     EXPECT_NE(std::string::npos, status.to_string().find(injected.message())) << status;
     ASSERT_FALSE(registered.empty());
     EXPECT_EQ(0, finish_count.load());
-    EXPECT_EQ(std::set<std::string>(registered.begin(), registered.end()),
-              std::set<std::string>(aborted.begin(), aborted.end()));
+    expect_exact_callback_filenames(registered, aborted);
     ASSIGN_OR_ABORT(auto after_failure, sst_inventory(tablet_id));
     EXPECT_EQ(baseline, after_failure);
     for (const auto& segment : source_segments) {
@@ -3809,6 +3824,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_commit_handoff_never_deletes
             ADD_FAILURE() << "successful recovery commit did not register handoff SSTs";
             continue;
         }
+        expect_unique_filenames(registered);
         EXPECT_EQ(registered.size(), handed_off);
         EXPECT_EQ(0, abort_count.load());
         ASSIGN_OR_ABORT(auto after_error, sst_inventory(tablet_id));
