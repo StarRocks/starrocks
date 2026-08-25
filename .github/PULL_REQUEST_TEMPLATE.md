@@ -40,4 +40,3 @@ If yes, please specify the type of change:
   - [ ] 26.2
   - [ ] 4.1
   - [ ] 4.0
-- [ ] I have reviewed and confirmed the AI backport recommendation

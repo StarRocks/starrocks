@@ -152,39 +152,19 @@ jobs:
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
-  # Standalone (version-independent) gate: the author must acknowledge the AI backport
-  # recommendation (the "<!-- backport-advisory -->" comment) before merge. It replaces the
-  # backport-PR owner-+1 gate. Kept OUT of the per-version backport-check-subtask matrix so a
-  # failure surfaces directly as "check-ai-backport-confirmed" rather than as every
-  # "backport-check-subtask (X)" leg. Fails UNLESS the CHECKED form is present (not "if the
-  # unchecked form is present") so a body predating the template, or a deleted line, cannot
-  # silently bypass it (codex P1). Same title scope as the subtask; base==main only, since the
-  # advisory is only posted for base==main (codex P2).
-  check-ai-backport-confirmed:
-    needs: title-check
-    runs-on: [ self-hosted, quick ]
-    if: >
-      github.base_ref == 'main' &&
-      (
-        startsWith(github.event.pull_request.title, '[BugFix]') ||
-        startsWith(github.event.pull_request.title, '[Enhancement]') ||
-        startsWith(github.event.pull_request.title, '[Doc]') ||
-        startsWith(github.event.pull_request.title, '[UT]')
-      ) && !startsWith(github.head_ref, 'mergify/bp/')
-    steps:
-      - name: check-ai-backport-confirmed
-        if: "!contains(toJson(github.event.pull_request.body), '[x] I have reviewed and confirmed the AI backport recommendation')"
-        run: |
-          echo "::error::You must review the AI backport recommendation (see the backport-advisory comment) and check the box - I have reviewed and confirmed the AI backport recommendation"
-          exit 1
+  # NOTE: the author's acknowledgement of the AI backport recommendation is no longer a
+  # static checkbox here. It is handled by the `backport-verify` divergence gate
+  # (.github/workflows/backport-verify.yml): the gate only requires an explicit
+  # confirmation when the ticked version boxes actually DIFFER from the AI recommendation,
+  # so a matching selection needs no action and the ack cannot decay into a rote checkbox.
 
   backport-check:
     runs-on: [self-hosted, light]
-    needs: [backport-check-subtask, check-ai-backport-confirmed]
-    if: always() && (needs.backport-check-subtask.result != 'skipped' || needs.check-ai-backport-confirmed.result != 'skipped')
+    needs: [backport-check-subtask]
+    if: always() && needs.backport-check-subtask.result != 'skipped'
     steps:
       - name: Check subtask status
-        if: needs.backport-check-subtask.result == 'failure' || needs.check-ai-backport-confirmed.result == 'failure'
+        if: needs.backport-check-subtask.result == 'failure'
         run: |
           exit 1
 
