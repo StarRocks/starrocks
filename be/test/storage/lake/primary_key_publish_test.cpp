@@ -3150,8 +3150,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    // Version 2 was indexless, so the first delete is also the first real writer: one full-recovery
-    // SST precedes the 51 low-threshold delete SSTs.
+    // Version 2 was indexless. The 52 SSTs are one replay-recovery SST, one
+    // session-owned SST for the first current delete, and 50 later ordinary SSTs.
     EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 52);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
