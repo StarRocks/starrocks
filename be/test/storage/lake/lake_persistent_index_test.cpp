@@ -17,12 +17,14 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -39,6 +41,7 @@
 #include "fs/fs.h"
 #include "platform/key_cache.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
@@ -173,6 +176,17 @@ protected:
                     return true;
                 }));
         return files;
+    }
+
+    void assert_sstables_reopen(const TabletMetadataPtr& metadata) {
+        auto* block_cache = _update_mgr->block_cache();
+        ASSERT_NE(nullptr, block_cache);
+        for (const auto& sstable : metadata->sstable_meta().sstables()) {
+            auto opened = PersistentIndexSstable::new_sstable(
+                    sstable, _tablet_mgr->sst_location(metadata->id(), sstable.filename()), block_cache->cache(),
+                    /*need_filter=*/true, nullptr, metadata, _tablet_mgr.get());
+            ASSERT_OK(opened.status());
+        }
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -2150,6 +2164,297 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_seri
                 << "key " << keys[i] << " missing after parallel rebuild";
         EXPECT_EQ(serial_values[i].get_value(), parallel_values[i].get_value())
                 << "parallel vs serial mismatch for key " << keys[i];
+    }
+}
+
+// An empty cloud-native index with real rebuild work is a bounded recovery session, not an
+// ordinary tail rebuild. Parallel execution and both pools stay enabled here so the callback
+// assertions prove that recovery overrides their normal policy.
+TEST_F(LakePersistentIndexTest, test_full_rebuild_session_forces_serial_scan_del_and_sync_flush) {
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, true);
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, 1);
+    ConfigResetGuard<int64_t> min_l0_guard(&config::l0_min_mem_usage, 1);
+    ConfigResetGuard<int32_t> memtable_count_guard(&config::pk_index_memtable_max_count, 4);
+
+    constexpr int64_t kVersion = 4;
+    auto metadata = make_varchar_pk_metadata();
+    metadata->set_version(kVersion);
+    metadata->set_next_rowset_id(4);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    std::vector<std::string> keys;
+    append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/32, /*rowset_id=*/1, &keys);
+    append_cold_rowset(metadata.get(), /*start=*/16, /*n=*/32, /*rowset_id=*/2, &keys);
+    append_cold_rowset(metadata.get(), /*start=*/48, /*n=*/32, /*rowset_id=*/3, &keys);
+    write_binary_del_file(metadata->id(), "full_rebuild_del_a.del", {"k00000005"});
+    write_binary_del_file(metadata->id(), "full_rebuild_del_b.del", {"k00000020"});
+    auto* del_rowset = metadata->mutable_rowsets(1);
+    for (const auto& [name, offset] :
+         std::vector<std::pair<std::string, uint32_t>>{{"full_rebuild_del_a.del", 0}, {"full_rebuild_del_b.del", 0}}) {
+        auto* del = del_rowset->add_del_files();
+        del->set_name(name);
+        del->set_origin_rowset_id(del_rowset->id());
+        del->set_op_offset(offset);
+    }
+
+    ASSIGN_OR_ABORT(auto before, sst_inventory(metadata->id()));
+    std::atomic<int> begin_count{0};
+    std::atomic<int> parallel_segment_count{0};
+    std::atomic<int> parallel_del_count{0};
+    std::atomic<int> async_submit_count{0};
+    std::vector<bool> flush_policies;
+    std::vector<std::string> registered;
+    std::vector<std::string> before_fileset;
+    size_t handed_off = 0;
+    bool callback_payloads_valid = true;
+
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:begin", [&](void* arg) {
+        ++begin_count;
+        callback_payloads_valid &= arg != nullptr && *static_cast<bool*>(arg);
+    });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:flush_policy", [&](void* arg) {
+        callback_payloads_valid &= arg != nullptr;
+        if (arg != nullptr) flush_policies.push_back(*static_cast<bool*>(arg));
+    });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
+        callback_payloads_valid &= arg != nullptr;
+        if (arg != nullptr) registered.emplace_back(*static_cast<std::string*>(arg));
+    });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:before_fileset", [&](void* arg) {
+        callback_payloads_valid &= arg != nullptr;
+        if (arg != nullptr) before_fileset.emplace_back(*static_cast<std::string*>(arg));
+    });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:finish", [&](void* arg) {
+        callback_payloads_valid &= arg != nullptr;
+        if (arg != nullptr) handed_off = *static_cast<size_t*>(arg);
+    });
+    sync->SetCallBack("LakePersistentIndex::flush_memtable:async_submit", [&](void*) { ++async_submit_count; });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:parallel_segment_prefetch",
+                      [&](void*) { ++parallel_segment_count; });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:parallel_del_prefetch", [&](void*) { ++parallel_del_count; });
+    sync->EnableProcessing();
+    DeferOp clear_callbacks([&]() {
+        for (const auto* point :
+             {"LakePersistentIndex::full_rebuild:begin", "LakePersistentIndex::full_rebuild:flush_policy",
+              "LakePersistentIndex::full_rebuild:register_sst", "LakePersistentIndex::full_rebuild:before_fileset",
+              "LakePersistentIndex::full_rebuild:finish", "LakePersistentIndex::flush_memtable:async_submit",
+              "LakePersistentIndex::full_rebuild:parallel_segment_prefetch",
+              "LakePersistentIndex::full_rebuild:parallel_del_prefetch"}) {
+            sync->ClearCallBack(point);
+        }
+        sync->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto flushed, _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/kVersion));
+    EXPECT_TRUE(callback_payloads_valid);
+    EXPECT_EQ(1, begin_count.load());
+    EXPECT_EQ(0, parallel_segment_count.load());
+    EXPECT_EQ(0, parallel_del_count.load());
+    EXPECT_EQ(0, async_submit_count.load());
+    ASSERT_FALSE(flush_policies.empty());
+    EXPECT_TRUE(
+            std::all_of(flush_policies.begin(), flush_policies.end(), [](bool synchronous) { return synchronous; }));
+    EXPECT_EQ(registered, before_fileset);
+    EXPECT_GE(registered.size(), 2u);
+    EXPECT_EQ(registered.size(), handed_off);
+
+    std::multiset<std::string> outgoing;
+    for (const auto& sstable : flushed->sstable_meta().sstables()) outgoing.emplace(sstable.filename());
+    for (const auto& filename : registered) EXPECT_EQ(1u, outgoing.count(filename)) << filename;
+    EXPECT_EQ(registered.size(), outgoing.size());
+    ASSIGN_OR_ABORT(auto after, sst_inventory(metadata->id()));
+    std::set<std::string> expected_after = before;
+    expected_after.insert(registered.begin(), registered.end());
+    EXPECT_EQ(expected_after, after);
+    assert_sstables_reopen(flushed);
+
+    auto reopened = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(reopened->init(flushed));
+    std::vector<std::string> oracle_keys = {"k00000000", "k00000005", "k00000016", "k00000020", "k00000048"};
+    std::vector<Slice> oracle_slices;
+    for (const auto& key : oracle_keys) oracle_slices.emplace_back(key);
+    std::vector<IndexValue> values(oracle_keys.size());
+    ASSERT_OK(reopened->get(oracle_slices.size(), oracle_slices.data(), values.data()));
+    EXPECT_EQ(1u, values[0].get_rssid());
+    EXPECT_EQ(NullIndexValue, values[1].get_value());
+    EXPECT_EQ(2u, values[2].get_rssid());
+    EXPECT_EQ(NullIndexValue, values[3].get_value());
+    EXPECT_EQ(3u, values[4].get_rssid());
+}
+
+TEST_F(LakePersistentIndexTest, test_persistent_index_memtable_flush_failure_cleans_partial_sst) {
+    ensure_kek_in_key_cache();
+    const std::vector<std::string> stages = {
+            "PersistentIndexMemtable::flush:after_create", "PersistentIndexMemtable::flush:after_build",
+            "PersistentIndexMemtable::flush:after_close", "PersistentIndexMemtable::flush:after_reopen",
+            "PersistentIndexMemtable::flush:after_sstable_init"};
+
+    for (bool encrypted : {false, true}) {
+        ConfigResetGuard<bool> tde_guard(&config::enable_transparent_data_encryption, encrypted);
+        for (const auto& stage : stages) {
+            SCOPED_TRACE(::testing::Message() << "encrypted=" << encrypted << " stage=" << stage);
+            ConfigResetGuard<int32_t> count_guard(&config::pk_index_memtable_max_count, 1);
+            auto metadata = make_varchar_pk_metadata();
+            metadata->set_id(next_id());
+            metadata->set_version(1);
+            ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+            ASSIGN_OR_ABORT(auto baseline, sst_inventory(metadata->id()));
+            const size_t block_cache_usage_before = _update_mgr->block_cache()->cache()->get_memory_usage();
+
+            auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+            ASSERT_OK(index->init(metadata));
+            std::string key = "partial-flush-key";
+            Slice key_slice(key);
+            IndexValue value((static_cast<uint64_t>(1) << 32) | 7);
+            ASSERT_OK(index->insert(1, &key_slice, &value, /*version=*/1));
+
+            const Status injected = Status::InternalError("injected partial sst failure at " + stage);
+            std::set<std::string> created;
+            auto* sync = SyncPoint::GetInstance();
+            for (const auto& point : stages) {
+                sync->SetCallBack(point, [&, point](void* arg) {
+                    auto inventory = sst_inventory(metadata->id());
+                    if (inventory.ok()) {
+                        for (const auto& filename : inventory.value()) {
+                            if (!baseline.contains(filename)) created.emplace(filename);
+                        }
+                    }
+                    if (point == stage && arg != nullptr) *static_cast<Status*>(arg) = injected;
+                });
+            }
+            sync->EnableProcessing();
+            DeferOp clear_stage_callbacks([&]() {
+                for (const auto& point : stages) sync->ClearCallBack(point);
+                sync->DisableProcessing();
+            });
+
+            const Status status = index->flush_memtable(/*force=*/true);
+            if (status.ok()) {
+                ADD_FAILURE() << "flush unexpectedly succeeded at injected stage " << stage;
+                continue;
+            }
+            EXPECT_EQ(injected.to_string(), status.to_string());
+            ASSIGN_OR_ABORT(auto after_failure, sst_inventory(metadata->id()));
+            EXPECT_EQ(baseline, after_failure);
+            EXPECT_EQ(block_cache_usage_before, _update_mgr->block_cache()->cache()->get_memory_usage());
+            ASSERT_EQ(1u, created.size());
+            for (const auto& filename : created) {
+                auto rf = fs::new_random_access_file(_tablet_mgr->sst_location(metadata->id(), filename));
+                EXPECT_TRUE(rf.status().is_not_found()) << rf.status();
+            }
+
+            for (const auto& point : stages) sync->ClearCallBack(point);
+            ASSERT_OK(index->flush_memtable(/*force=*/true));
+            Tablet tablet(_tablet_mgr.get(), metadata->id());
+            auto retry_metadata = std::make_shared<TabletMetadata>(*metadata);
+            retry_metadata->set_version(2);
+            MetaFileBuilder builder(tablet, retry_metadata);
+            ASSERT_OK(index->commit(&builder));
+            ASSIGN_OR_ABORT(auto after_retry, sst_inventory(metadata->id()));
+            ASSERT_EQ(baseline.size() + 1, after_retry.size());
+            ASSERT_EQ(1, retry_metadata->sstable_meta().sstables_size());
+            assert_sstables_reopen(retry_metadata);
+            std::vector<IndexValue> got(1);
+            ASSERT_OK(index->get(1, &key_slice, got.data()));
+            EXPECT_EQ(value, got[0]);
+        }
+    }
+}
+
+TEST_F(LakePersistentIndexTest, test_full_rebuild_session_failure_cleans_completed_ssts) {
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, true);
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, 1);
+    ConfigResetGuard<int32_t> count_guard(&config::pk_index_memtable_max_count, 4);
+    const std::vector<std::pair<std::string, std::string>> stages = {
+            {"LakePersistentIndex::full_rebuild:before_segment_scan",
+             "injected full rebuild during later segment scan"},
+            {"LakePersistentIndex::full_rebuild:before_del_replay", "injected full rebuild during later del replay"},
+            {"LakePersistentIndex::full_rebuild:before_fileset_merge", "injected full rebuild before fileset merge"},
+            {"LakePersistentIndex::full_rebuild:before_commit_install", "injected full rebuild before commit install"}};
+
+    for (const auto& [stage, message] : stages) {
+        SCOPED_TRACE(stage);
+        auto metadata = make_varchar_pk_metadata();
+        metadata->set_id(next_id());
+        metadata->set_version(4);
+        metadata->set_next_rowset_id(4);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        std::vector<std::string> keys;
+        append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/16, /*rowset_id=*/1, &keys);
+        append_cold_rowset(metadata.get(), /*start=*/16, /*n=*/16, /*rowset_id=*/2, &keys);
+        append_cold_rowset(metadata.get(), /*start=*/32, /*n=*/16, /*rowset_id=*/3, &keys);
+        write_binary_del_file(metadata->id(), "session_failure.del", {"k00000018"});
+        auto* del = metadata->mutable_rowsets(1)->add_del_files();
+        del->set_name("session_failure.del");
+        del->set_origin_rowset_id(2);
+        del->set_op_offset(0);
+
+        std::vector<std::string> source_paths;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& segment : rowset.segment_metas()) {
+                source_paths.emplace_back(_tablet_mgr->segment_location(metadata->id(), segment.filename()));
+            }
+            for (const auto& del_file : rowset.del_files()) {
+                source_paths.emplace_back(_tablet_mgr->del_location(metadata->id(), del_file.name()));
+            }
+        }
+        ASSIGN_OR_ABORT(auto baseline, sst_inventory(metadata->id()));
+        std::vector<std::string> registered;
+        std::vector<std::string> aborted;
+        const Status injected = Status::InternalError(message);
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
+            if (arg != nullptr) registered.emplace_back(*static_cast<std::string*>(arg));
+        });
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:abort", [&](void* arg) {
+            if (arg != nullptr) aborted = *static_cast<std::vector<std::string>*>(arg);
+        });
+        sync->SetCallBack(stage, [&](void* arg) {
+            const bool after_completed = !registered.empty();
+            const bool later_fileset =
+                    stage != "LakePersistentIndex::full_rebuild:before_fileset_merge" || registered.size() >= 2;
+            if (arg != nullptr && after_completed && later_fileset) *static_cast<Status*>(arg) = injected;
+        });
+        sync->EnableProcessing();
+        DeferOp clear_callbacks([&]() {
+            sync->ClearCallBack("LakePersistentIndex::full_rebuild:register_sst");
+            sync->ClearCallBack("LakePersistentIndex::full_rebuild:abort");
+            sync->ClearCallBack(stage);
+            sync->DisableProcessing();
+        });
+
+        const auto result = _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/metadata->version());
+        RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait();
+        if (result.ok()) {
+            ADD_FAILURE() << "recovery unexpectedly succeeded at " << stage;
+            continue;
+        }
+        EXPECT_TRUE(result.status().is_internal_error()) << result.status();
+        EXPECT_NE(std::string::npos, result.status().to_string().find(message)) << result.status();
+        ASSERT_FALSE(registered.empty());
+        EXPECT_EQ(std::set<std::string>(registered.begin(), registered.end()),
+                  std::set<std::string>(aborted.begin(), aborted.end()));
+        ASSIGN_OR_ABORT(auto after_failure, sst_inventory(metadata->id()));
+        EXPECT_EQ(baseline, after_failure);
+        for (const auto& path : source_paths) {
+            ASSIGN_OR_ABORT(auto source, fs::new_random_access_file(path));
+            ASSIGN_OR_ABORT(auto size, source->get_size());
+            EXPECT_GT(size, 0);
+        }
+        ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(metadata->id(), metadata->version()));
+        EXPECT_EQ(0, persisted->sstable_meta().sstables_size());
+        _update_mgr->unload_and_remove_primary_index(metadata->id());
+        ASSIGN_OR_ABORT(auto after_second_teardown, sst_inventory(metadata->id()));
+        EXPECT_EQ(baseline, after_second_teardown);
+
+        sync->ClearCallBack("LakePersistentIndex::full_rebuild:register_sst");
+        sync->ClearCallBack("LakePersistentIndex::full_rebuild:abort");
+        sync->ClearCallBack(stage);
+        ASSIGN_OR_ABORT(auto retry,
+                        _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/metadata->version()));
+        ASSERT_GT(retry->sstable_meta().sstables_size(), 0);
+        assert_sstables_reopen(retry);
     }
 }
 
