@@ -256,7 +256,8 @@ struct PlannedCanonicalRowset {
 // order. This is the single source of truth for duplicate decisions: offset
 // preparation uses it to ignore discarded sibling copies, and merge_rowsets
 // uses the recorded canonical index instead of recomputing dedup independently.
-StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<TabletMergeContext>& merge_contexts) {
+StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<TabletMergeContext>& merge_contexts,
+                                                        bool discard_empty_rowsets) {
     RowsetEmissionPlan plan(merge_contexts.size());
     std::vector<int> current_indices(merge_contexts.size(), 0);
     for (size_t i = 0; i < merge_contexts.size(); ++i) {
@@ -284,7 +285,8 @@ StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<Tablet
         const int rowset_index = current_indices[source_index]++;
         const auto& source_metadata = *merge_contexts[source_index].metadata();
         const auto& rowset = source_metadata.rowsets(rowset_index);
-        if (rowset.segment_metas_size() == 0 && rowset.del_files_size() == 0 && !rowset.has_delete_predicate()) {
+        if (discard_empty_rowsets && rowset.segment_metas_size() == 0 && rowset.del_files_size() == 0 &&
+            !rowset.has_delete_predicate()) {
             plan[source_index][rowset_index].discard = true;
             continue;
         }
@@ -2194,17 +2196,35 @@ StatusOr<MergeSourceRangeProof> validate_metadata_reuse_source_ranges(const std:
         source_ranges.emplace_back(std::move(source_range));
     }
 
-    const auto& first_pb = contexts.front().metadata()->range();
-    const auto& last_pb = contexts.back().metadata()->range();
     const auto& target_pb = target.range();
-    if (first_pb.has_lower_bound() != target_pb.has_lower_bound() ||
-        last_pb.has_upper_bound() != target_pb.has_upper_bound() ||
-        source_ranges.front().seek_key != target_range.seek_key ||
-        source_ranges.back().stop_key != target_range.stop_key) {
+    const auto* comparator = sstable::BytewiseComparator();
+    bool source_lower_unbounded = false;
+    bool source_upper_unbounded = false;
+    std::optional<std::string> source_min_lower;
+    std::optional<std::string> source_max_upper;
+    for (size_t i = 0; i < contexts.size(); ++i) {
+        const auto& source_pb = contexts[i].metadata()->range();
+        if (!source_pb.has_lower_bound()) {
+            source_lower_unbounded = true;
+        } else if (!source_min_lower.has_value() ||
+                   comparator->Compare(Slice(source_ranges[i].seek_key), Slice(*source_min_lower)) < 0) {
+            source_min_lower = source_ranges[i].seek_key;
+        }
+        if (!source_pb.has_upper_bound()) {
+            source_upper_unbounded = true;
+        } else if (!source_max_upper.has_value() ||
+                   comparator->Compare(Slice(source_ranges[i].stop_key), Slice(*source_max_upper)) > 0) {
+            source_max_upper = source_ranges[i].stop_key;
+        }
+    }
+    const bool source_has_lower = !source_lower_unbounded;
+    const bool source_has_upper = !source_upper_unbounded;
+    if (source_has_lower != target_pb.has_lower_bound() || source_has_upper != target_pb.has_upper_bound() ||
+        (source_has_lower && *source_min_lower != target_range.seek_key) ||
+        (source_has_upper && *source_max_upper != target_range.stop_key)) {
         return Status::Corruption("tablet merge source outer bounds do not equal target bounds");
     }
 
-    const auto* comparator = sstable::BytewiseComparator();
     for (size_t i = 1; i < contexts.size(); ++i) {
         const auto& left_pb = contexts[i - 1].metadata()->range();
         const auto& right_pb = contexts[i].metadata()->range();
@@ -2749,7 +2769,8 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // build task never skips another source's unbuilt rowsets (see the helper for the invariant).
     reconcile_vector_index_built_version(merge_contexts, new_tablet_metadata.get());
 
-    ASSIGN_OR_RETURN(auto rowset_emission_plan, build_rowset_emission_plan(merge_contexts));
+    const bool discard_empty_rowsets = !skip_sstable_merge && is_primary_key(*merge_contexts.front().metadata());
+    ASSIGN_OR_RETURN(auto rowset_emission_plan, build_rowset_emission_plan(merge_contexts, discard_empty_rowsets));
 
     // Phase 1: Prepare rssid offsets and merged range. For each ctx[i],
     // set new_tablet_metadata.next_rowset_id to the watermark of all

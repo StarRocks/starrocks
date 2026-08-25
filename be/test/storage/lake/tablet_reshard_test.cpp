@@ -2802,6 +2802,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_source_range_par
                  prepare_tablet_dirs(middle_low->id());
                  sources = {sources[0], middle_high, middle_low, sources[1]};
              }},
+            {"well-formed fully reversed source order", Outcome::kFallback,
+             [](auto& sources) { std::swap(sources[0], sources[1]); }},
             {"wrong bound arity", Outcome::kCorruption,
              [](auto& sources) {
                  auto* lower = sources[0]->mutable_range()->mutable_lower_bound();
@@ -2907,6 +2909,50 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_source_range_par
         EXPECT_EQ(rows, reopened_rows);
         ASSIGN_OR_ABORT(auto reopened_values, load_index_values(reopened, result.target_tablet_id, keys));
         EXPECT_EQ(values, reopened_values);
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_segmentless_rowset_preservation_controls) {
+    struct Case {
+        const char* name;
+        bool primary_key;
+        bool skip_sstable_merge;
+    };
+    const std::vector<Case> cases = {
+            {"non-PK real merge", false, false},
+            {"read-only PK alias", true, true},
+    };
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        auto source = std::make_shared<TabletMetadataPB>();
+        source->set_id(next_id());
+        source->set_version(1);
+        source->set_next_rowset_id(2);
+        if (test_case.primary_key) {
+            set_primary_key_schema(source.get(), 1001);
+        } else {
+            source->mutable_schema()->set_id(1001);
+            source->mutable_schema()->set_keys_type(DUP_KEYS);
+        }
+        auto* rowset = source->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+        lake::tablet_reshard_helper::set_rowset_uid(rowset);
+
+        MergingTabletInfoPB merging_info;
+        merging_info.set_new_tablet_id(next_id());
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(next_id());
+        std::vector<TabletMetadataPtr> sources = {source};
+        ASSIGN_OR_ABORT(auto merged, lake::merge_tablet(_tablet_manager.get(), sources, merging_info, /*new_version=*/2,
+                                                        txn_info, test_case.skip_sstable_merge));
+        EXPECT_EQ(1, merged->rowsets_size());
+        if (merged->rowsets_size() != 1) continue;
+        EXPECT_EQ(1, merged->rowsets(0).id());
+        EXPECT_EQ(0, merged->rowsets(0).segment_metas_size());
+        EXPECT_EQ(0, merged->rowsets(0).del_files_size());
     }
 }
 
