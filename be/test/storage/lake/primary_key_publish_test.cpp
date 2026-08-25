@@ -24,6 +24,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
@@ -52,6 +53,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -64,9 +66,12 @@
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "testutil/chunk_assert.h"
 
 namespace starrocks::lake {
+
+enum class DirectSstFirstWriter { kEagerUpsert, kBulkErase };
 
 class LakePrimaryKeyPublishTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
@@ -264,6 +269,233 @@ public:
             ASSERT_TRUE(rows.contains(key)) << key;
             EXPECT_EQ(key * 3, rows.at(key)) << key;
         }
+    }
+
+    StatusOr<std::vector<IndexValue>> load_index_values(const TabletMetadataPtr& metadata,
+                                                        const std::vector<int32_t>& keys) {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+        RETURN_IF_ERROR(index->init(metadata));
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        auto metadata_copy = std::make_shared<TabletMetadataPB>(*metadata);
+        MetaFileBuilder builder(tablet, metadata_copy);
+        RETURN_IF_ERROR(index->load_from_lake_tablet(_tablet_mgr.get(), metadata, metadata->version(), &builder));
+
+        std::vector<ColumnId> pk_columns{0};
+        auto pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
+        auto chunk = std::make_unique<Chunk>();
+        auto column = Int32Column::create();
+        column->append_numbers(keys.data(), keys.size() * sizeof(int32_t));
+        chunk->append_column(std::move(column), static_cast<SlotId>(0));
+        ASSIGN_OR_RETURN(auto encoding_type, _tablet_schema->primary_key_encoding_type_or_error());
+        MutableColumnPtr encoded;
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, encoding_type));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, keys.size(), encoded.get(), encoding_type);
+        auto* binary = down_cast<BinaryColumn*>(encoded.get());
+        std::vector<Slice> key_slices;
+        key_slices.reserve(keys.size());
+        for (size_t i = 0; i < keys.size(); ++i) {
+            key_slices.emplace_back(binary->get_slice(i));
+        }
+        std::vector<IndexValue> values(keys.size());
+        RETURN_IF_ERROR(index->get(keys.size(), key_slices.data(), values.data()));
+        return values;
+    }
+
+    void assert_exact_rows_and_index(const TabletMetadataPtr& metadata, const std::map<int32_t, int32_t>& expected_rows,
+                                     const std::vector<int32_t>& missing_keys) {
+        ASSIGN_OR_ABORT(auto chunk, read(metadata->id(), metadata->version()));
+        std::map<int32_t, int32_t> actual_rows;
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            actual_rows.emplace(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+        }
+        EXPECT_EQ(expected_rows, actual_rows);
+
+        std::vector<int32_t> keys;
+        keys.reserve(expected_rows.size() + missing_keys.size());
+        for (const auto& [key, value] : expected_rows) {
+            (void)value;
+            keys.emplace_back(key);
+        }
+        keys.insert(keys.end(), missing_keys.begin(), missing_keys.end());
+        ASSIGN_OR_ABORT(auto values, load_index_values(metadata, keys));
+        ASSERT_EQ(keys.size(), values.size());
+        for (size_t i = 0; i < expected_rows.size(); ++i) {
+            EXPECT_NE(IndexValue(NullIndexValue), values[i]) << keys[i];
+        }
+        for (size_t i = expected_rows.size(); i < values.size(); ++i) {
+            EXPECT_EQ(IndexValue(NullIndexValue), values[i]) << keys[i];
+        }
+    }
+
+    void run_direct_sst_first_writer(DirectSstFirstWriter kind) {
+        ASSERT_TRUE(GetParam().enable_persistent_index);
+        ASSERT_EQ(PersistentIndexTypePB::CLOUD_NATIVE, GetParam().persistent_index_type);
+        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, true);
+        ConfigResetGuard<int32_t> count_guard(&config::pk_index_memtable_max_count, 4);
+        ConfigResetGuard<int64_t> eager_guard(&config::pk_index_eager_build_threshold_bytes,
+                                              std::numeric_limits<int64_t>::max());
+        DeferOp wait_flush_pool(
+                []() { ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait(); });
+        const int64_t tablet_id = _tablet_metadata->id();
+
+        _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(
+                PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+        // Persist real rebuild work without an index, then evict the cache so version 3 is the first writer.
+        {
+            ConfigResetGuard<int64_t> large_l0(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+            auto [seed, unused] = gen_data_and_index(kChunkSize, 0, false, true);
+            ASSIGN_OR_ABORT(auto seed_txn, write_txn(tablet_id, seed));
+            ASSIGN_OR_ABORT(auto seeded, publish_single_version(tablet_id, 2, seed_txn));
+            ASSERT_EQ(0, seeded->sstable_meta().sstables_size());
+        }
+        _update_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSIGN_OR_ABORT(auto baseline_inventory, sst_inventory(tablet_id));
+
+        std::atomic<int> begin_count{0};
+        std::atomic<int> finish_count{0};
+        std::atomic<int> abort_count{0};
+        std::atomic<int> async_submit_count{0};
+        std::vector<std::string> registered;
+        size_t handed_off = 0;
+        PersistentIndexMemtable* post_finish_memtable = nullptr;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:begin", [&](void*) { ++begin_count; });
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
+            if (arg != nullptr) registered.emplace_back(*static_cast<std::string*>(arg));
+        });
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:finish", [&](void* arg) {
+            ++finish_count;
+            if (arg != nullptr) handed_off = *static_cast<size_t*>(arg);
+        });
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:after_finish_memtable", [&](void* arg) {
+            if (arg != nullptr) post_finish_memtable = *static_cast<PersistentIndexMemtable**>(arg);
+        });
+        sync->SetCallBack("LakePersistentIndex::full_rebuild:abort", [&](void*) { ++abort_count; });
+        sync->SetCallBack("LakePersistentIndex::flush_memtable:async_submit", [&](void*) { ++async_submit_count; });
+        sync->EnableProcessing();
+        DeferOp clear_callbacks([&]() {
+            for (const auto* point :
+                 {"LakePersistentIndex::full_rebuild:begin", "LakePersistentIndex::full_rebuild:register_sst",
+                  "LakePersistentIndex::full_rebuild:finish", "LakePersistentIndex::full_rebuild:after_finish_memtable",
+                  "LakePersistentIndex::full_rebuild:abort", "LakePersistentIndex::flush_memtable:async_submit"}) {
+                sync->ClearCallBack(point);
+            }
+            sync->DisableProcessing();
+        });
+
+        ConfigResetGuard<int64_t> small_l0(&config::l0_max_mem_usage, 1);
+        config::pk_index_eager_build_threshold_bytes = 1;
+        const bool bulk_erase = kind == DirectSstFirstWriter::kBulkErase;
+        int64_t first_txn = 0;
+        if (bulk_erase) {
+            auto [first_chunk, unused1] = gen_data_and_index(kChunkSize, 0, false, false);
+            ASSIGN_OR_ABORT(first_txn, write_txn(tablet_id, first_chunk));
+        } else {
+            // A one-flush load deliberately stays lazy. Force three real flushes so the spill merge enables
+            // the eager writer and emits the op_write SST exercised by this first-writer publish.
+            ConfigResetGuard<int64_t> tiny_write_buffer(&config::write_buffer_size, 1);
+            auto [first_chunk, indexes] = gen_data_and_index(kChunkSize, 1, false, true);
+            ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                                 .set_tablet_manager(_tablet_mgr.get())
+                                                 .set_tablet_id(tablet_id)
+                                                 .set_txn_id(next_id())
+                                                 .set_partition_id(_partition_id)
+                                                 .set_mem_tracker(_mem_tracker.get())
+                                                 .set_schema_id(_tablet_schema->id())
+                                                 .set_slot_descriptors(&_slot_pointers)
+                                                 .set_profile(&_dummy_runtime_profile)
+                                                 .build());
+            first_txn = writer->txn_id();
+            ASSERT_OK(writer->open());
+            for (int shift = 1; shift <= 3; ++shift) {
+                auto chunk = shift == 1 ? first_chunk : gen_data(kChunkSize, shift, false, true);
+                ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+            }
+            ASSERT_OK(writer->finish_with_txnlog());
+            writer->close();
+        }
+        ASSIGN_OR_ABORT(auto first_log, _tablet_mgr->get_txn_log(tablet_id, first_txn));
+        std::string direct_sst_filename;
+        if (bulk_erase) {
+            ASSERT_GT(first_log->op_write().dels_meta_size(), 0);
+            ASSERT_EQ(first_log->op_write().dels_meta_size(), first_log->op_write().del_ssts_size());
+            ASSERT_EQ(first_log->op_write().dels_meta_size(), first_log->op_write().del_sst_ranges_size());
+            ASSERT_FALSE(first_log->op_write().del_ssts(0).name().empty());
+            direct_sst_filename = first_log->op_write().del_ssts(0).name();
+        } else {
+            ASSERT_GT(first_log->op_write().ssts_size(), 0);
+            direct_sst_filename = first_log->op_write().ssts(0).name();
+        }
+        ASSIGN_OR_ABORT(auto first_metadata, publish_single_version(tablet_id, 3, first_txn));
+
+        ASSERT_EQ(1, begin_count.load());
+        ASSERT_EQ(1, finish_count.load());
+        EXPECT_EQ(0, abort_count.load());
+        ASSERT_FALSE(registered.empty());
+        expect_unique_filenames(registered);
+        EXPECT_EQ(registered.size(), handed_off);
+        ASSERT_NE(nullptr, post_finish_memtable);
+        EXPECT_TRUE(post_finish_memtable->empty());
+        ASSERT_GT(first_metadata->sstable_meta().sstables_size(), 1);
+        uint64_t newest_outgoing_watermark = 0;
+        bool found_direct_sst = false;
+        std::set<std::string> expected_inventory = baseline_inventory;
+        for (const auto& sstable : first_metadata->sstable_meta().sstables()) {
+            newest_outgoing_watermark = std::max(newest_outgoing_watermark, sstable.max_rss_rowid());
+            found_direct_sst = found_direct_sst || sstable.filename() == direct_sst_filename;
+            expected_inventory.emplace(sstable.filename());
+        }
+        EXPECT_TRUE(found_direct_sst) << direct_sst_filename;
+        EXPECT_EQ(newest_outgoing_watermark, post_finish_memtable->max_rss_rowid());
+        ASSIGN_OR_ABORT(auto after_first_inventory, sst_inventory(tablet_id));
+        EXPECT_EQ(expected_inventory, after_first_inventory);
+        assert_sstables_reopen(first_metadata);
+        {
+            auto* cached_entry = _update_mgr->index_cache().get(tablet_id);
+            ASSERT_NE(nullptr, cached_entry);
+            DeferOp release_cached_entry([&]() { _update_mgr->index_cache().release(cached_entry); });
+            auto cached_guard = cached_entry->value().fetch_guard();
+            auto* lake_index = dynamic_cast<LakePersistentIndex*>(cached_entry->value()._persistent_index.get());
+            ASSERT_NE(nullptr, lake_index);
+            EXPECT_FALSE(lake_index->_full_rebuild_session_active);
+            EXPECT_TRUE(lake_index->_uncommitted_full_rebuild_ssts.empty());
+        }
+
+        // Restore a non-eager writer and prove the next operation uses ordinary asynchronous flushing.
+        config::pk_index_eager_build_threshold_bytes = std::numeric_limits<int64_t>::max();
+        const int begin_before_second = begin_count.load();
+        const int finish_before_second = finish_count.load();
+        const size_t registered_before_second = registered.size();
+        const int async_before_second = async_submit_count.load();
+        auto [ordinary_chunk, unused2] = gen_data_and_index(kChunkSize, bulk_erase ? 1 : 4, false, true);
+        ASSIGN_OR_ABORT(auto ordinary_txn, write_txn(tablet_id, ordinary_chunk));
+        ASSIGN_OR_ABORT(auto ordinary_log, _tablet_mgr->get_txn_log(tablet_id, ordinary_txn));
+        EXPECT_EQ(0, ordinary_log->op_write().ssts_size());
+        ASSIGN_OR_ABORT(auto ordinary_metadata, publish_single_version(tablet_id, 4, ordinary_txn));
+        EXPECT_GT(async_submit_count.load(), async_before_second);
+        EXPECT_EQ(begin_before_second, begin_count.load());
+        EXPECT_EQ(finish_before_second, finish_count.load());
+        EXPECT_EQ(registered_before_second, registered.size());
+        EXPECT_EQ(0, abort_count.load());
+
+        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
+        _update_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSIGN_OR_ABORT(auto reopened, _tablet_mgr->get_tablet_metadata(tablet_id, ordinary_metadata->version()));
+        assert_sstables_reopen(reopened);
+        std::map<int32_t, int32_t> expected_rows;
+        std::vector<int32_t> missing_keys;
+        if (bulk_erase) {
+            for (int32_t key = 0; key < kChunkSize; ++key) missing_keys.emplace_back(key);
+            for (int32_t key = kChunkSize; key < 2 * kChunkSize; ++key) expected_rows.emplace(key, key * 3);
+        } else {
+            for (int32_t key = 0; key < 5 * kChunkSize; ++key) expected_rows.emplace(key, key * 3);
+            missing_keys.emplace_back(5 * kChunkSize);
+        }
+        assert_exact_rows_and_index(reopened, expected_rows, missing_keys);
     }
 
 protected:
@@ -3504,6 +3736,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_emits_trace_counters) {
     // A compaction publish runs the conflict resolver and applies the compaction to the PK index.
     EXPECT_NE(metrics.find("compaction_conflict_resolve_us"), std::string::npos) << metrics;
     EXPECT_NE(metrics.find("index_apply_opcompaction_us"), std::string::npos) << metrics;
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_eager_sst_first_writer_advances_recovery_memtable_watermark) {
+    run_direct_sst_first_writer(DirectSstFirstWriter::kEagerUpsert);
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_tombstone_sst_first_writer_advances_recovery_memtable_watermark) {
+    run_direct_sst_first_writer(DirectSstFirstWriter::kBulkErase);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_session_finish_restores_cached_ordinary_flush) {

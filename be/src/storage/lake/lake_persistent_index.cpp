@@ -243,6 +243,7 @@ void LakePersistentIndex::finish_full_rebuild_session(uint64_t final_max_rss_row
     DCHECK(_full_rebuild_session_active);
     DCHECK(_inactive_memtables.empty());
     DCHECK(_memtable != nullptr && _memtable->empty());
+    _memtable->advance_max_rss_rowid(final_max_rss_rowid);
     DCHECK_EQ(_memtable->max_rss_rowid(), final_max_rss_rowid);
     [[maybe_unused]] size_t handed_off_count = _uncommitted_full_rebuild_ssts.size();
     _uncommitted_full_rebuild_ssts.clear();
