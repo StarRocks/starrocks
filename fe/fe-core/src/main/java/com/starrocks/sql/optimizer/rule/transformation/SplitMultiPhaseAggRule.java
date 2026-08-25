@@ -343,11 +343,6 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return elseOperator;
     }
 
-<<<<<<< HEAD
-    static boolean isThreeStageMoreEfficient(OptExpression input,
-                                             List<ColumnRefOperator> groupKeys,
-                                             List<ColumnRefOperator> partitionByColumns) {
-=======
     /**
      * The builtin if(BOOLEAN, DECIMAL, DECIMAL) signatures declare a wildcard decimal return type,
      * so taking it as-is yields an expression typed DECIMAL(-1,-1). Both branches built above carry
@@ -364,9 +359,9 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return newFn;
     }
 
-    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys,
-                                              List<ColumnRefOperator> partitionByColumns) {
->>>>>>> bb2030a762 ([BugFix] Keep the decimal type of the if() built for multi-column count(distinct) (backport #77346) (#77593))
+    static boolean isThreeStageMoreEfficient(OptExpression input,
+                                             List<ColumnRefOperator> groupKeys,
+                                             List<ColumnRefOperator> partitionByColumns) {
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
             return false;
         }
