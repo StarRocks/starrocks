@@ -26,9 +26,9 @@ Join the three tables on `(DB_ID, TABLE_ID, BOOKMARK_ID)`.
 | LOGICAL_PARTITION_COUNT | BIGINT | Logical partition count captured. |
 | PHYSICAL_PARTITION_COUNT | BIGINT | Physical partition count captured. |
 | REFERENCE_COUNT | BIGINT | Current number of holders referencing this bookmark. |
-| LATEST_CHANGED_PHYSICAL_PARTITIONS | ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>> | Up to 3 physical partitions with the most recent `visible_version_time`, ordered descending by time. Ties broken by largest `physical_partition_id`. Empty array if the bookmark captured no partitions; shorter than 3 when fewer partitions exist. |
-| OLDEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | Holder with the oldest current acquire time. Ties broken by lexicographically smallest holder id. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
-| NEWEST_REFERENCE | STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT> | Holder with the most recent current acquire time. Same tie-break rule. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
+| LATEST_CHANGED_PHYSICAL_PARTITIONS | `ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>>` | Up to 3 physical partitions with the most recent `visible_version_time`, ordered descending by time. Ties broken by largest `physical_partition_id`. Empty array if the bookmark captured no partitions; shorter than 3 when fewer partitions exist. |
+| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | Holder with the oldest current acquire time. Ties broken by lexicographically smallest holder id. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
+| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | Holder with the most recent current acquire time. Same tie-break rule. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
 
 ## table_bookmark_partitions
 
