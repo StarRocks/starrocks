@@ -311,9 +311,9 @@ select * from tpk;
 20
 8
 -- !result
-admin set frontend config ('enable_online_optimize_table'='false');
--- result:
--- !result
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_online_optimize_table_stream_load @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -629,9 +629,9 @@ select count(*) from t;
 -- result:
 63
 -- !result
-admin set frontend config ('enable_online_optimize_table'='false');
--- result:
--- !result
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_optimize_table_with_special_characters @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -699,9 +699,9 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
-admin set frontend config ('enable_online_optimize_table'='false');
--- result:
--- !result
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_online_optimize_table_expr_partition @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -901,9 +901,9 @@ select count(*) from t;
 -- result:
 63
 -- !result
-admin set frontend config ('enable_online_optimize_table'='false');
--- result:
--- !result
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_online_optimize_table_batch @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -1568,6 +1568,6 @@ select count(*) from t;
 -- result:
 300
 -- !result
-admin set frontend config ('enable_online_optimize_table'='false');
--- result:
--- !result
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP

@@ -162,7 +162,9 @@ function: wait_optimize_table_finish()
 show create table t;
 -- show partitions from t;
 select * from t;
-admin set frontend config ('enable_online_optimize_table'='false');
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_online_optimize_table_pk @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -211,7 +213,9 @@ select * from tpk;
 function: wait_optimize_table_finish()
 show create table tpk;
 select * from tpk;
-admin set frontend config ('enable_online_optimize_table'='false');
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_online_optimize_table_stream_load @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -273,7 +277,9 @@ function: wait_optimize_table_finish()
 show create table t;
 -- show partitions from t;
 select count(*) from t;
-admin set frontend config ('enable_online_optimize_table'='false');
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_optimize_table_with_special_characters @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -286,7 +292,9 @@ admin set frontend config ('enable_online_optimize_table'='false');
 alter table `t#t` distributed by hash(k) buckets 30;
 function: wait_optimize_table_finish()
 show create table `t#t`;
-admin set frontend config ('enable_online_optimize_table'='false');
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_online_optimize_table_expr_partition @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -340,9 +348,11 @@ select count(*) from t;
 function: wait_optimize_table_finish()
 show create table t;
 select count(*) from t;
-admin set frontend config ('enable_online_optimize_table'='false');
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
--- name: test_online_optimize_table_batch @seqential @native
+-- name: test_online_optimize_table_batch @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
 create database db_${uuid0};
 use db_${uuid0};
@@ -360,4 +370,6 @@ function: wait_optimize_table_finish()
 show create table t;
 select * from t;
 select count(*) from t;
-admin set frontend config ('enable_online_optimize_table'='false');
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
