@@ -35,11 +35,15 @@ jobs:
       BE_CHANGE: ${{ steps.check_blacklist.outputs.BE_CHANGE }}
       FE_CHANGE: ${{ steps.check_blacklist.outputs.FE_CHANGE }}
     steps:
+      # celerdata-first: sync PRs run the full pipeline like normal PRs. Only
+      # hold PRs labeled `pending` -- a sync PR whose files overlap an earlier
+      # sync PR that has not landed yet (repo-sync serialization) -- so they do
+      # not build/deploy/test against a base that is about to change and then
+      # burn the expensive pipeline again once unblocked. `force-check` overrides.
       - name: Sync Check
         id: check
         if: >
-          (!contains(github.event.pull_request.labels.*.name, 'sync') &&
-          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))) ||
+          !contains(github.event.pull_request.labels.*.name, 'pending') ||
           contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
@@ -924,9 +928,9 @@ jobs:
         run: |
           labels=`gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json labels -q '.labels[].name'`
           echo "${labels}"
-          if [[ "${labels}" =~ sync ]]; then
-            echo "IS_SYNC=true" >> $GITHUB_OUTPUT
-          fi
+          # celerdata-first: sync PRs now build like normal PRs, so IS_SYNC is no
+          # longer emitted and the downstream `IS_SYNC != 'true'` build/path-filter
+          # gates run for sync PRs too.
           # elastic-build.sh compiles only what the PR itself touches and deploys a prebuilt
           # "inspection" package for the rest. That package is keyed by the commit it was built
           # from, which is not the base commit the test tree is merged with, so when package

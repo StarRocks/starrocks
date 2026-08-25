@@ -25,12 +25,16 @@ jobs:
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
     steps:
+      # celerdata-first: sync PRs run the full branch pipeline (BE-UT/FE-UT/
+      # code-style) like normal PRs. Only hold PRs labeled `pending` -- a sync
+      # PR whose files overlap an earlier sync PR that has not landed yet
+      # (repo-sync serialization) -- so they do not run against a base that is
+      # about to change. `force-check` overrides.
       - name: Check
         id: check
         if: >
-          !contains(github.event.pull_request.labels.*.name, 'sync') &&
-          !contains(github.base_ref, '-sync-') &&
-          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+          !contains(github.event.pull_request.labels.*.name, 'pending') ||
+          contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
