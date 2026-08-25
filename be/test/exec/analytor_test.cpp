@@ -125,4 +125,113 @@ TEST_F(AnalytorTest, find_partition_end) {
     ASSERT_EQ(analytor3._partition.end, 0);
 }
 
+namespace {
+TExpr make_window_function(const std::string& name,
+                           TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
+                           TPrimitiveType::type ret_type = TPrimitiveType::BIGINT) {
+    TFunctionName fn_name;
+    fn_name.__set_function_name(name);
+    TFunction fn;
+    fn.__set_name(fn_name);
+    fn.__set_binary_type(binary_type);
+    TScalarType scalar_type;
+    scalar_type.__set_type(ret_type);
+    if (ret_type == TPrimitiveType::VARCHAR) {
+        scalar_type.__set_len(10);
+    }
+    TTypeNode type_node;
+    type_node.__set_type(TTypeNodeType::SCALAR);
+    type_node.__set_scalar_type(scalar_type);
+    TTypeDesc ret;
+    ret.types.push_back(type_node);
+    fn.__set_ret_type(ret);
+    TExprNode node;
+    node.__set_fn(fn);
+    TExpr expr;
+    expr.nodes.push_back(node);
+    return expr;
+}
+
+TPlanNode make_analytic_plan_node(const std::vector<TExpr>& functions) {
+    TAnalyticNode analytic_node;
+    analytic_node.__set_analytic_functions(functions);
+    TPlanNode plan_node;
+    plan_node.__set_analytic_node(analytic_node);
+    return plan_node;
+}
+} // namespace
+
+// NOLINTNEXTLINE
+TEST_F(AnalytorTest, tnode_supports_spill_frames) {
+    // No window clause: frame is the whole partition, eligible.
+    TPlanNode plan_node = make_analytic_plan_node({make_window_function("sum")});
+    ASSERT_TRUE(Analytor::tnode_supports_spill(plan_node));
+
+    // Window clause with neither bound set (UNBOUNDED ~ UNBOUNDED): eligible.
+    TAnalyticWindow window;
+    window.__set_type(TAnalyticWindowType::ROWS);
+    plan_node.analytic_node.__set_window(window);
+    ASSERT_TRUE(Analytor::tnode_supports_spill(plan_node));
+
+    // Any explicit bound makes the frame non-whole-partition: not eligible.
+    TAnalyticWindowBoundary window_start;
+    window_start.__set_type(TAnalyticWindowBoundaryType::PRECEDING);
+    plan_node.analytic_node.window.__set_window_start(window_start);
+    ASSERT_FALSE(Analytor::tnode_supports_spill(plan_node));
+}
+
+// NOLINTNEXTLINE
+TEST_F(AnalytorTest, tnode_supports_spill_functions) {
+    // Whitelisted aggregates over the whole-partition frame are eligible.
+    for (const auto& name : {"sum", "avg", "count", "max", "min", "first_value", "last_value"}) {
+        TPlanNode plan_node = make_analytic_plan_node({make_window_function(name)});
+        ASSERT_TRUE(Analytor::tnode_supports_spill(plan_node)) << name;
+    }
+
+    // Rank-family / partition-size / offset functions are not.
+    for (const auto& name : {"ntile", "cume_dist", "percent_rank", "rank", "row_number", "lead", "lag"}) {
+        TPlanNode plan_node = make_analytic_plan_node({make_window_function(name)});
+        ASSERT_FALSE(Analytor::tnode_supports_spill(plan_node)) << name;
+    }
+
+    // One ineligible function disqualifies the whole node.
+    TPlanNode plan_node = make_analytic_plan_node({make_window_function("sum"), make_window_function("ntile")});
+    ASSERT_FALSE(Analytor::tnode_supports_spill(plan_node));
+
+    // Non-builtin (UDAF) functions are not eligible.
+    plan_node = make_analytic_plan_node({make_window_function("sum", TFunctionBinaryType::SRJAR)});
+    ASSERT_FALSE(Analytor::tnode_supports_spill(plan_node));
+
+    // Variable-size result types are eligible too (append-only result
+    // columns); their per-partition results stay resident until pass 2
+    // completes — the per-session opt-out is the ANALYTIC mask bit.
+    plan_node = make_analytic_plan_node(
+            {make_window_function("max", TFunctionBinaryType::BUILTIN, TPrimitiveType::VARCHAR)});
+    ASSERT_TRUE(Analytor::tnode_supports_spill(plan_node));
+}
+
+// NOLINTNEXTLINE
+TEST_F(AnalytorTest, whole_partition_frame_flag) {
+    // Mirrors the constructor sites that mark _is_whole_partition_frame.
+    TPlanNode plan_node = make_analytic_plan_node({make_window_function("sum")});
+    Analytor no_window(plan_node, nullptr, false);
+    ASSERT_TRUE(no_window._is_whole_partition_frame);
+    ASSERT_TRUE(no_window._need_partition_materializing);
+
+    TAnalyticWindow window;
+    window.__set_type(TAnalyticWindowType::ROWS);
+    plan_node.analytic_node.__set_window(window);
+    Analytor unbounded_rows(plan_node, nullptr, false);
+    ASSERT_TRUE(unbounded_rows._is_whole_partition_frame);
+
+    TAnalyticWindowBoundary window_start;
+    window_start.__set_type(TAnalyticWindowBoundaryType::CURRENT_ROW);
+    plan_node.analytic_node.window.__set_window_start(window_start);
+    TAnalyticWindowBoundary window_end;
+    window_end.__set_type(TAnalyticWindowBoundaryType::CURRENT_ROW);
+    plan_node.analytic_node.window.__set_window_end(window_end);
+    Analytor bounded(plan_node, nullptr, false);
+    ASSERT_FALSE(bounded._is_whole_partition_frame);
+}
+
 } // namespace starrocks

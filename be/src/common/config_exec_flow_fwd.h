@@ -113,6 +113,13 @@ CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 
+// Cluster-wide kill switch for spilling in the analytic (window) operator. Only
+// materializing whole-partition frames are eligible (e.g. SUM(x) OVER (PARTITION
+// BY k) without a window clause); spilling additionally requires the session to
+// enable spilling via enable_spill and to keep the ANALYTIC bit of
+// spillable_operator_mask set (the per-operator opt-out, on by default).
+CONF_mBool(pipeline_analytic_enable_spill, "false");
+
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // the maximum number of connections in the connection pool for a single jdbc url

@@ -15,6 +15,9 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
+#include <deque>
+#include <mutex>
 #include <queue>
 #include <string>
 
@@ -23,6 +26,7 @@
 #include "common/global_types.h"
 #include "common/memory/mem_hook_allocator.h"
 #include "common/runtime_profile.h"
+#include "common/statusor.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -31,6 +35,10 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
+
+namespace starrocks::pipeline {
+class MemLimitedChunkQueue;
+} // namespace starrocks::pipeline
 
 namespace starrocks {
 
@@ -43,6 +51,56 @@ struct FunctionTypes {
 class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
+
+// In-memory FIFO carrying sealed-partition descriptor batches from the sink
+// driver to the source driver. Purely resident by design: it only ever holds
+// records the source can drain, so a full queue is a backpressure condition,
+// never a deadlock risk — capacity enforcement therefore lives in the
+// analytor's ready-backlog limits and this queue only provides ordering,
+// cross-thread hand-off and end-of-stream semantics. (The input run, which
+// buffers not-yet-consumable open-partition data, is the spillable one.)
+class AnalyticDescriptorQueue {
+public:
+    void push(ChunkPtr batch) {
+        std::lock_guard<std::mutex> l(_mutex);
+        if (_consumer_closed) {
+            return; // early LIMIT: the consumer will never read it
+        }
+        _batches.emplace_back(std::move(batch));
+    }
+    // Data available, or drained with the producer closed (pop -> EndOfFile).
+    bool can_pop() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return !_batches.empty() || _producer_closed;
+    }
+    StatusOr<ChunkPtr> pop() {
+        std::lock_guard<std::mutex> l(_mutex);
+        if (!_batches.empty()) {
+            ChunkPtr batch = std::move(_batches.front());
+            _batches.pop_front();
+            return batch;
+        }
+        if (_producer_closed) {
+            return Status::EndOfFile("no more descriptors");
+        }
+        return Status::InternalError("descriptor queue pop without can_pop");
+    }
+    void close_producer() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _producer_closed = true;
+    }
+    void close_consumer() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _consumer_closed = true;
+        _batches.clear();
+    }
+
+private:
+    std::mutex _mutex;
+    std::deque<ChunkPtr> _batches;
+    bool _producer_closed = false;
+    bool _consumer_closed = false;
+};
 
 template <typename T>
 class ManagedFunctionStates;
@@ -164,6 +222,72 @@ public:
 
     std::string debug_string() const;
 
+    // ==== Analytic spill (incremental partition-stream edition) ====
+    // Spill support covers materializing whole-partition frames, i.e.
+    // `... OVER (PARTITION BY k)` without a window clause, or with
+    // `ROWS|RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`.
+    // Every window value within a partition is one scalar per function, so
+    // processing becomes two cooperating sequential streams (both
+    // MemLimitedChunkQueue) shared by the sink and source drivers:
+    // - InputRun holds the raw input chunks in arrival order, resident below
+    //   its memory limit, flushing cold blocks beyond it;
+    // - the descriptor queue publishes one record per sealed partition: its
+    //   row count plus one result row per window function. It is a dedicated
+    //   in-memory queue, never spilled: it only holds sealed records, which
+    //   the source can always drain, so a full queue is a backpressure
+    //   condition rather than a deadlock risk and the ready-backlog limits
+    //   below are its capacity (see AnalyticDescriptorQueue).
+    // A descriptor is the read permit for its rows. The source consumes the
+    // sealed prefix of InputRun as soon as the covering descriptors arrive,
+    // attaches the per-partition constants as result columns, and lets the
+    // queues release consumed blocks immediately — it does not wait for the
+    // sink to finish. A sealed-but-unconsumed backlog limit feeds back into
+    // the sink's need_input(), so retained memory and disk stay bounded by
+    // the open partition plus that backlog instead of the whole query.
+    //
+    // There is no activation event and no processing-mode conversion: the
+    // memory limit IS the policy (spill_mode=force -> 0, auto -> threshold),
+    // and eligible queries always execute on this single path.
+    //
+    // Known limitations, by design:
+    // - A partition emits nothing before it seals: the first-row latency of
+    //   one giant partition is SQL semantics, not a protocol artifact. The
+    //   per-session escape hatch is the ANALYTIC bit of
+    //   spillable_operator_mask.
+    // - The resident threshold derives from spill_mem_table_size instead of
+    //   the operator memory-reservation mechanism (follow-up).
+    static bool tnode_supports_spill(const TPlanNode& tnode);
+    bool spill_supported() const { return _spill_supported; }
+    bool partition_streams_enabled() const { return _input_run != nullptr; }
+    void set_input_run(std::shared_ptr<pipeline::MemLimitedChunkQueue> input_run) {
+        _input_run = std::move(input_run);
+    }
+    const std::shared_ptr<pipeline::MemLimitedChunkQueue>& input_run() const { return _input_run; }
+    AnalyticDescriptorQueue& descriptor_queue() { return _descriptor_queue; }
+    // Sink side. False while a stream flush is in flight, while the
+    // sealed-but-unconsumed backlog exceeds its limit, or once the consumer
+    // side closed early (LIMIT).
+    bool store_can_push();
+    Status store_process_chunk(RuntimeState* state, const ChunkPtr& chunk);
+    // Seals the open partition, publishes the last descriptors and closes
+    // both producers. Bounded work with no IO barrier.
+    Status store_finish_input(RuntimeState* state);
+    // Source side. True when a descriptor permit and the covering input rows
+    // can both make progress (a block on disk triggers an async load and
+    // reads as false until loaded). store_pull_chunk() returns nullptr
+    // transiently (flush race, or permit not yet published) and sets
+    // store_eos() at end of stream after verifying the replay accounting.
+    //
+    // allow_share_columns lets a fully authorized chunk go out sharing the
+    // input run's data columns instead of copying them. The caller must only
+    // pass true when nothing will rewrite the returned chunk in place: the
+    // queue hands out the ChunkPtr it stored and an in-flight flush task
+    // serializes those columns outside the queue lock, so any filter or resize
+    // races that serializer (see the comment at the output-building site).
+    bool store_has_output();
+    bool store_eos() const { return _store_eos; }
+    StatusOr<ChunkPtr> store_pull_chunk(RuntimeState* state, bool allow_share_columns);
+
 private:
     Status _prepare_processing_mode(RuntimeState* state, RuntimeProfile* runtime_profile);
     Status _evaluate_const_columns(int i);
@@ -276,6 +400,71 @@ private:
     bool _require_partition_size(const std::string& function_name) {
         return function_name == "cume_dist" || function_name == "percent_rank";
     }
+
+    // ==== Analytic spill — see the comment on tnode_supports_spill ====
+    // Sink-side fields below are owned by the sink driver, source-side fields
+    // by the source driver; neither touches the other's. Everything crossing
+    // the two pipelines flows through the queues (internally synchronized) or
+    // through the atomic counters.
+    struct AnalyticSpillContext {
+        // -- Sink side: open-partition tracking. The open partition's key is
+        // kept as one-row column copies so it survives chunk boundaries.
+        bool has_open_partition = false;
+        int64_t open_partition_rows = 0;
+        MutableColumns last_partition_key;
+        // Sealed-but-unpublished partitions: column 0 holds the row counts,
+        // column 1 + i the one-row results of function i. Flushed into the
+        // descriptor stream before store_process_chunk returns, so a sealed
+        // record is never privately held across scheduling periods (the
+        // source could otherwise starve with no way to trigger a flush).
+        MutableColumns descriptor_builder;
+        size_t builder_records = 0;
+        int64_t builder_rows = 0;
+
+        // -- Source side: replay cursor over the two streams.
+        ChunkPtr descriptor_batch; // current descriptor chunk
+        size_t descriptor_idx = 0; // next record within the batch
+        int64_t out_rows_remaining = 0;
+        bool descriptor_eos = false;
+        bool input_eos = false;
+        ChunkPtr pending_input; // popped but not fully covered by permits
+        size_t pending_offset = 0;
+        int64_t out_rows_total = 0;
+    };
+
+    static constexpr int32_t kOutputConsumerIndex = 0;
+    // Sealed-but-unconsumed backlog limits: bound retained memory/disk when
+    // the source lags; the open partition itself is never throttled. The
+    // rows/partitions limits bound the sealed input payload and the record
+    // count; the bytes limit bounds the descriptor stream's resident memory
+    // (variable-size results make a pure count limit insufficient).
+    static constexpr int64_t kStoreReadyRowsLimit = 1LL << 20;
+    static constexpr int64_t kStoreReadyPartitionsLimit = 1LL << 16;
+    static constexpr int64_t kStoreReadyDescriptorBytesLimit = 16LL << 20;
+
+    Status _store_update_states(const std::vector<Columns>& fn_cols, int64_t frame_start, int64_t frame_end);
+    Status _store_seal_open_partition();
+    Status _store_flush_descriptors();
+    void _store_open_partition(const Columns& part_cols, size_t row);
+    bool _store_row_equals_last_key(const Columns& part_cols, size_t row) const;
+
+    bool _spill_supported = false;
+    bool _is_whole_partition_frame = false;
+    std::shared_ptr<pipeline::MemLimitedChunkQueue> _input_run;
+    AnalyticDescriptorQueue _descriptor_queue;
+    bool _store_eos = false;
+    AnalyticSpillContext _spill_ctx;
+    // Cross-pipeline accounting. The sink publishes, the source consumes;
+    // backpressure reads are relaxed (approximate is fine), the source's EOF
+    // validation reads happen after both queues reported end-of-stream, which
+    // orders them behind the sink's final updates.
+    std::atomic<int64_t> _store_rows_pushed{0};
+    std::atomic<int64_t> _store_rows_published{0};
+    std::atomic<int64_t> _store_partitions_published{0};
+    std::atomic<int64_t> _store_rows_consumed{0};
+    std::atomic<int64_t> _store_partitions_consumed{0};
+    std::atomic<int64_t> _store_descriptor_bytes_published{0};
+    std::atomic<int64_t> _store_descriptor_bytes_consumed{0};
 
     RuntimeState* _state = nullptr;
     bool _is_closed = false;

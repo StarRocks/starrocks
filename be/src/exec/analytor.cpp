@@ -21,9 +21,11 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
@@ -55,6 +57,16 @@
     }
 
 namespace starrocks {
+
+namespace {
+// Result columns of these types cannot be resized in place, so window results
+// are appended to them instead of being written at absolute positions. Shared
+// by the in-memory result columns and the spill per-partition result columns.
+bool window_result_column_is_append_only(LogicalType type) {
+    return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_JSON ||
+           type == LogicalType::TYPE_ARRAY || type == LogicalType::TYPE_MAP || type == LogicalType::TYPE_STRUCT;
+}
+} // namespace
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context,
                                const TCloudConfiguration& cloud_configuration, bool use_cache,
@@ -80,6 +92,7 @@ Analytor::Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_d
     TAnalyticWindow window = analytic_node.window;
     if (!analytic_node.__isset.window) {
         _need_partition_materializing = true;
+        _is_whole_partition_frame = true;
     } else if (analytic_node.window.type == TAnalyticWindowType::RANGE) {
         _is_range_window = true;
 
@@ -110,6 +123,7 @@ Analytor::Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_d
         if (_range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
             _range_end_boundary.type == RangeBoundaryType::UNBOUNDED_FOLLOWING) {
             _need_partition_materializing = true;
+            _is_whole_partition_frame = true;
         } else if (!(_range_start_boundary.type == RangeBoundaryType::UNBOUNDED_PRECEDING &&
                      _range_end_boundary.type == RangeBoundaryType::CURRENT_ROW)) {
             // Non-cumulative RANGE windows are handled by definition in materializing mode.
@@ -121,6 +135,7 @@ Analytor::Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_d
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
             _need_partition_materializing = true;
+            _is_whole_partition_frame = true;
         } else {
             if (window.__isset.window_start) {
                 TAnalyticWindowBoundary b = window.window_start;
@@ -429,6 +444,20 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
+    // ==== Analytic spill eligibility. tnode_supports_spill is the single
+    // source of truth (also used at pipeline-decompose time); the DCHECK guards
+    // against its rules drifting from the parsed state.
+    _spill_supported = tnode_supports_spill(_tnode);
+    DCHECK(!_spill_supported ||
+           (_need_partition_materializing && _is_whole_partition_frame && !_should_set_partition_size &&
+            std::none_of(_is_lead_lag_functions.begin(), _is_lead_lag_functions.end(), [](bool v) { return v; })));
+    if (!_spill_supported) {
+        _input_run.reset();
+    }
+    if (partition_streams_enabled()) {
+        _runtime_profile->add_info_string("AnalyticSpill", "true");
+    }
+
     return _prepare_processing_mode(state, runtime_profile);
 }
 
@@ -524,6 +553,8 @@ void Analytor::close(RuntimeState* state) {
         return;
     }
 
+    _input_run.reset();
+
     while (!_buffer.empty()) {
         _buffer.pop();
     }
@@ -574,6 +605,13 @@ void Analytor::close(RuntimeState* state) {
 }
 
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
+    if (_input_run != nullptr) {
+        TRY_CATCH_ALLOC_SCOPE_START()
+        RETURN_IF_ERROR(store_process_chunk(state, chunk));
+        TRY_CATCH_ALLOC_SCOPE_END()
+        return _check_has_error();
+    }
+
     _remove_unused_rows(state);
 
     // Wrap the whole processing path in a bad-alloc scope so that all allocations inside _add_chunk and the window
@@ -1467,12 +1505,7 @@ void Analytor::_init_window_result_columns() {
         // so we only reserve it.
         if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
             _result_window_columns[i]->resize(chunk_size);
-        } else if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+        } else if (window_result_column_is_append_only(_agg_fn_types[i].result_type.type)) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);
@@ -1658,6 +1691,438 @@ void Analytor::_set_partition_size_for_function() {
         auto& state = *reinterpret_cast<CumeDistState*>(_managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
         state.count = _partition.end - _partition.start;
     }
+}
+
+// ==== Analytic spill (v1) ====================================================
+// Only materializing whole-partition frames are supported (see analytor.h).
+// FIFO replay is intrinsic to the run store: chunks live in an ordered block
+// with a single mem table: flushes are strictly serialized, so blocks join the
+// block group set in append order and the unordered input stream reads them
+// back in exactly that order.
+
+bool Analytor::tnode_supports_spill(const TPlanNode& tnode) {
+    const TAnalyticNode& analytic_node = tnode.analytic_node;
+    if (analytic_node.__isset.window) {
+        const TAnalyticWindow& window = analytic_node.window;
+        if (window.__isset.window_start || window.__isset.window_end) {
+            return false;
+        }
+    }
+    for (const TExpr& desc : analytic_node.analytic_functions) {
+        const TFunction& fn = desc.nodes[0].fn;
+        if (fn.binary_type != TFunctionBinaryType::BUILTIN) {
+            return false;
+        }
+        const std::string& name = fn.name.function_name;
+        if (!(name == "sum" || name == "avg" || name == "count" || name == "max" || name == "min" ||
+              name == "first_value" || name == "last_value")) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Status Analytor::store_process_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    DCHECK(partition_streams_enabled());
+    DCHECK(chunk != nullptr && !chunk->is_empty());
+    const size_t chunk_size = chunk->num_rows();
+
+    // Payload first: a descriptor must never refer to rows that are not in
+    // the input run yet. The chunk is immutable from here on — the source may
+    // pop it while this driver is still scanning it.
+    RETURN_IF_ERROR(_input_run->push(chunk));
+    _store_rows_pushed.fetch_add(chunk_size, std::memory_order_release);
+
+    // Evaluate each expression at most once per chunk; the span loop below
+    // only references the results.
+    Columns part_cols(_partition_ctxs.size());
+    for (size_t i = 0; i < _partition_ctxs.size(); i++) {
+        ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
+        auto normalized = _partition_columns[i]->clone_empty();
+        _append_column(chunk_size, normalized.get(), column);
+        part_cols[i] = std::move(normalized);
+    }
+
+    std::vector<Columns> fn_cols(_agg_fn_ctxs.size());
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        // count(*) has no input expressions and gets zero argument columns;
+        // every update path branches on the argument count instead of
+        // dereferencing a placeholder.
+        fn_cols[i].resize(_agg_expr_ctxs[i].size());
+        for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+            auto normalized = _agg_intput_columns[i][j]->clone_empty();
+            ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
+            _append_column(chunk_size, normalized.get(), column);
+            fn_cols[i][j] = std::move(normalized);
+        }
+    }
+
+    if (!_spill_ctx.has_open_partition) {
+        _store_open_partition(part_cols, 0);
+    } else if (!_store_row_equals_last_key(part_cols, 0)) {
+        RETURN_IF_ERROR(_store_seal_open_partition());
+        _store_open_partition(part_cols, 0);
+    }
+
+    size_t seg_start = 0;
+    for (size_t row = 1; row <= chunk_size; row++) {
+        bool is_boundary = false;
+        if (row < chunk_size) {
+            for (auto& column : part_cols) {
+                if (column->compare_at(row, row - 1, *column, 1) != 0) {
+                    is_boundary = true;
+                    break;
+                }
+            }
+        }
+
+        //TODO simplify logic
+        if (row == chunk_size || is_boundary) {
+            RETURN_IF_ERROR(_store_update_states(fn_cols, seg_start, row));
+            _spill_ctx.open_partition_rows += row - seg_start;
+            if (row < chunk_size) {
+                RETURN_IF_ERROR(_store_seal_open_partition());
+                _store_open_partition(part_cols, row);
+                seg_start = row;
+            }
+        }
+    }
+
+    // Publish every partition sealed by this chunk before returning.
+    return _store_flush_descriptors();
+}
+
+Status Analytor::_store_update_states(const std::vector<Columns>& fn_cols, int64_t frame_start, int64_t frame_end) {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        const size_t column_size = fn_cols[i].size();
+        const Column* data_columns[std::max<size_t>(column_size, 1)];
+        for (size_t j = 0; j < column_size; j++) {
+            data_columns[j] = fn_cols[i][j].get();
+        }
+        if (_is_merge_funcs) {
+            DCHECK_GT(column_size, 0);
+            for (int64_t j = frame_start; j < frame_end; j++) {
+                _agg_functions[i]->merge(_agg_fn_ctxs[i], data_columns[0],
+                                         _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], j);
+            }
+        } else {
+            _agg_functions[i]->update_batch_single_state_with_frame(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
+                    frame_start, frame_end, frame_start, frame_end);
+        }
+    }
+    return Status::OK();
+}
+
+void Analytor::_store_open_partition(const Columns& part_cols, size_t row) {
+    if (_spill_ctx.last_partition_key.size() != _partition_columns.size()) {
+        _spill_ctx.last_partition_key.clear();
+        for (auto& column : _partition_columns) {
+            _spill_ctx.last_partition_key.emplace_back(column->clone_empty());
+        }
+    }
+    for (size_t i = 0; i < _spill_ctx.last_partition_key.size(); i++) {
+        _spill_ctx.last_partition_key[i]->resize(0);
+        _spill_ctx.last_partition_key[i]->append(*part_cols[i], row, 1);
+    }
+    _spill_ctx.has_open_partition = true;
+}
+
+bool Analytor::_store_row_equals_last_key(const Columns& part_cols, size_t row) const {
+    for (size_t i = 0; i < part_cols.size(); i++) {
+        if (part_cols[i]->compare_at(row, 0, *_spill_ctx.last_partition_key[i], 1) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Status Analytor::_store_seal_open_partition() {
+    auto& ctx = _spill_ctx;
+    DCHECK(ctx.has_open_partition);
+    DCHECK_GT(ctx.open_partition_rows, 0);
+    if (ctx.descriptor_builder.empty()) {
+        ctx.descriptor_builder.reserve(1 + _agg_fn_types.size());
+        ctx.descriptor_builder.emplace_back(Int64Column::create());
+        for (auto& agg_fn_type : _agg_fn_types) {
+            ctx.descriptor_builder.emplace_back(
+                    ColumnHelper::create_column(agg_fn_type.result_type, agg_fn_type.has_nullable_child));
+        }
+    }
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+    down_cast<Int64Column*>(ctx.descriptor_builder[0].get())->append(ctx.open_partition_rows);
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        Column* dst = ctx.descriptor_builder[i + 1].get();
+        // Fixed-size result columns are resized and written in place by
+        // get_values, var-size ones append.
+        if (!window_result_column_is_append_only(_agg_fn_types[i].result_type.type)) {
+            dst->resize(ctx.builder_records + 1);
+        }
+        _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i], dst,
+                                      ctx.builder_records, ctx.builder_records + 1);
+    }
+    ctx.builder_records++;
+    ctx.builder_rows += ctx.open_partition_rows;
+    ctx.open_partition_rows = 0;
+    ctx.has_open_partition = false;
+    _reset_window_state();
+    // Cap descriptor batches at the vector chunk size like any chunk stream.
+    if (ctx.builder_records >= static_cast<size_t>(_state->chunk_size())) {
+        return _store_flush_descriptors();
+    }
+    return Status::OK();
+}
+
+Status Analytor::_store_flush_descriptors() {
+    auto& ctx = _spill_ctx;
+    if (ctx.builder_records == 0) {
+        return Status::OK();
+    }
+    auto batch = std::make_shared<Chunk>();
+    for (size_t i = 0; i < ctx.descriptor_builder.size(); i++) {
+        batch->append_column(std::move(ctx.descriptor_builder[i]), static_cast<SlotId>(i));
+    }
+    ctx.descriptor_builder.clear();
+    const int64_t records = static_cast<int64_t>(ctx.builder_records);
+    const int64_t rows = ctx.builder_rows;
+    const int64_t bytes = static_cast<int64_t>(batch->memory_usage());
+    ctx.builder_records = 0;
+    ctx.builder_rows = 0;
+    _descriptor_queue.push(std::move(batch));
+    // Publication: the queue push is the synchronization point for the data;
+    // these counters feed the sink backpressure (relaxed reads) and the
+    // source EOF validation (which runs after both streams reported EOF).
+    _store_rows_published.fetch_add(rows, std::memory_order_release);
+    _store_partitions_published.fetch_add(records, std::memory_order_release);
+    _store_descriptor_bytes_published.fetch_add(bytes, std::memory_order_release);
+    return Status::OK();
+}
+
+bool Analytor::store_can_push() {
+    DCHECK(partition_streams_enabled());
+    // Early consumer close (LIMIT): stop accepting input, the framework
+    // finishes this pipeline.
+    if (_input_run->is_all_source_finished()) {
+        return false;
+    }
+    // Sealed-but-unconsumed backlog: when the source lags, stop accepting
+    // more input so retained memory/disk stay bounded by the open partition
+    // plus this backlog. Relaxed reads: approximate is fine for flow control.
+    const int64_t ready_rows = _store_rows_published.load(std::memory_order_relaxed) -
+                               _store_rows_consumed.load(std::memory_order_relaxed);
+    const int64_t ready_partitions = _store_partitions_published.load(std::memory_order_relaxed) -
+                                     _store_partitions_consumed.load(std::memory_order_relaxed);
+    const int64_t ready_descriptor_bytes = _store_descriptor_bytes_published.load(std::memory_order_relaxed) -
+                                           _store_descriptor_bytes_consumed.load(std::memory_order_relaxed);
+    if (ready_rows >= kStoreReadyRowsLimit || ready_partitions >= kStoreReadyPartitionsLimit ||
+        ready_descriptor_bytes >= kStoreReadyDescriptorBytesLimit) {
+        return false;
+    }
+    // The descriptor stream is a pure in-memory bounded queue -- the backlog
+    // limits above ARE its capacity -- so only the input run (which may have
+    // a flush in flight) gates the push.
+    return _input_run->can_push();
+}
+
+Status Analytor::store_finish_input(RuntimeState* state) {
+    DCHECK(partition_streams_enabled());
+    _input_eos = true;
+    TRY_CATCH_ALLOC_SCOPE_START()
+    if (_spill_ctx.has_open_partition) {
+        RETURN_IF_ERROR(_store_seal_open_partition());
+    }
+    RETURN_IF_ERROR(_store_flush_descriptors());
+    TRY_CATCH_ALLOC_SCOPE_END()
+    // No IO barrier: resident blocks serve directly and flushed blocks are
+    // prefetched by the source side's can_pop.
+    _descriptor_queue.close_producer();
+    _input_run->close_producer();
+    _is_sink_complete.store(true, std::memory_order_release);
+    return _check_has_error();
+}
+
+bool Analytor::store_has_output() {
+    DCHECK(partition_streams_enabled());
+    const auto& ctx = _spill_ctx;
+    if (_store_eos) {
+        return false;
+    }
+    // A permit in hand, one poppable from the stream, or the stream at EOF
+    // (store_pull_chunk still has to run the final validation then).
+    const bool permit = ctx.out_rows_remaining > 0 ||
+                        (ctx.descriptor_batch != nullptr && ctx.descriptor_idx < ctx.descriptor_batch->num_rows()) ||
+                        ctx.descriptor_eos || _descriptor_queue.can_pop();
+    if (!permit) {
+        return false;
+    }
+    return ctx.pending_input != nullptr || ctx.input_eos || _input_run->can_pop(kOutputConsumerIndex);
+}
+
+StatusOr<ChunkPtr> Analytor::store_pull_chunk(RuntimeState* state, bool allow_share_columns) {
+    DCHECK(partition_streams_enabled());
+    auto& ctx = _spill_ctx;
+    if (_store_eos) {
+        return nullptr;
+    }
+
+    // Ensure input rows at hand.
+    if (ctx.pending_input == nullptr && !ctx.input_eos) {
+        auto res = _input_run->pop(kOutputConsumerIndex);
+        if (res.status().is_end_of_file()) {
+            ctx.input_eos = true;
+        } else {
+            RETURN_IF_ERROR(res.status());
+            ChunkPtr chunk = std::move(res.value());
+            if (chunk == nullptr || chunk->is_empty()) {
+                // Transient: the block was flushed between can_pop and pop;
+                // the next can_pop schedules its load.
+                return nullptr;
+            }
+            ctx.pending_input = std::move(chunk);
+            ctx.pending_offset = 0;
+        }
+    }
+
+    if (ctx.pending_input == nullptr) {
+        DCHECK(ctx.input_eos);
+        // Drain the descriptor stream to its EOF and verify the accounting.
+        if (ctx.out_rows_remaining > 0 ||
+            (ctx.descriptor_batch != nullptr && ctx.descriptor_idx < ctx.descriptor_batch->num_rows())) {
+            return Status::InternalError("analytic spill replay: input EOF with descriptors remaining");
+        }
+        if (!ctx.descriptor_eos) {
+            auto res = _descriptor_queue.pop();
+            if (res.status().is_end_of_file()) {
+                ctx.descriptor_eos = true;
+            } else {
+                RETURN_IF_ERROR(res.status());
+                return Status::InternalError("analytic spill replay: descriptors after input EOF");
+            }
+        }
+        const int64_t pushed = _store_rows_pushed.load(std::memory_order_acquire);
+        const int64_t published = _store_rows_published.load(std::memory_order_acquire);
+        const int64_t partitions_published = _store_partitions_published.load(std::memory_order_acquire);
+        const int64_t partitions_consumed = _store_partitions_consumed.load(std::memory_order_relaxed);
+        const int64_t descriptor_bytes_published = _store_descriptor_bytes_published.load(std::memory_order_acquire);
+        const int64_t descriptor_bytes_consumed = _store_descriptor_bytes_consumed.load(std::memory_order_relaxed);
+        if (descriptor_bytes_published != descriptor_bytes_consumed) {
+            return Status::InternalError(strings::Substitute(
+                    "analytic spill replay accounting mismatch: descriptor bytes published=$0 consumed=$1",
+                    descriptor_bytes_published, descriptor_bytes_consumed));
+        }
+        if (ctx.out_rows_total != pushed || ctx.out_rows_total != published ||
+            partitions_consumed != partitions_published) {
+            return Status::InternalError(
+                    strings::Substitute("analytic spill replay accounting mismatch: pushed=$0 published=$1 "
+                                        "replayed=$2 partitions published=$3 consumed=$4",
+                                        pushed, published, ctx.out_rows_total, partitions_published,
+                                        partitions_consumed));
+        }
+        _store_eos = true;
+        return nullptr;
+    }
+
+    // Authorize as many pending rows as the published descriptors cover.
+    ChunkPtr in = ctx.pending_input;
+    const size_t in_rows = in->num_rows();
+    size_t avail = in_rows - ctx.pending_offset;
+    // Never authorize more rows than the limit still needs. Stopping at the
+    // source keeps the replay accounting exact and avoids trimming an already
+    // built output chunk, which would resize columns the input run may share.
+    if (_limit != -1) {
+        const int64_t remaining = _limit - _num_rows_returned;
+        if (remaining <= 0) {
+            _store_eos = true;
+            return nullptr;
+        }
+        avail = std::min<size_t>(avail, static_cast<size_t>(remaining));
+    }
+    std::vector<std::tuple<ChunkPtr, size_t, size_t>> spans; // (batch, record, length)
+    size_t take = 0;
+    while (take < avail) {
+        if (ctx.out_rows_remaining == 0) {
+            if (ctx.descriptor_batch == nullptr || ctx.descriptor_idx >= ctx.descriptor_batch->num_rows()) {
+                if (ctx.descriptor_eos || !_descriptor_queue.can_pop()) {
+                    break; // permit not yet published
+                }
+                auto res = _descriptor_queue.pop();
+                if (res.status().is_end_of_file()) {
+                    ctx.descriptor_eos = true;
+                    break;
+                }
+                RETURN_IF_ERROR(res.status());
+                DCHECK(res.value() != nullptr && !res.value()->is_empty());
+                ctx.descriptor_batch = std::move(res.value());
+                ctx.descriptor_idx = 0;
+            }
+            const auto& row_counts = down_cast<const Int64Column&>(*ctx.descriptor_batch->columns()[0]);
+            ctx.out_rows_remaining = row_counts.get_data()[ctx.descriptor_idx];
+            DCHECK_GT(ctx.out_rows_remaining, 0);
+        }
+        const size_t span = std::min<size_t>(static_cast<size_t>(ctx.out_rows_remaining), avail - take);
+        spans.emplace_back(ctx.descriptor_batch, ctx.descriptor_idx, span);
+        take += span;
+        ctx.out_rows_remaining -= span;
+        if (ctx.out_rows_remaining == 0) {
+            ctx.descriptor_idx++;
+            _store_partitions_consumed.fetch_add(1, std::memory_order_relaxed);
+            if (ctx.descriptor_idx >= ctx.descriptor_batch->num_rows()) {
+                // Batch fully consumed: release it eagerly (the spans hold
+                // their own references) and return its bytes to the backlog.
+                _store_descriptor_bytes_consumed.fetch_add(
+                        static_cast<int64_t>(ctx.descriptor_batch->memory_usage()), std::memory_order_relaxed);
+                ctx.descriptor_batch.reset();
+                ctx.descriptor_idx = 0;
+            }
+        }
+    }
+
+    if (take == 0) {
+        if (ctx.descriptor_eos) {
+            return Status::InternalError("analytic spill replay: descriptor EOF with unauthorized input rows");
+        }
+        return nullptr; // wait for the next descriptor publication
+    }
+
+    // Build the output. Sharing the data columns is only allowed when the whole
+    // chunk goes out in one piece AND nothing downstream will rewrite them:
+    // pop() hands out the ChunkPtr the queue stored, and a flush task selected
+    // under the queue lock keeps its own reference while serializing those
+    // columns outside that lock. Column::filter compacts survivors forward in
+    // the same buffer and Chunk::set_num_rows resizes it, so an in-place edit
+    // races that serializer and desynchronizes the block's framing -- the whole
+    // block is one flat byte stream replayed by a single sequential cursor, so
+    // a torn chunk corrupts every chunk behind it. Copy in every other case;
+    // the source must never trim columns still shared with the queue.
+    ChunkPtr output;
+    TRY_CATCH_ALLOC_SCOPE_START()
+    if (allow_share_columns && ctx.pending_offset == 0 && take == in_rows) {
+        output = std::make_shared<Chunk>(Columns(in->columns()), in->get_slot_id_to_index_map());
+    } else {
+        output = in->clone_empty(take);
+        output->append(*in, ctx.pending_offset, take);
+    }
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        auto column = ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
+        column->reserve(take);
+        for (const auto& [batch, record, span] : spans) {
+            column->append_value_multiple_times(*batch->columns()[i + 1], record, span);
+        }
+        output->append_column(std::move(column), _result_tuple_desc->slots()[i]->id());
+    }
+    TRY_CATCH_ALLOC_SCOPE_END()
+
+    ctx.pending_offset += take;
+    if (ctx.pending_offset == in_rows) {
+        ctx.pending_input.reset();
+        ctx.pending_offset = 0;
+    }
+    ctx.out_rows_total += take;
+    _store_rows_consumed.fetch_add(take, std::memory_order_relaxed);
+
+    _num_rows_returned += static_cast<int64_t>(take);
+    return output;
 }
 
 AnalytorPtr AnalytorFactory::create(int i) {

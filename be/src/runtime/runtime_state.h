@@ -401,6 +401,7 @@ public:
         return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG_DISTINCT);
     }
     bool enable_sort_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::SORT); }
+    bool enable_analytic_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::ANALYTIC); }
     bool enable_nl_join_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::NL_JOIN); }
     bool enable_multi_cast_local_exchange_spill() const {
         return spillable_operator_mask() & (1LL << TSpillableOperatorType::MULTI_CAST_LOCAL_EXCHANGE);

@@ -120,6 +120,7 @@ enum TSpillableOperatorType {
   SORT = 3;
   NL_JOIN = 4;
   MULTI_CAST_LOCAL_EXCHANGE = 5;
+  ANALYTIC = 6;
 }
 
 enum TTabletInternalParallelMode {

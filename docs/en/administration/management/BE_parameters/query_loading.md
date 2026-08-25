@@ -467,6 +467,15 @@ This topic introduces the following types of BE configurations:
 - Description: The time interval at which GC cleans expired data.
 - Introduced in: -
 
+### pipeline_analytic_enable_spill
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the analytic (window) operator is allowed to spill. Only takes effect for materializing whole-partition frames (for example `SUM(x) OVER (PARTITION BY k)` without a window clause) over the built-in aggregate functions `sum`, `avg`, `count`, `min`, `max`, `first_value`, and `last_value`, and requires the session to enable spilling via `enable_spill`. Only the buffered input rows are spilled; per-partition results stay in memory, bounded by a fixed backlog limit.
+- Introduced in: -
+
 ### pipeline_connector_scan_thread_num_per_cpu
 
 - Default: 8

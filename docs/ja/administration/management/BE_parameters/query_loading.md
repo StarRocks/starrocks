@@ -459,6 +459,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: GCが期限切れのデータをクリーンアップする時間間隔。
 - 導入バージョン: -
 
+### pipeline_analytic_enable_spill
+
+- デフォルト: false
+- タイプ: ブール
+- 単位: -
+- 変更可能: はい
+- 説明: 分析（ウィンドウ）オペレーターにスピルを許可するかどうか。ウィンドウ句のないパーティション全体のフレーム（例: `SUM(x) OVER (PARTITION BY k)`）にのみ適用され、セッションが `enable_spill` でスピルを有効にしている場合に有効になります。
+- 導入バージョン: -
+
 ### pipeline_connector_scan_thread_num_per_cpu
 
 - デフォルト: 8

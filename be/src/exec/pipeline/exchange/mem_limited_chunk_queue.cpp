@@ -131,6 +131,11 @@ Status MemLimitedChunkQueue::push(const ChunkPtr& chunk) {
 }
 
 bool MemLimitedChunkQueue::can_push() {
+    // An asynchronous flush failure must surface instead of reading as "not
+    // ready" forever: report ready so the next push returns the error.
+    if (UNLIKELY(!_get_io_task_status().ok())) {
+        return true;
+    }
     std::shared_lock l(_mutex);
     size_t unconsumed_bytes = _total_accumulated_bytes - _fastest_accumulated_bytes;
     // if the fastest consumer still has a lot of data to consume, it will no longer accept new input.
@@ -219,6 +224,12 @@ void MemLimitedChunkQueue::_evict_loaded_block() {
 
 bool MemLimitedChunkQueue::can_pop(int32_t consumer_index) {
     DCHECK(consumer_index < _consumer_number);
+    // See can_push: a failed load task would otherwise leave has_load_task
+    // set and this consumer not-ready forever; report ready so the next pop
+    // returns the error.
+    if (UNLIKELY(!_get_io_task_status().ok())) {
+        return true;
+    }
     std::shared_lock l(_mutex);
     DCHECK(_consumer_progress[consumer_index] != nullptr);
 

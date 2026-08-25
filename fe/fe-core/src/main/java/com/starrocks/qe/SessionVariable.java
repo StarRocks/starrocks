@@ -1761,6 +1761,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if spillable_operator_mask & 4 != 0, agg distinct operator can spill
     // if spillable_operator_mask & 8 != 0, sort operator can spill
     // if spillable_operator_mask & 16 != 0, nest loop join operator can spill
+    // if spillable_operator_mask & 64 != 0, analytic (window) operator can spill
     // ...
     // default value is -1, means all operators can spill
     @VariableMgr.VarAttr(name = SPILLABLE_OPERATOR_MASK, flag = VariableMgr.INVISIBLE)

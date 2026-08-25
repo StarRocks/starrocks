@@ -23,8 +23,8 @@ namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
     AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                         const TPlanNode& tnode, AnalytorPtr&& analytor)
-            : Operator(factory, id, "analytic_sink", plan_node_id, false, driver_sequence),
+                         const TPlanNode& tnode, AnalytorPtr&& analytor, const char* name = "analytic_sink")
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence),
               _tnode(tnode),
               _analytor(std::move(analytor)) {
         _analytor->ref();
@@ -42,7 +42,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-private:
+protected:
     TPlanNode _tnode;
     // It is used to perform analytic algorithms
     // shared by AnalyticSourceOperator
@@ -51,13 +51,11 @@ private:
     bool _is_finished = false;
 };
 
-class AnalyticSinkOperatorFactory final : public OperatorFactory {
+class AnalyticSinkOperatorFactory : public OperatorFactory {
 public:
     AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
-                                AnalytorFactoryPtr analytor_factory)
-            : OperatorFactory(id, "analytic_sink", plan_node_id),
-              _tnode(tnode),
-              _analytor_factory(std::move(analytor_factory)) {}
+                                AnalytorFactoryPtr analytor_factory, const char* name = "analytic_sink")
+            : OperatorFactory(id, name, plan_node_id), _tnode(tnode), _analytor_factory(std::move(analytor_factory)) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
     bool support_event_scheduler() const override { return true; }
@@ -68,7 +66,7 @@ public:
                                                       std::move(analytor));
     }
 
-private:
+protected:
     TPlanNode _tnode;
     AnalytorFactoryPtr _analytor_factory;
 };

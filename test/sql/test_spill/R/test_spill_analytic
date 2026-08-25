@@ -1,0 +1,192 @@
+-- name: test_spill_analytic
+update information_schema.be_configs set value = "true" where name = "pipeline_analytic_enable_spill";
+-- result:
+-- !result
+drop table if exists t_wpa;
+-- result:
+-- !result
+create table t_wpa (dt int, x bigint) duplicate key(dt) distributed by hash(dt) buckets 4 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_wpa select generate_series % 7, generate_series from TABLE(generate_series(1, 2000000));
+-- result:
+-- !result
+insert into t_wpa values (0, null), (7, null), (7, 1);
+-- result:
+-- !result
+select count(*) from t_wpa;
+-- result:
+2000003
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=2;
+-- result:
+-- !result
+set spill_mem_table_size=1048576;
+-- result:
+-- !result
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt order by dt;
+-- result:
+0	285715	285714714285	285714714285
+1	285715	285715000000	285715000000
+2	285715	285715285715	285715285715
+3	285714	285713571429	285713571429
+4	285714	285713857143	285713857143
+5	285714	285714142857	285714142857
+6	285714	285714428571	285714428571
+7	2	1	1
+-- !result
+select count(c), min(c), max(c) from (select count(*) over (partition by dt) c from t_wpa) w;
+-- result:
+2000003	2	285715
+-- !result
+select dt, min(c) mnc, max(c) mxc, min(a) mna, max(a) mxa from (select dt, count(x) over (partition by dt) c, avg(x) over (partition by dt) a from t_wpa) w group by dt order by dt;
+-- result:
+0	285714	285714	1000002.5	1000002.5
+1	285715	285715	1000000.0	1000000.0
+2	285715	285715	1000001.0	1000001.0
+3	285714	285714	999998.5	999998.5
+4	285714	285714	999999.5	999999.5
+5	285714	285714	1000000.5	1000000.5
+6	285714	285714	1000001.5	1000001.5
+7	1	1	1.0	1.0
+-- !result
+select dt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt order by x rows between unbounded preceding and unbounded following) s from t_wpa) w group by dt order by dt;
+-- result:
+0	285714714285	285714714285
+1	285715000000	285715000000
+2	285715285715	285715285715
+3	285713571429	285713571429
+4	285713857143	285713857143
+5	285714142857	285714142857
+6	285714428571	285714428571
+7	1	1
+-- !result
+select dt, min(f) mnf, max(l) mxl from (select dt, first_value(x) over (partition by dt order by x rows between unbounded preceding and unbounded following) f, last_value(x) over (partition by dt order by x rows between unbounded preceding and unbounded following) l from t_wpa) w group by dt order by dt;
+-- result:
+0	None	1999998
+1	1	1999999
+2	2	2000000
+3	3	1999994
+4	4	1999995
+5	5	1999996
+6	6	1999997
+7	None	1
+-- !result
+select count(s), min(s), max(s) from (select sum(x) over () s from t_wpa) w;
+-- result:
+2000003	2000001000001	2000001000001
+-- !result
+select count(*) from (select dt, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt) a join (select dt, sum(x) ss from t_wpa group by dt) b on a.dt = b.dt and a.mx <=> b.ss;
+-- result:
+8
+-- !result
+select count(*) from (select s from (select sum(x) over (partition by dt) s from t_wpa) w limit 10) t;
+-- result:
+10
+-- !result
+select k, min(c) mnc, max(m) mxm from (select cast(dt as string) k, count(*) over (partition by cast(dt as string)) c, max(cast(x as string)) over (partition by cast(dt as string)) m from t_wpa) w group by k order by k;
+-- result:
+0	285715	999999
+1	285715	999993
+2	285715	999994
+3	285714	999995
+4	285714	999996
+5	285714	999997
+6	285714	999998
+7	2	1
+-- !result
+set spill_mode="auto";
+-- result:
+-- !result
+select dt, count(*) cnt, min(s) mn from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt order by dt;
+-- result:
+0	285715	285714714285
+1	285715	285715000000
+2	285715	285715285715
+3	285714	285713571429
+4	285714	285713857143
+5	285714	285714142857
+6	285714	285714428571
+7	2	1
+-- !result
+drop table if exists t_wpa_skew;
+-- result:
+-- !result
+create table t_wpa_skew (dt int, x bigint) duplicate key(dt) distributed by hash(dt) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_wpa_skew select 1, generate_series from TABLE(generate_series(1, 10));
+-- result:
+-- !result
+insert into t_wpa_skew select 2, generate_series from TABLE(generate_series(1, 10));
+-- result:
+-- !result
+insert into t_wpa_skew select 3, generate_series from TABLE(generate_series(1, 10));
+-- result:
+-- !result
+insert into t_wpa_skew select 9, generate_series from TABLE(generate_series(1, 2000000));
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa_skew) w group by dt order by dt;
+-- result:
+1	10	55	55
+2	10	55	55
+3	10	55	55
+9	2000000	2000001000000	2000001000000
+-- !result
+select dt, count(*) cnt, sum(x) ss from t_wpa_skew group by dt order by dt;
+-- result:
+1	10	55
+2	10	55
+3	10	55
+9	2000000	2000001000000
+-- !result
+set spillable_operator_mask = -65;
+-- result:
+-- !result
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa_skew) w group by dt order by dt;
+-- result:
+1	10	55	55
+2	10	55	55
+3	10	55	55
+9	2000000	2000001000000	2000001000000
+-- !result
+set spillable_operator_mask = -1;
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name = "pipeline_analytic_enable_spill";
+-- result:
+-- !result
+select dt, count(*) cnt, min(s) mn from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt order by dt;
+-- result:
+0	285715	285714714285
+1	285715	285715000000
+2	285715	285715285715
+3	285714	285713571429
+4	285714	285713857143
+5	285714	285714142857
+6	285714	285714428571
+7	2	1
+-- !result
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa_skew) w group by dt order by dt;
+-- result:
+1	10	55	55
+2	10	55	55
+3	10	55	55
+9	2000000	2000001000000	2000001000000
+-- !result
+drop table t_wpa;
+-- result:
+-- !result
+drop table t_wpa_skew;
+-- result:
+-- !result

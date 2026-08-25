@@ -455,6 +455,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：GC 线程清理过期数据的间隔时间。
 - 引入版本：-
 
+### pipeline_analytic_enable_spill
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许窗口（analytic）算子落盘。仅对整分区帧的物化窗口（例如不带 window 子句的 `SUM(x) OVER (PARTITION BY k)`，函数限内置的 sum/avg/count/min/max/first_value/last_value）生效，需要会话开启 `enable_spill`。仅原始输入行参与落盘；各分区结果常驻内存，总量受固定积压上限约束。
+- 引入版本：-
+
 ### pipeline_connector_scan_thread_num_per_cpu
 
 - 默认值：8

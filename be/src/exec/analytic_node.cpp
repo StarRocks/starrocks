@@ -19,9 +19,12 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/analysis/spillable_analytic_sink_operator.h"
+#include "exec/pipeline/analysis/spillable_analytic_source_operator.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/hash_partition_sink_operator.h"
@@ -128,15 +131,29 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
             degree_of_parallelism, _tnode, _result_tuple_desc, _use_hash_based_partition);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
-    ops_with_sink.emplace_back(
-            std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor_factory));
+    // Analytic spill v1 covers materializing whole-partition frames only.
+    const bool may_spill = runtime_state()->enable_spill() && runtime_state()->enable_analytic_spill() &&
+                           config::pipeline_analytic_enable_spill && Analytor::tnode_supports_spill(_tnode);
+
+    std::shared_ptr<AnalyticSinkOperatorFactory> sink_op;
+    OpFactories ops_with_source;
+    std::shared_ptr<AnalyticSourceOperatorFactory> source_op;
+    if (may_spill) {
+        sink_op = std::make_shared<SpillableAnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode,
+                                                                         analytor_factory);
+        source_op = std::make_shared<SpillableAnalyticSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                             analytor_factory);
+    } else {
+        sink_op = std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode,
+                                                                analytor_factory);
+        source_op =
+                std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
+    }
+    source_op->set_skewed(is_skewed);
+
+    ops_with_sink.emplace_back(std::move(sink_op));
     pipeline::init_runtime_filter_for_operator(*this, ops_with_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_sink);
-
-    OpFactories ops_with_source;
-    auto source_op =
-            std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
-    source_op->set_skewed(is_skewed);
     pipeline::init_runtime_filter_for_operator(*this, source_op.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(source_op.get(), upstream_source_op);
     ops_with_source.push_back(std::move(source_op));

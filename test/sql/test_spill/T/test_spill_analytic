@@ -1,0 +1,65 @@
+-- name: test_spill_analytic
+-- NOTE: pipeline_analytic_enable_spill is the cluster-wide kill switch (a BE
+-- config); the per-session opt-out is the ANALYTIC bit of spillable_operator_mask.
+-- The config is flipped on here and restored at the end. If the case aborts
+-- midway the config may be left enabled, which only widens the feature's
+-- eligibility and never changes query results.
+update information_schema.be_configs set value = "true" where name = "pipeline_analytic_enable_spill";
+drop table if exists t_wpa;
+create table t_wpa (dt int, x bigint) duplicate key(dt) distributed by hash(dt) buckets 4 properties('replication_num' = '1');
+insert into t_wpa select generate_series % 7, generate_series from TABLE(generate_series(1, 2000000));
+insert into t_wpa values (0, null), (7, null), (7, 1);
+select count(*) from t_wpa;
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=2;
+-- Shrink the mem table BEFORE the forced-spill queries: at the default 100MB a
+-- single mem table swallows this data set whole, so every query below would flush
+-- exactly once and the multi-block replay, the writer-full backpressure and the
+-- staging rollover would all stay dead code.
+set spill_mem_table_size=1048576;
+-- whole-partition sum under force spill
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt order by dt;
+-- count(*): input slot without an input expression
+select count(c), min(c), max(c) from (select count(*) over (partition by dt) c from t_wpa) w;
+-- multiple functions incl. nullable avg
+select dt, min(c) mnc, max(c) mxc, min(a) mna, max(a) mxa from (select dt, count(x) over (partition by dt) c, avg(x) over (partition by dt) a from t_wpa) w group by dt order by dt;
+-- explicit UNBOUNDED..UNBOUNDED frame with order by
+select dt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt order by x rows between unbounded preceding and unbounded following) s from t_wpa) w group by dt order by dt;
+-- first_value/last_value over a deterministic frame
+select dt, min(f) mnf, max(l) mxl from (select dt, first_value(x) over (partition by dt order by x rows between unbounded preceding and unbounded following) f, last_value(x) over (partition by dt order by x rows between unbounded preceding and unbounded following) l from t_wpa) w group by dt order by dt;
+-- global window without partition by
+select count(s), min(s), max(s) from (select sum(x) over () s from t_wpa) w;
+-- spilled window results must agree with group by aggregation (8 partitions)
+select count(*) from (select dt, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt) a join (select dt, sum(x) ss from t_wpa group by dt) b on a.dt = b.dt and a.mx <=> b.ss;
+-- limit triggers downstream early finish of the spilling sink
+select count(*) from (select s from (select sum(x) over (partition by dt) s from t_wpa) w limit 10) t;
+-- varchar partition key and string result column (append-only result columns)
+select k, min(c) mnc, max(m) mxm from (select cast(dt as string) k, count(*) over (partition by cast(dt as string)) c, max(cast(x as string)) over (partition by cast(dt as string)) m from t_wpa) w group by k order by k;
+-- auto mode on a balanced data set: conversion happens inside the first partition
+set spill_mode="auto";
+select dt, count(*) cnt, min(s) mn from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt order by dt;
+-- Skewed shape the feature exists for: several tiny partitions are emitted (and
+-- evicted) first, then one huge partition crosses the activation threshold. This
+-- only spills if auto activation can convert mid-stream.
+drop table if exists t_wpa_skew;
+create table t_wpa_skew (dt int, x bigint) duplicate key(dt) distributed by hash(dt) buckets 1 properties('replication_num' = '1');
+insert into t_wpa_skew select 1, generate_series from TABLE(generate_series(1, 10));
+insert into t_wpa_skew select 2, generate_series from TABLE(generate_series(1, 10));
+insert into t_wpa_skew select 3, generate_series from TABLE(generate_series(1, 10));
+insert into t_wpa_skew select 9, generate_series from TABLE(generate_series(1, 2000000));
+set pipeline_dop=1;
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa_skew) w group by dt order by dt;
+-- the same numbers computed without any window function
+select dt, count(*) cnt, sum(x) ss from t_wpa_skew group by dt order by dt;
+-- per-session opt-out: clearing the ANALYTIC bit (64) of the mask (-1 & ~64)
+-- keeps agg/join/sort spill enabled and forces this query onto the in-memory path
+set spillable_operator_mask = -65;
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa_skew) w group by dt order by dt;
+set spillable_operator_mask = -1;
+-- the in-memory path with the feature disabled must agree
+update information_schema.be_configs set value = "false" where name = "pipeline_analytic_enable_spill";
+select dt, count(*) cnt, min(s) mn from (select dt, sum(x) over (partition by dt) s from t_wpa) w group by dt order by dt;
+select dt, count(*) cnt, min(s) mn, max(s) mx from (select dt, sum(x) over (partition by dt) s from t_wpa_skew) w group by dt order by dt;
+drop table t_wpa;
+drop table t_wpa_skew;
