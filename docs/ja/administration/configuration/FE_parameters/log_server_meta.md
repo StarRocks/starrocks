@@ -516,8 +516,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Days
 - 変更可能：Yes
-- 説明：`sys_log_dir/proc_profile` 以下に生成されたプロセスプロファイリングファイル (CPU およびメモリ) の保持日数。ProcProfileCollector は、現在時刻から `proc_profile_file_retained_days` 日を差し引いて (yyyyMMdd-HHmmss 形式で) カットオフを計算し、タイムスタンプ部分がそのカットオフよりも辞書順で早いプロファイルファイル (`timePart.compareTo(timeToDelete) < 0` の場合) を削除します。ファイル削除は、`proc_profile_file_retained_size_bytes` によって制御されるサイズベースのカットオフも尊重します。プロファイルファイルは `cpu-profile-` と `mem-profile-` というプレフィックスを使用し、収集後に圧縮されます。
+- 説明：`sys_log_dir/proc_profile` 以下に生成されたプロセスプロファイリングファイル (CPU およびメモリ) の保持日数。`proc-profile-cleaner` デーモンは、現在時刻から `proc_profile_file_retained_days` 日を差し引いて (yyyyMMdd-HHmmss 形式で) カットオフを計算し、タイムスタンプ部分がそのカットオフよりも辞書順で早いプロファイルファイル (`timePart.compareTo(timeToDelete) < 0` の場合) を削除します。ファイル削除は、`proc_profile_file_retained_size_bytes` によって制御されるサイズベースのカットオフも尊重します。プロファイルファイルは `cpu-profile-` と `mem-profile-` というプレフィックスを使用し、収集後に圧縮されます。
 - 導入時期：v3.2.12
+
+### `proc_profile_cleanup_interval_s`
+
+- デフォルト：300
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：`proc-profile-cleaner` デーモンが `sys_log_dir/proc_profile` 以下のプロセスプロファイリングファイルに保持ポリシーを適用する間隔で、`proc_profile_file_retained_days` と `proc_profile_file_retained_size_bytes` が適用されます。クリーンアップは収集の後ではなく専用のデーモンで実行されるため、プロファイル収集が失敗している間や採取中であっても保持ポリシーは有効に働きます。`1` より小さい値は `1` として扱われます。`sys_log_dir` の空き容量が小さく、サイズ上限をより早く適用する必要がある場合はこの値を小さくしてください。
+- 導入時期：v4.2.0
 
 ### `proc_profile_file_retained_size_bytes`
 
@@ -525,7 +534,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Bytes
 - 変更可能：Yes
-- 説明：プロファイルディレクトリ下に保持される、収集された CPU およびメモリプロファイルファイル (`cpu-profile-` および `mem-profile-` というプレフィックスを持つファイル) の合計バイト数の最大値。有効なプロファイルファイルの合計が `proc_profile_file_retained_size_bytes` を超えると、コレクターは、残りの合計サイズが `proc_profile_file_retained_size_bytes` 以下になるまで、最も古いプロファイルファイルを削除します。`proc_profile_file_retained_days` よりも古いファイルもサイズに関係なく削除されます。この設定はプロファイルアーカイブのディスク使用量を制御し、`proc_profile_file_retained_days` と相互作用して削除順序と保持を決定します。
+- 説明：プロファイルディレクトリ下に保持される、収集された CPU およびメモリプロファイルファイル (`cpu-profile-` および `mem-profile-` というプレフィックスを持つファイル) の合計バイト数の最大値。有効なプロファイルファイルの合計が `proc_profile_file_retained_size_bytes` を超えると、`proc-profile-cleaner` デーモンは、残りの合計サイズが `proc_profile_file_retained_size_bytes` 以下になるまで、最も古いプロファイルファイルを削除します。`proc_profile_file_retained_days` よりも古いファイルもサイズに関係なく削除されます。この設定はプロファイルアーカイブのディスク使用量を制御し、`proc_profile_file_retained_days` と相互作用して削除順序と保持を決定します。
 - 導入時期：v3.2.12
 
 ### `profile_log_delete_age`

@@ -74,7 +74,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ### `proc_profile_collect_time_s`
 
 - 默认值: 120
-- 类型: Int
+- 类型: Long
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
