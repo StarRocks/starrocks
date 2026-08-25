@@ -18,7 +18,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -92,14 +91,14 @@ public final class ConvertTzStatisticUtils {
     public static Optional<Histogram> transformHistogram(CallOperator callOperator,
                                                          ColumnStatistic childStats,
                                                          double minValue, double maxValue,
-                                                         double rowCount) {
+                                                         double rowCount,
+                                                         Optional<ConstantOperator> fromTz,
+                                                         Optional<ConstantOperator> toTz) {
         Histogram hist = childStats == null ? null : childStats.getHistogram();
         if (hist == null || hist.getMCV().isEmpty()) {
             return Optional.empty();
         }
 
-        Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
-        Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
         if (fromTz.isEmpty() || toTz.isEmpty()) {
             return Optional.empty();
         }
@@ -147,15 +146,5 @@ public final class ConvertTzStatisticUtils {
         long nonMcvRows = Math.max(0L, Math.round(totalRows) - mcvRows);
         List<Bucket> buckets = List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L));
         return new Histogram(buckets, mcv);
-    }
-
-    private static Optional<ConstantOperator> toConstantOperator(ScalarOperator op) {
-        if (op == null || !op.isConstant() || op.isConstantNull()) {
-            return Optional.empty();
-        }
-        if (op instanceof ConstantOperator) {
-            return Optional.of((ConstantOperator) op);
-        }
-        return Optional.empty();
     }
 }

@@ -1095,7 +1095,8 @@ public class ExpressionStatisticCalculator {
                     .setAverageRowSize(callOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .setHistogram(ConvertTzStatisticUtils.transformHistogram(
-                            callOperator, childStat, minValue, maxValue, nonNullRowCount).orElse(null))
+                            callOperator, childStat, minValue, maxValue, nonNullRowCount, fromTz, toTz)
+                            .orElse(null))
                     .build();
         }
 

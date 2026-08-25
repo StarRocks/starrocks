@@ -142,8 +142,10 @@ public class ConvertTzStatisticUtilsTest {
         final CallOperator call = convertTzCall(
                 ConstantOperator.createVarchar(fromTz), ConstantOperator.createVarchar(toTz));
 
-        final Optional<Histogram> result =
-                ConvertTzStatisticUtils.transformHistogram(call, childStats, 1.0, 2.0, 1000);
+        final Optional<Histogram> result = ConvertTzStatisticUtils.transformHistogram(
+                call, childStats, 1.0, 2.0, 1000,
+                Optional.of(ConstantOperator.createVarchar(fromTz)),
+                Optional.of(ConstantOperator.createVarchar(toTz)));
 
         Assertions.assertTrue(result.isPresent());
         final Map<String, Long> mcv = result.get().getMCV();
@@ -163,8 +165,10 @@ public class ConvertTzStatisticUtilsTest {
         final CallOperator call = convertTzCall(
                 ConstantOperator.createVarchar("UTC"), ConstantOperator.createVarchar("Asia/Shanghai"));
 
-        Assertions.assertTrue(
-                ConvertTzStatisticUtils.transformHistogram(call, childStats, 1.0, 2.0, 1000).isEmpty());
+        Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
+                call, childStats, 1.0, 2.0, 1000,
+                Optional.of(ConstantOperator.createVarchar("UTC")),
+                Optional.of(ConstantOperator.createVarchar("Asia/Shanghai"))).isEmpty());
     }
 
     @Test
@@ -177,8 +181,8 @@ public class ConvertTzStatisticUtilsTest {
                 .build();
         final CallOperator call = convertTzCall(fromTzCol, toTzCol);
 
-        Assertions.assertTrue(
-                ConvertTzStatisticUtils.transformHistogram(call, childStats, 1.0, 2.0, 1000).isEmpty());
+        Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
+                call, childStats, 1.0, 2.0, 1000, Optional.empty(), Optional.empty()).isEmpty());
     }
 
     @Test
@@ -190,8 +194,10 @@ public class ConvertTzStatisticUtilsTest {
         final CallOperator call = convertTzCall(
                 ConstantOperator.createVarchar("UTC"), ConstantOperator.createVarchar("Asia/Shanghai"));
 
-        Assertions.assertTrue(
-                ConvertTzStatisticUtils.transformHistogram(call, childStats, 1.0, 2.0, 1000).isEmpty());
+        Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
+                call, childStats, 1.0, 2.0, 1000,
+                Optional.of(ConstantOperator.createVarchar("UTC")),
+                Optional.of(ConstantOperator.createVarchar("Asia/Shanghai"))).isEmpty());
     }
 
     @Test
@@ -203,8 +209,10 @@ public class ConvertTzStatisticUtilsTest {
         final CallOperator call = convertTzCall(
                 ConstantOperator.createVarchar("Not/AZone"), ConstantOperator.createVarchar("UTC"));
 
-        Assertions.assertTrue(
-                ConvertTzStatisticUtils.transformHistogram(call, childStats, 1.0, 2.0, 1000).isEmpty());
+        Assertions.assertTrue(ConvertTzStatisticUtils.transformHistogram(
+                call, childStats, 1.0, 2.0, 1000,
+                Optional.of(ConstantOperator.createVarchar("Not/AZone")),
+                Optional.of(ConstantOperator.createVarchar("UTC"))).isEmpty());
     }
 
     private static CallOperator convertTzCall(ScalarOperator fromTz, ScalarOperator toTz) {
