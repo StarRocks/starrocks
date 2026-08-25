@@ -540,10 +540,13 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     }
 
     // The delete filter evaluates these on the outgoing chunk, so they must survive into the output schema.
-    std::set<ColumnId> delete_pred_cids;
-    RETURN_IF_ERROR(lake::delete_predicate_column_ids(*_tablet.metadata(), *_tablet_schema, &delete_pred_cids));
-    for (ColumnId cid : delete_pred_cids) {
-        _unused_output_column_ids.erase(cid);
+    // An empty unused set makes every erase a no-op, so skip walking the rowset metadata entirely.
+    if (!_unused_output_column_ids.empty()) {
+        std::set<ColumnId> delete_pred_cids;
+        RETURN_IF_ERROR(lake::delete_predicate_column_ids(*_tablet.metadata(), *_tablet_schema, &delete_pred_cids));
+        for (ColumnId cid : delete_pred_cids) {
+            _unused_output_column_ids.erase(cid);
+        }
     }
 
     std::vector<ExprContext*> not_pushdown_conjuncts;
