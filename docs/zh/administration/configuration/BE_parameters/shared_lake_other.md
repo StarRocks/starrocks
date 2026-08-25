@@ -94,7 +94,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### compaction_parallel_merge_init_threads
 
-- 默认值：16
+- 默认值：64
 - 类型：Int
 - 单位：-
 - 是否动态：否
@@ -103,7 +103,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### compaction_parallel_merge_init_pool_threads
 
-- 默认值：64
+- 默认值：256
 - 类型：Int
 - 单位：-
 - 是否动态：否

@@ -97,7 +97,7 @@ This topic introduces the following types of BE configurations:
 
 ### compaction_parallel_merge_init_threads
 
-- Default: 16
+- Default: 64
 - Type: Int
 - Unit: -
 - Is mutable: No
@@ -106,7 +106,7 @@ This topic introduces the following types of BE configurations:
 
 ### compaction_parallel_merge_init_pool_threads
 
-- Default: 64
+- Default: 256
 - Type: Int
 - Unit: -
 - Is mutable: No

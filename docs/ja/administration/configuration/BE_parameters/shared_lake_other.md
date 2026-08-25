@@ -97,7 +97,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### compaction_parallel_merge_init_threads
 
-- デフォルト: 16
+- デフォルト: 64
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
@@ -106,7 +106,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### compaction_parallel_merge_init_pool_threads
 
-- デフォルト: 64
+- デフォルト: 256
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
