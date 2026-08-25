@@ -483,6 +483,7 @@ jobs:
           always()
           && steps.download-ut-xml.outputs.size != '0'
           && steps.download-ut-xml.outcome == 'success'
+          && env.SKIP_COV != 'true'
           && !contains(github.event.workflow_run.head_branch, '-sync-pr-')
           && !startsWith(github.event.workflow_run.head_branch, 'mergify/')
         env:
@@ -498,6 +499,12 @@ jobs:
           # so the only signal is merge_outcome.
           if [[ "${merge_outcome}" == "failure" || "${merge_outcome}" == "skipped" ]]; then
               total_xml=${be_path}/be_ut_coverage.xml
+          fi
+          # The coverage xml and the diff are only present when the download step pulled them
+          # from OSS; a partial upload must not fail the report job.
+          if [[ ! -s "${total_xml}" || ! -s "${be_path}/diff.txt" ]]; then
+              echo "::warning::no BE coverage xml or diff available; skip incremental coverage report"
+              exit 0
           fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
             --cover ${total_xml} --github-token ${{ secrets.GITHUB_TOKEN }} --repo ${{ github.repository }} \
