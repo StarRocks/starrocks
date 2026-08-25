@@ -1096,11 +1096,15 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
 // Drop the delete keys that fall outside this tablet's key range.
 //
 // A del file is cross-published verbatim to every SPLIT child: each child reads the SAME parent del
-// file and erases every key in it from its OWN primary index. The upsert side solves the same problem
-// per row instead: prepare() asks get_each_segment_iterator NOT to narrow the segment and installs a
-// CrossPublishRowSelector, so every consumer of _upserts is handed a mask of the rows this tablet
-// owns. A del file is a flat serialized PK column with no index and no guaranteed key order, so it
-// cannot be masked against the index lookup -- it is clipped against the range directly, here.
+// file and erases every key in it from its OWN primary index. The upsert side does not have this
+// problem because it is clipped at read time -- convert_txn_log_for_splitting stamps this tablet's
+// range onto op_write.rowset, and get_each_segment_iterator turns it into
+// SegmentReadOptions::tablet_range, which _apply_tablet_range resolves to a rowid range via the short
+// key index so out-of-range rows are never even read. Where that resolution is impossible -- a
+// primary-key tablet ordered by a separate sort key, whose range describes no rowid interval --
+// CrossPublishRowSelector answers per row instead; see cross_publish_context.h. A del file is a flat
+// serialized PK column with no index and no guaranteed key order, so it gets neither: it is clipped
+// against the range directly, here.
 //
 // Erasing a key it does not own is not merely wasted work: the child's primary index still carries
 // the ancestor entries inherited through its shared sstables (the tablet-range gate on those runs

@@ -1286,15 +1286,17 @@ static void set_int_tablet_range(TabletMetadata* metadata, int lower_inclusive, 
 // read), which is what puts the SIBLINGS' keys in this child's index. Without them every sibling
 // lookup would simply miss and there would be nothing left to get wrong.
 //
-// The range covers the MIDDLE of the key space on purpose. Filtering the chunk renumbers the
-// survivors, so a child owning a prefix would keep working with the pre-filter arithmetic; owning
-// [n/4, 3n/4) is what makes "row 0 of the filtered column is row n/4 of the segment" load-bearing.
+// The range covers the MIDDLE of the key space on purpose: a sibling's row sits on either side of the
+// owned block, so the verdict walk has to close a winner run at both edges, and every rowid it records
+// -- the winners' index entries, the losers' delvec -- has to stay the row's position in the SEGMENT
+// rather than its position among the rows this child kept. A child owning a prefix would pass either
+// way.
 TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_only_owned_rows) {
     if (GetParam().enable_transparent_data_encryption) {
         return;
     }
     // No token below pk_index_parallel_execution_min_rows, so the winners reach the index through the
-    // serial branch -- LakePrimaryIndex::upsert_rows.
+    // serial branch: index.upsert() over each winner range of the unfiltered chunk.
     ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
 
     const int n = kChunkSize;
@@ -1395,8 +1397,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
 
     // v4 pins the rowids the winners were indexed AT: a delete of every key is clipped to this child's
     // range, so it erases exactly the owned keys -- which the index must have placed at their real
-    // positions in v3's segment. Rowids left renumbered by the filter erase other rows and leave some
-    // of the owned ones alive.
+    // positions in v3's segment. A rowid taken from the row's position among the owned rows instead
+    // erases other rows and leaves some of the owned ones alive.
     ASSERT_OK(publish_single_version(tablet_id, 4, write_txn(make_op_chunk(n, 0, false, _slot_cid_map), "")).status());
     auto after_delete = read_key_to_value(4);
     EXPECT_EQ(static_cast<size_t>(n - kOwnedRows), after_delete.size());
@@ -1409,8 +1411,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_o
 // The other half of the same mapping: a row that LOSES its comparison is appended to this child's
 // delvec, and the parent view ORs the children's delvecs, so a verdict reached for a sibling's row
 // erases a row its owner had just decided to keep. The verdict alternates by key here, which also
-// pins the delvec entries to the losers' real rowids -- an entry off by the filter's renumbering
-// deletes an unrelated row and leaves the loser visible next to the old row that beat it.
+// pins the delvec entries to the losers' real rowids -- an entry that names the row's position among
+// the owned rows instead deletes an unrelated row and leaves the loser visible next to the old row
+// that beat it.
 //
 // Runs the parallel compare + parallel upsert branch (the serial one is covered above).
 TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_delvecs_losers_at_real_rowids) {
