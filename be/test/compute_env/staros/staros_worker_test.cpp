@@ -27,24 +27,18 @@
 #include <algorithm>
 #include <condition_variable>
 #include <functional>
-<<<<<<< HEAD
 #include <iterator>
-=======
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
->>>>>>> 3b5300a4280... [BugFix] Skip table metrics for non-table StarOS shards (#78116)
 
 #include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
-<<<<<<< HEAD
+#include "common/config_metrics_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/configbase.h"
-=======
-#include "common/config_metrics_fwd.h"
 #include "common/logging.h"
->>>>>>> 3b5300a4280... [BugFix] Skip table metrics for non-table StarOS shards (#78116)
 #include "common/shutdown_hook.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
