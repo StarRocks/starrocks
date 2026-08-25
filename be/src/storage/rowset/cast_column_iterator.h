@@ -56,7 +56,7 @@ public:
                                                                         Column* dst) override;
 
 private:
-    void do_cast(Column* target);
+    Status do_cast(Column* target);
 
     std::unique_ptr<ObjectPool> _obj_pool;
     // managed by |_obj_pool|
