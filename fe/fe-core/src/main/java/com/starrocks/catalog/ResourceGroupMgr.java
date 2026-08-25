@@ -721,7 +721,7 @@ public class ResourceGroupMgr implements Writable {
             newWg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
         }
         if (log.getMemUsedPctLimit() != null) {
-            wg.setMemUsedPctLimit(log.getMemUsedPctLimit());
+            newWg.setMemUsedPctLimit(log.getMemUsedPctLimit());
         }
         if (log.getWarehouses() != null) {
             newWg.setWarehouses(log.getWarehouses());

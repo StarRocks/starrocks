@@ -230,6 +230,7 @@ public class ResourceGroup {
         rg.bigQueryCpuSecondLimit = this.bigQueryCpuSecondLimit;
         rg.concurrencyLimit = this.concurrencyLimit;
         rg.spillMemLimitThreshold = this.spillMemLimitThreshold;
+        rg.memUsedPctLimit = this.memUsedPctLimit;
         rg.resourceGroupType = this.resourceGroupType;
         rg.version = this.version;
         rg.warehouses = this.warehouses != null ? new ArrayList<>(this.warehouses) : null;
