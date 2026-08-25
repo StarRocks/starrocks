@@ -171,8 +171,17 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
             ASSIGN_OR_RETURN(auto combined_log, tablet_mgr->get_combined_txn_log(log_path, true));
             for (const auto& log : combined_log->txn_logs()) {
                 if (log.tablet_id() == tablet_id) {
+                    if (!txn_logs.empty()) {
+                        // A combined log holds at most one entry per tablet. Under shard write several
+                        // nodes each produce a partial log for the same tablet and the sender folds them
+                        // into one before writing this file (see merge_shard_write_txn_log); a second
+                        // entry means the fold missed a node, so applying just the first would silently
+                        // drop that node's rows. Fail the publish instead.
+                        return Status::Corruption(
+                                fmt::format("combined txn log of txn {} contains more than one txn log for tablet {}",
+                                            txn_info.txn_id(), tablet_id));
+                    }
                     txn_logs.push_back(std::make_shared<TxnLogPB>(log));
-                    break;
                 }
             }
             if (txn_logs.empty()) {
@@ -494,7 +503,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     return new_version_metadata_or_error(txn_log_st.status());
                 }
             } // close: if (txn_log_st.status().is_not_found())
-        }     // close: else (admin force-skip vs normal path)
+        } // close: else (admin force-skip vs normal path)
 
         if (!txn_log_st.ok() && !ignore_txn_log) {
             LOG(WARNING) << "Fail to get txn log: " << txn_log_st.status() << " tablet_info=" << tablet_info

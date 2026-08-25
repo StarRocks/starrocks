@@ -57,6 +57,10 @@ public:
     // mutable
     IndexIdToTabletBEMap* index_id_to_tablet_be_map() { return &_index_id_to_tablet_be_map; }
 
+    // See TOlapTableSink.enable_shard_write: a tablet's node list is a SHARD set (round-robin one
+    // node per row) instead of a replica set (same rows to every node).
+    void set_enable_shard_write(bool enable) { _enable_shard_write = enable; }
+
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
             func(it.second);
@@ -73,6 +77,9 @@ protected:
     // Virtual to allow tests or derived senders (e.g. colocate sender) to intercept
     // how chunks are dispatched to BE nodes.
     virtual Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
+    // Move every node channel's txn logs into _txn_log_map, folding the several partial logs a
+    // shard-write tablet produces into one. See merge_shard_write_txn_log.
+    Status _collect_txn_logs();
     Status _write_combined_txn_log();
 
     // For every partition this sink is about to write a combined txn log for, the set of tablets
@@ -115,6 +122,13 @@ protected:
     // one chunk selection for BE node
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
+    bool _enable_shard_write = false;
+    // Shard write only. Indexed like _tablet_ids: the single node each row was assigned to, decided
+    // once per chunk before the per-node dispatch loop.
+    std::vector<int64_t> _row_target_node;
+    // Shard write only. Per-tablet round-robin cursor; lives across chunks so the spread stays even
+    // when a chunk carries only a few rows of a tablet.
+    std::unordered_map<int64_t, uint64_t> _shard_write_counters;
     std::set<int64_t> _failed_channels;
     // mapping from partition id to CombinedTxnLogPB
     std::map<int64_t, CombinedTxnLogPB> _txn_log_map;

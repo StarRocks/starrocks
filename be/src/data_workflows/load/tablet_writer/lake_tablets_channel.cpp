@@ -242,6 +242,8 @@ private:
     static bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
 
     static bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
+    // See TOlapTableSink.enable_shard_write: this CN receives only part of each tablet's rows.
+    static bool _is_shard_write(const PTabletWriterOpenRequest& params);
 
     Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
@@ -910,6 +912,10 @@ bool LakeTabletsChannel::_is_multi_statements_txn(const PTabletWriterOpenRequest
            params.lake_tablet_params().is_multi_statements_txn();
 }
 
+bool LakeTabletsChannel::_is_shard_write(const PTabletWriterOpenRequest& params) {
+    return params.has_lake_tablet_params() && params.lake_tablet_params().shard_write();
+}
+
 Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
     int64_t schema_id = 0;
     std::vector<SlotDescriptor*>* slots = nullptr;
@@ -947,6 +953,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     bool multi_stmt = _is_multi_statements_txn(params);
+    bool shard_write = _is_shard_write(params);
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
         // Enable bundle write for both single-statement and multi-statement transactions.
@@ -984,6 +991,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
                                               .set_is_multi_statements_txn(multi_stmt)
+                                              .set_shard_write(shard_write)
                                               .build());
         mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
