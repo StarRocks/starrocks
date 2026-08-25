@@ -216,7 +216,8 @@ public class PaimonMetadataTest {
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
                         "PRIMARY KEY (`col2`)\n" +
-                        "PARTITION BY (col1);",
+                        "PARTITION BY (col1)\n" +
+                        "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/paimon\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
