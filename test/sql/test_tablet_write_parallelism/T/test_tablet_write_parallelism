@@ -1,0 +1,45 @@
+-- name: test_tablet_write_parallelism @cloud
+create database db_${uuid0};
+use db_${uuid0};
+
+-- One bucket on purpose: this is the shape tablet_write_parallelism exists for -- without it
+-- the whole load lands on the single compute node that owns the tablet. `file_bundling` puts
+-- the transaction on combined txn logs, which shard write requires: each writing node emits a
+-- PARTIAL txn log and the sender folds them into one before writing the combined file.
+create table t_shard (k1 bigint, k2 int, v1 string, v2 bigint)
+    primary key(k1, k2)
+    distributed by hash(k1, k2) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+
+set tablet_write_parallelism = 3;
+
+-- Enough rows for many chunks, so the per-row round-robin actually lands data on every node
+-- the tablet was spread over rather than on whichever one happened to get the first chunk.
+insert into t_shard select generate_series, cast(generate_series % 7 as int), concat('v', generate_series), generate_series * 3 from table(generate_series(1, 20000));
+select count(*), count(distinct k1), sum(k1), sum(v2) from t_shard;
+
+-- Rows inside one transaction have no order once they are spread over several nodes, but
+-- TRANSACTIONS are still ordered: a later load must overwrite the same keys.
+insert into t_shard select generate_series, cast(generate_series % 7 as int), concat('w', generate_series), generate_series * 5 from table(generate_series(1, 20000));
+select count(*), sum(v2) from t_shard;
+select k1, k2, v1, v2 from t_shard where k1 = 12345;
+
+-- Deletes must still erase rows written by earlier transactions.
+delete from t_shard where k1 <= 10000;
+select count(*), sum(k1), sum(v2) from t_shard;
+
+-- The same routing change without a primary key index behind it.
+create table t_shard_dup (k1 bigint, k2 int, v1 string)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+insert into t_shard_dup select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_shard_dup;
+
+-- Back to the default: the same load must give exactly the same answer.
+set tablet_write_parallelism = 1;
+truncate table t_shard_dup;
+insert into t_shard_dup select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_shard_dup;
+
+drop database db_${uuid0} force;
