@@ -203,7 +203,7 @@ Status LakePersistentIndex::begin_full_rebuild_session() {
         return Status::InternalError("full rebuild session requires an empty active memtable");
     }
     _full_rebuild_session_active = true;
-    bool active = true;
+    [[maybe_unused]] bool active = true;
     TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:begin", &active);
     return Status::OK();
 }
@@ -244,7 +244,7 @@ void LakePersistentIndex::finish_full_rebuild_session(uint64_t final_max_rss_row
     DCHECK(_inactive_memtables.empty());
     DCHECK(_memtable != nullptr && _memtable->empty());
     DCHECK_EQ(_memtable->max_rss_rowid(), final_max_rss_rowid);
-    size_t handed_off_count = _uncommitted_full_rebuild_ssts.size();
+    [[maybe_unused]] size_t handed_off_count = _uncommitted_full_rebuild_ssts.size();
     _uncommitted_full_rebuild_ssts.clear();
     _full_rebuild_session_active = false;
     TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:finish", &handed_off_count);
@@ -464,7 +464,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         if (!_memtable->empty() && (force || is_memtable_full())) {
             TRACE_COUNTER_INCREMENT("flush_times", 1);
             TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
-            bool synchronous = true;
+            [[maybe_unused]] bool synchronous = true;
             TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:flush_policy", &synchronous);
             const uint64_t previous_max_rss_rowid = _memtable->max_rss_rowid();
             auto flush_status = _memtable->flush();
@@ -511,7 +511,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
-                bool submitted = true;
+                [[maybe_unused]] bool submitted = true;
                 TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::flush_memtable:async_submit", &submitted);
             }
         }
@@ -1304,11 +1304,11 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
     }
     builder->finalize_sstable_meta(sstable_meta);
     if (_full_rebuild_session_active) {
-        PersistentIndexMemtable* active_memtable_before_finish = _memtable.get();
+        [[maybe_unused]] PersistentIndexMemtable* active_memtable_before_finish = _memtable.get();
         TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_finish_memtable",
                                  &active_memtable_before_finish);
         finish_full_rebuild_session(static_cast<uint64_t>(last_max_rss_rowid));
-        PersistentIndexMemtable* active_memtable_after_finish = _memtable.get();
+        [[maybe_unused]] PersistentIndexMemtable* active_memtable_after_finish = _memtable.get();
         TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:after_finish_memtable",
                                  &active_memtable_after_finish);
     }
