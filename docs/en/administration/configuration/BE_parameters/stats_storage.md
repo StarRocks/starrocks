@@ -444,13 +444,15 @@ This topic introduces the following types of BE configurations:
 
 ### enable_zstd_compression_dict
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: The cluster-wide master switch of the column-level compression dictionary, which is a ZSTD dictionary stored per column in each segment file. The switch is checked at the segment write gate. When it is `false`, the columns designated by the table property `zstd_compression_columns` are still compressed with ZSTD -- that part is the user's request and does not depend on this switch -- but no shared dictionary is built for them. The switch therefore only trades some compression ratio, never the codec, and can be flipped at runtime as an operational safety valve.
 
-  The default is `false` for rolling-upgrade safety. A compression dictionary data page is a ZSTD frame compressed against a raw-content dictionary (`dictID=0`), so its frame header carries no signal that a dictionary is required. A BE that predates the `ColumnMetaPB.zstd_compression_dict_page` field (field 35) would decompress such a page WITHOUT the dictionary and hit ZSTD corruption. Therefore, no compression dictionary page may be written until every BE in the cluster understands field 35. Set this parameter to `true` only AFTER the whole cluster has been upgraded. The same reasoning covers cross-replica clone and replication during a mixed-version window.
+  The default is `true`: every build that carries this switch also carries the reader (the `ColumnMetaPB.zstd_compression_dict_page` field, field 35, shipped ahead of the write side), and a dictionary page is only ever written for columns nominated through the table property `zstd_compression_columns` -- a cluster that never sets the property writes no dictionary pages regardless of this default.
+
+  The one window that still needs care is a rolling upgrade FROM a release that predates the reader. A compression dictionary data page is a ZSTD frame compressed against a raw-content dictionary (`dictID=0`), so its frame header carries no signal that a dictionary is required; a BE that does not know field 35 would decompress such a page WITHOUT the dictionary and hit ZSTD corruption. During such an upgrade, do not add `zstd_compression_columns` to any table (or set this parameter to `false`) until every BE has been upgraded. The same reasoning covers cross-replica clone and replication during a mixed-version window.
 
   Warning: once a cluster has written compression dictionary segments, it can no longer be downgraded to a version earlier than the one that introduced this feature, because the older BEs can neither read nor compact those segments.
 - Introduced in: v4.2

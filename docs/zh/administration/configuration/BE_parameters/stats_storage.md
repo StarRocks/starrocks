@@ -478,13 +478,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_zstd_compression_dict
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
 - 描述：列级压缩字典的集群级总开关。列级压缩字典是一个 ZSTD 字典，按列存储在每个 Segment 文件中。该开关在 Segment 写入入口处判定。当其为 `false` 时，由表属性 `zstd_compression_columns` 指定的列**仍然使用 ZSTD 压缩**——这是用户的显式要求，不受该开关影响——只是不再为它们构建共享字典。也就是说该开关只影响压缩率，不会改变压缩算法，因此可以在运行时作为运维安全阀随时切换。
 
-  出于滚动升级安全考虑，该参数默认值为 `false`。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识。因此，不认识 `ColumnMetaPB.zstd_compression_dict_page`（字段 35）的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。所以在集群中所有 BE 都能识别字段 35 之前，不允许写出任何压缩字典页。运维人员必须在整个集群升级完成之后，才能将该参数设置为 `true`。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
+  该参数默认值为 `true`：任何带有这个开关的版本都同时带有读取端（`ColumnMetaPB.zstd_compression_dict_page`，字段 35，先于写入端发布），并且只有通过表属性 `zstd_compression_columns` 被指定的列才会写出字典页——从未设置该属性的集群无论此默认值如何都不会写出任何字典页。
+
+  唯一仍需注意的窗口，是从一个尚不含读取端的旧版本做滚动升级。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识；不认识字段 35 的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。在这样的升级期间，请勿给任何表添加 `zstd_compression_columns`（或将该参数设置为 `false`），直到所有 BE 升级完成。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
 
   警告：一旦集群写出了带压缩字典的 Segment，就无法再降级到引入该特性之前的版本，因为旧版本 BE 既无法读取也无法 Compaction 这些 Segment。
 - 引入版本：v4.2

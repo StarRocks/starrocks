@@ -40,5 +40,6 @@ ALTER TABLE t_zstd_col ADD COLUMN v STRING;
 function: wait_alter_table_finish()
 function: assert_query_not_contains("show create table t_zstd_col", "zstd_compression_columns")
 
-update information_schema.be_configs set value = "false" where name = "enable_zstd_compression_dict";
+-- restore the default (true): the switch was only exercised above to prove flipping it never affects reads
+update information_schema.be_configs set value = "true" where name = "enable_zstd_compression_dict";
 DROP DATABASE test_zstd_compression_${uuid0};

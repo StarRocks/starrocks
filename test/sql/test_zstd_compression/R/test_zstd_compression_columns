@@ -95,7 +95,8 @@ function: assert_query_not_contains("show create table t_zstd_col", "zstd_compre
 None
 -- !result
 
-update information_schema.be_configs set value = "false" where name = "enable_zstd_compression_dict";
+-- restore the default (true): the switch was only exercised above to prove flipping it never affects reads
+update information_schema.be_configs set value = "true" where name = "enable_zstd_compression_dict";
 -- result:
 -- !result
 DROP DATABASE test_zstd_compression_${uuid0};

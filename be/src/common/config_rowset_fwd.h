@@ -108,17 +108,23 @@ CONF_Int32(small_dictionary_page_size, "4096");
 // to plain per-column ZSTD with no compression dict. Independent of the per-column
 // flag so it can be flipped at runtime as an operational safety valve.
 //
-// DEFAULT IS false FOR ROLLING-UPGRADE SAFETY. An compression dict data page is a ZSTD frame
-// compressed against a raw-content dictionary (dictID=0), so its frame header
-// carries no signal that a dictionary is required; a BE that predates
-// ColumnMetaPB.zstd_compression_dict_page (field 35) would decompress it WITHOUT the
-// dictionary and hit ZSTD corruption. So no compression dict page may be emitted until every
-// BE in the cluster understands field 35. Operators must flip this to true only
-// AFTER the whole cluster is upgraded. WARNING: once a cluster has written compression dict
-// segments it cannot be downgraded below the compression dict build (old BEs cannot read or
-// compact those segments). Same reasoning covers cross-replica clone/replication
-// during a mixed-version window.
-CONF_mBool(enable_zstd_compression_dict, "false");
+// DEFAULT IS true: this switch ships only in builds that already contain the reader
+// (ColumnMetaPB.zstd_compression_dict_page, field 35, merged ahead of the write side),
+// and a dictionary page is only ever written for columns the user nominated through
+// the zstd_compression_columns table property -- a cluster that never sets the
+// property writes no dictionary pages regardless of this default.
+//
+// The one window that still needs care is a rolling upgrade FROM a release that
+// predates the reader: a compression dict data page is a ZSTD frame compressed
+// against a raw-content dictionary (dictID=0), so its frame header carries no signal
+// that a dictionary is required, and an old BE would decompress it WITHOUT the
+// dictionary and hit ZSTD corruption. During such an upgrade, do not add
+// zstd_compression_columns to any table (or set this to false) until every BE is
+// upgraded. WARNING: once a cluster has written compression dict segments it cannot
+// be downgraded below the reader build (old BEs cannot read or compact those
+// segments). Same reasoning covers cross-replica clone/replication during a
+// mixed-version window.
+CONF_mBool(enable_zstd_compression_dict, "true");
 
 // Bytes sampled from the first eligible data page to build the compression dict
 // ("first-page sampling" mode). ~one 64KB data page by default.
