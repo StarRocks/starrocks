@@ -97,31 +97,6 @@ private:
     DelVectorPtr _delvec;
 };
 
-void read_key_value_merger_outputs(TabletManager* tablet_mgr, int64_t tablet_id,
-                                   const std::vector<KeyValueMerger::KeyValueMergerOutput>& outputs,
-                                   std::vector<std::pair<std::string, IndexValueWithVer>>* entries) {
-    for (const auto& output : outputs) {
-        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(tablet_mgr->sst_location(tablet_id, output.filename)));
-        sstable::Options options;
-        std::unique_ptr<sstable::Table> table;
-        ASSERT_OK(sstable::Table::Open(options, rf.get(), output.filesize, table));
-        sstable::ReadOptions read_options;
-        std::unique_ptr<sstable::Iterator> iter(table->NewIterator(read_options));
-        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-            ASSERT_OK(iter->status());
-            IndexValuesWithVerPB value_pb;
-            ASSERT_TRUE(value_pb.ParseFromArray(iter->value().data, iter->value().size));
-            ASSERT_EQ(1, value_pb.values_size());
-            const auto& value = value_pb.values(0);
-            entries->emplace_back(
-                    iter->key().to_string(),
-                    IndexValueWithVer{value.version(),
-                                      IndexValue((static_cast<uint64_t>(value.rssid()) << 32) | value.rowid())});
-        }
-        ASSERT_OK(iter->status());
-    }
-}
-
 class LakePersistentIndexTest : public TestBase {
 public:
     LakePersistentIndexTest() : TestBase(kTestDirectory) {
@@ -368,33 +343,6 @@ protected:
         ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(opts, path));
         ASSERT_OK(wf->append(Slice(reinterpret_cast<const char*>(buffer.data()), used)));
         ASSERT_OK(wf->close());
-    }
-
-    std::string encode_varchar_key(const TabletMetadata& metadata, const std::string& key) {
-        auto tablet_schema = TabletSchema::create(metadata.schema());
-        auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
-        auto chunk = std::make_unique<Chunk>();
-        auto column = BinaryColumn::create();
-        column->append(Slice(key));
-        chunk->append_column(std::move(column), 0);
-        MutableColumnPtr encoded;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, encoded.get(),
-                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
-        return down_cast<BinaryColumn*>(encoded.get())->get_slice(0).to_string();
-    }
-
-    void set_varchar_tablet_range(TabletMetadata* metadata, const std::string& lower, const std::string& upper) {
-        auto* schema = metadata->mutable_schema();
-        schema->clear_sort_key_idxes();
-        schema->add_sort_key_idxes(0);
-        schema->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
-        auto* range = metadata->mutable_range();
-        range->Clear();
-        range->mutable_lower_bound()->add_values()->CopyFrom(make_string_variant_pb(lower));
-        range->set_lower_bound_included(true);
-        range->mutable_upper_bound()->add_values()->CopyFrom(make_string_variant_pb(upper));
-        range->set_upper_bound_included(false);
     }
 
     void ensure_kek_in_key_cache() {

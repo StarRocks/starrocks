@@ -145,27 +145,19 @@ reshard.
 | `tablet_merge_before_delete_predicate_range` | a delete-predicate rowset has been copied into the merged metadata but not yet confined to its source tablet's range | a merge where some source rowset carries a delete predicate, i.e. a `DELETE` ran on a source tablet (DUP / AGG / UNIQUE; primary-key tables use delvecs instead) |
 | `tablet_merge_after_write_delvec` | the merged delvec file is written, metadata not yet updated | primary-key table with delete/update history (the phase is skipped when there is no source delvec and no synthesized gap) |
 | `tablet_merge_after_write_dcg_cols` | a rebuilt `.cols` segment is written, metadata not yet updated | two delta-column-group entries claim the **same** column id for the same segment, i.e. a partial-column update on both merge sources touching one column |
-| `tablet_merge_after_write_sstable` | a rebuilt persistent-index sstable is written, metadata not yet updated | primary-key table with a cloud-native persistent index **and** a legacy-form shared sstable or a remap that disagrees with the natural offset — in practice a multi-generation split/merge history with compaction on only some of the old tablets |
 
-The three `after_write_*` hooks are the orphan-file windows: the file is durable and unreferenced.
+The two `after_write_*` hooks are the orphan-file windows: the file is durable and unreferenced.
 They differ in what an armed `ENABLE` leaves behind, and the difference matters if you are counting
 orphan files.
 
-- **`tablet_merge_after_write_sstable` cleans up its own output.** Both callers arm a cleanup guard
-  *before* the call and cancel it only after the output metadata is built, so an injected error
-  deletes the rebuilt sstable.
 - **`tablet_merge_after_write_dcg_cols` does not.** Its caller records the rebuilt path only *after*
   the rebuild returns successfully, so an injected error returns before the caller learns the
   filename and the `.cols` file is left for ordinary orphan-file vacuum.
 - **`tablet_merge_after_write_delvec` does not either.** Nothing arms a cleanup guard over the merged
   delvec file, so an injected error leaves it for vacuum as well.
 
-Do not expect a whole-tablet garbage-file check to read zero straight after an armed `ENABLE`, even
-for the sstable hook. A merge runs the `.cols` phase, then the delvec phase, then the sstable phase,
-so a merge that wrote either of the first two and then failed at the sstable hook discards the
-metadata referencing them and leaves those files for vacuum — the sstable itself is gone, but the
-earlier outputs are not. An immediate zero is only expected from a fixture that reaches the sstable
-phase without writing a `.cols` or delvec file first.
+Do not expect a whole-tablet garbage-file check to read zero straight after an armed `ENABLE`: an
+error at either hook leaves its newly written file for ordinary orphan-file vacuum.
 
 ### Frontend rules (in `conf/failpoint.btm`)
 

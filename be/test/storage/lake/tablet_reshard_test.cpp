@@ -307,37 +307,6 @@ protected:
         return rowset;
     }
 
-    PersistentIndexSstablePB* add_shared_rssid_sstable(TabletMetadataPB* metadata, const std::string& filename,
-                                                       uint32_t rssid, int64_t shared_version, uint32_t max_rowid,
-                                                       uint64_t filesize = 512) {
-        auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
-        sstable->set_filename(filename);
-        sstable->set_filesize(filesize);
-        sstable->set_shared(true);
-        sstable->set_shared_rssid(rssid);
-        sstable->set_shared_version(shared_version);
-        sstable->set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | max_rowid);
-        return sstable;
-    }
-
-    std::shared_ptr<TabletMetadataPB> make_single_rowset_pk_metadata(int64_t tablet_id, uint32_t rowset_id,
-                                                                     const std::string& segment_filename) {
-        auto metadata = std::make_shared<TabletMetadataPB>();
-        metadata->set_id(tablet_id);
-        metadata->set_version(1);
-        metadata->set_next_rowset_id(rowset_id + 1);
-        set_primary_key_schema(metadata.get(), 1001);
-        auto* rowset = metadata->add_rowsets();
-        rowset->set_id(rowset_id);
-        rowset->set_version(1);
-        rowset->set_num_rows(1);
-        rowset->set_data_size(100);
-        auto* segment = rowset->add_segment_metas();
-        segment->set_filename(segment_filename);
-        segment->set_size(100);
-        return metadata;
-    }
-
     Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
                                     int64_t base_version, int64_t new_version, int64_t txn_id,
                                     std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas) {
@@ -855,16 +824,6 @@ protected:
         ASSIGN_OR_RETURN(auto files, directory_inventory(_location_provider->segment_root_location(tablet_id)));
         std::erase_if(files, [](const std::string& file) { return !file.ends_with(".sst"); });
         return files;
-    }
-
-    StatusOr<std::string> read_file_contents(const std::string& path) {
-        ASSIGN_OR_RETURN(auto file, fs::new_random_access_file(path));
-        ASSIGN_OR_RETURN(auto size, file->get_size());
-        std::string contents(size, '\0');
-        if (size > 0) {
-            RETURN_IF_ERROR(file->read_at_fully(0, contents.data(), size));
-        }
-        return contents;
     }
 
     // contents still need a real file when production performs a conservative
