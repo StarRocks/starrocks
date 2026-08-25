@@ -742,8 +742,21 @@ public class StarOSAgent {
         }
     }
 
-    public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
-            FileCacheInfo cacheInfo, long groupId, @NotNull Map<String, String> properties,
+    /**
+     * Create shards for a tablet merge.
+     *
+     * <p>Each new shard joins its own list of group ids and pins placement to every source shard it
+     * merges via {@code PlacementRelationship.WITH_SHARD}, so the merged shard lands on a worker that
+     * already has some of the data cached.
+     *
+     * <p>{@code newToOldShardIds} maps each new shard id to the source shard ids it merges.
+     * {@code newShardIdToGroupIds} maps each new shard id to its target group ids (typically
+     * {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must have the same key set;
+     * the call fails if a new shard has no group assignment.
+     */
+    public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds,
+            Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+            FileCacheInfo cacheInfo, @NotNull Map<String, String> properties,
             ComputeResource computeResource) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
@@ -751,7 +764,6 @@ public class StarOSAgent {
         try {
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
             builder.setReplicaCount(1)
-                    .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
                     .putAllShardProperties(properties)
@@ -763,7 +775,12 @@ public class StarOSAgent {
                 List<Long> oldShardIds = entry.getValue();
                 Preconditions.checkState(oldShardIds != null && !oldShardIds.isEmpty(),
                         "Empty old shard ids for new shard " + newShardId);
+                List<Long> groupIds = newShardIdToGroupIds.get(newShardId);
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for new shard " + newShardId);
 
+                builder.clearGroupIds();
+                builder.addAllGroupIds(groupIds);
                 builder.clearPlacementPreferences();
                 for (Long oldShardId : oldShardIds) {
                     PlacementPreference preference = PlacementPreference.newBuilder()
