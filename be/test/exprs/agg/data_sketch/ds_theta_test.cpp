@@ -360,11 +360,9 @@ TEST_F(DataSketchsThetaTest, TestANotBNullInput) {
 TEST_F(DataSketchsThetaTest, TestCombineReset) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    std::unique_ptr<FunctionContext> local_ctx(
-            FunctionContext::create_test_context(std::move(arg_types), return_type));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
-    const AggregateFunction* func =
-            get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
     auto state = ManagedAggrState::create(local_ctx.get(), func);
 
     // Update, then reset — state should be wiped.
@@ -384,11 +382,9 @@ TEST_F(DataSketchsThetaTest, TestCombineReset) {
 TEST_F(DataSketchsThetaTest, TestCombineSerializeMergeRoundTrip) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    std::unique_ptr<FunctionContext> local_ctx(
-            FunctionContext::create_test_context(std::move(arg_types), return_type));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
-    const AggregateFunction* func =
-            get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
 
     auto sketch_a = make_sketch_bytes(0, 300);
     auto sketch_b = make_sketch_bytes(1000, 300);
@@ -433,11 +429,9 @@ TEST_F(DataSketchsThetaTest, TestCombineSerializeMergeRoundTrip) {
 TEST_F(DataSketchsThetaTest, TestCombineConvertToSerializeFormat) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
-    std::unique_ptr<FunctionContext> local_ctx(
-            FunctionContext::create_test_context(std::move(arg_types), return_type));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
-    const AggregateFunction* func =
-            get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
 
     auto sketch = make_sketch_bytes(0, 200);
     auto src_col = BinaryColumn::create();
