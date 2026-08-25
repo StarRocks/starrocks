@@ -3150,9 +3150,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    // Version 2 was indexless. The 52 SSTs are one replay-recovery SST, one
-    // session-owned SST for the first current delete, and 50 later ordinary SSTs.
-    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 52);
+    // Version 2 remains current in the cache despite having no persisted SST. The first low-threshold delete
+    // flushes that ordinary memtable together with the cached upsert, followed by 50 later ordinary SSTs.
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 51);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
     {
@@ -3174,7 +3174,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
-    EXPECT_EQ(sst_cnt, 52);
+    EXPECT_EQ(sst_cnt, 51);
     EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 76.5);
     // 4. compaction with sst
     {
