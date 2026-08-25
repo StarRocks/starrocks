@@ -304,6 +304,13 @@ public:
         return *this;
     }
 
+    // See TOlapTableSink.enable_shard_write. Marks this writer as holding only part of the tablet's
+    // rows for the transaction, which keeps its (partial) txn log out of the metacache.
+    DeltaWriterBuilder& set_shard_write(bool shard_write) {
+        _shard_write = shard_write;
+        return *this;
+    }
+
     // Force the internal TabletWriter to build the vector index inline, overriding async
     // index_build_mode. Used by lake schema-change conversions (SortedSchemaChange) so the
     // shadow tablet's existing data is fully indexed within the ALTER, matching DirectSchemaChange.
@@ -335,6 +342,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    bool _shard_write = false;
     std::shared_ptr<const TabletSchema> _tablet_schema;
     bool _force_build_vector_index_inline = false;
 };
