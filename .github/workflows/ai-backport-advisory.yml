@@ -6,9 +6,10 @@ name: AI BACKPORT ADVISORY
 #   apply   (write PAT)       : upserts a single "<!-- backport-advisory -->" comment
 #     showing the AI-recommended release lines + reasons vs the author's checkbox.
 # COMMENT ONLY: this never ticks the body version checkboxes and never posts @Mergifyio.
-# The author reads the advisory, then BY HAND ticks the version boxes AND the
-# "confirmed the AI backport recommendation" box (pr-checker requires both); pr-checker
-# converts checkbox -> label and the static backport matrix executes at merge.
+# The author reads the advisory, then BY HAND ticks the version boxes; pr-checker converts
+# checkbox -> label and the static backport matrix executes at merge. The backport-verify
+# gate (backport-verify.yml) then requires an explicit confirmation ONLY when the ticked
+# boxes differ from this recommendation (the affected set is embedded here as a marker).
 #
 # Affected lines are derived by `claude` over local git + gh (no plugin / no code_kb),
 # see ci-tool/bin/ai_backport_decide.sh.
@@ -169,4 +170,6 @@ jobs:
           # Post the advisory COMMENT (reasons included); --skip-ai reuses the validated
           # ${AFF} (no claude here). COMMENT ONLY — the body version checkboxes are never
           # touched; the author ticks them by hand guided by this advisory.
-          ./bin/ai_backport_decide.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --ai-lead --advisory --no-dry-run --skip-ai
+          # --head-sha stamps the advisory's machine-readable markers (backport-affected-json +
+          # head-sha) that the backport-verify divergence gate reads.
+          ./bin/ai_backport_decide.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --ai-lead --advisory --no-dry-run --skip-ai --head-sha ${{ github.event.pull_request.head.sha }}
