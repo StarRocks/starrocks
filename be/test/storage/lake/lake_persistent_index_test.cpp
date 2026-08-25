@@ -312,7 +312,11 @@ protected:
         rs->set_num_rows(writer->num_rows());
         rs->set_data_size(writer->data_size());
         for (const auto& f : writer->segments()) {
-            rs->add_segment_metas()->set_filename(f.path);
+            auto* segment = rs->add_segment_metas();
+            segment->set_filename(f.path);
+            if (!f.encryption_meta.empty()) {
+                segment->set_encryption_meta(f.encryption_meta);
+            }
         }
         writer->close();
 
@@ -2438,6 +2442,7 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_forces_serial_scan_del
 
 TEST_F(LakePersistentIndexTest, test_persistent_index_memtable_flush_failure_cleans_partial_sst) {
     ensure_kek_in_key_cache();
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_data, false);
     const std::vector<std::string> stages = {
             "PersistentIndexMemtable::flush:after_create", "PersistentIndexMemtable::flush:after_build",
             "PersistentIndexMemtable::flush:after_close", "PersistentIndexMemtable::flush:after_reopen",
@@ -2464,6 +2469,7 @@ TEST_F(LakePersistentIndexTest, test_persistent_index_memtable_flush_failure_cle
 
             const Status injected = Status::InternalError("injected partial sst failure at " + stage);
             std::set<std::string> created;
+            std::vector<std::string> dropped_paths;
             auto* sync = SyncPoint::GetInstance();
             for (const auto& point : stages) {
                 sync->SetCallBack(point, [&, point](void* arg) {
@@ -2476,9 +2482,13 @@ TEST_F(LakePersistentIndexTest, test_persistent_index_memtable_flush_failure_cle
                     if (point == stage && arg != nullptr) *static_cast<Status*>(arg) = injected;
                 });
             }
+            sync->SetCallBack("PersistentIndexSstable::drop_cache", [&](void* arg) {
+                if (arg != nullptr) dropped_paths.emplace_back(*static_cast<std::string*>(arg));
+            });
             sync->EnableProcessing();
             DeferOp clear_stage_callbacks([&]() {
                 for (const auto& point : stages) sync->ClearCallBack(point);
+                sync->ClearCallBack("PersistentIndexSstable::drop_cache");
                 sync->DisableProcessing();
             });
 
@@ -2492,12 +2502,15 @@ TEST_F(LakePersistentIndexTest, test_persistent_index_memtable_flush_failure_cle
             EXPECT_EQ(baseline, after_failure);
             EXPECT_EQ(block_cache_usage_before, _update_mgr->block_cache()->cache()->get_memory_usage());
             ASSERT_EQ(1u, created.size());
+            ASSERT_EQ(1u, dropped_paths.size());
+            EXPECT_EQ(_tablet_mgr->sst_location(metadata->id(), *created.begin()), dropped_paths.front());
             for (const auto& filename : created) {
                 auto rf = fs::new_random_access_file(_tablet_mgr->sst_location(metadata->id(), filename));
                 EXPECT_TRUE(rf.status().is_not_found()) << rf.status();
             }
 
             for (const auto& point : stages) sync->ClearCallBack(point);
+            sync->ClearCallBack("PersistentIndexSstable::drop_cache");
             ASSERT_OK(index->flush_memtable(/*force=*/true));
             Tablet tablet(_tablet_mgr.get(), metadata->id());
             auto retry_metadata = std::make_shared<TabletMetadata>(*metadata);
@@ -2516,9 +2529,11 @@ TEST_F(LakePersistentIndexTest, test_persistent_index_memtable_flush_failure_cle
 }
 
 TEST_F(LakePersistentIndexTest, test_full_rebuild_session_failure_cleans_completed_ssts) {
+    ensure_kek_in_key_cache();
     ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, true);
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, 1);
     ConfigResetGuard<int32_t> count_guard(&config::pk_index_memtable_max_count, 4);
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_data, false);
     const std::vector<std::pair<std::string, std::string>> stages = {
             {"LakePersistentIndex::full_rebuild:before_segment_scan",
              "injected full rebuild during later segment scan"},
@@ -2526,87 +2541,103 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_failure_cleans_complet
             {"LakePersistentIndex::full_rebuild:before_fileset_merge", "injected full rebuild before fileset merge"},
             {"LakePersistentIndex::full_rebuild:before_commit_install", "injected full rebuild before commit install"}};
 
-    for (const auto& [stage, message] : stages) {
-        SCOPED_TRACE(stage);
-        auto metadata = make_varchar_pk_metadata();
-        metadata->set_id(next_id());
-        metadata->set_version(4);
-        metadata->set_next_rowset_id(4);
-        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
-        std::vector<std::string> keys;
-        append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/16, /*rowset_id=*/1, &keys);
-        append_cold_rowset(metadata.get(), /*start=*/16, /*n=*/16, /*rowset_id=*/2, &keys);
-        append_cold_rowset(metadata.get(), /*start=*/32, /*n=*/16, /*rowset_id=*/3, &keys);
-        write_binary_del_file(metadata->id(), "session_failure.del", {"k00000018"});
-        auto* del = metadata->mutable_rowsets(1)->add_del_files();
-        del->set_name("session_failure.del");
-        del->set_origin_rowset_id(2);
-        del->set_op_offset(0);
+    for (bool encrypted : {false, true}) {
+        ConfigResetGuard<bool> tde_guard(&config::enable_transparent_data_encryption, encrypted);
+        for (const auto& [stage, message] : stages) {
+            SCOPED_TRACE(::testing::Message() << "encrypted=" << encrypted << " stage=" << stage);
+            auto metadata = make_varchar_pk_metadata();
+            metadata->set_id(next_id());
+            metadata->set_version(4);
+            metadata->set_next_rowset_id(4);
+            ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+            std::vector<std::string> keys;
+            append_cold_rowset(metadata.get(), /*start=*/0, /*n=*/16, /*rowset_id=*/1, &keys);
+            append_cold_rowset(metadata.get(), /*start=*/16, /*n=*/16, /*rowset_id=*/2, &keys);
+            append_cold_rowset(metadata.get(), /*start=*/32, /*n=*/16, /*rowset_id=*/3, &keys);
+            write_binary_del_file(metadata->id(), "session_failure.del", {"k00000018"});
+            auto* del = metadata->mutable_rowsets(1)->add_del_files();
+            del->set_name("session_failure.del");
+            del->set_origin_rowset_id(2);
+            del->set_op_offset(0);
 
-        std::vector<std::string> source_paths;
-        for (const auto& rowset : metadata->rowsets()) {
-            for (const auto& segment : rowset.segment_metas()) {
-                source_paths.emplace_back(_tablet_mgr->segment_location(metadata->id(), segment.filename()));
+            std::vector<std::string> source_paths;
+            for (const auto& rowset : metadata->rowsets()) {
+                for (const auto& segment : rowset.segment_metas()) {
+                    source_paths.emplace_back(_tablet_mgr->segment_location(metadata->id(), segment.filename()));
+                }
+                for (const auto& del_file : rowset.del_files()) {
+                    source_paths.emplace_back(_tablet_mgr->del_location(metadata->id(), del_file.name()));
+                }
             }
-            for (const auto& del_file : rowset.del_files()) {
-                source_paths.emplace_back(_tablet_mgr->del_location(metadata->id(), del_file.name()));
+            ASSIGN_OR_ABORT(auto baseline, sst_inventory(metadata->id()));
+            const size_t block_cache_usage_before = _update_mgr->block_cache()->cache()->get_memory_usage();
+            std::vector<std::string> registered;
+            std::vector<std::string> aborted;
+            std::vector<std::string> dropped_paths;
+            const Status injected = Status::InternalError(message);
+            auto* sync = SyncPoint::GetInstance();
+            sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
+                if (arg != nullptr) registered.emplace_back(*static_cast<std::string*>(arg));
+            });
+            sync->SetCallBack("LakePersistentIndex::full_rebuild:abort", [&](void* arg) {
+                if (arg != nullptr) aborted = *static_cast<std::vector<std::string>*>(arg);
+            });
+            sync->SetCallBack("PersistentIndexSstable::drop_cache", [&](void* arg) {
+                if (arg != nullptr) dropped_paths.emplace_back(*static_cast<std::string*>(arg));
+            });
+            sync->SetCallBack(stage, [&](void* arg) {
+                const bool after_completed = !registered.empty();
+                const bool later_fileset =
+                        stage != "LakePersistentIndex::full_rebuild:before_fileset_merge" || registered.size() >= 2;
+                if (arg != nullptr && after_completed && later_fileset) *static_cast<Status*>(arg) = injected;
+            });
+            sync->EnableProcessing();
+            DeferOp clear_callbacks([&]() {
+                sync->ClearCallBack("LakePersistentIndex::full_rebuild:register_sst");
+                sync->ClearCallBack("LakePersistentIndex::full_rebuild:abort");
+                sync->ClearCallBack("PersistentIndexSstable::drop_cache");
+                sync->ClearCallBack(stage);
+                sync->DisableProcessing();
+            });
+
+            const auto result = _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/metadata->version());
+            RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait();
+            if (result.ok()) {
+                ADD_FAILURE() << "recovery unexpectedly succeeded at " << stage;
+                continue;
             }
-        }
-        ASSIGN_OR_ABORT(auto baseline, sst_inventory(metadata->id()));
-        std::vector<std::string> registered;
-        std::vector<std::string> aborted;
-        const Status injected = Status::InternalError(message);
-        auto* sync = SyncPoint::GetInstance();
-        sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
-            if (arg != nullptr) registered.emplace_back(*static_cast<std::string*>(arg));
-        });
-        sync->SetCallBack("LakePersistentIndex::full_rebuild:abort", [&](void* arg) {
-            if (arg != nullptr) aborted = *static_cast<std::vector<std::string>*>(arg);
-        });
-        sync->SetCallBack(stage, [&](void* arg) {
-            const bool after_completed = !registered.empty();
-            const bool later_fileset =
-                    stage != "LakePersistentIndex::full_rebuild:before_fileset_merge" || registered.size() >= 2;
-            if (arg != nullptr && after_completed && later_fileset) *static_cast<Status*>(arg) = injected;
-        });
-        sync->EnableProcessing();
-        DeferOp clear_callbacks([&]() {
+            EXPECT_TRUE(result.status().is_internal_error()) << result.status();
+            EXPECT_NE(std::string::npos, result.status().to_string().find(message)) << result.status();
+            ASSERT_FALSE(registered.empty());
+            expect_exact_callback_filenames(registered, aborted);
+            std::vector<std::string> expected_drop_paths;
+            for (const auto& filename : aborted) {
+                expected_drop_paths.emplace_back(_tablet_mgr->sst_location(metadata->id(), filename));
+            }
+            EXPECT_EQ(expected_drop_paths, dropped_paths);
+            ASSIGN_OR_ABORT(auto after_failure, sst_inventory(metadata->id()));
+            EXPECT_EQ(baseline, after_failure);
+            EXPECT_EQ(block_cache_usage_before, _update_mgr->block_cache()->cache()->get_memory_usage());
+            for (const auto& path : source_paths) {
+                ASSIGN_OR_ABORT(auto source, fs::new_random_access_file(path));
+                ASSIGN_OR_ABORT(auto size, source->get_size());
+                EXPECT_GT(size, 0);
+            }
+            ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(metadata->id(), metadata->version()));
+            EXPECT_EQ(0, persisted->sstable_meta().sstables_size());
+            _update_mgr->unload_and_remove_primary_index(metadata->id());
+            ASSIGN_OR_ABORT(auto after_second_teardown, sst_inventory(metadata->id()));
+            EXPECT_EQ(baseline, after_second_teardown);
+
             sync->ClearCallBack("LakePersistentIndex::full_rebuild:register_sst");
             sync->ClearCallBack("LakePersistentIndex::full_rebuild:abort");
+            sync->ClearCallBack("PersistentIndexSstable::drop_cache");
             sync->ClearCallBack(stage);
-            sync->DisableProcessing();
-        });
-
-        const auto result = _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/metadata->version());
-        RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait();
-        if (result.ok()) {
-            ADD_FAILURE() << "recovery unexpectedly succeeded at " << stage;
-            continue;
+            ASSIGN_OR_ABORT(auto retry,
+                            _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/metadata->version()));
+            ASSERT_GT(retry->sstable_meta().sstables_size(), 0);
+            assert_sstables_reopen(retry);
         }
-        EXPECT_TRUE(result.status().is_internal_error()) << result.status();
-        EXPECT_NE(std::string::npos, result.status().to_string().find(message)) << result.status();
-        ASSERT_FALSE(registered.empty());
-        expect_exact_callback_filenames(registered, aborted);
-        ASSIGN_OR_ABORT(auto after_failure, sst_inventory(metadata->id()));
-        EXPECT_EQ(baseline, after_failure);
-        for (const auto& path : source_paths) {
-            ASSIGN_OR_ABORT(auto source, fs::new_random_access_file(path));
-            ASSIGN_OR_ABORT(auto size, source->get_size());
-            EXPECT_GT(size, 0);
-        }
-        ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(metadata->id(), metadata->version()));
-        EXPECT_EQ(0, persisted->sstable_meta().sstables_size());
-        _update_mgr->unload_and_remove_primary_index(metadata->id());
-        ASSIGN_OR_ABORT(auto after_second_teardown, sst_inventory(metadata->id()));
-        EXPECT_EQ(baseline, after_second_teardown);
-
-        sync->ClearCallBack("LakePersistentIndex::full_rebuild:register_sst");
-        sync->ClearCallBack("LakePersistentIndex::full_rebuild:abort");
-        sync->ClearCallBack(stage);
-        ASSIGN_OR_ABORT(auto retry,
-                        _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/metadata->version()));
-        ASSERT_GT(retry->sstable_meta().sstables_size(), 0);
-        assert_sstables_reopen(retry);
     }
 }
 

@@ -43,6 +43,10 @@ namespace lake {
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
 
+// Drop the local cache copy of `path` so owned temporary-output cleanup cannot leave stale cache state.
+// This operation is unconditional in shared-data mode.
+Status drop_sstable_cache(const std::string& path);
+
 // Drop the local cache copy of `path` so subsequent reads go to remote storage.
 // Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
 Status drop_corrupted_sstable_cache(const std::string& path);

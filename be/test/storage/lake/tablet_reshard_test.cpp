@@ -11381,10 +11381,10 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
         EXPECT_EQ(2, (MERGED)->version()) << "merged tablet version mismatch";                                     \
     } while (0)
 
-// A synthesized gap delvec remains authoritative when divergent rowset layouts force the shared SST cohort into
-// lazy fallback, even if the source SST PB carried no delvec. Cold first-writer recovery must rebuild from rowsets,
-// honor the synthesized target delvec, and preserve the exact data oracle across reopen.
-TEST_F(LakeTabletReshardTest, test_tablet_merging_pk_sstable_pb_delvec_projection_when_source_has_no_delvec) {
+// A synthesized gap delvec remains authoritative when divergent rowset layouts force lazy index rebuild, even when
+// the inherited index metadata carries no delvec. Cold first-writer recovery must rebuild from rowsets, honor the
+// synthesized target delvec, and preserve the exact data oracle across reopen.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_synthesized_delvec_survives_lazy_rebuild_fallback) {
     using namespace pr1_helpers;
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -11471,7 +11471,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_pk_sstable_pb_delvec_projectio
     EXPECT_GT(delvec_it->second.size(), 0u);
 
     // The compacted sibling makes the rowset layouts divergent, so the complete shared cohort cannot be reused.
-    // The synthesized delvec remains authoritative rowset metadata while the source SST is handed off exactly once.
+    // The synthesized delvec remains authoritative rowset metadata while the inherited SST is orphaned exactly once.
     EXPECT_EQ(0, merged->sstable_meta().sstables_size());
     ASSERT_EQ(1, merged->orphan_files_size());
     EXPECT_EQ("shared.sst", merged->orphan_files(0).name());

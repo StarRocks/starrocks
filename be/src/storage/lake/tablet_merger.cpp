@@ -2517,7 +2517,6 @@ Status fold_omitted_sstable_orphans(const std::vector<TabletMergeContext>& conte
                                     TabletMetadataPB* target) {
     struct FoldedOrphan {
         FileMetaPB file;
-        bool version_initialized = false;
         bool version_valid = true;
         int64_t version = 0;
     };
@@ -2529,24 +2528,23 @@ Status fold_omitted_sstable_orphans(const std::vector<TabletMergeContext>& conte
             }
             auto [it, inserted] = folded.try_emplace(sstable.filename());
             auto& orphan = it->second;
+            const int64_t occurrence_version = sstable.generation_version();
+            const bool occurrence_valid = occurrence_version > 0 && occurrence_version <= target_version;
             if (inserted) {
                 orphan.file.set_name(sstable.filename());
                 orphan.file.set_size(sstable.filesize());
                 orphan.file.set_encryption_meta(sstable.encryption_meta());
                 orphan.file.set_shared(true);
-            } else if (orphan.file.size() != sstable.filesize() ||
-                       orphan.file.encryption_meta() != sstable.encryption_meta()) {
+                orphan.version_valid = occurrence_valid;
+                orphan.version = occurrence_version;
+                continue;
+            }
+            if (orphan.file.size() != sstable.filesize() ||
+                orphan.file.encryption_meta() != sstable.encryption_meta()) {
                 return Status::Corruption(fmt::format("tablet merge source SST {} has conflicting physical metadata",
                                                       sstable.filename()));
             }
-
-            const int64_t occurrence_version = sstable.generation_version();
-            const bool occurrence_valid = occurrence_version > 0 && occurrence_version <= target_version;
-            if (!orphan.version_initialized) {
-                orphan.version_initialized = true;
-                orphan.version_valid = occurrence_valid;
-                orphan.version = occurrence_version;
-            } else if (!occurrence_valid || !orphan.version_valid || orphan.version != occurrence_version) {
+            if (!occurrence_valid || !orphan.version_valid || orphan.version != occurrence_version) {
                 orphan.version_valid = false;
             }
         }
