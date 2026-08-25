@@ -144,7 +144,16 @@ private:
     static constexpr size_t _FIXED_FIFO_CACHE_SIZE = 1024;
     static constexpr size_t _FXIED_FIFO_CACHE_EXPIRE_MS = 5000; // 5000ms
 
+#ifdef BE_TEST
+    // The schedule thread finishes its current sleep before it notices the stop request, so every
+    // fixture that starts a TabletWarmupManager waits out one full interval on teardown. At the
+    // production 200ms that dominated unit-test wall time: single tests measured 201ms almost
+    // entirely made of this sleep, so a suite's runtime was ~test_count * 200ms. 10ms keeps the
+    // polling cadence meaningful while making the teardown cost negligible.
+    size_t _schedule_sleep_ms = 10;
+#else
     size_t _schedule_sleep_ms = 200; // 200ms
+#endif
 
     TabletManager* _tablet_mgr;
     std::unique_ptr<ThreadPool> _thread_pool;

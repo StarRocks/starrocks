@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <thread>
 
 #include "agent/agent_server.h"
 #include "base/path/file_util.h"
@@ -28,6 +29,7 @@
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/config_runtime_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
@@ -88,6 +90,12 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     config::l0_snapshot_size = 1048576;
     config::storage_flood_stage_left_capacity_bytes = 10485600;
     config::spill_local_storage_dir = spill_path.value();
+    // Dozens of thread pools size themselves from CpuInfo::num_cores() (global_thread_pools.cpp
+    // alone has ~10 such sites), so on a big host a unit-test process builds pools sized for the whole
+    // machine and then tears them down again -- pure overhead for tests that run almost no concurrent
+    // work. CpuInfo::init() below honours config::num_cores when it is > 0, so cap it here. Never raise
+    // it above what the host actually has.
+    config::num_cores = std::min<int32_t>(8, std::max(1U, std::thread::hardware_concurrency()));
 
     FLAGS_alsologtostderr = true;
     init_glog(argv[0], true);
