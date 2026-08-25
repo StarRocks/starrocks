@@ -3165,6 +3165,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     EXPECT_EQ(parent_segment, second_child->rowsets(0).segment_metas(0).filename());
     EXPECT_TRUE(first_child->rowsets(0).segment_metas(0).shared());
     EXPECT_TRUE(second_child->rowsets(0).segment_metas(0).shared());
+    // Mutation gate: child-local range/data_size intentionally differ; restoring the old full-PB
+    // comparator must make this identical-layout merge fall back instead of reusing its source SSTs.
     const auto& first_rowset = first_child->rowsets(0);
     const auto& second_rowset = second_child->rowsets(0);
     EXPECT_TRUE(lake::tablet_reshard_helper::same_rowset_uid(first_rowset, second_rowset));
