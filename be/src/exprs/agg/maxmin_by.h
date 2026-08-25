@@ -67,11 +67,11 @@ struct MinByAggregateData<LT, not_filter_nulls, AggregateComplexLTGuard<LT>> {
 template <LogicalType LT, typename State, typename = guard::Guard>
 struct MaxByElement {
     using T = RunTimeCppType<LT>;
-    static bool should_update(const State& state, const T& right) { return right > state.value; }
-    static bool should_replace(const T& current, const T& right) { return right > current; }
+    static bool should_replace_committed_state(const State& state, const T& right) { return right > state.value; }
+    static bool should_replace_chunk_candidate(const T& current, const T& right) { return right > current; }
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (should_update(state, right)) {
+        if (should_replace_committed_state(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -113,11 +113,11 @@ struct MaxByElement {
 template <LogicalType LT, typename State>
 struct MaxByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
-    static bool should_update(const State& state, const T& right) { return *right >= state.value; }
-    static bool should_replace(const T& current, const T& right) { return *right >= *current; }
+    static bool should_replace_committed_state(const State& state, const T& right) { return *right >= state.value; }
+    static bool should_replace_chunk_candidate(const T& current, const T& right) { return *right >= *current; }
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (should_update(state, right)) {
+        if (should_replace_committed_state(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -159,11 +159,11 @@ struct MaxByElement<LT, State, JsonGuard<LT>> {
 template <LogicalType LT, typename State, typename = guard::Guard>
 struct MinByElement {
     using T = RunTimeCppType<LT>;
-    static bool should_update(const State& state, const T& right) { return right <= state.value; }
-    static bool should_replace(const T& current, const T& right) { return right <= current; }
+    static bool should_replace_committed_state(const State& state, const T& right) { return right <= state.value; }
+    static bool should_replace_chunk_candidate(const T& current, const T& right) { return right <= current; }
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (should_update(state, right)) {
+        if (should_replace_committed_state(state, right)) {
             auto is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -205,11 +205,11 @@ struct MinByElement {
 template <LogicalType LT, typename State>
 struct MinByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
-    static bool should_update(const State& state, const T& right) { return *right <= state.value; }
-    static bool should_replace(const T& current, const T& right) { return *right <= *current; }
+    static bool should_replace_committed_state(const State& state, const T& right) { return *right <= state.value; }
+    static bool should_replace_chunk_candidate(const T& current, const T& right) { return *right <= *current; }
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (should_update(state, right)) {
+        if (should_replace_committed_state(state, right)) {
             auto is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -284,13 +284,15 @@ struct MinByAggregateData<LT, not_filter_nulls, StringLTGuard<LT>> {
 
 template <LogicalType LT, typename State>
 struct MaxByElement<LT, State, StringLTGuard<LT>> {
-    static bool should_update(const State& state, const Slice& right) {
+    static bool should_replace_committed_state(const State& state, const Slice& right) {
         return !state.has_value() || state.slice_max().compare(right) < 0;
     }
-    static bool should_replace(const Slice& current, const Slice& right) { return current.compare(right) < 0; }
+    static bool should_replace_chunk_candidate(const Slice& current, const Slice& right) {
+        return current.compare(right) < 0;
+    }
 
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
-        if (should_update(state, right)) {
+        if (should_replace_committed_state(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -337,13 +339,15 @@ struct MaxByElement<LT, State, StringLTGuard<LT>> {
 
 template <LogicalType LT, typename State>
 struct MinByElement<LT, State, StringLTGuard<LT>> {
-    static bool should_update(const State& state, const Slice& right) {
+    static bool should_replace_committed_state(const State& state, const Slice& right) {
         return !state.has_value() || state.slice_min().compare(right) > 0;
     }
-    static bool should_replace(const Slice& current, const Slice& right) { return current.compare(right) > 0; }
+    static bool should_replace_chunk_candidate(const Slice& current, const Slice& right) {
+        return current.compare(right) > 0;
+    }
 
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
-        if (should_update(state, right)) {
+        if (should_replace_committed_state(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -695,13 +699,13 @@ private:
 
             T key = key_data[is_constant_key ? 0 : i];
             if (!has_candidate) {
-                if (!OP::should_update(aggregate_state, key)) {
+                if (!OP::should_replace_committed_state(aggregate_state, key)) {
                     continue;
                 }
                 has_candidate = true;
                 candidate_row = i;
                 candidate_key = key;
-            } else if (OP::should_replace(candidate_key, key)) {
+            } else if (OP::should_replace_chunk_candidate(candidate_key, key)) {
                 candidate_row = i;
                 candidate_key = key;
             }
@@ -986,13 +990,13 @@ private:
 
             Slice key = GetContainer<LT>::get_data(columns[1], i);
             if (!has_candidate) {
-                if (!OP::should_update(aggregate_state, key)) {
+                if (!OP::should_replace_committed_state(aggregate_state, key)) {
                     continue;
                 }
                 has_candidate = true;
                 candidate_row = i;
                 candidate_key = key;
-            } else if (OP::should_replace(candidate_key, key)) {
+            } else if (OP::should_replace_chunk_candidate(candidate_key, key)) {
                 candidate_row = i;
                 candidate_key = key;
             }
