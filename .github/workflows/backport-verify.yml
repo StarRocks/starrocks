@@ -151,19 +151,27 @@ jobs:
           gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
             -f state="${ST}" -f context=backport-verify -f description="${DESC}"
 
-          # human-readable sticky result comment
-          if [ "${STATE}" = "block" ]; then
-            {
-              printf '<!-- backport-verify -->\n'
-              printf '### :warning: Backport selection differs from the AI recommendation\n\n'
-              printf '%s\n\n' "${DESC}"
-              printf 'Either re-tick the version boxes to match the recommendation, or — if the difference is intentional — copy this exact line into a comment:\n\n'
-              printf '    I have confirmed the differences between the Backport branch and the AI recommendations.\n'
-            } > cbody.txt
+          # human-readable sticky result comment. Skip the transient fail-open state
+          # (`unavailable`): the gate races ahead of the slow advisory, so the FIRST run of
+          # every PR would otherwise post a "not available yet" comment that just churns until
+          # the advisory lands and the gate re-evaluates. The success status alone is enough
+          # there; only pass / acked / block warrant a comment.
+          if [ "${STATE}" = "unavailable" ]; then
+            echo "unavailable (fail-open) — status only, no comment"
           else
-            {
-              printf '<!-- backport-verify -->\n'
-              printf '### Backport verify: %s\n\n%s\n' "${STATE}" "${DESC}"
-            } > cbody.txt
+            if [ "${STATE}" = "block" ]; then
+              {
+                printf '<!-- backport-verify -->\n'
+                printf '### :warning: Backport selection differs from the AI recommendation\n\n'
+                printf '%s\n\n' "${DESC}"
+                printf 'Either re-tick the version boxes to match the recommendation, or — if the difference is intentional — copy this exact line into a comment:\n\n'
+                printf '    I have confirmed the differences between the Backport branch and the AI recommendations.\n'
+              } > cbody.txt
+            else
+              {
+                printf '<!-- backport-verify -->\n'
+                printf '### Backport verify: %s\n\n%s\n' "${STATE}" "${DESC}"
+              } > cbody.txt
+            fi
+            python3 ci-tool/lib/upsert_pr_comment.py "$REPO" "$PR" "<!-- backport-verify -->" cbody.txt
           fi
-          python3 ci-tool/lib/upsert_pr_comment.py "$REPO" "$PR" "<!-- backport-verify -->" cbody.txt
