@@ -94,6 +94,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergFileContent;
@@ -775,6 +776,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     stmt.getDbName(), stmt.getTableName(), e);
             icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), false);
             tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
+            dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
             asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
             return;
         }
@@ -819,6 +821,27 @@ public class IcebergMetadata implements ConnectorMetadata {
         } catch (Exception e) {
             return isMetadataFileMissing(e);
         }
+    }
+
+    /**
+     * Drops the statistics that are keyed by name, which is everything reachable without loading the table.
+     * Leaving them behind would hand a broken table's leftovers to a table later recreated under the same
+     * name, and its analyze job would start collecting again on the new table's behalf. The remainder of
+     * {@link StatisticUtils#dropStatisticsAfterDropTable} is keyed by the table UUID, which embeds the uuid
+     * iceberg keeps in the very metadata that is missing here: those entries cannot be reached, and a
+     * recreated table gets a different uuid, so they are never taken for the new table's statistics.
+     */
+    private void dropNameKeyedStatistics(String dbName, String tableName) {
+        IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
+        if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
+            // getTable() lower cases the names of these catalogs before the statistics get keyed by them
+            dbName = dbName.toLowerCase();
+            tableName = tableName.toLowerCase();
+        }
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        analyzeMgr.removeExternalBasicStatsMeta(catalogName, dbName, tableName);
+        analyzeMgr.dropAnalyzeJob(catalogName, dbName, tableName);
     }
 
     public void updateTableProperty(Database db, IcebergTable icebergTable) {
