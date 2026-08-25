@@ -3807,10 +3807,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return paimonForceJNIReader;
     }
 
-    public void setPaimonForceJNIReader(boolean paimonForceJNIReader) {
-        this.paimonForceJNIReader = paimonForceJNIReader;
-    }
-
     public PaimonReaderMode getPaimonReaderMode() {
         return PaimonReaderMode.valueOf(paimonReaderMode);
     }

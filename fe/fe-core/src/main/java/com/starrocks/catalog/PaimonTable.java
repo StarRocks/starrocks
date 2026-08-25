@@ -160,8 +160,7 @@ public class PaimonTable extends Table {
 
         tPaimonTable.setPaimon_schema(PaimonUtils.getTPaimonSchema(this.paimonNativeTable.rowType()));
 
-        if (paimonNativeTable instanceof FileStoreTable) {
-            FileStoreTable fileStoreTable = (FileStoreTable) paimonNativeTable;
+        if (paimonNativeTable instanceof FileStoreTable fileStoreTable) {
             tPaimonTable.setPaimon_table_path(fileStoreTable.location().toString());
             try {
                 tPaimonTable.setPaimon_table_schema_json(JsonSerdeUtil.toJson(fileStoreTable.schema()));

@@ -801,6 +801,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = std::string(_scanner_ctx.hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
+    if (scan_range.__isset.use_paimon_native_reader && scan_range.use_paimon_native_reader) {
+        // Paimon native scan ranges leave full_path unset so that HDFSBackendSelector hashes on the
+        // per-split relative_path. Build the FileSystem from the table path in the descriptor instead.
+        if (const auto* paimon_desc = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx.hive_table);
+            paimon_desc != nullptr && !paimon_desc->get_paimon_table_path().empty()) {
+            native_file_path = paimon_desc->get_paimon_table_path();
+        }
+    }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     auto fsOptions =
