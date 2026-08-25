@@ -3150,7 +3150,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 51);
+    // Version 2 was indexless, so the first delete is also the first real writer: one full-recovery
+    // SST precedes the 51 low-threshold delete SSTs.
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 52);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
     {
@@ -3172,7 +3174,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
-    EXPECT_EQ(sst_cnt, 51);
+    EXPECT_EQ(sst_cnt, 52);
     EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 76.5);
     // 4. compaction with sst
     {
@@ -3618,6 +3620,17 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_session_finish_restores_cach
     EXPECT_EQ(expected_first, after_first);
     assert_sstables_reopen(first_writer_metadata);
 
+    {
+        auto* cached_entry = _update_mgr->index_cache().get(tablet_id);
+        ASSERT_NE(nullptr, cached_entry);
+        DeferOp release_cached_entry([&]() { _update_mgr->index_cache().release(cached_entry); });
+        auto cached_guard = cached_entry->value().fetch_guard();
+        auto* lake_index = dynamic_cast<LakePersistentIndex*>(cached_entry->value()._persistent_index.get());
+        ASSERT_NE(nullptr, lake_index);
+        EXPECT_FALSE(lake_index->_full_rebuild_session_active);
+        EXPECT_TRUE(lake_index->_uncommitted_full_rebuild_ssts.empty());
+    }
+
     const int begin_before_second = begin_count.load();
     const int abort_before_second = abort_count.load();
     const size_t registered_before_second = registered.size();
@@ -3839,7 +3852,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_commit_handoff_never_deletes
         EXPECT_EQ(after_error, after_evict);
         EXPECT_EQ(0, abort_count.load());
         for (const auto& filename : registered) {
-            ASSIGN_OR_ABORT(auto file, fs::new_random_access_file(_tablet_mgr->sst_location(tablet_id, filename)));
+            auto file_or = fs::new_random_access_file(_tablet_mgr->sst_location(tablet_id, filename));
+            ASSERT_OK(file_or);
+            auto file = std::move(file_or).value();
             ASSIGN_OR_ABORT(auto size, file->get_size());
             EXPECT_GT(size, 0);
         }

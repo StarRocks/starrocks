@@ -199,7 +199,8 @@ public:
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
-                                                std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
+                                                std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt,
+                                                bool force_serial_full_rebuild = false);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);

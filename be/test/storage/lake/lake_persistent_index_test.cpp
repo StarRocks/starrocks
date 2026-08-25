@@ -2234,7 +2234,13 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_forces_serial_scan_del
     });
     sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
         callback_payloads_valid &= arg != nullptr;
-        if (arg != nullptr) registered.emplace_back(*static_cast<std::string*>(arg));
+        if (arg != nullptr) {
+            registered.emplace_back(*static_cast<std::string*>(arg));
+            if (registered.size() == 2) {
+                config::l0_max_mem_usage = std::numeric_limits<int64_t>::max();
+                config::l0_min_mem_usage = std::numeric_limits<int64_t>::max();
+            }
+        }
     });
     sync->SetCallBack("LakePersistentIndex::full_rebuild:before_fileset", [&](void* arg) {
         callback_payloads_valid &= arg != nullptr;
@@ -2261,7 +2267,9 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_forces_serial_scan_del
         sync->DisableProcessing();
     });
 
-    ASSIGN_OR_ABORT(auto flushed, _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/kVersion));
+    auto flushed_or = _update_mgr->flush_pk_memtable(metadata, /*generation_version=*/kVersion);
+    ASSERT_OK(flushed_or);
+    auto flushed = std::move(flushed_or).value();
     EXPECT_TRUE(callback_payloads_valid);
     EXPECT_EQ(1, begin_count.load());
     EXPECT_EQ(0, parallel_segment_count.load());
@@ -2272,6 +2280,7 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_forces_serial_scan_del
             std::all_of(flush_policies.begin(), flush_policies.end(), [](bool synchronous) { return synchronous; }));
     EXPECT_EQ(registered, before_fileset);
     expect_unique_filenames(registered);
+    EXPECT_EQ(registered.size(), flush_policies.size());
     EXPECT_GE(registered.size(), 2u);
     EXPECT_EQ(registered.size(), handed_off);
 
