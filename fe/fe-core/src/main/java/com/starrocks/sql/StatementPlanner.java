@@ -251,8 +251,7 @@ public class StatementPlanner {
                 // we can pre-resolve or pre-refresh external source tables here so slow
                 // connector/filesystem metadata I/O does not remain on the lock critical path.
                 if (session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
-                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
-                            session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
+                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement, true);
                 }
             }
 
