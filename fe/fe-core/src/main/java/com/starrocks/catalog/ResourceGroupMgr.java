@@ -255,17 +255,16 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) {
-        if (stmt.getName() != null && !snapshot.get().byName.containsKey(stmt.getName())) {
-            ErrorReport.reportSemanticException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
-        }
-
-        List<List<String>> rows;
-        if (stmt.getName() != null) {
-            rows = showOneResourceGroup(stmt.getName(), stmt.isVerbose());
+        String name = stmt.getName();
+        if (name != null) {
+            ResourceGroup rg = snapshot.get().byName.get(name);
+            if (rg == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERROR_NO_RG_ERROR, name);
+            }
+            return rg.show(stmt.isVerbose());
         } else {
-            rows = showAllResourceGroups(ConnectContext.get(), stmt.isVerbose(), stmt.isListAll());
+            return showAllResourceGroups(ConnectContext.get(), stmt.isVerbose(), stmt.isListAll());
         }
-        return rows;
     }
 
     public List<Long> getResourceGroupIds() {
@@ -341,11 +340,11 @@ public class ResourceGroupMgr implements Writable {
 
     public List<List<String>> showOneResourceGroup(String name, boolean verbose) {
         // Lock-free: capture snapshot once.
-        Map<String, ResourceGroup> snap = this.snapshot.get().byName;
-        if (!snap.containsKey(name)) {
+        ResourceGroup rg = this.snapshot.get().byName.get(name);
+        if (rg == null) {
             return Collections.emptyList();
         } else {
-            return snap.get(name).show(verbose);
+            return rg.show(verbose);
         }
     }
 
