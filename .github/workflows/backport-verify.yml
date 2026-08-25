@@ -6,22 +6,22 @@ name: BACKPORT VERIFY
 #   AI absent    -> success (fail-open)
 #   differ+acked -> success
 #   differ       -> failure  (author re-ticks OR posts the exact confirmation line)
-# The `backport-verify` commit status is the gate. Replaces the static "confirm the AI
-# backport recommendation" checkbox. Logic lives in ci-tool/lib/backport_verify_gate.py.
+# The `backport-verify` commit status is the gate; it replaces the static "confirm the AI
+# backport recommendation" checkbox.
 #
-# REQUIRED-CHECK SAFETY: `backport-verify` is a required status on `main`. A required
-# status that is NEVER posted leaves the PR pending forever. So for EVERY base==main PR we
-# ALWAYS post a status — success ("not applicable") for non-backportable / mergify-bp PRs,
-# the gate result otherwise. base!=main PRs are not gated by main's protection, so skip.
+# THIN CALLER: all logic lives in ci-tool/lib/backport_verify_run.py (resolve the PR, scope
+# it, read the advisory AI set + the author's ticks, decide, post the status + sticky
+# comments). `backport-verify` is a required status on main and the runner ALWAYS posts on
+# base==main (success "not applicable" for non-backportable / mergify-bp PRs), so a required
+# context never leaves a PR pending.
 
 on:
   pull_request_target:
     types: [opened, reopened, edited, synchronize]
   issue_comment:
-    # `edited` too: a reopened / title-edited PR that already has the sticky advisory makes
-    # ai-backport-advisory.yml EDIT that comment (new AI set) rather than create a new one.
-    # Without `edited` the gate would keep evaluating the stale marker. The job `if` filters
-    # to advisory / confirmation comments and excludes the gate's own sticky comments.
+    # `edited` too: a reopened / title-edited PR makes ai-backport-advisory.yml EDIT its
+    # sticky advisory comment (new AI set) rather than create a new one; without `edited`
+    # the gate would keep evaluating the stale marker.
     types: [created, edited]
 
 permissions:
@@ -36,16 +36,12 @@ concurrency:
 
 jobs:
   verify:
-    # Only PRs (an issue_comment must be on a PR). Fine-grained scope (base/title/head) is
-    # decided in-step after fetching the PR, so we can always post a status on main.
-    # For issue_comment (created OR edited), ONLY the comments that change the gate's inputs
-    # are worth a re-run: the advisory (carries the <!-- backport-affected-json --> marker =
-    # the AI set — re-run when it is first posted AND when a reopen/title-edit re-computes and
-    # EDITS it) and the author's exact confirmation line. Everything else — bot coverage
-    # reports, chatter — cannot change pass/block, so skip it instead of burning a runner.
-    # The gate's OWN sticky comments must not re-trigger: the block comment embeds the
-    # confirmation line as copy-paste text, so exclude anything carrying a `<!-- backport-verify`
-    # marker (the result comment and the ack comment) from the confirmation branch.
+    # Only PRs (an issue_comment must be on a PR). For issue_comment (created OR edited), only
+    # the comments that can change the decision are worth a run: the advisory (carries the
+    # <!-- backport-affected-json --> marker) or the author's exact confirmation line — and
+    # exclude the gate's OWN sticky comments (the block comment embeds the confirmation line as
+    # copy-paste text, so filter out anything carrying a `<!-- backport-verify` marker). Bot
+    # coverage reports / chatter cannot change pass/block, so they never start a run.
     if: >
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
@@ -56,122 +52,17 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.PAT }}
       GITHUB_TOKEN: ${{ secrets.PAT }}
-      REPO: ${{ github.repository }}
-      # Untrusted comment payload — passed via env (NEVER inlined into the script) so an
-      # exotic body cannot break out of the shell. Empty for pull_request_target.
+      # Untrusted comment payload via env (NEVER a shell arg); the runner reads $EV_BODY.
+      # Empty for pull_request_target.
       EV_USER: ${{ github.event.comment.user.login }}
       EV_BODY: ${{ github.event.comment.body }}
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
-      - name: Resolve PR + scope
-        id: scope
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            PR='${{ github.event.issue.number }}'
-          else
-            PR='${{ github.event.pull_request.number }}'
-          fi
-          echo "PR=${PR}" >> "$GITHUB_ENV"
-          gh api "repos/${REPO}/pulls/${PR}" > pr.json
-          BASE=$(jq -r '.base.ref' pr.json)
-          HEAD_SHA=$(jq -r '.head.sha' pr.json)
-          HEAD_REF=$(jq -r '.head.ref' pr.json)
-          AUTHOR=$(jq -r '.user.login' pr.json)
-          TITLE=$(jq -r '.title' pr.json)
-          jq -r '.body // ""' pr.json > body.txt
-          echo "HEAD_SHA=${HEAD_SHA}" >> "$GITHUB_ENV"
-          echo "AUTHOR=${AUTHOR}" >> "$GITHUB_ENV"
-
-          base_main=false; [ "${BASE}" = "main" ] && base_main=true
-          applicable=true
-          case "${HEAD_REF}" in mergify/bp/*) applicable=false;; esac
-          case "${TITLE}" in
-            '[BugFix]'*|'[Enhancement]'*|'[Doc]'*|'[UT]'*) ;;
-            *) applicable=false;;
-          esac
-          echo "base_main=${base_main}" >> "$GITHUB_OUTPUT"
-          echo "applicable=${applicable}" >> "$GITHUB_OUTPUT"
-          echo "scope: base=${BASE} head=${HEAD_REF} title='${TITLE}' base_main=${base_main} applicable=${applicable}"
-
-      # base==main but non-backportable / mergify-bp: post success so the required context
-      # is satisfied (never leave a main PR pending on this gate).
-      - name: Post not-applicable success
-        if: steps.scope.outputs.base_main == 'true' && steps.scope.outputs.applicable != 'true'
-        run: |
-          set -euo pipefail
-          gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
-            -f state=success -f context=backport-verify \
-            -f description="Not a backportable PR; no version selection to verify."
-
-      - name: Gate + status
-        if: steps.scope.outputs.base_main == 'true' && steps.scope.outputs.applicable == 'true'
+      - name: backport-verify gate
         run: |
           set -euo pipefail
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           ( cd ci-tool && git pull -q || true )
-          ( cd ci-tool && source lib/init.sh ) || true
-
-          # all PR comments as [{user, body}]
-          gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
-            --jq '[.[] | {user: .user.login, body: .body}]' > comments.json
-
-          # triggering comment (issue_comment only) via env -> file (injection-safe)
-          : > evbody.txt
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            printf '%s' "${EV_BODY:-}" > evbody.txt
-          fi
-
-          python3 ci-tool/lib/backport_verify_gate.py \
-            --body-file body.txt --comments-file comments.json \
-            --author "${AUTHOR}" --event-user "${EV_USER:-}" --event-body-file evbody.txt \
-            --out gate.out
-          STATE=$(sed -n 's/^state=//p' gate.out)
-          SIG=$(sed -n 's/^sig=//p' gate.out)
-          WRITE_ACK=$(sed -n 's/^write_ack=//p' gate.out)
-          echo "gate: state=${STATE} sig=${SIG} write_ack=${WRITE_ACK}"
-
-          # snapshot a fresh ack marker when the author just confirmed the divergence
-          if [ "${WRITE_ACK}" = "true" ]; then
-            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            {
-              printf '<!-- backport-verify-ack -->\n'
-              printf '<!-- backport-ack-sig: %s by: %s at: %s -->\n' "${SIG}" "${AUTHOR}" "${TS}"
-              printf ':white_check_mark: @%s confirmed the intentional difference from the AI backport recommendation.' "${AUTHOR}"
-            } > ackbody.txt
-            python3 ci-tool/lib/upsert_pr_comment.py "$REPO" "$PR" "<!-- backport-verify-ack -->" ackbody.txt
-          fi
-
-          case "${STATE}" in
-            pass)        ST=success; DESC="Backport selection matches the AI recommendation." ;;
-            acked)       ST=success; DESC="Author confirmed the difference from the AI recommendation." ;;
-            unavailable) ST=success; DESC="AI recommendation not available yet; version selection not auto-verified." ;;
-            block)       ST=failure; DESC="Backport selection differs from the AI recommendation — reconcile or confirm." ;;
-            *)           ST=failure; DESC="backport-verify: unexpected state '${STATE}'" ;;
-          esac
-          gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
-            -f state="${ST}" -f context=backport-verify -f description="${DESC}"
-
-          # human-readable sticky result comment. Skip the transient fail-open state
-          # (`unavailable`): the gate races ahead of the slow advisory, so the FIRST run of
-          # every PR would otherwise post a "not available yet" comment that just churns until
-          # the advisory lands and the gate re-evaluates. The success status alone is enough
-          # there; only pass / acked / block warrant a comment.
-          if [ "${STATE}" = "unavailable" ]; then
-            echo "unavailable (fail-open) — status only, no comment"
-          else
-            if [ "${STATE}" = "block" ]; then
-              {
-                printf '<!-- backport-verify -->\n'
-                printf '### :warning: Backport selection differs from the AI recommendation\n\n'
-                printf '%s\n\n' "${DESC}"
-                printf 'Either re-tick the version boxes to match the recommendation, or — if the difference is intentional — copy this exact line into a comment:\n\n'
-                printf '    I have confirmed the differences between the Backport branch and the AI recommendations.\n'
-              } > cbody.txt
-            else
-              {
-                printf '<!-- backport-verify -->\n'
-                printf '### Backport verify: %s\n\n%s\n' "${STATE}" "${DESC}"
-              } > cbody.txt
-            fi
-            python3 ci-tool/lib/upsert_pr_comment.py "$REPO" "$PR" "<!-- backport-verify -->" cbody.txt
-          fi
+          python3 ci-tool/lib/backport_verify_run.py \
+            --repo "${{ github.repository }}" --pr "${PR_NUMBER}" \
+            --event-name "${{ github.event_name }}" --event-user "${EV_USER:-}"
