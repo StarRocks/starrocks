@@ -1266,61 +1266,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データ型**: String
 * **導入バージョン**: v4.2
 
-### paimon_native_reader_enable_prefetch
-
-* **説明**: paimon-cpp ネイティブ Reader が個々のファイルから Batch をプリフェッチするかどうかを指定します。プリフェッチはリモート I/O とデコードを並行して実行し、デフォルトでは無効です。
-* **デフォルト**: false
-* **データ型**: Boolean
-* **導入バージョン**: v4.2
-
-### paimon_native_reader_enable_multi_thread_row_to_batch
-
-* **説明**: paimon-cpp ネイティブ Reader がマージされたキー値行を Arrow Batch に並列変換するかどうかを指定します。主に Primary Key テーブルの Merge-on-Read スキャンに影響し、Append-only テーブルでは通常効果がありません。
-* **デフォルト**: false
-* **データ型**: Boolean
-* **導入バージョン**: v4.2
-
-### paimon_native_reader_row_to_batch_thread_num
-
-* **説明**: `paimon_native_reader_enable_multi_thread_row_to_batch` が有効な場合に Row-to-Batch 変換で使用するスレッド数です。
-* **デフォルト**: 1
-* **データ型**: Integer
-* **導入バージョン**: v4.2
-
-### paimon_parquet_read_cache_hole_size_limit
-
-* **説明**: paimon-cpp Parquet Reader が隣接する I/O Range を結合するときにまたぐことができる最大バイト間隔です。
-* **デフォルト**: 4194304（4 MiB）
-* **データ型**: Big integer
-* **単位**: Byte
-* **値の範囲**: [0, 9223372036854775807]
-* **導入バージョン**: v4.2
-
-### paimon_parquet_read_cache_range_size_limit
-
-* **説明**: paimon-cpp Parquet Reader が結合した I/O Range の目標最大サイズです。この値は `paimon_parquet_read_cache_hole_size_limit` より大きくなければなりません。元の単一 Range はこの値を超える場合があります。
-* **デフォルト**: 33554432（32 MiB）
-* **データ型**: Big integer
-* **単位**: Byte
-* **値の範囲**: [1, 9223372036854775807]
-* **導入バージョン**: v4.2
-
-### paimon_parquet_read_bitmap_row_range_refining_strategy
-
-* **説明**: paimon-cpp Parquet Reader が Selection Bitmap の RowRange を調整する方式です。有効な値は、近接する選択範囲を結合する `coalesce` と、正確な選択範囲を保持する `trim` です。
-* **デフォルト**: coalesce
-* **データ型**: String
-* **導入バージョン**: v4.2
-
-### paimon_parquet_read_bitmap_coalesce_hole_size_limit
-
-* **説明**: `paimon_parquet_read_bitmap_row_range_refining_strategy` が `coalesce` の場合、この行数以下の間隔で分かれた選択 RowRange を結合します。
-* **デフォルト**: 32
-* **データ型**: Big integer
-* **単位**: Row
-* **値の範囲**: [0, 9223372036854775807]
-* **導入バージョン**: v4.2
-
 ### parallel_exchange_instance_num
 
 上位ノードが実行プランで下位ノードからデータを受け取るために使用するエクスチェンジノードの数を設定するために使用されます。デフォルト値は -1 で、エクスチェンジノードの数は下位ノードの実行インスタンスの数と等しいことを意味します。この変数が 0 より大きく、下位ノードの実行インスタンスの数より小さい場合、エクスチェンジノードの数は設定値と等しくなります。

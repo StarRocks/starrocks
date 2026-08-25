@@ -41,14 +41,6 @@ public class VariableVarConverters {
         CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
         CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
         CONVERTERS.put(SessionVariable.PAIMON_READER_MODE, new PaimonReaderModeConverter());
-        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT,
-                new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, 0));
-        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT,
-                new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT, 1));
-        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT,
-                new MinLongConverter(SessionVariable.PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT, 0));
-        CONVERTERS.put(SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY,
-                new PaimonBitmapRowRangeRefiningStrategyConverter());
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -121,51 +113,6 @@ public class VariableVarConverters {
             if (!value.matches("^[a-zA-Z0-9_\\-]*$")) {
                 throw new DdlException("custom_session_name can only contain letters, digits, hyhens and underscores");
             }
-            return value;
-        }
-    }
-
-    private static class MinLongConverter implements VariableVarConverterI {
-        private final String variableName;
-        private final long minimum;
-
-        private MinLongConverter(String variableName, long minimum) {
-            this.variableName = variableName;
-            this.minimum = minimum;
-        }
-
-        @Override
-        public String convert(String value) throws DdlException {
-            try {
-                if (Long.parseLong(value) < minimum) {
-                    reportInvalidValue(value);
-                }
-            } catch (NumberFormatException e) {
-                reportInvalidValue(value);
-            }
-            return value;
-        }
-
-        private void reportInvalidValue(String value) throws DdlException {
-            ErrorReport.reportDdlException(
-                    ErrorCode.ERR_INVALID_VALUE, variableName, value, "an integer at least " + minimum);
-        }
-    }
-
-    private static class PaimonBitmapRowRangeRefiningStrategyConverter implements VariableVarConverterI {
-        @Override
-        public String convert(String value) throws DdlException {
-            if (value.equalsIgnoreCase("coalesce")) {
-                return "coalesce";
-            }
-            if (value.equalsIgnoreCase("trim")) {
-                return "trim";
-            }
-            ErrorReport.reportDdlException(
-                    ErrorCode.ERR_INVALID_VALUE,
-                    SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY,
-                    value,
-                    "one of {coalesce, trim}");
             return value;
         }
     }

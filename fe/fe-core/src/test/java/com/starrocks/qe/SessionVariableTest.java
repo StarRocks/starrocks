@@ -44,66 +44,6 @@ public class SessionVariableTest {
     }
 
     @Test
-    public void testPaimonNativeReaderOptions() {
-        SessionVariable sessionVariable = new SessionVariable();
-        TQueryOptions options = sessionVariable.toThrift();
-        Assertions.assertFalse(options.isPaimon_native_reader_enable_prefetch());
-        Assertions.assertFalse(options.isPaimon_native_reader_enable_multi_thread_row_to_batch());
-        Assertions.assertEquals(1, options.getPaimon_native_reader_row_to_batch_thread_num());
-        Assertions.assertEquals(4L * 1024 * 1024, options.getPaimon_parquet_read_cache_hole_size_limit());
-        Assertions.assertEquals(32L * 1024 * 1024, options.getPaimon_parquet_read_cache_range_size_limit());
-        Assertions.assertEquals("coalesce",
-                options.getPaimon_parquet_read_bitmap_row_range_refining_strategy());
-        Assertions.assertEquals(32, options.getPaimon_parquet_read_bitmap_coalesce_hole_size_limit());
-
-        sessionVariable.setPaimonNativeReaderEnablePrefetch(true);
-        sessionVariable.setPaimonNativeReaderEnableMultiThreadRowToBatch(true);
-        sessionVariable.setPaimonNativeReaderRowToBatchThreadNum(2);
-        sessionVariable.setPaimonParquetReadCacheHoleSizeLimit(1024);
-        sessionVariable.setPaimonParquetReadCacheRangeSizeLimit(8192);
-        sessionVariable.setPaimonParquetReadBitmapRowRangeRefiningStrategy("trim");
-        sessionVariable.setPaimonParquetReadBitmapCoalesceHoleSizeLimit(8);
-
-        Assertions.assertTrue(sessionVariable.getPaimonNativeReaderEnablePrefetch());
-        Assertions.assertTrue(sessionVariable.getPaimonNativeReaderEnableMultiThreadRowToBatch());
-        Assertions.assertEquals(2, sessionVariable.getPaimonNativeReaderRowToBatchThreadNum());
-        Assertions.assertEquals(1024, sessionVariable.getPaimonParquetReadCacheHoleSizeLimit());
-        Assertions.assertEquals(8192, sessionVariable.getPaimonParquetReadCacheRangeSizeLimit());
-        Assertions.assertEquals("trim", sessionVariable.getPaimonParquetReadBitmapRowRangeRefiningStrategy());
-        Assertions.assertEquals(8, sessionVariable.getPaimonParquetReadBitmapCoalesceHoleSizeLimit());
-
-        options = sessionVariable.toThrift();
-        Assertions.assertTrue(options.isPaimon_native_reader_enable_prefetch());
-        Assertions.assertTrue(options.isPaimon_native_reader_enable_multi_thread_row_to_batch());
-        Assertions.assertEquals(2, options.getPaimon_native_reader_row_to_batch_thread_num());
-        Assertions.assertEquals(1024, options.getPaimon_parquet_read_cache_hole_size_limit());
-        Assertions.assertEquals(8192, options.getPaimon_parquet_read_cache_range_size_limit());
-        Assertions.assertEquals("trim",
-                options.getPaimon_parquet_read_bitmap_row_range_refining_strategy());
-        Assertions.assertEquals(8, options.getPaimon_parquet_read_bitmap_coalesce_hole_size_limit());
-    }
-
-    @Test
-    public void testPaimonIoOptionValidation() throws DdlException {
-        Assertions.assertEquals("trim", VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY, "TRIM"));
-        Assertions.assertEquals("coalesce", VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY, "Coalesce"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY, "invalid"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, "-1"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT, "0"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT, "-1"));
-        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, "not-a-number"));
-        Assertions.assertEquals("1024", VariableVarConverters.convert(
-                SessionVariable.PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT, "1024"));
-    }
-
-    @Test
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();

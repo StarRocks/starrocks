@@ -772,20 +772,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
     public static final String PAIMON_READER_MODE = "paimon_reader_mode";
-    public static final String PAIMON_NATIVE_READER_ENABLE_PREFETCH =
-            "paimon_native_reader_enable_prefetch";
-    public static final String PAIMON_NATIVE_READER_ENABLE_MULTI_THREAD_ROW_TO_BATCH =
-            "paimon_native_reader_enable_multi_thread_row_to_batch";
-    public static final String PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM =
-            "paimon_native_reader_row_to_batch_thread_num";
-    public static final String PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT =
-            "paimon_parquet_read_cache_hole_size_limit";
-    public static final String PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT =
-            "paimon_parquet_read_cache_range_size_limit";
-    public static final String PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY =
-            "paimon_parquet_read_bitmap_row_range_refining_strategy";
-    public static final String PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT =
-            "paimon_parquet_read_bitmap_coalesce_hole_size_limit";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -2928,27 +2914,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
 
-    @VariableMgr.VarAttr(name = PAIMON_NATIVE_READER_ENABLE_PREFETCH)
-    private boolean paimonNativeReaderEnablePrefetch = false;
-
-    @VariableMgr.VarAttr(name = PAIMON_NATIVE_READER_ENABLE_MULTI_THREAD_ROW_TO_BATCH)
-    private boolean paimonNativeReaderEnableMultiThreadRowToBatch = false;
-
-    @VariableMgr.VarAttr(name = PAIMON_NATIVE_READER_ROW_TO_BATCH_THREAD_NUM)
-    private int paimonNativeReaderRowToBatchThreadNum = 1;
-
-    @VariableMgr.VarAttr(name = PAIMON_PARQUET_READ_CACHE_HOLE_SIZE_LIMIT)
-    private long paimonParquetReadCacheHoleSizeLimit = 4L * 1024 * 1024;
-
-    @VariableMgr.VarAttr(name = PAIMON_PARQUET_READ_CACHE_RANGE_SIZE_LIMIT)
-    private long paimonParquetReadCacheRangeSizeLimit = 32L * 1024 * 1024;
-
-    @VariableMgr.VarAttr(name = PAIMON_PARQUET_READ_BITMAP_ROW_RANGE_REFINING_STRATEGY)
-    private String paimonParquetReadBitmapRowRangeRefiningStrategy = "coalesce";
-
-    @VariableMgr.VarAttr(name = PAIMON_PARQUET_READ_BITMAP_COALESCE_HOLE_SIZE_LIMIT)
-    private long paimonParquetReadBitmapCoalesceHoleSizeLimit = 32;
-
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
     private boolean avroUseJNIReader = false;
 
@@ -3852,62 +3817,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setPaimonReaderMode(String paimonReaderMode) {
         this.paimonReaderMode = paimonReaderMode;
-    }
-
-    public boolean getPaimonNativeReaderEnablePrefetch() {
-        return paimonNativeReaderEnablePrefetch;
-    }
-
-    public void setPaimonNativeReaderEnablePrefetch(boolean enablePrefetch) {
-        this.paimonNativeReaderEnablePrefetch = enablePrefetch;
-    }
-
-    public boolean getPaimonNativeReaderEnableMultiThreadRowToBatch() {
-        return paimonNativeReaderEnableMultiThreadRowToBatch;
-    }
-
-    public void setPaimonNativeReaderEnableMultiThreadRowToBatch(boolean enableMultiThreadRowToBatch) {
-        this.paimonNativeReaderEnableMultiThreadRowToBatch = enableMultiThreadRowToBatch;
-    }
-
-    public int getPaimonNativeReaderRowToBatchThreadNum() {
-        return paimonNativeReaderRowToBatchThreadNum;
-    }
-
-    public void setPaimonNativeReaderRowToBatchThreadNum(int threadNum) {
-        this.paimonNativeReaderRowToBatchThreadNum = threadNum;
-    }
-
-    public long getPaimonParquetReadCacheHoleSizeLimit() {
-        return paimonParquetReadCacheHoleSizeLimit;
-    }
-
-    public void setPaimonParquetReadCacheHoleSizeLimit(long holeSizeLimit) {
-        this.paimonParquetReadCacheHoleSizeLimit = holeSizeLimit;
-    }
-
-    public long getPaimonParquetReadCacheRangeSizeLimit() {
-        return paimonParquetReadCacheRangeSizeLimit;
-    }
-
-    public void setPaimonParquetReadCacheRangeSizeLimit(long rangeSizeLimit) {
-        this.paimonParquetReadCacheRangeSizeLimit = rangeSizeLimit;
-    }
-
-    public String getPaimonParquetReadBitmapRowRangeRefiningStrategy() {
-        return paimonParquetReadBitmapRowRangeRefiningStrategy;
-    }
-
-    public void setPaimonParquetReadBitmapRowRangeRefiningStrategy(String strategy) {
-        this.paimonParquetReadBitmapRowRangeRefiningStrategy = strategy;
-    }
-
-    public long getPaimonParquetReadBitmapCoalesceHoleSizeLimit() {
-        return paimonParquetReadBitmapCoalesceHoleSizeLimit;
-    }
-
-    public void setPaimonParquetReadBitmapCoalesceHoleSizeLimit(long holeSizeLimit) {
-        this.paimonParquetReadBitmapCoalesceHoleSizeLimit = holeSizeLimit;
     }
 
     public boolean getAvroUseJNIReader() {
@@ -6882,16 +6791,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setEnable_file_pagecache(enableFilePageCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
-        tResult.setPaimon_native_reader_enable_prefetch(paimonNativeReaderEnablePrefetch);
-        tResult.setPaimon_native_reader_enable_multi_thread_row_to_batch(
-                paimonNativeReaderEnableMultiThreadRowToBatch);
-        tResult.setPaimon_native_reader_row_to_batch_thread_num(paimonNativeReaderRowToBatchThreadNum);
-        tResult.setPaimon_parquet_read_cache_hole_size_limit(paimonParquetReadCacheHoleSizeLimit);
-        tResult.setPaimon_parquet_read_cache_range_size_limit(paimonParquetReadCacheRangeSizeLimit);
-        tResult.setPaimon_parquet_read_bitmap_row_range_refining_strategy(
-                paimonParquetReadBitmapRowRangeRefiningStrategy);
-        tResult.setPaimon_parquet_read_bitmap_coalesce_hole_size_limit(
-                paimonParquetReadBitmapCoalesceHoleSizeLimit);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
         tResult.setTopn_filter_back_pressure_io_tasks(topnFilterBackPressureIoTasks);

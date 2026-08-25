@@ -1542,61 +1542,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v4.2
 
-### paimon_native_reader_enable_prefetch
-
-* **Description**: Whether the paimon-cpp native reader prefetches batches from individual files. Prefetch overlaps remote I/O with decoding and is disabled by default.
-* **Default**: false
-* **Data type**: Boolean
-* **Introduced in**: v4.2
-
-### paimon_native_reader_enable_multi_thread_row_to_batch
-
-* **Description**: Whether the paimon-cpp native reader converts merged key-value rows to Arrow batches in parallel. This option primarily affects merge-on-read scans of Primary Key tables and is normally a no-op for append-only tables.
-* **Default**: false
-* **Data type**: Boolean
-* **Introduced in**: v4.2
-
-### paimon_native_reader_row_to_batch_thread_num
-
-* **Description**: The number of threads used for row-to-batch conversion when `paimon_native_reader_enable_multi_thread_row_to_batch` is enabled.
-* **Default**: 1
-* **Data type**: Integer
-* **Introduced in**: v4.2
-
-### paimon_parquet_read_cache_hole_size_limit
-
-* **Description**: The maximum byte gap that the paimon-cpp Parquet reader can bridge while coalescing adjacent I/O ranges.
-* **Default**: 4194304 (4 MiB)
-* **Data type**: Big integer
-* **Unit**: Byte
-* **Value range**: [0, 9223372036854775807]
-* **Introduced in**: v4.2
-
-### paimon_parquet_read_cache_range_size_limit
-
-* **Description**: The target maximum size of a coalesced I/O range in the paimon-cpp Parquet reader. This value must be greater than `paimon_parquet_read_cache_hole_size_limit`. A single original range can still exceed this value.
-* **Default**: 33554432 (32 MiB)
-* **Data type**: Big integer
-* **Unit**: Byte
-* **Value range**: [1, 9223372036854775807]
-* **Introduced in**: v4.2
-
-### paimon_parquet_read_bitmap_row_range_refining_strategy
-
-* **Description**: The strategy used by the paimon-cpp Parquet reader to refine selection-bitmap row ranges. Valid values are `coalesce`, which merges nearby selected ranges, and `trim`, which retains exact selected ranges.
-* **Default**: coalesce
-* **Data type**: String
-* **Introduced in**: v4.2
-
-### paimon_parquet_read_bitmap_coalesce_hole_size_limit
-
-* **Description**: When `paimon_parquet_read_bitmap_row_range_refining_strategy` is `coalesce`, selected row ranges separated by no more than this number of rows are merged.
-* **Default**: 32
-* **Data type**: Big integer
-* **Unit**: Row
-* **Value range**: [0, 9223372036854775807]
-* **Introduced in**: v4.2
-
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.

@@ -44,6 +44,9 @@ constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
 constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
 constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
 constexpr std::string_view kPaimonParquetBitmapRefiningStrategy = "coalesce";
+constexpr bool kPaimonEnablePrefetch = true;
+constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
+constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
 
 void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemStats::Snapshot& io_stats) {
     const std::string paimon_fs_section = "PaimonFileSystem";
@@ -100,16 +103,6 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         return Status::InternalError("Paimon native scanner has no StarRocks file system");
     }
 
-    const auto& query_options = runtime_state->query_options();
-    const int32_t row_to_batch_thread_num = query_options.__isset.paimon_native_reader_row_to_batch_thread_num
-                                                    ? query_options.paimon_native_reader_row_to_batch_thread_num
-                                                    : 1;
-    const int64_t parquet_cache_hole_size_limit = query_options.__isset.paimon_parquet_read_cache_hole_size_limit
-                                                          ? query_options.paimon_parquet_read_cache_hole_size_limit
-                                                          : kPaimonParquetCacheHoleSizeLimit;
-    const int64_t parquet_cache_range_size_limit = query_options.__isset.paimon_parquet_read_cache_range_size_limit
-                                                           ? query_options.paimon_parquet_read_cache_range_size_limit
-                                                           : kPaimonParquetCacheRangeSizeLimit;
     _paimon_file_system = std::make_shared<PaimonFileSystem>(_scanner_ctx->fs, _scanner_ctx->datacache_options);
 
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
@@ -143,26 +136,19 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     }
 
     context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(kPaimonReadBatchSize));
+    // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
+    // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
-                              std::to_string(parquet_cache_hole_size_limit));
+                              std::to_string(kPaimonParquetCacheHoleSizeLimit));
     context_builder.AddOption("parquet.read.cache-option.range-size-limit",
-                              std::to_string(parquet_cache_range_size_limit));
+                              std::to_string(kPaimonParquetCacheRangeSizeLimit));
     context_builder.AddOption("parquet.read.bitmap.row-range-refining-strategy",
-                              query_options.__isset.paimon_parquet_read_bitmap_row_range_refining_strategy
-                                      ? query_options.paimon_parquet_read_bitmap_row_range_refining_strategy
-                                      : std::string(kPaimonParquetBitmapRefiningStrategy));
+                              std::string(kPaimonParquetBitmapRefiningStrategy));
     context_builder.AddOption("parquet.read.bitmap.coalesce-hole-size-limit",
-                              std::to_string(query_options.__isset.paimon_parquet_read_bitmap_coalesce_hole_size_limit
-                                                     ? query_options.paimon_parquet_read_bitmap_coalesce_hole_size_limit
-                                                     : kPaimonParquetBitmapCoalesceHoleSizeLimit));
-    context_builder.EnablePrefetch(query_options.__isset.paimon_native_reader_enable_prefetch
-                                           ? query_options.paimon_native_reader_enable_prefetch
-                                           : false);
-    context_builder.EnableMultiThreadRowToBatch(
-            query_options.__isset.paimon_native_reader_enable_multi_thread_row_to_batch
-                    ? query_options.paimon_native_reader_enable_multi_thread_row_to_batch
-                    : false);
-    context_builder.SetRowToBatchThreadNumber(static_cast<uint32_t>(row_to_batch_thread_num));
+                              std::to_string(kPaimonParquetBitmapCoalesceHoleSizeLimit));
+    context_builder.EnablePrefetch(kPaimonEnablePrefetch);
+    context_builder.EnableMultiThreadRowToBatch(kPaimonEnableMultiThreadRowToBatch);
+    context_builder.SetRowToBatchThreadNumber(kPaimonRowToBatchThreadNum);
     context_builder.WithMemoryPool(_memory_pool);
     context_builder.WithFileSystem(_paimon_file_system);
 
