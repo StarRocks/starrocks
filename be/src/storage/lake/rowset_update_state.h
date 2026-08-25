@@ -199,6 +199,7 @@ private:
     // the original handed back through |unwidened_auto_increment_column|; the caller owns putting it back,
     // and must do so after the rewrite.
     Status _widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params, uint32_t segment_id,
+                                                    const FileInfo& src,
                                                     const std::vector<ColumnId>& unmodified_column_ids,
                                                     MutableColumns* widened_write_columns,
                                                     MutableColumnPtr* unwidened_auto_increment_column);

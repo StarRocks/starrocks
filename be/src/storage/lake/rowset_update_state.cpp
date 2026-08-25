@@ -595,7 +595,7 @@ static StatusOr<MutableColumnPtr> widen_rewrite_column_to_segment(
 }
 
 Status RowsetUpdateState::_widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params,
-                                                                   uint32_t segment_id,
+                                                                   uint32_t segment_id, const FileInfo& src,
                                                                    const std::vector<ColumnId>& unmodified_column_ids,
                                                                    MutableColumns* widened_write_columns,
                                                                    MutableColumnPtr* unwidened_auto_increment_column) {
@@ -606,10 +606,23 @@ Status RowsetUpdateState::_widen_rewrite_columns_for_cross_publish(const RowsetU
     if (!params.metadata->has_range()) {
         return Status::OK();
     }
-    const size_t num_segment_rows = params.op_write.rowset().segment_metas(segment_id).num_rows();
+    const auto& src_seg_meta = params.op_write.rowset().segment_metas(segment_id);
+    size_t num_segment_rows = src_seg_meta.num_rows();
+    if (!src_seg_meta.has_num_rows()) {
+        // A txn log written by an older BE carries only the deprecated per-segment arrays, and the
+        // segment_metas lake_proto_normalizer synthesizes from them have no row count. Read it off the
+        // segment rather than skip the widening: the rewrite would copy every row of this file and append
+        // only this tablet's slice, failing the publish on every retry. A count that IS present and zero
+        // means a genuinely empty segment -- the one a delete-only write leaves behind to reserve its del
+        // file's op_offset -- and there is nothing to widen there.
+        size_t footer_size_hint = 16 * 1024;
+        LakeIOOptions lake_io_opts{.fill_data_cache = false, .buffer_size = -1};
+        ASSIGN_OR_RETURN(auto segment,
+                         params.tablet->tablet_mgr()->load_segment(src, segment_id, &footer_size_hint, lake_io_opts,
+                                                                   false /*fill_meta_cache*/, params.tablet_schema));
+        num_segment_rows = segment->num_rows();
+    }
     if (num_segment_rows == 0) {
-        // No per-segment count to widen to: metadata written by an older version, or a segment that holds
-        // no rows at all (the empty one a delete-only write leaves to reserve its del file's op_offset).
         return Status::OK();
     }
     const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
@@ -730,7 +743,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
             auto_increment_state.write_column = std::move(unwidened_auto_increment_column);
         }
     });
-    RETURN_IF_ERROR(_widen_rewrite_columns_for_cross_publish(params, segment_id, unmodified_column_ids,
+    RETURN_IF_ERROR(_widen_rewrite_columns_for_cross_publish(params, segment_id, src, unmodified_column_ids,
                                                              &widened_write_columns, &unwidened_auto_increment_column));
     MutableColumns* rewrite_write_columns =
             widened_write_columns.empty() ? &_partial_update_states[segment_id].write_columns : &widened_write_columns;
