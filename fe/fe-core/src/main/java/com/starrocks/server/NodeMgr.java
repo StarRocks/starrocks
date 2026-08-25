@@ -880,12 +880,21 @@ public class NodeMgr {
             }
 
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
+                // Adjust the electable group size override BEFORE writing the edit log, otherwise
+                // the log commit may wait for the ack of the dropped (possibly gone) follower.
                 GlobalStateMgr.getCurrentState().getHaProtocol().removeUnstableNode(fe.getNodeName(), getFollowerCnt() - 1);
             }
             Frontend finalFE = fe;
+            // Write the edit log BEFORE removing the frontend from the bdbje replication group.
+            // removeElectableNode() shuts down the feeder to the dropped follower immediately,
+            // so if the log were written after it, the dropped follower could never receive
+            // OP_REMOVE_FRONTEND_V2 and would hang in UNKNOWN state forever, instead of exiting
+            // by itself through the self-check in EditLog.loadJournal().
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(
                     new DropFrontendInfo(fe.getNodeName()), wal -> applyDropFrontend(finalFE));
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
+            }
         } finally {
             unlock();
 
