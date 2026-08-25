@@ -248,12 +248,11 @@ private:
             TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
             const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
             std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-            std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables,
-            bool count_open_corruption_metric = true);
+            std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables);
 
     static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
             std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            const TabletMetadataPtr& metadata, bool contain_shared_sstables, bool enable_multiple_output_files = false);
+            const TabletMetadataPtr& metadata, bool contain_shared_sstables);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 

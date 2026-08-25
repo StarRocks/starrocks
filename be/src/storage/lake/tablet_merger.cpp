@@ -2071,7 +2071,7 @@ Status project_modern_shared_rssid_sstable(const PersistentIndexSstablePB& sst, 
 // preserves correctness when the file already carries a non-zero
 // rssid_offset (stacked merge case).
 Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
-                                         bool tombstone_only, PersistentIndexSstablePB* out) {
+                                         PersistentIndexSstablePB* out) {
     RETURN_IF_ERROR(validate_non_shared_legacy_sstable_form(sst));
     const int64_t accumulated_offset = static_cast<int64_t>(sst.rssid_offset()) + ctx.rssid_offset();
     if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
@@ -2083,9 +2083,7 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, co
     out->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
     const int64_t high = static_cast<int64_t>(extract_rss_rowid_high(sst.max_rss_rowid()));
     const int64_t new_high = high + ctx.rssid_offset();
-    if (new_high < 0 && tombstone_only) {
-        out->set_max_rss_rowid(0);
-    } else if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
+    if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
         return Status::Corruption(
                 fmt::format("rssid high overflow in merge projection: high={} ctx_offset={} new_high={}", high,
                             ctx.rssid_offset(), new_high));
@@ -2359,8 +2357,7 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
                     projected_offset > std::numeric_limits<int32_t>::max()) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
-                const auto projection_status = project_non_shared_legacy_sstable(source_sstable, context,
-                                                                                 /*tombstone_only=*/false, &projected);
+                const auto projection_status = project_non_shared_legacy_sstable(source_sstable, context, &projected);
                 if (!projection_status.ok()) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }

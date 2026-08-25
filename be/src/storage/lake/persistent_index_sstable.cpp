@@ -81,8 +81,7 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
                                     Cache* cache, bool need_filter, DelVectorPtr delvec,
-                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr,
-                                    bool count_open_corruption_metric) {
+                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     sstable::Options options;
     if (need_filter) {
         _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -110,9 +109,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         }
     }
     if (!open_st.ok()) {
-        if (!open_st.is_corruption() || count_open_corruption_metric) {
-            StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        }
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
         LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
         return open_st;
     }
@@ -368,8 +365,7 @@ Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, 
 
 StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
-        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr,
-        bool count_open_corruption_metric) {
+        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
     if (!sstable_pb.encryption_meta().empty()) {
@@ -377,8 +373,7 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         opts.encryption_info = std::move(info);
     }
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr,
-                                  count_open_corruption_metric));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
     return std::move(sstable);
 }
 
