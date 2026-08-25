@@ -2626,34 +2626,73 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_fallback_folds_s
             return response;
         };
 
-        auto retained_response = run_vacuum(result.target_version);
-        EXPECT_TRUE(retained_response.has_status());
-        ASSERT_OK(FileSystem::Default()->path_exists(sst_path));
+        const int64_t live_reference_version = result.target_version + 1;
+        TabletMetadataPB live_target(target);
+        live_target.set_version(live_reference_version);
+        live_target.clear_sstable_meta();
+        live_target.clear_orphan_files();
+        live_target.set_prev_garbage_version(result.target_version);
+        ASSERT_OK(put_tablet_metadata(live_target));
 
-        auto advance_without_reference = [&](const TabletMetadataPB& current, int64_t tablet_id) {
-            TabletMetadataPB advanced(current);
-            advanced.set_id(tablet_id);
-            advanced.set_version(result.target_version + 1);
-            advanced.clear_sstable_meta();
-            advanced.clear_orphan_files();
-            advanced.set_prev_garbage_version(result.target_version);
-            ASSERT_OK(put_tablet_metadata(advanced));
-        };
-        advance_without_reference(target, result.target_tablet_id);
+        std::map<int64_t, TabletMetadataPB> live_references;
         for (int64_t tablet_id : source_tablet_ids) {
-            if (tablet_id == sibling_id) {
-                advance_without_reference(sibling, sibling_id);
-            } else {
-                advance_without_reference(result.published.at(tablet_id), tablet_id);
-            }
+            TabletMetadataPB live = tablet_id == sibling_id ? sibling : result.published.at(tablet_id);
+            live.set_id(tablet_id);
+            live.set_version(live_reference_version);
+            live.clear_orphan_files();
+            live.set_prev_garbage_version(result.target_version);
+            ASSERT_GT(live.sstable_meta().sstables_size(), 0);
+            ASSERT_OK(put_tablet_metadata(live));
+            live_references.emplace(tablet_id, std::move(live));
         }
         _tablet_manager->prune_metacache();
 
-        auto reclaimed_response = run_vacuum(result.target_version + 1);
+        // The old target orphan is now eligible, but the newer source and
+        // sibling snapshots still retain the physical SST.
+        auto retained_response = run_vacuum(live_reference_version);
+        EXPECT_TRUE(retained_response.has_status());
+        ASSERT_OK(FileSystem::Default()->path_exists(sst_path));
+
+        const int64_t retirement_version = live_reference_version + 1;
+        TabletMetadataPB retired_target(live_target);
+        retired_target.set_version(retirement_version);
+        retired_target.set_prev_garbage_version(live_reference_version);
+        ASSERT_OK(put_tablet_metadata(retired_target));
+        std::map<int64_t, TabletMetadataPB> retired_sources;
+        for (const auto& [tablet_id, live] : live_references) {
+            TabletMetadataPB retired(live);
+            retired.set_version(retirement_version);
+            retired.clear_sstable_meta();
+            retired.clear_orphan_files();
+            retired.add_orphan_files()->CopyFrom(*matching[0]);
+            retired.set_prev_garbage_version(live_reference_version);
+            ASSERT_OK(put_tablet_metadata(retired));
+            retired_sources.emplace(tablet_id, std::move(retired));
+        }
+        _tablet_manager->prune_metacache();
+
+        auto reclaimed_response = run_vacuum(retirement_version);
         EXPECT_GE(reclaimed_response.vacuumed_file_size(), matching[0]->size());
         EXPECT_TRUE(FileSystem::Default()->path_exists(sst_path).is_not_found());
 
-        auto exact_once_response = run_vacuum(result.target_version + 1);
+        // Advance past the retirement metadata without linking it into the
+        // next garbage chain, so a subsequent normal-vacuum pass has no
+        // candidate with which to attempt a second physical deletion.
+        const int64_t cleared_version = retirement_version + 1;
+        TabletMetadataPB cleared_target(retired_target);
+        cleared_target.set_version(cleared_version);
+        cleared_target.clear_prev_garbage_version();
+        ASSERT_OK(put_tablet_metadata(cleared_target));
+        for (const auto& [tablet_id, retired] : retired_sources) {
+            TabletMetadataPB cleared(retired);
+            cleared.set_version(cleared_version);
+            cleared.clear_orphan_files();
+            cleared.clear_prev_garbage_version();
+            ASSERT_OK(put_tablet_metadata(cleared));
+        }
+        _tablet_manager->prune_metacache();
+
+        auto exact_once_response = run_vacuum(cleared_version);
         EXPECT_EQ(0, exact_once_response.vacuumed_file_size());
         EXPECT_TRUE(FileSystem::Default()->path_exists(sst_path).is_not_found());
     }
@@ -3021,10 +3060,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
         const char* name;
         const char* filename;
         uint32_t source_high;
+        bool force_exact_zero;
     };
     const std::vector<Case> cases = {
-            {"negative below-floor projection", "issue11939_negative_watermark.sst", 47},
-            {"explicit zero watermark", "issue11939_zero_watermark.sst", 0},
+            {"negative below-floor projection", "issue11939_negative_watermark.sst", 47, false},
+            {"exact zero watermark", "issue11939_zero_watermark.sst", 0, true},
     };
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
@@ -3032,6 +3072,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
                 test_case.filename,
                 {{tombstone_key, serialize_index_values({{/*version=*/23, kTombstone, kTombstone}})}},
                 test_case.source_high);
+        if (test_case.force_exact_zero) {
+            fixture.hot_metadata->mutable_sstable_meta()->mutable_sstables(0)->set_max_rss_rowid(0);
+            fixture.source_pb.set_max_rss_rowid(0);
+            ASSERT_EQ(0, fixture.hot_metadata->sstable_meta().sstables(0).max_rss_rowid());
+        }
         auto merged_or = merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata,
                                                          fixture.merged_tablet, BelowFloorLegacyFixture::kBaseVersion,
                                                          BelowFloorLegacyFixture::kMergedVersion, next_id());
