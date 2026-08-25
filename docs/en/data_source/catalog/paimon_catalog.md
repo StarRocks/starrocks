@@ -49,6 +49,11 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` is supported from v4.2 onwards for reading, regardless of table type or compaction state. Both the native reader and the JNI reader can read `VARIANT` columns.
+:::
 
 ## Integration preparations
 
