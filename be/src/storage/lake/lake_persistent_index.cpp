@@ -922,8 +922,7 @@ Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
         TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
         const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables,
-        bool count_open_corruption_metric) {
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables) {
     sstable::ReadOptions read_options;
     // No need to cache input sst's blocks.
     read_options.fill_cache = false;
@@ -941,7 +940,7 @@ Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()), nullptr,
-                                 false /* need filter */, nullptr, metadata, tablet_mgr, count_open_corruption_metric));
+                                 false /* need filter */, nullptr, metadata, tablet_mgr));
         PersistentIndexSstablePtr merging_sstable = std::move(sstable);
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
@@ -968,7 +967,7 @@ Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
 
 StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex::merge_sstables(
         std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-        const TabletMetadataPtr& metadata, bool contain_shared_sstables, bool enable_multiple_output_files) {
+        const TabletMetadataPtr& metadata, bool contain_shared_sstables) {
     SstSeekRange seek_range;
     // adjust sst seek range by tablet range
     if (contain_shared_sstables) {
@@ -988,7 +987,7 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     sstable::Options options;
     auto merger =
             std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), base_level_merge,
-                                             tablet_mgr, metadata->id(), enable_multiple_output_files);
+                                             tablet_mgr, metadata->id(), false /* enable_multiple_output_files */);
     while (iter_ptr->Valid()) {
         const Slice cur_key = iter_ptr->key();
         if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {

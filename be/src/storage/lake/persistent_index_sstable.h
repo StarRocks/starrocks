@@ -58,7 +58,7 @@ public:
 
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
                 bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
-                TabletManager* tablet_mgr = nullptr, bool count_open_corruption_metric = true);
+                TabletManager* tablet_mgr = nullptr);
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
@@ -108,10 +108,12 @@ public:
         _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
     }
 
-    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(
-            const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache,
-            bool need_filter = true, const DelVectorPtr& delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
-            TabletManager* tablet_mgr = nullptr, bool count_open_corruption_metric = true);
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
+                                                                 const std::string& location, Cache* cache,
+                                                                 bool need_filter = true,
+                                                                 const DelVectorPtr& delvec = nullptr,
+                                                                 const TabletMetadataPtr& metadata = nullptr,
+                                                                 TabletManager* tablet_mgr = nullptr);
 
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
