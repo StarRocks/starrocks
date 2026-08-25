@@ -243,10 +243,10 @@ void LakePersistentIndex::finish_full_rebuild_session(uint64_t final_max_rss_row
     DCHECK(_full_rebuild_session_active);
     DCHECK(_inactive_memtables.empty());
     DCHECK(_memtable != nullptr && _memtable->empty());
+    DCHECK_EQ(_memtable->max_rss_rowid(), final_max_rss_rowid);
     size_t handed_off_count = _uncommitted_full_rebuild_ssts.size();
     _uncommitted_full_rebuild_ssts.clear();
     _full_rebuild_session_active = false;
-    _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, final_max_rss_rowid);
     TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:finish", &handed_off_count);
 }
 
@@ -273,7 +273,7 @@ void LakePersistentIndex::abort_full_rebuild_session() {
 
     for (const auto& filename : filenames) {
         const auto location = _tablet_mgr->sst_location(_tablet_id, filename);
-        auto drop_status = drop_corrupted_sstable_cache(location);
+        auto drop_status = drop_sstable_cache(location);
         if (!drop_status.ok() && !drop_status.is_not_supported()) {
             LOG(WARNING) << "Failed to drop cache for uncommitted full rebuild sstable " << location << ": "
                          << drop_status;
@@ -1304,7 +1304,13 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
     }
     builder->finalize_sstable_meta(sstable_meta);
     if (_full_rebuild_session_active) {
+        PersistentIndexMemtable* active_memtable_before_finish = _memtable.get();
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_finish_memtable",
+                                 &active_memtable_before_finish);
         finish_full_rebuild_session(static_cast<uint64_t>(last_max_rss_rowid));
+        PersistentIndexMemtable* active_memtable_after_finish = _memtable.get();
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:after_finish_memtable",
+                                 &active_memtable_after_finish);
     }
     auto [file_cnt, row_cnt] = need_rebuild_counts(*builder->tablet_meta(), sstable_meta);
     _need_rebuild_file_cnt = file_cnt;

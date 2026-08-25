@@ -227,7 +227,7 @@ Status PersistentIndexMemtable::flush() {
             }
         }
         wf.reset();
-        auto drop_status = drop_corrupted_sstable_cache(location);
+        auto drop_status = drop_sstable_cache(location);
         if (!drop_status.ok() && !drop_status.is_not_supported()) {
             LOG(WARNING) << "Failed to drop cache for partial persistent index sstable " << location << ": "
                          << drop_status;

@@ -3533,6 +3533,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_session_finish_restores_cach
     std::atomic<int> async_submit_count{0};
     std::vector<std::string> registered;
     size_t handed_off = 0;
+    PersistentIndexMemtable* recovery_memtable_before_finish = nullptr;
+    PersistentIndexMemtable* recovery_memtable_after_finish = nullptr;
     auto* sync = SyncPoint::GetInstance();
     sync->SetCallBack("LakePersistentIndex::full_rebuild:begin", [&](void*) { ++begin_count; });
     sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst", [&](void* arg) {
@@ -3541,13 +3543,20 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_session_finish_restores_cach
     sync->SetCallBack("LakePersistentIndex::full_rebuild:finish", [&](void* arg) {
         if (arg != nullptr) handed_off = *static_cast<size_t*>(arg);
     });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:before_finish_memtable", [&](void* arg) {
+        if (arg != nullptr) recovery_memtable_before_finish = *static_cast<PersistentIndexMemtable**>(arg);
+    });
+    sync->SetCallBack("LakePersistentIndex::full_rebuild:after_finish_memtable", [&](void* arg) {
+        if (arg != nullptr) recovery_memtable_after_finish = *static_cast<PersistentIndexMemtable**>(arg);
+    });
     sync->SetCallBack("LakePersistentIndex::full_rebuild:abort", [&](void*) { ++abort_count; });
     sync->SetCallBack("LakePersistentIndex::flush_memtable:async_submit", [&](void*) { ++async_submit_count; });
     sync->EnableProcessing();
     DeferOp clear_callbacks([&]() {
         for (const auto* point :
              {"LakePersistentIndex::full_rebuild:begin", "LakePersistentIndex::full_rebuild:register_sst",
-              "LakePersistentIndex::full_rebuild:finish", "LakePersistentIndex::full_rebuild:abort",
+              "LakePersistentIndex::full_rebuild:finish", "LakePersistentIndex::full_rebuild:before_finish_memtable",
+              "LakePersistentIndex::full_rebuild:after_finish_memtable", "LakePersistentIndex::full_rebuild:abort",
               "LakePersistentIndex::flush_memtable:async_submit"}) {
             sync->ClearCallBack(point);
         }
@@ -3565,6 +3574,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_rebuild_session_finish_restores_cach
     ASSERT_FALSE(registered.empty());
     expect_unique_filenames(registered);
     EXPECT_EQ(registered.size(), handed_off);
+    ASSERT_NE(nullptr, recovery_memtable_before_finish);
+    ASSERT_NE(nullptr, recovery_memtable_after_finish);
+    EXPECT_EQ(recovery_memtable_before_finish, recovery_memtable_after_finish);
     std::multiset<std::string> first_outgoing;
     for (const auto& sstable : first_writer_metadata->sstable_meta().sstables()) {
         first_outgoing.emplace(sstable.filename());
