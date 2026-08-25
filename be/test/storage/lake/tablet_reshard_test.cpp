@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_reshard.h"
 
+#include <bvar/bvar.h>
 #include <fmt/format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -1391,7 +1392,7 @@ protected:
     }
 
     StatusOr<TabletMetadataPtr> create_lifecycle_source(int64_t tablet_id, int lower, int upper, int32_t key,
-                                                        int32_t value) {
+                                                        int32_t value, bool include_delete = true) {
         prepare_tablet_dirs(tablet_id);
         auto metadata = std::make_shared<TabletMetadataPB>();
         metadata->set_id(tablet_id);
@@ -1406,7 +1407,7 @@ protected:
         metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
         metadata->mutable_range()->set_upper_bound_included(false);
         RETURN_IF_ERROR(put_tablet_metadata(metadata));
-        return publish_followup_upsert_delete(tablet_id, /*base_version=*/1, key, value, upper - 1);
+        return publish_followup_upsert_delete(tablet_id, /*base_version=*/1, key, value, upper - 1, include_delete);
     }
 
     void append_tombstone_sstable(TabletMetadataPB* metadata, int32_t key, const std::string& filename, bool shared) {
@@ -3011,8 +3012,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
     const int64_t right_id = next_id();
     const int64_t merged_id = next_id();
     prepare_tablet_dirs(merged_id);
-    ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100));
-    ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600));
+    ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
+    ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
     ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
     ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
@@ -3027,10 +3028,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
     ASSERT_EQ(0, indexless->sstable_meta().sstables_size());
 
     _update_manager->unload_and_remove_primary_index(merged_id);
-    ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(merged_id, indexless->version(), 20, 2000, 10));
+    ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(merged_id, indexless->version(), 20, 2000,
+                                                                   /*delete_key=*/0, /*include_delete=*/false));
     ASSERT_GT(recovered->sstable_meta().sstables_size(), 0);
-    const std::vector<std::pair<int32_t, int32_t>> expected = {{20, 2000}, {60, 600}};
-    expect_lifecycle_oracle(recovered, expected, {10});
+    const std::vector<std::pair<int32_t, int32_t>> expected = {{10, 100}, {20, 2000}, {60, 600}};
+    expect_lifecycle_oracle(recovered, expected, {});
 
     std::set<std::string> parent_segments;
     for (const auto& rowset : recovered->rowsets()) {
@@ -3065,13 +3067,58 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
         }
     }
 
+    using PhysicalSegment = std::tuple<uint32_t, uint32_t, std::string, uint64_t>;
+    auto physical_layout = [](const TabletMetadataPtr& metadata) {
+        std::vector<PhysicalSegment> layout;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment = rowset.segment_metas(i);
+                layout.emplace_back(rowset.id(), segment.has_segment_idx() ? segment.segment_idx() : i,
+                                    segment.filename(), segment.size());
+            }
+        }
+        return layout;
+    };
+    const auto first_layout = physical_layout(split_published.at(child_a));
+    const auto second_layout = physical_layout(split_published.at(child_b));
+    ASSERT_FALSE(first_layout.empty());
+    ASSERT_FALSE(second_layout.empty());
+    EXPECT_TRUE(std::is_sorted(first_layout.begin(), first_layout.end()));
+    EXPECT_TRUE(std::is_sorted(second_layout.begin(), second_layout.end()));
+    EXPECT_NE(first_layout, second_layout) << "split children must have genuinely different physical segment layouts";
+
+    const auto& first_sstables = split_published.at(child_a)->sstable_meta().sstables();
+    const auto& second_sstables = split_published.at(child_b)->sstable_meta().sstables();
+    ASSERT_GT(first_sstables.size(), 0);
+    ASSERT_EQ(first_sstables.size(), second_sstables.size());
+    for (int i = 0; i < first_sstables.size(); ++i) {
+        EXPECT_TRUE(first_sstables.Get(i).shared());
+        EXPECT_TRUE(second_sstables.Get(i).shared());
+        PersistentIndexSstablePB normalized_first(first_sstables.Get(i));
+        PersistentIndexSstablePB normalized_second(second_sstables.Get(i));
+        normalized_first.clear_fileset_id();
+        normalized_second.clear_fileset_id();
+        EXPECT_EQ(normalized_first.SerializeAsString(), normalized_second.SerializeAsString())
+                << "SST cohorts must differ only in allowed fileset grouping";
+    }
+    _update_manager->unload_and_remove_primary_index(child_a);
+    _update_manager->unload_and_remove_primary_index(child_b);
+
     const int64_t final_id = next_id();
     prepare_tablet_dirs(final_id);
+    auto rowset_layout_mismatch_count = [] {
+        const std::string value =
+                bvar::Variable::describe_exposed("tablet_merge_sstable_fallback_rowset_layout_mismatch_total");
+        return value.empty() ? int64_t{-1} : std::stoll(value);
+    };
+    const int64_t mismatch_before = rowset_layout_mismatch_count();
+    ASSERT_GE(mismatch_before, 0);
     std::unordered_map<int64_t, TabletMetadataPtr> final_published;
     ASSERT_OK(publish_resharding_merge({split_published.at(child_a), split_published.at(child_b)}, final_id,
                                        recovered->version() + 1, recovered->version() + 2, next_id(), final_published));
     const auto& final_metadata = final_published.at(final_id);
     ASSERT_EQ(0, final_metadata->sstable_meta().sstables_size());
+    EXPECT_EQ(mismatch_before + 1, rowset_layout_mismatch_count());
     std::set<std::string> omitted_sstables;
     for (const auto& [tablet_id, source] : final_published) {
         if (tablet_id == final_id) continue;
@@ -3084,10 +3131,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
         handed_off_sstables.insert(orphan.name());
     }
     EXPECT_EQ(omitted_sstables, handed_off_sstables);
-    expect_lifecycle_oracle(final_metadata, expected, {10});
+    expect_lifecycle_oracle(final_metadata, expected, {});
     _update_manager->unload_and_remove_primary_index(final_id);
     ASSIGN_OR_ABORT(auto restarted, _tablet_manager->get_tablet_metadata(final_id, final_metadata->version()));
-    expect_lifecycle_oracle(restarted, expected, {10});
+    expect_lifecycle_oracle(restarted, expected, {});
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layout_reuses_sstables) {
