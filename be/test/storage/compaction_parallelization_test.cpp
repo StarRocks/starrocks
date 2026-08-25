@@ -253,7 +253,7 @@ TEST_F(CompactionParallelizationTest, horizontal_chunk_size_uses_total_row_size)
 
     int32_t actual_chunk_size = 0;
     SyncPoint::GetInstance()->SetCallBack("HorizontalCompactionTask::_horizontal_compact_data:chunk_size",
-                                         [&](void* arg) { actual_chunk_size = *static_cast<int32_t*>(arg); });
+                                          [&](void* arg) { actual_chunk_size = *static_cast<int32_t*>(arg); });
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp clear_sync_point([&]() {
         SyncPoint::GetInstance()->ClearCallBack("HorizontalCompactionTask::_horizontal_compact_data:chunk_size");
