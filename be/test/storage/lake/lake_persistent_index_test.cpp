@@ -189,6 +189,21 @@ protected:
         }
     }
 
+    void expect_unique_filenames(const std::vector<std::string>& filenames) {
+        EXPECT_EQ(filenames.size(), std::set<std::string>(filenames.begin(), filenames.end()).size());
+    }
+
+    void expect_exact_callback_filenames(const std::vector<std::string>& registered,
+                                         const std::vector<std::string>& aborted) {
+        expect_unique_filenames(registered);
+        expect_unique_filenames(aborted);
+        auto sorted_registered = registered;
+        auto sorted_aborted = aborted;
+        std::sort(sorted_registered.begin(), sorted_registered.end());
+        std::sort(sorted_aborted.begin(), sorted_aborted.end());
+        EXPECT_EQ(sorted_registered, sorted_aborted);
+    }
+
     std::shared_ptr<TabletMetadata> _tablet_metadata;
 
     TabletSchemaPB create_tablet_schema_pb(const std::vector<std::pair<std::string, std::string>>& columns,
@@ -2256,6 +2271,7 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_forces_serial_scan_del
     EXPECT_TRUE(
             std::all_of(flush_policies.begin(), flush_policies.end(), [](bool synchronous) { return synchronous; }));
     EXPECT_EQ(registered, before_fileset);
+    expect_unique_filenames(registered);
     EXPECT_GE(registered.size(), 2u);
     EXPECT_EQ(registered.size(), handed_off);
 
@@ -2433,8 +2449,7 @@ TEST_F(LakePersistentIndexTest, test_full_rebuild_session_failure_cleans_complet
         EXPECT_TRUE(result.status().is_internal_error()) << result.status();
         EXPECT_NE(std::string::npos, result.status().to_string().find(message)) << result.status();
         ASSERT_FALSE(registered.empty());
-        EXPECT_EQ(std::set<std::string>(registered.begin(), registered.end()),
-                  std::set<std::string>(aborted.begin(), aborted.end()));
+        expect_exact_callback_filenames(registered, aborted);
         ASSIGN_OR_ABORT(auto after_failure, sst_inventory(metadata->id()));
         EXPECT_EQ(baseline, after_failure);
         for (const auto& path : source_paths) {
