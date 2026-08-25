@@ -484,8 +484,8 @@ protected:
         EXPECT_TRUE(mask_buffer.flush().ok());
         EXPECT_TRUE(mask_buffer.flip_to_read().ok());
 
-        auto iter = new_mask_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, nullptr),
-                                            &mask_buffer);
+        auto iter =
+                new_mask_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, nullptr), &mask_buffer);
         EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         return drain(iter);
     }
