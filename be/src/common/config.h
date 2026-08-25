@@ -797,6 +797,17 @@ CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 // The interval for performing stack trace to control the frequency.
 CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");
 
+// Shard write (TOlapTableSink.enable_shard_write): how many CONSECUTIVE rows of one tablet go to
+// the same compute node before the round-robin advances.
+//   1                  -> spread every row. Perfectly balanced, but each node then gets a strided
+//                         1/N slice of every chunk, so the sender does N small column appends where
+//                         it used to do one large one.
+//   >= the chunk size  -> effectively per-chunk routing: a chunk's rows for a tablet go to a single
+//                         node, restoring the large append at the cost of coarser balancing.
+// It does NOT change which keys a node sees: with no shuffle before the sink every instance holds
+// arbitrary rows, so at any granularity a node still receives a uniform sample of the key space.
+CONF_mInt32(shard_write_rows_per_node, "1");
+
 CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
 CONF_Int32(load_segment_thread_pool_queue_size, "10240");

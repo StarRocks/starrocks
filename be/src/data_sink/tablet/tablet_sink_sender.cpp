@@ -14,6 +14,7 @@
 
 #include "data_sink/tablet/tablet_sink_sender.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/testutil/sync_point.h"
@@ -104,6 +105,11 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
         if (_row_target_node.size() < _tablet_ids.size()) {
             _row_target_node.resize(_tablet_ids.size());
         }
+        // Rows are handed out in runs of `shard_write_rows_per_node`. A run of 1 spreads every row
+        // and balances perfectly, but leaves each node a strided 1/N slice of the chunk, so the
+        // sender does N small per-column appends where it used to do one large one. A run at or
+        // above the chunk size routes a whole chunk's rows for a tablet to one node instead.
+        const uint64_t stride = std::max(1, config::shard_write_rows_per_node);
         int64_t last_tablet_id = -1;
         std::vector<int64_t>* last_be_ids = nullptr;
         uint64_t* last_counter = nullptr;
@@ -120,7 +126,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
                 last_counter = &_shard_write_counters[tablet_id];
             }
             DCHECK(!last_be_ids->empty());
-            _row_target_node[selection] = (*last_be_ids)[(*last_counter)++ % last_be_ids->size()];
+            _row_target_node[selection] = (*last_be_ids)[((*last_counter)++ / stride) % last_be_ids->size()];
         }
     }
     // Acquire shared lock to protect against concurrent modification of _node_channels
