@@ -118,14 +118,23 @@ public class AutomaticTabletReshardTest {
             }
         };
 
-        // pair sum strictly below mergePairThreshold = ceil(0.8 * target) → triggers merge
-        long t = Config.tablet_reshard_target_size;
-        long pairSumBelowThreshold = TabletReshardUtils.mergePairThreshold(t) - 1;
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                0L, pairSumBelowThreshold);
-        org.junit.jupiter.api.Assertions.assertTrue(mergeCalled[0],
-                "merge job should be created when minAdjacentPair < mergePairThreshold");
+        // triggerTabletReshard consults tablet_reshard_enable_tablet_merge before planning; the gate
+        // used to sit inside createTabletReshardJob, which this test mocks out. State the precondition
+        // explicitly, or the default-off flag decides the outcome instead of the rule under test.
+        boolean savedMergeFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            // pair sum strictly below mergePairThreshold = ceil(0.8 * target) → triggers merge
+            long t = Config.tablet_reshard_target_size;
+            long pairSumBelowThreshold = TabletReshardUtils.mergePairThreshold(t) - 1;
+            TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
+                    0L, pairSumBelowThreshold);
+            org.junit.jupiter.api.Assertions.assertTrue(mergeCalled[0],
+                    "merge job should be created when minAdjacentPair < mergePairThreshold");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedMergeFlag;
+        }
     }
 
     @Test
@@ -139,14 +148,23 @@ public class AutomaticTabletReshardTest {
             }
         };
 
-        // pair sum exactly at mergePairThreshold → strict-less-than means NOT triggered
-        long t = Config.tablet_reshard_target_size;
-        long atThreshold = TabletReshardUtils.mergePairThreshold(t);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
-                0L, atThreshold);
-        org.junit.jupiter.api.Assertions.assertFalse(mergeCalled[0],
-                "merge must not trigger at the exact threshold (strict <)");
+        // triggerTabletReshard consults tablet_reshard_enable_tablet_merge before planning; the gate
+        // used to sit inside createTabletReshardJob, which this test mocks out. State the precondition
+        // explicitly, or the default-off flag decides the outcome instead of the rule under test.
+        boolean savedMergeFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            // pair sum exactly at mergePairThreshold → strict-less-than means NOT triggered
+            long t = Config.tablet_reshard_target_size;
+            long atThreshold = TabletReshardUtils.mergePairThreshold(t);
+            TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", db, table,
+                    0L, atThreshold);
+            org.junit.jupiter.api.Assertions.assertFalse(mergeCalled[0],
+                    "merge must not trigger at the exact threshold (strict <)");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedMergeFlag;
+        }
     }
 
     @Test
