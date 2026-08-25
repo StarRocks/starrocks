@@ -154,12 +154,14 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_a_not_b(FunctionContext* context,
                 append_compact(theta_union_type::builder(alloc_type(&mem)).build().get_result(), builder);
                 continue;
             }
+            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
             if (b_slice.size == 0) {
-                // X \ ∅ = X: pass input bytes through directly
-                builder.append(a_slice);
+                // X \ ∅ = X: run through the API to validate sketch_a
+                auto empty_b = theta_union_type::builder(alloc_type(&mem)).build().get_result();
+                auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
+                append_compact(anb.compute(a, empty_b), builder);
                 continue;
             }
-            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
             auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
             auto b = wrapped_compact_theta_sketch::wrap(b_slice.data, b_slice.size);
             append_compact(anb.compute(a, b), builder);
