@@ -253,6 +253,11 @@ public:
     // and are actually about to load their per-column indexes.
     void prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache);
 
+    // Size of that region, 0 on the legacy layout. Non-zero means the per-column indexes were
+    // already in memory once the footer was read, so a reader can plan the segment's data page
+    // IO without paying for the plan.
+    uint64_t small_index_region_size() const { return _small_index_region_size; }
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(const LakeIOOptions& lake_io_opts = {});

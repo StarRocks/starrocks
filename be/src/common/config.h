@@ -438,6 +438,28 @@ CONF_mBool(enable_segment_tail_index_prefetch, "true");
 // as in the legacy layout.
 CONF_mInt64(segment_tail_index_prefetch_max_bytes, "16777216");
 
+// Read-time gate for the concurrent data page prefetch. Once a segment's tail index region has
+// been parsed, the ordinal index of every accessed column is already in memory, so the absolute
+// byte range of every data page the scan is about to read is known before the first one is
+// fetched. When true, those ranges are folded onto the cache blocks behind them and the blocks
+// are filled several at a time through a dedicated pool, instead of the read loop discovering
+// them one at a time and waiting out a full remote round trip for each. The block set is
+// exactly the one the read loop would have fetched, so this changes when the blocks are fetched
+// and how many at once, not how many.
+CONF_mBool(enable_segment_data_page_concurrent_prefetch, "false");
+
+// How many cache blocks of one segment the prefetch above fills at the same time. The effective
+// value is capped by the number of independent file handles the scan holds on that segment (one
+// per non-DCG column it reads): a cachefs handle serializes on its own persist stream, so two
+// blocks can only be fetched concurrently through two handles.
+CONF_mInt32(segment_data_page_prefetch_concurrency, "8");
+
+// Size of the pool that runs the prefetch above. Its threads spend their time blocked on remote
+// reads rather than on CPU, so this is sized after the scan instances a node runs concurrently,
+// not after its cores. The pool is built on first use, so a node with the prefetch off never
+// creates it.
+CONF_Int32(segment_data_page_prefetch_thread_num, "256");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
