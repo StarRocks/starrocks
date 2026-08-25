@@ -1058,15 +1058,16 @@ public class ExpressionStatisticCalculator {
             ColumnStatistic fromTzStat = inputs.get(1);
             ColumnStatistic toTzStat = inputs.get(2);
 
-            final double distinctValues = Math.min(rowCount,
-                    childStat.getDistinctValuesCount()
-                            * fromTzStat.getDistinctValuesCount()
-                            * toTzStat.getDistinctValuesCount());
-
             final double nullsFraction = 1.0
                     - (1.0 - childStat.getNullsFraction())
                     * (1.0 - fromTzStat.getNullsFraction())
                     * (1.0 - toTzStat.getNullsFraction());
+            final double nonNullRowCount = rowCount * (1.0 - nullsFraction);
+
+            final double distinctValues = Math.min(nonNullRowCount,
+                    childStat.getDistinctValuesCount()
+                            * fromTzStat.getDistinctValuesCount()
+                            * toTzStat.getDistinctValuesCount());
 
             double minValue = childStat.getMinValue() - ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
             double maxValue = childStat.getMaxValue() + ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
@@ -1094,7 +1095,7 @@ public class ExpressionStatisticCalculator {
                     .setAverageRowSize(callOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .setHistogram(ConvertTzStatisticUtils.transformHistogram(
-                            callOperator, childStat, minValue, maxValue, rowCount).orElse(null))
+                            callOperator, childStat, minValue, maxValue, nonNullRowCount).orElse(null))
                     .build();
         }
 

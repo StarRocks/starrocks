@@ -2442,7 +2442,7 @@ public class ExpressionStatisticsCalculatorTest {
         assertConvertTzStatRangeCovers(actual, "UTC", "Asia/Shanghai", minDt, maxDt);
         assertConvertTzStatRangeCovers(actual, "Pacific/Kiritimati", "Etc/GMT+12", minDt, maxDt);
         Assertions.assertEquals(nullsFraction, actual.getNullsFraction(), 0.001);
-        Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(100, 2*1*2)
+        Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(100*(1-0.1), 2*1*2)
         Assertions.assertEquals(DateType.DATETIME.getTypeSize(), actual.getAverageRowSize(), 0.001);
         Assertions.assertNull(actual.getHistogram());
     }
@@ -2482,7 +2482,47 @@ public class ExpressionStatisticsCalculatorTest {
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
 
-        Assertions.assertEquals(5, actual.getDistinctValuesCount(), 0.001); // min(5, 3*2*2)
+        Assertions.assertEquals(5, actual.getDistinctValuesCount(), 0.001); // min(5*(1-0), 3*2*2)
+    }
+
+    @Test
+    public void testConvertTzCapsDistinctValuesAtNonNullRowCount() {
+        final int rowCount = 10;
+        final double dtNulls = 0.4;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 1, 0, 0, 0)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)))
+                        .setNullsFraction(dtNulls)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        // min(10*(1-0.4), 3*2*2) = min(6, 12) = 6
+        Assertions.assertEquals(6, actual.getDistinctValuesCount(), 0.001);
     }
 
     @Test
