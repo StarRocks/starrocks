@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <ctime>
 #include <functional>
 #include <limits>
 #include <set>
@@ -61,6 +62,7 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vacuum.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
@@ -421,12 +423,15 @@ protected:
     StatusOr<MetadataOnlyMergeResult> publish_metadata_only_merge_fixture(
             MetadataOnlyMergeShape shape, bool enable_tde = false, bool with_del_file = false,
             bool skip_source_flush = false,
-            const std::function<void(std::vector<std::shared_ptr<TabletMetadataPB>>&)>& mutate_sources = {}) {
+            const std::function<void(std::vector<std::shared_ptr<TabletMetadataPB>>&)>& mutate_sources = {},
+            int64_t* attempted_target_id = nullptr, int64_t* attempted_target_version = nullptr) {
         const int64_t base_version = next_id();
         const int64_t target_version = base_version + 1;
         const int64_t source_a_id = next_id();
         const int64_t source_b_id = next_id();
         const int64_t target_id = next_id();
+        if (attempted_target_id != nullptr) *attempted_target_id = target_id;
+        if (attempted_target_version != nullptr) *attempted_target_version = target_version;
         prepare_tablet_dirs(source_a_id);
         prepare_tablet_dirs(source_b_id);
         prepare_tablet_dirs(target_id);
@@ -570,6 +575,12 @@ protected:
             }
         }
         return result;
+    }
+
+    void expect_target_version_not_published(int64_t tablet_id, int64_t version) {
+        auto metadata = _tablet_manager->get_tablet_metadata(tablet_id, version);
+        EXPECT_TRUE(metadata.status().is_not_found()) << "target " << tablet_id << " version " << version
+                                                      << " was unexpectedly published: " << metadata.status();
     }
 
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
@@ -2314,7 +2325,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_private_uncertai
         auto result_or = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
                                                              /*with_del_file=*/false, /*skip_source_flush=*/true,
                                                              test_case.mutate);
-        ASSERT_OK(result_or);
+        if (!result_or.ok()) {
+            ADD_FAILURE() << result_or.status();
+            continue;
+        }
         auto result = std::move(result_or).value();
         const auto& target = result.published.at(result.target_tablet_id);
         EXPECT_EQ(0, target.sstable_meta().sstables_size());
@@ -2332,6 +2346,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_private_uncertai
 
     for (bool encryption_conflict : {false, true}) {
         SCOPED_TRACE(encryption_conflict ? "conflicting encryption" : "conflicting filesize");
+        if (encryption_conflict) ensure_kek_in_key_cache();
+        const size_t key_cache_size_before = KeyCache::instance().size();
+        const bool tde_before = config::enable_transparent_data_encryption;
         auto conflict = [=](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
             auto* right = sources[1]->mutable_sstable_meta()->mutable_sstables(0);
             right->set_filename(sources[0]->sstable_meta().sstables(0).filename());
@@ -2341,10 +2358,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_private_uncertai
                 right->set_filesize(right->filesize() + 1);
             }
         };
-        auto result_or =
-                publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
-                                                    /*with_del_file=*/false, /*skip_source_flush=*/true, conflict);
+        int64_t target_id = 0;
+        int64_t target_version = 0;
+        auto result_or = publish_metadata_only_merge_fixture(
+                MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/encryption_conflict,
+                /*with_del_file=*/false, /*skip_source_flush=*/true, conflict, &target_id, &target_version);
         EXPECT_TRUE(result_or.status().is_corruption()) << result_or.status();
+        expect_target_version_not_published(target_id, target_version);
+        EXPECT_EQ(tde_before, config::enable_transparent_data_encryption);
+        EXPECT_EQ(key_cache_size_before, KeyCache::instance().size());
     }
 }
 
@@ -2353,30 +2375,132 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_identical_diverg
         const char* name;
         std::function<void(std::vector<std::shared_ptr<TabletMetadataPB>>&)> mutate;
     };
+    auto append_identical_second_sst = [&](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
+        const std::string filename = "metadata_only_identical_second.sst";
+        const std::string key = encode_int_primary_key(20);
+        const auto file = write_raw_pk_sstable(
+                _tablet_manager->sst_location(sources[0]->id(), filename),
+                {{key, serialize_index_values({{sources[0]->version(), /*rssid=*/1, /*rowid=*/0}})}});
+        for (auto& source : sources) {
+            auto* second = source->mutable_sstable_meta()->add_sstables();
+            second->CopyFrom(source->sstable_meta().sstables(0));
+            second->set_filename(filename);
+            second->set_filesize(file.filesize);
+            second->mutable_range()->CopyFrom(file.range);
+            second->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | 1);
+        }
+    };
     const std::vector<Case> cases = {
             {"one private occurrence",
              [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->set_shared(false); }},
-            {"SST order mismatch",
+            {"SST count mismatch",
+             [&](auto& sources) {
+                 append_identical_second_sst(sources);
+                 sources[1]->mutable_sstable_meta()->mutable_sstables()->RemoveLast();
+             }},
+            {"same-count SST order mismatch",
+             [&](auto& sources) {
+                 append_identical_second_sst(sources);
+                 sources[1]->mutable_sstable_meta()->mutable_sstables()->SwapElements(0, 1);
+             }},
+            {"range mismatch",
              [](auto& sources) {
-                 auto* extra = sources[0]->mutable_sstable_meta()->add_sstables();
-                 extra->CopyFrom(sources[0]->sstable_meta().sstables(0));
-                 extra->set_filename("metadata_only_identical_extra.sst");
+                 sources[1]->mutable_sstable_meta()->mutable_sstables(0)->mutable_range()->set_end_key(
+                         "divergent range end");
              }},
             {"generation mismatch",
              [](auto& sources) {
                  sources[1]->mutable_sstable_meta()->mutable_sstables(0)->set_generation_version(999);
              }},
-            {"rowset layout mismatch",
+            {"delvec mismatch",
+             [](auto& sources) {
+                 auto* delvec = sources[1]->mutable_sstable_meta()->mutable_sstables(0)->mutable_delvec();
+                 delvec->set_version(99);
+                 delvec->set_size(1);
+             }},
+            {"rowset UID mismatch",
+             [](auto& sources) {
+                 auto* uid = sources[1]->mutable_rowsets(0)->mutable_uid();
+                 uid->set_lo(uid->lo() + 1);
+             }},
+            {"source-local delete-only rowset",
+             [&](auto& sources) {
+                 auto* rowset = sources[1]->add_rowsets();
+                 rowset->set_id(7);
+                 rowset->set_version(sources[1]->version());
+                 lake::tablet_reshard_helper::set_rowset_uid(rowset);
+                 auto* del = rowset->add_del_files();
+                 del->set_name("metadata_only_identical_local.del");
+                 del->set_origin_rowset_id(7);
+                 del->set_op_offset(0);
+                 write_binary_del_file(sources[1]->id(), del->name(), {});
+                 sources[1]->set_next_rowset_id(8);
+             }},
+            {"source-local compaction rowset",
+             [&](auto& sources) {
+                 const std::string segment_name = "metadata_only_identical_compaction.dat";
+                 const uint64_t segment_size = write_two_column_segment(
+                         sources[1]->id(), segment_name, /*num_rows=*/1, [](int key) { return key * 10; }, 70);
+                 auto* rowset = sources[1]->add_rowsets();
+                 rowset->set_id(7);
+                 rowset->set_version(sources[1]->version());
+                 rowset->set_max_compact_input_rowset_id(6);
+                 rowset->set_num_rows(1);
+                 rowset->set_data_size(segment_size);
+                 lake::tablet_reshard_helper::set_rowset_uid(rowset);
+                 auto* segment = rowset->add_segment_metas();
+                 segment->set_filename(segment_name);
+                 segment->set_size(segment_size);
+                 segment->set_num_rows(1);
+                 sources[1]->set_next_rowset_id(8);
+             }},
+            {"segment index mismatch",
              [](auto& sources) { sources[1]->mutable_rowsets(0)->mutable_segment_metas(0)->set_segment_idx(7); }},
+            {"segment layout count mismatch",
+             [&](auto& sources) {
+                 const std::string segment_name = "metadata_only_identical_second_segment.dat";
+                 const uint64_t segment_size = write_two_column_segment(
+                         sources[1]->id(), segment_name, /*num_rows=*/1, [](int key) { return key * 10; }, 11);
+                 auto* segment = sources[1]->mutable_rowsets(0)->add_segment_metas();
+                 segment->set_filename(segment_name);
+                 segment->set_size(segment_size);
+                 segment->set_num_rows(1);
+                 segment->set_segment_idx(1);
+                 sources[1]->mutable_rowsets(0)->set_num_rows(2);
+                 sources[1]->mutable_rowsets(0)->set_data_size(sources[1]->rowsets(0).data_size() + segment_size);
+             }},
             {"projection mismatch",
              [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->set_rssid_offset(1); }},
+            {"nonconvergent RSSID mapping",
+             [&](auto& sources) {
+                 const std::string segment_name = "metadata_only_identical_nonconvergent.dat";
+                 const uint64_t segment_size = write_two_column_segment(
+                         sources[1]->id(), segment_name, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+                 auto* rowset = sources[1]->add_rowsets();
+                 rowset->set_id(5);
+                 rowset->set_version(sources[1]->version());
+                 rowset->set_num_rows(1);
+                 rowset->set_data_size(segment_size);
+                 lake::tablet_reshard_helper::set_rowset_uid(rowset);
+                 auto* segment = rowset->add_segment_metas();
+                 segment->set_filename(segment_name);
+                 segment->set_size(segment_size);
+                 segment->set_num_rows(1);
+                 auto* sstable = sources[1]->mutable_sstable_meta()->mutable_sstables(0);
+                 sstable->set_shared_rssid(5);
+                 sstable->set_max_rss_rowid(static_cast<uint64_t>(5) << 32);
+                 sources[1]->set_next_rowset_id(6);
+             }},
     };
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
         auto result_or = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kIdentical,
                                                              /*enable_tde=*/false, /*with_del_file=*/false,
                                                              /*skip_source_flush=*/true, test_case.mutate);
-        ASSERT_OK(result_or);
+        if (!result_or.ok()) {
+            ADD_FAILURE() << result_or.status();
+            continue;
+        }
         auto result = std::move(result_or).value();
         const auto& target = result.published.at(result.target_tablet_id);
         EXPECT_EQ(0, target.sstable_meta().sstables_size());
@@ -2388,6 +2512,30 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_identical_diverg
             }
         }
         for (const auto& filename : result.source_sst_filenames) EXPECT_EQ(1, orphan_counts[filename]);
+    }
+
+    for (bool encryption_conflict : {false, true}) {
+        SCOPED_TRACE(encryption_conflict ? "identical encryption conflict" : "identical filesize conflict");
+        if (encryption_conflict) ensure_kek_in_key_cache();
+        const size_t key_cache_size_before = KeyCache::instance().size();
+        const bool tde_before = config::enable_transparent_data_encryption;
+        auto conflict = [=](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
+            auto* right = sources[1]->mutable_sstable_meta()->mutable_sstables(0);
+            if (encryption_conflict) {
+                right->set_encryption_meta("identical conflicting encryption metadata");
+            } else {
+                right->set_filesize(right->filesize() + 1);
+            }
+        };
+        int64_t target_id = 0;
+        int64_t target_version = 0;
+        auto result_or = publish_metadata_only_merge_fixture(
+                MetadataOnlyMergeShape::kIdentical, /*enable_tde=*/encryption_conflict,
+                /*with_del_file=*/false, /*skip_source_flush=*/true, conflict, &target_id, &target_version);
+        EXPECT_TRUE(result_or.status().is_corruption()) << result_or.status();
+        expect_target_version_not_published(target_id, target_version);
+        EXPECT_EQ(tde_before, config::enable_transparent_data_encryption);
+        EXPECT_EQ(key_cache_size_before, KeyCache::instance().size());
     }
 }
 
@@ -2414,7 +2562,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_fallback_folds_s
         auto result_or = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kIdentical,
                                                              /*enable_tde=*/true, /*with_del_file=*/false,
                                                              /*skip_source_flush=*/true, mutate);
-        ASSERT_OK(result_or);
+        if (!result_or.ok()) {
+            ADD_FAILURE() << result_or.status();
+            continue;
+        }
         auto result = std::move(result_or).value();
         const auto& target = result.published.at(result.target_tablet_id);
         EXPECT_EQ(0, target.sstable_meta().sstables_size());
@@ -2422,11 +2573,89 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_fallback_folds_s
         for (const auto& orphan : target.orphan_files()) {
             if (result.source_sst_filenames.contains(orphan.name())) matching.push_back(&orphan);
         }
-        ASSERT_EQ(1, matching.size());
+        EXPECT_EQ(1, matching.size());
+        if (matching.size() != 1) continue;
         EXPECT_TRUE(matching[0]->shared());
         EXPECT_EQ(test_case.expected, matching[0]->version());
-        EXPECT_GT(matching[0]->size(), 0);
-        EXPECT_FALSE(matching[0]->encryption_meta().empty());
+        const PersistentIndexSstablePB* source_declaration = nullptr;
+        std::vector<int64_t> source_tablet_ids;
+        for (const auto& [tablet_id, metadata] : result.published) {
+            if (tablet_id == result.target_tablet_id) continue;
+            source_tablet_ids.push_back(tablet_id);
+            for (const auto& sstable : metadata.sstable_meta().sstables()) {
+                if (sstable.filename() == matching[0]->name()) source_declaration = &sstable;
+            }
+        }
+        ASSERT_NE(nullptr, source_declaration);
+        EXPECT_EQ(source_declaration->filesize(), matching[0]->size());
+        EXPECT_EQ(source_declaration->encryption_meta(), matching[0]->encryption_meta());
+
+        if (test_case.expected != 7) continue;
+
+        // Add one additional retained sibling reference beyond the two merge
+        // sources, then run the normal shared-orphan vacuum path.
+        const int64_t sibling_id = next_id();
+        prepare_tablet_dirs(sibling_id);
+        TabletMetadataPB sibling = result.published.at(source_tablet_ids.front());
+        sibling.set_id(sibling_id);
+        ASSERT_OK(put_tablet_metadata(sibling));
+        source_tablet_ids.push_back(sibling_id);
+
+        const std::string sst_path = _tablet_manager->sst_location(result.target_tablet_id, matching[0]->name());
+        ASSERT_OK(FileSystem::Default()->path_exists(sst_path));
+        auto run_vacuum = [&](int64_t min_retain_version) {
+            VacuumRequest request;
+            VacuumResponse response;
+            auto add_info = [&](int64_t tablet_id) {
+                auto* info = request.add_tablet_infos();
+                info->set_tablet_id(tablet_id);
+                info->set_min_version(result.target_version);
+            };
+            add_info(result.target_tablet_id);
+            for (int64_t tablet_id : source_tablet_ids) add_info(tablet_id);
+            request.set_min_retain_version(min_retain_version);
+            request.set_grace_timestamp(::time(nullptr) + 3600);
+            request.set_min_active_txn_id(std::numeric_limits<int64_t>::max());
+            request.set_enable_file_bundling(false);
+            request.set_enable_shared_file_cleanup(true);
+            request.set_delete_txn_log(false);
+            lake::vacuum(_tablet_manager.get(), request, &response);
+            EXPECT_TRUE(response.has_status());
+            EXPECT_EQ(0, response.status().status_code())
+                    << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
+            return response;
+        };
+
+        auto retained_response = run_vacuum(result.target_version);
+        EXPECT_TRUE(retained_response.has_status());
+        ASSERT_OK(FileSystem::Default()->path_exists(sst_path));
+
+        auto advance_without_reference = [&](const TabletMetadataPB& current, int64_t tablet_id) {
+            TabletMetadataPB advanced(current);
+            advanced.set_id(tablet_id);
+            advanced.set_version(result.target_version + 1);
+            advanced.clear_sstable_meta();
+            advanced.clear_orphan_files();
+            advanced.set_prev_garbage_version(result.target_version);
+            ASSERT_OK(put_tablet_metadata(advanced));
+        };
+        advance_without_reference(target, result.target_tablet_id);
+        for (int64_t tablet_id : source_tablet_ids) {
+            if (tablet_id == sibling_id) {
+                advance_without_reference(sibling, sibling_id);
+            } else {
+                advance_without_reference(result.published.at(tablet_id), tablet_id);
+            }
+        }
+        _tablet_manager->prune_metacache();
+
+        auto reclaimed_response = run_vacuum(result.target_version + 1);
+        EXPECT_GE(reclaimed_response.vacuumed_file_size(), matching[0]->size());
+        EXPECT_TRUE(FileSystem::Default()->path_exists(sst_path).is_not_found());
+
+        auto exact_once_response = run_vacuum(result.target_version + 1);
+        EXPECT_EQ(0, exact_once_response.vacuumed_file_size());
+        EXPECT_TRUE(FileSystem::Default()->path_exists(sst_path).is_not_found());
     }
 }
 
@@ -2455,6 +2684,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_identical_repeat
 
     for (bool encryption_conflict : {false, true}) {
         SCOPED_TRACE(encryption_conflict ? "encryption conflict" : "filesize conflict");
+        if (encryption_conflict) ensure_kek_in_key_cache();
+        const size_t key_cache_size_before = KeyCache::instance().size();
+        const bool tde_before = config::enable_transparent_data_encryption;
         auto repeat_conflicting = [=](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
             for (auto& source : sources) {
                 auto* duplicate = source->mutable_sstable_meta()->add_sstables();
@@ -2466,10 +2698,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_identical_repeat
                 }
             }
         };
-        auto conflicting = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kIdentical,
-                                                               /*enable_tde=*/false, /*with_del_file=*/false,
-                                                               /*skip_source_flush=*/true, repeat_conflicting);
+        int64_t target_id = 0;
+        int64_t target_version = 0;
+        auto conflicting = publish_metadata_only_merge_fixture(
+                MetadataOnlyMergeShape::kIdentical, /*enable_tde=*/encryption_conflict,
+                /*with_del_file=*/false, /*skip_source_flush=*/true, repeat_conflicting, &target_id, &target_version);
         EXPECT_TRUE(conflicting.status().is_corruption()) << conflicting.status();
+        expect_target_version_not_published(target_id, target_version);
+        EXPECT_EQ(tde_before, config::enable_transparent_data_encryption);
+        EXPECT_EQ(key_cache_size_before, KeyCache::instance().size());
     }
 }
 
@@ -2560,11 +2797,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_source_range_par
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
+        int64_t target_id = 0;
+        int64_t target_version = 0;
         auto result_or = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate,
                                                              /*enable_tde=*/false, /*with_del_file=*/false,
-                                                             /*skip_source_flush=*/true, test_case.mutate);
+                                                             /*skip_source_flush=*/true, test_case.mutate, &target_id,
+                                                             &target_version);
         if (test_case.outcome == Outcome::kCorruption) {
             EXPECT_TRUE(result_or.status().is_corruption()) << result_or.status();
+            expect_target_version_not_published(target_id, target_version);
             continue;
         }
         ASSERT_OK(result_or);
@@ -2639,12 +2880,66 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
     EXPECT_GT(target.next_rowset_id(), origin_ceiling);
     EXPECT_EQ(0, target.sstable_meta().sstables_size());
 
-    auto boundary_or = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
-                                                           /*with_del_file=*/false, /*skip_source_flush=*/true);
+    _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+    ASSIGN_OR_ABORT(auto after_dml,
+                    publish_followup_upsert_delete(result.target_tablet_id, result.target_version,
+                                                   /*upsert_key=*/10, /*upsert_value=*/1010, /*delete_key=*/60));
+    const RowsetMetadataPB* write_rowset = nullptr;
+    for (const auto& rowset : after_dml->rowsets()) {
+        if (rowset.version() == result.target_version + 1 && rowset.segment_metas_size() > 0) {
+            write_rowset = &rowset;
+        }
+    }
+    ASSERT_NE(nullptr, write_rowset);
+    const auto& write_segment = write_rowset->segment_metas(0);
+    const uint64_t allocated_rssid = uint64_t{write_rowset->id()} + write_segment.segment_idx();
+    EXPECT_GT(allocated_rssid, replay_ceiling);
+    EXPECT_GT(allocated_rssid, origin_ceiling);
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
+    const std::vector<std::string> keys = {encode_int_primary_key(10), encode_int_primary_key(60)};
+    ASSIGN_OR_ABORT(auto values, load_index_values(after_dml, result.target_tablet_id, keys));
+    ASSERT_EQ(2, values.size());
+    EXPECT_EQ(allocated_rssid, values[0].get_value() >> 32);
+    EXPECT_EQ(IndexValue(NullIndexValue), values[1]);
+    _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+    ASSIGN_OR_ABORT(auto reopened,
+                    _tablet_manager->get_tablet_metadata(result.target_tablet_id, result.target_version + 1));
+    ASSIGN_OR_ABORT(auto reopened_rows, read_two_column_rows(reopened));
+    EXPECT_EQ(rows, reopened_rows);
+    ASSIGN_OR_ABORT(auto reopened_values, load_index_values(reopened, result.target_tablet_id, keys));
+    EXPECT_EQ(values, reopened_values);
+
+    auto zero_segment_no_del = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
+        sources[0]->mutable_rowsets(0)->clear_segment_metas();
+        sources[0]->mutable_rowsets(0)->clear_del_files();
+        sources[0]->clear_sstable_meta();
+        sources[1]->clear_rowsets();
+        sources[1]->clear_sstable_meta();
+        sources[1]->set_next_rowset_id(1);
+    };
+    ASSIGN_OR_ABORT(auto zero_control,
+                    publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
+                                                        /*with_del_file=*/false, /*skip_source_flush=*/true,
+                                                        zero_segment_no_del));
+    const auto& zero_target = zero_control.published.at(zero_control.target_tablet_id);
+    EXPECT_EQ(0, zero_target.rowsets_size());
+    EXPECT_EQ(0, zero_target.sstable_meta().sstables_size());
+    EXPECT_EQ(1, zero_target.next_rowset_id());
+
+    auto one_sst_boundary = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
+        sources[0]->clear_rowsets();
+        sources[0]->clear_sstable_meta();
+        sources[0]->set_next_rowset_id(1);
+    };
+    auto boundary_or =
+            publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
+                                                /*with_del_file=*/false, /*skip_source_flush=*/true, one_sst_boundary);
     ASSERT_OK(boundary_or);
     const auto& boundary = boundary_or->published.at(boundary_or->target_tablet_id);
-    ASSERT_GT(boundary.sstable_meta().sstables_size(), 0);
-    EXPECT_GT(boundary.next_rowset_id(), boundary.sstable_meta().sstables().rbegin()->max_rss_rowid() >> 32);
+    ASSERT_EQ(1, boundary.sstable_meta().sstables_size());
+    EXPECT_EQ(1, boundary.sstable_meta().sstables(0).max_rss_rowid() >> 32);
+    EXPECT_EQ(2, boundary.next_rowset_id());
 
     auto exhausted = [&](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
         auto* rowset = sources[0]->mutable_rowsets(0);
@@ -2655,10 +2950,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
         del->set_op_offset(std::numeric_limits<int32_t>::max());
         write_binary_del_file(sources[0]->id(), del->name(), {});
     };
-    auto exhausted_or =
-            publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
-                                                /*with_del_file=*/false, /*skip_source_flush=*/true, exhausted);
+    int64_t exhausted_target_id = 0;
+    int64_t exhausted_target_version = 0;
+    auto exhausted_or = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
+                                                            /*with_del_file=*/false, /*skip_source_flush=*/true,
+                                                            exhausted, &exhausted_target_id, &exhausted_target_version);
     EXPECT_TRUE(exhausted_or.status().is_invalid_argument()) << exhausted_or.status();
+    expect_target_version_not_published(exhausted_target_id, exhausted_target_version);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml_is_exact) {
@@ -2719,37 +3017,49 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
     });
     constexpr uint32_t kTombstone = std::numeric_limits<uint32_t>::max();
     const std::string tombstone_key = encode_int_primary_key(10);
-    auto fixture = make_below_floor_legacy_fixture(
-            "issue11939_negative_watermark.sst",
-            {{tombstone_key, serialize_index_values({{/*version=*/23, kTombstone, kTombstone}})}},
-            /*source_high=*/47);
-    auto merged_or = merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata, fixture.merged_tablet,
-                                                     BelowFloorLegacyFixture::kBaseVersion,
-                                                     BelowFloorLegacyFixture::kMergedVersion, next_id());
-    ASSERT_OK(merged_or);
-    auto merged = std::move(merged_or).value();
-    EXPECT_EQ(0, merged->sstable_meta().sstables_size());
-    int orphan_count = 0;
-    for (const auto& orphan : merged->orphan_files()) {
-        if (orphan.name() == fixture.source_filename) {
-            ++orphan_count;
-            EXPECT_TRUE(orphan.shared());
+    struct Case {
+        const char* name;
+        const char* filename;
+        uint32_t source_high;
+    };
+    const std::vector<Case> cases = {
+            {"negative below-floor projection", "issue11939_negative_watermark.sst", 47},
+            {"explicit zero watermark", "issue11939_zero_watermark.sst", 0},
+    };
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        auto fixture = make_below_floor_legacy_fixture(
+                test_case.filename,
+                {{tombstone_key, serialize_index_values({{/*version=*/23, kTombstone, kTombstone}})}},
+                test_case.source_high);
+        auto merged_or = merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata,
+                                                         fixture.merged_tablet, BelowFloorLegacyFixture::kBaseVersion,
+                                                         BelowFloorLegacyFixture::kMergedVersion, next_id());
+        ASSERT_OK(merged_or);
+        auto merged = std::move(merged_or).value();
+        EXPECT_EQ(0, merged->sstable_meta().sstables_size());
+        int orphan_count = 0;
+        for (const auto& orphan : merged->orphan_files()) {
+            if (orphan.name() == fixture.source_filename) {
+                ++orphan_count;
+                EXPECT_TRUE(orphan.shared());
+            }
         }
-    }
-    EXPECT_EQ(1, orphan_count);
+        EXPECT_EQ(1, orphan_count);
 
-    _update_manager->unload_and_remove_primary_index(fixture.merged_tablet);
-    ASSIGN_OR_ABORT(auto after_dml,
-                    publish_followup_upsert_delete(fixture.merged_tablet, BelowFloorLegacyFixture::kMergedVersion,
-                                                   /*upsert_key=*/10,
-                                                   /*upsert_value=*/1010, /*delete_key=*/20));
-    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
-    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
-    const std::vector<std::string> keys = {encode_int_primary_key(10), encode_int_primary_key(20)};
-    ASSIGN_OR_ABORT(auto values, load_index_values(after_dml, fixture.merged_tablet, keys));
-    ASSERT_EQ(2, values.size());
-    EXPECT_NE(IndexValue(NullIndexValue), values[0]);
-    EXPECT_EQ(IndexValue(NullIndexValue), values[1]);
+        _update_manager->unload_and_remove_primary_index(fixture.merged_tablet);
+        ASSIGN_OR_ABORT(auto after_dml,
+                        publish_followup_upsert_delete(fixture.merged_tablet, BelowFloorLegacyFixture::kMergedVersion,
+                                                       /*upsert_key=*/10,
+                                                       /*upsert_value=*/1010, /*delete_key=*/20));
+        ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
+        EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
+        const std::vector<std::string> keys = {encode_int_primary_key(10), encode_int_primary_key(20)};
+        ASSIGN_OR_ABORT(auto values, load_index_values(after_dml, fixture.merged_tablet, keys));
+        ASSERT_EQ(2, values.size());
+        EXPECT_NE(IndexValue(NullIndexValue), values[0]);
+        EXPECT_EQ(IndexValue(NullIndexValue), values[1]);
+    }
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
