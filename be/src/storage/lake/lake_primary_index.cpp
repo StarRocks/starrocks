@@ -54,7 +54,7 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
                                    bool force_serial_full_rebuild) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
-    if ((rebuild_rss_rowid_point.has_value() || force_serial_full_rebuild) && _loaded) {
+    if (rebuild_rss_rowid_point.has_value() && _loaded) {
         unload_without_lock();
     }
     if (_loaded && !need_rebuild()) {

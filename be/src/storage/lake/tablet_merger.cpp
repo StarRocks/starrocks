@@ -2613,8 +2613,17 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         bool skip_source_flush = false;
         FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
         if (skip_source_flush) continue;
+        TEST_SYNC_POINT_CALLBACK("merge_sstables:source_pk_flush", nullptr);
         ASSIGN_OR_RETURN(auto flushed, update_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
         context.set_metadata(std::move(flushed));
+    }
+
+    const bool has_source_sstable = std::any_of(merge_contexts.begin(), merge_contexts.end(), [](const auto& context) {
+        return !context.metadata()->sstable_meta().sstables().empty();
+    });
+    if (!has_source_sstable) {
+        new_metadata->clear_sstable_meta();
+        return Status::OK();
     }
 
     TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_entry", nullptr);
@@ -2751,6 +2760,11 @@ void reconcile_vector_index_built_version(const std::vector<TabletMergeContext>&
     }
 }
 
+bool uses_cloud_native_pk_index(const TabletMetadataPB& metadata) {
+    return is_primary_key(metadata) && metadata.enable_persistent_index() &&
+           metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
+}
+
 } // namespace
 
 DEFINE_FAIL_POINT(tablet_merge_after_rssid_reassign);
@@ -2876,8 +2890,12 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     if (skip_sstable_merge) {
         // Read-only alias: leave it without a primary index rather than paying the rebuild.
         new_tablet_metadata->clear_sstable_meta();
-    } else {
+    } else if (uses_cloud_native_pk_index(*new_tablet_metadata)) {
         RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));
+    } else {
+        // SST classification and source flushing are cloud-native PK contracts. Other key/index modes retain
+        // their merged rowset and sidecar metadata without manufacturing a primary-index attachment.
+        new_tablet_metadata->clear_sstable_meta();
     }
 
     // Phase 4: Finalize
