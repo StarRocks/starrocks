@@ -2269,20 +2269,23 @@ CONF_mInt32(lake_compaction_chunk_size, "4096");
 // order, which keeps the merge order and the error semantics identical to the serial path.
 // Only the reads are parallel; heap/state updates stay serial.
 CONF_mBool(enable_compaction_parallel_merge_init, "false");
-// Size of the thread pool that runs the parallel merge prefill. Only takes effect the first
-// time enable_compaction_parallel_merge_init drives a merge; the pool is built once.
-// Per-merge-iterator in-flight read limit: 16 is the measured knee for one task (1/4/16/64
-// threads read 754/302/157/181s), and issuing more per task past the knee slows it down.
-CONF_Int32(compaction_parallel_merge_init_threads, "16");
+// Per-merge-iterator in-flight prefill read limit. Before the IO/decode split, prefill reads
+// carried the decode too, and 16 was the measured knee for one task (1/4/16/64 threads read
+// 754/302/157/181s). With the split the pool waits on IO only, so the limit is pure IO depth:
+// 64 in-flight measured 2.4x faster on an inadequate cache (264s -> 109s) with zero regression
+// on warm and cold caches.
+CONF_Int32(compaction_parallel_merge_init_threads, "64");
 // How many bytes one merge may hold in prefetched read buffers, across all of its inputs, when
 // its prefill runs as prefetch (IO on the pool, decode on the merge thread). Inputs past the
 // budget fall back to full reads on the pool instead of holding their scans; 0 disables the
 // IO/decode split entirely.
 CONF_mInt64(compaction_parallel_merge_prefetch_bytes, "268435456");
 // The shared pool's thread count. Larger than the per-task limit so concurrent compactions do
-// not dilute each other down to pool_size / tasks; idle threads are reclaimed after 10s, so an
-// idle BE pays nothing for the headroom.
-CONF_Int32(compaction_parallel_merge_init_pool_threads, "64");
+// not dilute each other down to pool_size / tasks (4 concurrent tasks measured 777s at pool 16
+// vs 141-248s at pool 256 with the per-task cap); idle threads are reclaimed after 10s, so an
+// idle BE pays nothing for the headroom. The threads mostly wait on IO under the IO/decode
+// split, so the count buys concurrency, not CPU.
+CONF_Int32(compaction_parallel_merge_init_pool_threads, "256");
 // Number of chunk slots kept per merge input. With one slot the merge holds the only chunk and
 // refilling it is a blocking read, so the merge stalls for a full round trip every time an input
 // runs dry. With more slots a background reader keeps the free ones filled while the merge
