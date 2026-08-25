@@ -171,7 +171,7 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard,
-        std::optional<uint64_t> rebuild_rss_rowid_point) {
+        std::optional<uint64_t> rebuild_rss_rowid_point, bool force_serial_full_rebuild) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -183,7 +183,13 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
         guard = index.fetch_guard();
     }
-    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, rebuild_rss_rowid_point);
+    const auto& effective_sstable_meta = builder->tablet_meta()->sstable_meta();
+    force_serial_full_rebuild =
+            force_serial_full_rebuild ||
+            (effective_sstable_meta.sstables().empty() &&
+             LakePersistentIndex::need_rebuild_counts(*metadata, effective_sstable_meta, uint64_t{0}).first > 0);
+    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, rebuild_rss_rowid_point,
+                                force_serial_full_rebuild);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         if (st.is_already_exist()) {

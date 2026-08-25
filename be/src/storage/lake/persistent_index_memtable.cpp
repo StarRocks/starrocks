@@ -16,8 +16,11 @@
 
 #include "base/debug/trace.h"
 #include "base/string/string_util.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
@@ -214,6 +217,26 @@ Status PersistentIndexMemtable::flush() {
     }
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
+    std::unique_ptr<WritableFile> wf;
+    bool writer_close_attempted = false;
+    CancelableDefer cleanup_partial_sst([&]() {
+        if (wf != nullptr && !writer_close_attempted) {
+            auto close_status = wf->close();
+            if (!close_status.ok()) {
+                LOG(WARNING) << "Failed to close partial persistent index sstable " << location << ": " << close_status;
+            }
+        }
+        wf.reset();
+        auto drop_status = drop_corrupted_sstable_cache(location);
+        if (!drop_status.ok() && !drop_status.is_not_supported()) {
+            LOG(WARNING) << "Failed to drop cache for partial persistent index sstable " << location << ": "
+                         << drop_status;
+        }
+        auto delete_status = fs::delete_file(location);
+        if (!delete_status.ok() && !delete_status.is_not_found()) {
+            LOG(WARNING) << "Failed to delete partial persistent index sstable " << location << ": " << delete_status;
+        }
+    });
     WritableFileOptions wopts;
     std::string encryption_meta;
     if (config::enable_transparent_data_encryption) {
@@ -221,11 +244,27 @@ Status PersistentIndexMemtable::flush() {
         wopts.encryption_info = pair.info;
         encryption_meta.swap(pair.encryption_meta);
     }
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
+    ASSIGN_OR_RETURN(wf, fs::new_writable_file(wopts, location));
+    Status after_create;
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_create", &after_create);
+    if (!after_create.ok()) {
+        return after_create;
+    }
     uint64_t filesize = 0;
     PersistentIndexSstableRangePB range_pb;
     RETURN_IF_ERROR(flush(wf.get(), &filesize, &range_pb));
+    Status after_build;
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_build", &after_build);
+    if (!after_build.ok()) {
+        return after_build;
+    }
+    writer_close_attempted = true;
     RETURN_IF_ERROR(wf->close());
+    Status after_close;
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_close", &after_close);
+    if (!after_close.ok()) {
+        return after_close;
+    }
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
@@ -233,6 +272,11 @@ Status PersistentIndexMemtable::flush() {
         opts.encryption_info = wopts.encryption_info;
     }
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    Status after_reopen;
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_reopen", &after_reopen);
+    if (!after_reopen.ok()) {
+        return after_reopen;
+    }
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
@@ -240,8 +284,14 @@ Status PersistentIndexMemtable::flush() {
     sstable_pb.set_encryption_meta(encryption_meta);
     sstable_pb.mutable_range()->CopyFrom(range_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    Status after_sstable_init;
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_sstable_init", &after_sstable_init);
+    if (!after_sstable_init.ok()) {
+        return after_sstable_init;
+    }
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);
+    cleanup_partial_sst.cancel();
     return Status::OK();
 }
 

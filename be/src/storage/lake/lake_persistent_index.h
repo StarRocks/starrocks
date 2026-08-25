@@ -16,6 +16,8 @@
 
 #include <functional>
 #include <optional>
+#include <string>
+#include <unordered_set>
 
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -144,7 +146,8 @@ public:
 
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder,
-                                 std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
+                                 std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt,
+                                 bool force_serial_full_rebuild = false);
 
     size_t memory_usage() const override;
 
@@ -219,7 +222,18 @@ private:
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
     // rebuild delete operation from rowset.
-    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                     bool force_serial = false);
+
+    Status begin_full_rebuild_session();
+
+    Status register_full_rebuild_sstable(const PersistentIndexSstable& sstable);
+
+    Status validate_full_rebuild_session(const PersistentIndexSstableMetaPB& outgoing) const;
+
+    void finish_full_rebuild_session(uint64_t final_max_rss_rowid);
+
+    void abort_full_rebuild_session();
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
@@ -239,8 +253,7 @@ private:
 
     static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
             std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            const TabletMetadataPtr& metadata, bool contain_shared_sstables,
-            bool enable_multiple_output_files = false);
+            const TabletMetadataPtr& metadata, bool contain_shared_sstables, bool enable_multiple_output_files = false);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 
@@ -257,6 +270,9 @@ private:
     // Counters for SST files flushed during publish phase
     int32_t _publish_sst_flush_count{0};
     int64_t _publish_sst_flush_bytes{0};
+
+    bool _full_rebuild_session_active{false};
+    std::unordered_set<std::string> _uncommitted_full_rebuild_ssts;
 };
 
 } // namespace lake

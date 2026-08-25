@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -59,6 +60,9 @@ LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tabl
         : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 LakePersistentIndex::~LakePersistentIndex() {
+    if (_full_rebuild_session_active) {
+        abort_full_rebuild_session();
+    }
     if (_memtable) {
         _memtable->clear();
     }
@@ -185,6 +189,105 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     return Status::OK();
 }
 
+Status LakePersistentIndex::begin_full_rebuild_session() {
+    if (_full_rebuild_session_active) {
+        return Status::InternalError("full rebuild session is already active");
+    }
+    if (!_uncommitted_full_rebuild_ssts.empty()) {
+        return Status::InternalError("full rebuild session inventory is not empty");
+    }
+    if (!_inactive_memtables.empty()) {
+        return Status::InternalError("full rebuild session has inactive memtables");
+    }
+    if (_memtable == nullptr || !_memtable->empty()) {
+        return Status::InternalError("full rebuild session requires an empty active memtable");
+    }
+    _full_rebuild_session_active = true;
+    bool active = true;
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:begin", &active);
+    return Status::OK();
+}
+
+Status LakePersistentIndex::register_full_rebuild_sstable(const PersistentIndexSstable& sstable) {
+    if (!_full_rebuild_session_active) {
+        return Status::InternalError("cannot register sstable outside a full rebuild session");
+    }
+    std::string filename = sstable.sstable_pb().filename();
+    if (!_uncommitted_full_rebuild_ssts.emplace(filename).second) {
+        return Status::InternalError(fmt::format("duplicate full rebuild sstable {}", filename));
+    }
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:register_sst", &filename);
+    return Status::OK();
+}
+
+Status LakePersistentIndex::validate_full_rebuild_session(const PersistentIndexSstableMetaPB& outgoing) const {
+    if (!_full_rebuild_session_active) {
+        return Status::InternalError("cannot validate an inactive full rebuild session");
+    }
+    std::unordered_map<std::string, size_t> outgoing_counts;
+    outgoing_counts.reserve(outgoing.sstables_size());
+    for (const auto& sstable : outgoing.sstables()) {
+        ++outgoing_counts[sstable.filename()];
+    }
+    for (const auto& filename : _uncommitted_full_rebuild_ssts) {
+        const auto it = outgoing_counts.find(filename);
+        if (it == outgoing_counts.end() || it->second != 1) {
+            return Status::InternalError(fmt::format("full rebuild sstable {} occurs {} times in outgoing metadata",
+                                                     filename, it == outgoing_counts.end() ? 0 : it->second));
+        }
+    }
+    return Status::OK();
+}
+
+void LakePersistentIndex::finish_full_rebuild_session(uint64_t final_max_rss_rowid) {
+    DCHECK(_full_rebuild_session_active);
+    DCHECK(_inactive_memtables.empty());
+    DCHECK(_memtable != nullptr && _memtable->empty());
+    size_t handed_off_count = _uncommitted_full_rebuild_ssts.size();
+    _uncommitted_full_rebuild_ssts.clear();
+    _full_rebuild_session_active = false;
+    _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, final_max_rss_rowid);
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:finish", &handed_off_count);
+}
+
+void LakePersistentIndex::abort_full_rebuild_session() {
+    if (!_full_rebuild_session_active) {
+        DCHECK(_uncommitted_full_rebuild_ssts.empty());
+        return;
+    }
+    DCHECK(_inactive_memtables.empty());
+    std::vector<std::string> filenames(_uncommitted_full_rebuild_ssts.begin(), _uncommitted_full_rebuild_ssts.end());
+    std::sort(filenames.begin(), filenames.end());
+
+    if (_memtable != nullptr) {
+        _memtable->clear();
+    }
+    _memtable.reset();
+    for (auto& memtable : _inactive_memtables) {
+        if (memtable != nullptr) {
+            memtable->cancel();
+        }
+    }
+    _inactive_memtables.clear();
+    _sstable_filesets.clear();
+
+    for (const auto& filename : filenames) {
+        const auto location = _tablet_mgr->sst_location(_tablet_id, filename);
+        auto drop_status = drop_corrupted_sstable_cache(location);
+        if (!drop_status.ok() && !drop_status.is_not_supported()) {
+            LOG(WARNING) << "Failed to drop cache for uncommitted full rebuild sstable " << location << ": "
+                         << drop_status;
+        }
+        auto status = fs::delete_file(location);
+        if (!status.ok() && !status.is_not_found()) {
+            LOG(WARNING) << "Failed to delete uncommitted full rebuild sstable " << location << ": " << status;
+        }
+    }
+    _uncommitted_full_rebuild_ssts.clear();
+    _full_rebuild_session_active = false;
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:abort", &filenames);
+}
+
 void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes) {
     if (!found_key_indexes.empty()) {
         KeyIndexSet t;
@@ -295,6 +398,14 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
 
 Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
     TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
+    if (_full_rebuild_session_active) {
+        RETURN_ERROR_IF_FALSE(_inactive_memtables.empty(), "full rebuild session unexpectedly has inactive memtables");
+        RETURN_IF_ERROR(flush_memtable(true));
+        RETURN_ERROR_IF_FALSE(_inactive_memtables.empty(), "full rebuild session created an inactive memtable");
+        _need_rebuild_file_cnt = 0;
+        _need_rebuild_row_cnt = 0;
+        return Status::OK();
+    }
     // 1. flush inactive memtables
     for (auto& memtable : _inactive_memtables) {
         int64_t start_us = butil::gettimeofday_us();
@@ -349,6 +460,32 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
 // - Multiple memtables can be flushing concurrently (up to pk_index_memtable_max_count)
 // - If too many pending flushes, switches to synchronous flush to avoid unbounded memory growth
 Status LakePersistentIndex::flush_memtable(bool force) {
+    if (_full_rebuild_session_active) {
+        if (!_memtable->empty() && (force || is_memtable_full())) {
+            TRACE_COUNTER_INCREMENT("flush_times", 1);
+            TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
+            bool synchronous = true;
+            TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:flush_policy", &synchronous);
+            const uint64_t previous_max_rss_rowid = _memtable->max_rss_rowid();
+            auto flush_status = _memtable->flush();
+            if (!flush_status.ok()) {
+                return flush_status;
+            }
+            auto sstable = _memtable->release_sstable();
+            RETURN_ERROR_IF_FALSE(sstable != nullptr, "full rebuild memtable flush produced no sstable");
+            RETURN_IF_ERROR(register_full_rebuild_sstable(*sstable));
+            std::string filename = sstable->sstable_pb().filename();
+            TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_fileset", &filename);
+            Status before_fileset_merge;
+            TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_fileset_merge", &before_fileset_merge);
+            RETURN_IF_ERROR(before_fileset_merge);
+            RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+            _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, previous_max_rss_rowid);
+            _need_rebuild_file_cnt = 0;
+            _need_rebuild_row_cnt = 0;
+        }
+        return Status::OK();
+    }
     if (!_memtable->empty() && (force || is_memtable_full())) {
         TRACE_COUNTER_INCREMENT("flush_times", 1);
         TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
@@ -374,13 +511,18 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
+                bool submitted = true;
+                TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::flush_memtable:async_submit", &submitted);
             }
         }
         if (flush_async) {
             _inactive_memtables.push_back(_memtable);
         } else {
             // If too many memtables or submit flush job fail, switch to sync flush.
-            RETURN_IF_ERROR(_memtable->flush());
+            auto flush_status = _memtable->flush();
+            if (!flush_status.ok()) {
+                return flush_status;
+            }
             if (_inactive_memtables.empty()) {
                 auto sstable = _memtable->release_sstable();
                 RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
@@ -1119,7 +1261,12 @@ void LakePersistentIndex::assign_generation_versions(PersistentIndexSstableMetaP
 }
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_version) {
-    if ((too_many_rebuild_files() || too_many_rebuild_rows()) && !_memtable->empty()) {
+    if (_full_rebuild_session_active) {
+        RETURN_IF_ERROR(flush_memtable(true));
+        RETURN_ERROR_IF_FALSE(_inactive_memtables.empty(), "full rebuild commit unexpectedly has inactive memtables");
+        RETURN_ERROR_IF_FALSE(_memtable != nullptr && _memtable->empty(),
+                              "full rebuild commit did not drain the active memtable");
+    } else if ((too_many_rebuild_files() || too_many_rebuild_rows()) && !_memtable->empty()) {
         // If we have too many files or rows need to be rebuilt,
         // we need to do flush to reduce index rebuild cost later.
         RETURN_IF_ERROR(flush_memtable(true));
@@ -1149,7 +1296,16 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
         generation_version = builder->tablet_meta()->version();
     }
     assign_generation_versions(&sstable_meta, builder->tablet_meta()->sstable_meta(), generation_version);
+    if (_full_rebuild_session_active) {
+        RETURN_IF_ERROR(validate_full_rebuild_session(sstable_meta));
+        Status before_commit_install;
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_commit_install", &before_commit_install);
+        RETURN_IF_ERROR(before_commit_install);
+    }
     builder->finalize_sstable_meta(sstable_meta);
+    if (_full_rebuild_session_active) {
+        finish_full_rebuild_session(static_cast<uint64_t>(last_max_rss_rowid));
+    }
     auto [file_cnt, row_cnt] = need_rebuild_counts(*builder->tablet_meta(), sstable_meta);
     _need_rebuild_file_cnt = file_cnt;
     _need_rebuild_row_cnt = row_cnt;
@@ -1174,7 +1330,8 @@ static bool should_parallel_rebuild_prefetch(int num_files) {
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
-Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
+Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                                      bool force_serial) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
     ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
@@ -1290,12 +1447,15 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // Gate the two-phase parallel path on update-memtracker pressure (see
     // should_parallel_rebuild_prefetch): under pressure, fall back to the legacy single-pass loop
     // to avoid holding all decoded del-file columns in memory at once.
-    const bool use_two_phase = should_parallel_rebuild_prefetch(num_del_files);
+    const bool use_two_phase = !force_serial && should_parallel_rebuild_prefetch(num_del_files);
 
     if (!use_two_phase) {
         // Single-pass loop: load (read+decode+keys+maybe-get) then erase per file, in del_idx order.
         // Only one decoded column held at a time.
         for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+            Status before_del_replay;
+            TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_del_replay", &before_del_replay);
+            RETURN_IF_ERROR(before_del_replay);
             TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
             DecodedDel d;
             RETURN_IF_ERROR(load_one(del_idx, &d));
@@ -1303,6 +1463,8 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         }
         return Status::OK();
     }
+
+    TEST_SYNC_POINT("LakePersistentIndex::full_rebuild:parallel_del_prefetch");
 
     // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for non-origin
     // files only) run the index get() + build the skip filter. Both the OSS byte reads and the
@@ -1772,7 +1934,8 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder,
-                                                  std::optional<uint64_t> rebuild_rss_rowid_point_override) {
+                                                  std::optional<uint64_t> rebuild_rss_rowid_point_override,
+                                                  bool force_serial_full_rebuild) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -1823,7 +1986,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // a single unit) fall back to a serial scan that builds, scans-and-inserts, and releases ONE rowset
     // at a time on the caller thread (no thread pool) -- the segment-scan analog of load_dels reading
     // one del file at a time.
-    const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
+    const bool use_parallel = !force_serial_full_rebuild && should_parallel_rebuild_prefetch(rebuild_unit_count);
+    if (force_serial_full_rebuild && file_cnt > 0) {
+        RETURN_IF_ERROR(begin_full_rebuild_session());
+    }
     auto insert_rebuild_batch = [&](RebuildInsertBatch& batch, int64_t rowset_version) -> Status {
         if (rebuild_rss_rowid_point_override.has_value() && !batch.keys.empty()) {
             std::vector<IndexValue> existing_values(batch.keys.size(), IndexValue(NullIndexValue));
@@ -1849,6 +2015,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     };
 
     if (use_parallel) {
+        TEST_SYNC_POINT("LakePersistentIndex::full_rebuild:parallel_segment_prefetch");
         // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
         // stats), since the parallel scan needs them all alive concurrently.
         ASSIGN_OR_RETURN(auto plan, build_rebuild_scan_units(tablet_mgr, metadata, base_version, builder, pkey_schema,
@@ -1907,7 +2074,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 unit_cursor++;
             }
             if (rebuild_rowsets[ro].has_del_files) {
-                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
+                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version,
+                                          force_serial_full_rebuild));
             }
         }
     } else {
@@ -1923,6 +2091,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 continue;
             }
             for (const auto& unit : one->units) {
+                Status before_segment_scan;
+                TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::full_rebuild:before_segment_scan", &before_segment_scan);
+                RETURN_IF_ERROR(before_segment_scan);
                 TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
                 TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
                 int64_t unit_rows = 0;
@@ -1935,7 +2106,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
             if (one->has_del_files) {
-                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version));
+                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version, force_serial_full_rebuild));
             }
         }
     }

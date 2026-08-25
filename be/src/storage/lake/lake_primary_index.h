@@ -61,7 +61,8 @@ public:
     //
     // [thread-safe]
     Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                     const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt);
+                     const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point = std::nullopt,
+                     bool force_serial_full_rebuild = false);
 
     bool is_load(int64_t base_version);
 
@@ -177,7 +178,8 @@ public:
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                         const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point);
+                         const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point,
+                         bool force_serial_full_rebuild);
 
 private:
     // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking
