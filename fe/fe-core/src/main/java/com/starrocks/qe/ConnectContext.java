@@ -40,6 +40,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -259,6 +260,12 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
+
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
+    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
+    // uses a job-owned collector because its asynchronous work must not depend on this context's
+    // statement-level reset or on a reused client context.
+    private volatile PreSplitProfile preSplitProfile;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -790,6 +797,7 @@ public class ConnectContext {
         startTime = Instant.now();
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
     }
 
     @VisibleForTesting
@@ -797,6 +805,24 @@ public class ConnectContext {
         startTime = start;
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
+    }
+
+    public PreSplitProfile getPreSplitProfile() {
+        return preSplitProfile;
+    }
+
+    public PreSplitProfile getOrCreatePreSplitProfile() {
+        PreSplitProfile current = preSplitProfile;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (preSplitProfile == null) {
+                preSplitProfile = new PreSplitProfile();
+            }
+            return preSplitProfile;
+        }
     }
 
     public void setEndTime() {
@@ -951,6 +977,24 @@ public class ConnectContext {
 
     public boolean isKilled() {
         return (parent != null && parent.isKilled()) || isKilled;
+    }
+
+    /**
+     * Whether this statement has been cancelled by any route, as opposed to {@link #isKilled()}, which
+     * only covers connection-scoped kills. {@code KILL QUERY}, a cancelled TaskRun and a closed client
+     * all call {@code kill(false, ...)}, which reaches only {@link StmtExecutor#cancel(String)} and
+     * leaves {@code isKilled} false. Use this wherever work outside query execution needs to notice
+     * cancellation -- by then the coordinator {@code cancel()} targets has usually already finished.
+     */
+    public boolean isStatementCancelled() {
+        if (isKilled()) {
+            return true;
+        }
+        StmtExecutor executorRef = executor;
+        if (executorRef != null && executorRef.isCancelled()) {
+            return true;
+        }
+        return parent != null && parent.isStatementCancelled();
     }
 
     // Set kill flag to true;

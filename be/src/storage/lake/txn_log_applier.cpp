@@ -44,6 +44,32 @@
 
 namespace starrocks::lake {
 
+// Does this rowset hold any rows? The rowset-level count alone cannot answer it: a split cross
+// publish apportions that count across the siblings, so a rowset whose segments hold this tablet's
+// rows can arrive with num_rows == 0 and be mistaken for empty. The per-segment counts are not
+// apportioned, so they settle it -- and they also keep a genuinely empty write (segments written,
+// no rows in them) out, which the segment count alone would not.
+//
+// The last clause covers a legacy rowset whose segment_metas were back-filled by
+// normalize_*_after_load from the deprecated parallel arrays, which carry no per-segment count:
+// nothing proves it empty, so it is kept.
+bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
+    if (rowset.num_rows() > 0) {
+        return true;
+    }
+    if (rowset.segment_metas_size() == 0) {
+        return false;
+    }
+    bool any_segment_counted = false;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (segment_meta.num_rows() > 0) {
+            return true;
+        }
+        any_segment_counted |= segment_meta.has_num_rows();
+    }
+    return !any_segment_counted;
+}
+
 namespace {
 
 // Non-clearing archival of the tablet's current schema before a new schema is installed: map every
@@ -204,8 +230,10 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
 
 // Build rssid_remap for DCG application during replication.
 // Maps source rssid to target rssid based on which op_writes will actually be applied.
-// For PK tables: an op_write is applied when dels_size > 0 || num_rows > 0 || has_delete_predicate.
-// For Non-PK tables: an op_write is applied when has_rowset && (num_rows > 0 || has_delete_predicate).
+// The predicates below must stay identical to the ones the two appliers use to decide whether an
+// op_write carries anything -- they model the same target_id advance.
+// For PK tables: an op_write is applied when holds_rows || dels > 0 || has_delete_predicate.
+// For Non-PK tables: an op_write is applied when has_rowset && (holds_rows || has_delete_predicate).
 std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplication& op_replication,
                                                          uint32_t start_target_id, bool is_pk) {
     std::unordered_map<uint32_t, uint32_t> rssid_remap;
@@ -216,10 +244,10 @@ std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplic
         }
         bool included = false;
         if (is_pk) {
-            included = op_write.dels_meta_size() > 0 || op_write.rowset().num_rows() > 0 ||
+            included = rowset_holds_rows(op_write.rowset()) || op_write.dels_meta_size() > 0 ||
                        op_write.rowset().has_delete_predicate();
         } else {
-            included = op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
+            included = rowset_holds_rows(op_write.rowset()) || op_write.rowset().has_delete_predicate();
         }
         if (included) {
             uint32_t source_id = op_write.rowset().id();
@@ -579,7 +607,11 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        if (op_write.dels_meta_size() == 0 && op_write.rowset().num_rows() == 0 &&
+        // Ask the segments, not just the rowset-level count: a cross publish apportions that count
+        // across the siblings, so a rowset whose segments hold this tablet's rows can arrive with
+        // num_rows == 0, and skipping on it drops those segments -- the rows are gone while the
+        // transaction reports success. See rowset_holds_rows.
+        if (!rowset_holds_rows(op_write.rowset()) && op_write.dels_meta_size() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
@@ -1120,7 +1152,10 @@ private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
-        if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
+        // Ask the segments too -- see rowset_holds_rows: num_rows is apportioned per sibling on a
+        // cross publish and cannot be the only witness that the rowset exists.
+        if (op_write.has_rowset() &&
+            (rowset_holds_rows(op_write.rowset()) || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());

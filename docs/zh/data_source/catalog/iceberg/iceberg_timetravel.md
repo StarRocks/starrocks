@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks 支持时间旅行查询历史 Iceberg 快照，使用 AS OF 子句访问指定时间点数据。"
 ---

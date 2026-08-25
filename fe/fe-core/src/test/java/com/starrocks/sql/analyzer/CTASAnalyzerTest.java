@@ -514,6 +514,19 @@ public class CTASAnalyzerTest {
         }
     }
 
+    @Test
+    public void testRepeatedAnalysisReusesInferredColumns() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table test_repeated_analysis as select cast('abc' as varchar(10)) as c;";
+        CreateTableAsSelectStmt stmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
+        Analyzer.analyze(stmt, ctx);
+
+        Assertions.assertEquals(1, stmt.getCreateTableStmt().getColumnDefs().size());
+        assertVarcharLength(stmt.getCreateTableStmt().getColumnDefs().get(0).getTypeDef(), 10);
+    }
+
     private static void assertVarcharLength(TypeDef typeDef, int expectedLength) {
         ScalarType scalarType = (ScalarType) typeDef.getType();
         Assertions.assertEquals(PrimitiveType.VARCHAR, scalarType.getPrimitiveType());

@@ -29,6 +29,8 @@
 #include "platform/key_cache.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/iterator.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
 
@@ -46,6 +48,8 @@ io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
     auto stream = rf->stream();
     return stream ? stream->get_io_stats_snapshot() : io::IoStatsSnapshot{};
 }
+
+} // namespace
 
 Status drop_corrupted_sstable_cache(const std::string& path) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -65,8 +69,6 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
     return Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
 #endif
 }
-
-} // namespace
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
                                     Cache* cache, bool need_filter, DelVectorPtr delvec,
@@ -146,6 +148,49 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
     if (auto st = builder.Finish(); !st.ok()) {
         StorageMetrics::instance()->pk_index_sst_write_error_total.increment(1);
         LOG(WARNING) << "Failed to finish PersistentIndex SST, error: " << st;
+        return st;
+    }
+    *filesz = builder.FileSize();
+    if (range_pb != nullptr) {
+        auto [key_start, key_end] = builder.KeyRange();
+        range_pb->set_start_key(key_start.to_string());
+        range_pb->set_end_key(key_end.to_string());
+    }
+    return Status::OK();
+}
+
+Status PersistentIndexSstable::build_tombstone_sstable(const Slice* sorted_keys, size_t n, int64_t version,
+                                                       WritableFile* wf, uint64_t* filesz,
+                                                       PersistentIndexSstableRangePB* range_pb) {
+    std::unique_ptr<sstable::FilterPolicy> filter_policy;
+    filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    sstable::Options options;
+    options.filter_policy = filter_policy.get();
+    sstable::TableBuilder builder(options, wf);
+    // The tombstone value is identical for every key (|version| + the NullIndexValue split), so serialize
+    // it once and reuse the same bytes for every Add. Over a large delete this avoids a per-key protobuf
+    // serialization -- the dominant cost when the sort is skipped.
+    IndexValuesWithVerPB index_value_pb;
+    auto* value = index_value_pb.add_values();
+    value->set_version(version);
+    // Tombstone encoding: rssid == rowid == UINT32_MAX (== NullIndexValue split), see is_index_tombstone().
+    value->set_rssid(std::numeric_limits<uint32_t>::max());
+    value->set_rowid(std::numeric_limits<uint32_t>::max());
+    std::string serialized;
+    index_value_pb.SerializeToString(&serialized);
+    const Slice value_slice(serialized);
+    // |sorted_keys| must be ascending; skip adjacent duplicates so a repeated key does not trip the
+    // strictly-increasing check in TableBuilder::Add. Any out-of-order key (a broken caller assumption)
+    // still surfaces as an Add error rather than silent corruption.
+    for (size_t i = 0; i < n; ++i) {
+        if (i > 0 && options.comparator->Compare(sorted_keys[i], sorted_keys[i - 1]) == 0) {
+            continue;
+        }
+        RETURN_IF_ERROR(builder.Add(sorted_keys[i], value_slice));
+    }
+    if (auto st = builder.Finish(); !st.ok()) {
+        StorageMetrics::instance()->pk_index_sst_write_error_total.increment(1);
+        LOG(WARNING) << "Failed to finish PersistentIndex tombstone SST, error: " << st;
         return st;
     }
     *filesz = builder.FileSize();
@@ -285,6 +330,28 @@ Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_
         return Status::InvalidArgument("SSTable is not initialized");
     }
     return _sst->sample_keys(keys, sample_interval_bytes);
+}
+
+Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, const Slice& seek_key,
+                                                const Slice& stop_key, size_t max_samples) const {
+    if (_sst == nullptr) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    std::vector<std::string> separators;
+    RETURN_IF_ERROR(_sst->sample_keys_in_range(&separators, seek_key, stop_key, max_samples));
+
+    sstable::ReadOptions options;
+    options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iterator(_sst->NewIterator(options));
+    for (const auto& separator : separators) {
+        iterator->Seek(Slice(separator));
+        if (!iterator->Valid()) {
+            RETURN_IF_ERROR(iterator->status());
+            continue;
+        }
+        keys->emplace_back(iterator->key().to_string());
+    }
+    return iterator->status();
 }
 
 StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(

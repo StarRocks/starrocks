@@ -16,7 +16,9 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -25,6 +27,10 @@
 namespace starrocks {
 
 class ParallelPublishContext;
+// Declared here rather than included: persistent_index_parallel_publish_context.h is not
+// self-contained (it needs MutableColumnPtr and a complete Buffer<Slice>), so pulling it in from a
+// header breaks the include order. The .cpp has it.
+struct ParallelPublishSlot;
 
 namespace lake {
 
@@ -33,6 +39,15 @@ class MetaFileBuilder;
 class TabletManager;
 class LakePersistentIndexParallelCompactMgr;
 class SegmentPKIterator;
+
+struct SegmentPKChunkRef;
+
+// Turn SegmentPKChunkRef::owned -- the mask a cross publish puts on a chunk -- into the two shapes
+// PrimaryIndex::upsert accepts. Both are no-ops on an ordinary publish, where the mask is empty.
+//
+// owned_rowids_of: absolute source-segment rowids of the owned rows, in chunk order. Read it off the
+// mask BEFORE filtering the column; filtering renumbers the survivors.
+std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current);
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
@@ -95,6 +110,14 @@ public:
     // (cloud native index only).
     Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t del_rssid);
 
+    // Same as erase(), but applies the delete by ingesting the tombstone sstable |del_sst_meta| that was
+    // pre-built at import time, instead of accumulating every tombstone in the memtable and triggering
+    // additional flushes. |pks| still supplies the keys reverse-looked-up to build the delete vector; that
+    // lookup can run in parallel in both erase paths. Cloud-native index only.
+    Status bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t del_rssid,
+                      const FileMetaPB& del_sst_meta, const PersistentIndexSstableRangePB& del_sst_range,
+                      int64_t version);
+
     int32_t current_fileset_index() const;
 
     StatusOr<AsyncCompactCBPtr> early_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr,
@@ -120,6 +143,19 @@ public:
     // 1. upsert into memtable. (serialize)
     // 2. parallel get from inactive memtables and sstables. (parallel)
     // 3. Call `flush_memtable`, and flush memtable into sstable when memtable is full. (serialize)
+    // Upsert only the rows |current.owned| marks as this tablet's, each keyed to the rowid it has in
+    // the SOURCE segment rather than its position among the survivors. |slot->pk_column| holds the
+    // encoded keys and is filtered in place.
+    //
+    // Cross publish only: an ordinary publish carries an empty mask and keeps the plain overload,
+    // which needs no per-row rowid vector and works on the in-memory index too.
+    //
+    // The slot belongs to the caller: it also carries the encoded column, whose bytes the index
+    // keeps referencing after this returns when the upsert runs asynchronously. Both call sites hand
+    // over a freshly extended slot, so the append-only scratch inside it always starts empty.
+    Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
+                        ParallelPublishContext* context);
+
     Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                            DeletesMap* new_deletes);
 

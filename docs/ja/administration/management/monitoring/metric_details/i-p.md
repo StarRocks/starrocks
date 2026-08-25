@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [非同期マテリアライズドビューのメトリクスに関するメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびスターレットダッシュボードのメトリクスに関するメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
 
 :::
 
@@ -55,37 +55,6 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 累積
 - ラベル: `compaction_type` (`manual` または `auto`)
 - 説明: Icebergコンパクション (`rewrite_data_files`) タスクの総数。
-
-## `iceberg_delete_bytes`
-
-- 単位: バイト
-- 種類: 累積
-- ラベル: `delete_type` (`position` または `metadata`)
-- 説明: Iceberg `DELETE` タスクから削除された合計バイト数。`metadata` 削除の場合、これは削除されたデータファイルのサイズを表します。`position` 削除の場合、これは作成された位置削除ファイルのサイズを表します。
-
-## `iceberg_delete_duration_ms_total`
-
-- 単位: ミリ秒
-- タイプ: 累積
-- ラベル: `delete_type` (`position`または`metadata`)
-- 説明: Iceberg `DELETE` タスクの合計実行時間（ミリ秒）。各タスクの実行時間は、終了後に加算されます。`delete_type` は、2つの削除方法を区別します。
-
-## `iceberg_delete_rows`
-
-- 単位: 行
-- タイプ: 累積
-- ラベル: `delete_type` (`position` または `metadata`)
-- 説明: Iceberg `DELETE` タスクから削除された行の合計数。`metadata` 削除の場合、これは削除されたデータファイル内の行数を表します。`position` 削除の場合、これは作成された位置削除の数を表します。
-
-## `iceberg_delete_total`
-
-- 単位: カウント
-- タイプ: 累積
-- ラベル:
-  - `status` (`success` または `failed`)
-  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
-  - `delete_type` (`position` または `metadata`)
-- 説明: Icebergテーブルをターゲットとする`DELETE`タスクの合計数。このメトリックは、各タスクの終了後、成功または失敗にかかわらず1ずつ増加します。`delete_type`は、2つの削除方法を区別します: `position` (位置削除ファイルを生成する) と `metadata` (メタデータレベルの削除)。
 
 ## `iceberg_merge_bytes`
 
@@ -245,6 +214,11 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: アプリケーションによって割り当てられた合計バイト数。
 
+## `jemalloc_dirty_bytes`
+
+- 単位: バイト
+- 説明: 未使用のダーティページ内の合計バイト数。これらのページはまだ madvise によってオペレーティングシステムに返却されておらず、ページフォールトを発生させずに新しい割り当てに再利用できます。
+
 ## `jemalloc_mapped_bytes`
 
 - 単位: バイト
@@ -259,6 +233,11 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: メタデータに使用される透過的ヒュージページの数。
+
+## `jemalloc_muzzy_bytes`
+
+- 単位: バイト
+- 説明: 未使用の muzzy ページ内の合計バイト数。muzzy はダーティページと保持（retained）ページの中間的な減衰状態で、ページは madvise（例: MADV_FREE）によって処理済みですが、アドレスマッピングはまだ保持されています。
 
 ## `jemalloc_resident_bytes`
 
@@ -585,7 +564,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - タイプ: カウンター
 - 単位: カウント
-- 説明: レイクプライマリキー永続インデックスにおけるSSTファイル読み取り失敗の総数。SSTマルチゲット（読み取り）操作が失敗した場合に増加します。
+- 説明: レイクプライマリキー永続インデックスにおけるSSTファイル読み取り失敗の総数。SSTマルチゲット（読み取り）操作が失敗した場合、または Compaction が入力SSTファイルの読み取り中にデータ破損を検出した場合に増加します。
 
 ## `pk_index_sst_write_error_total`
 

@@ -4341,6 +4341,354 @@ TEST_P(LakeVacuumTest, test_vacuum_deadline_window_too_small_to_start) {
     EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 3)));
 }
 
+// ===========================================================================
+// Incremental (bounded, resumable) vacuum protocol.
+//
+// Selected by VacuumRequest.max_versions_per_round; each round commits the
+// range carried in the request's vacuum_state (previous round's proposal),
+// walks the prev_garbage_version chain for a bounded budget, and returns the
+// next proposal in the response's vacuum_state. These tests drive the FE/BE
+// round-trip directly by feeding a round's response state into the next
+// request, and assert on the proposed [to_delete_low, to_delete_high) range,
+// the next_propose_start_version resume cursor, and which per-tablet metadata
+// files (non-bundle layout) the commit phase physically removed.
+// ===========================================================================
+
+// A fresh round proposes the full deletable band; the next round commits it (deleting the metadata
+// below the retain floor) and re-proposes empty because the pass has drained.
+TEST_P(LakeVacuumTest, test_incremental_propose_then_commit) {
+    // Chain: v4 -> v3 -> v2 -> bottom(0), all committed long before the grace timestamp.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30001, "version": 2, "prev_garbage_version": 0, "commit_time": 1000 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30001, "version": 3, "prev_garbage_version": 2, "commit_time": 1001 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30001, "version": 4, "prev_garbage_version": 3, "commit_time": 1002 })DEL")));
+
+    // Round 1: fresh round (empty vacuum_state) -- propose only, nothing is deleted.
+    VacuumRequest propose_req;
+    VacuumResponse propose_resp;
+    propose_req.set_partition_id(3000);
+    propose_req.set_min_retain_version(4);
+    propose_req.set_grace_timestamp(4000000000);
+    propose_req.set_max_versions_per_round(100);
+    auto* info = propose_req.add_tablet_infos();
+    info->set_tablet_id(30001);
+    info->set_min_version(1);
+    vacuum(_tablet_mgr.get(), propose_req, &propose_resp);
+    ASSERT_TRUE(propose_resp.has_status());
+    ASSERT_EQ(0, propose_resp.status().status_code()) << propose_resp.status().error_msgs(0);
+    ASSERT_TRUE(propose_resp.has_vacuum_state());
+    // Deletable band is [1, 4): everything strictly below the retain floor 4.
+    EXPECT_EQ(1, propose_resp.vacuum_state().to_delete_low());
+    EXPECT_EQ(4, propose_resp.vacuum_state().to_delete_high());
+    EXPECT_EQ(0, propose_resp.vacuum_state().next_propose_start_version()); // chain bottom within budget
+    EXPECT_EQ(4, propose_resp.vacuum_state().pass_start_version());         // fresh round establishes the floor
+    EXPECT_EQ(0, propose_resp.vacuumed_files());                            // propose deletes nothing
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30001, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30001, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30001, 4)));
+
+    // Round 2: feed the proposal back as the range to commit. Commit deletes [1, 4); the re-proposal is
+    // empty because the walk from the floor immediately hits the just-deleted versions (pass drained).
+    VacuumRequest commit_req;
+    VacuumResponse commit_resp;
+    commit_req.set_partition_id(3000);
+    commit_req.set_min_retain_version(4);
+    commit_req.set_grace_timestamp(4000000000);
+    commit_req.set_max_versions_per_round(100);
+    commit_req.add_tablet_infos()->CopyFrom(*info);
+    commit_req.mutable_vacuum_state()->CopyFrom(propose_resp.vacuum_state());
+    vacuum(_tablet_mgr.get(), commit_req, &commit_resp);
+    ASSERT_EQ(0, commit_resp.status().status_code()) << commit_resp.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30001, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30001, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30001, 4))); // retain floor kept
+    // Pass drained: re-proposal is empty.
+    EXPECT_GE(commit_resp.vacuum_state().to_delete_low(), commit_resp.vacuum_state().to_delete_high());
+    EXPECT_EQ(0, commit_resp.vacuum_state().next_propose_start_version());
+}
+
+// A single large prev_garbage_version hop (retain floor records prev_garbage 0, collapsing the whole
+// range into one jump) must still be clamped to the per-round budget, with the remainder carried on the
+// resume cursor -- otherwise one round would commit a range thousands of versions wide.
+TEST_P(LakeVacuumTest, test_incremental_budget_width_clamp) {
+    // Retain floor v10 points straight at the bottom: [1, 10) is one hop of width 9.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30002, "version": 10, "prev_garbage_version": 0, "commit_time": 1000 })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(10);
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(3); // small budget
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(30002);
+    info->set_min_version(1);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    ASSERT_TRUE(response.has_vacuum_state());
+    // Band clamped to the budget: [10 - 3, 10) = [7, 10), width exactly max_versions_per_round.
+    EXPECT_EQ(7, response.vacuum_state().to_delete_low());
+    EXPECT_EQ(10, response.vacuum_state().to_delete_high());
+    // Remainder carried on the resume cursor (proposed_low - 1), so the next round re-enters below the band.
+    EXPECT_EQ(6, response.vacuum_state().next_propose_start_version());
+    EXPECT_EQ(10, response.vacuum_state().pass_start_version());
+}
+
+// max_empty_walk_versions bounds the pre-anchor step-down (searching for the nearest existing version
+// below the resume cursor). A resume cursor above a hole taller than the bound makes the tablet abstain
+// (empty proposal); a bound wide enough to reach the real version below the hole anchors and proposes.
+TEST_P(LakeVacuumTest, test_incremental_max_empty_walk_versions) {
+    // Only v10 exists; a resume cursor at 20 sits above a 10-version hole [11, 20].
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30003, "version": 10, "prev_garbage_version": 0, "commit_time": 1000 })DEL")));
+
+    auto make_resume_req = [&](int64_t empty_walk, VacuumRequest* req) {
+        req->set_partition_id(3000);
+        req->set_min_retain_version(100);
+        req->set_grace_timestamp(4000000000);
+        req->set_max_versions_per_round(100);
+        req->set_max_empty_walk_versions(empty_walk);
+        auto* info = req->add_tablet_infos();
+        info->set_tablet_id(30003);
+        info->set_min_version(1);
+        // Resume round: cursor set, commit range empty (only propose).
+        req->mutable_vacuum_state()->set_next_propose_start_version(20);
+    };
+
+    // Bound 3: steps 20->19->18->17 exhaust the budget before reaching v10 -- the tablet abstains.
+    VacuumRequest narrow_req;
+    VacuumResponse narrow_resp;
+    make_resume_req(3, &narrow_req);
+    vacuum(_tablet_mgr.get(), narrow_req, &narrow_resp);
+    ASSERT_EQ(0, narrow_resp.status().status_code()) << narrow_resp.status().error_msgs(0);
+    EXPECT_GE(narrow_resp.vacuum_state().to_delete_low(), narrow_resp.vacuum_state().to_delete_high())
+            << "hole taller than max_empty_walk_versions should yield an empty proposal";
+
+    // Bound 15: the step-down reaches v10 and anchors, so a band is proposed. max_version for a resume
+    // round is resume_from + 1 = 21, and the anchored chain bottoms out at version 1.
+    VacuumRequest wide_req;
+    VacuumResponse wide_resp;
+    make_resume_req(15, &wide_req);
+    vacuum(_tablet_mgr.get(), wide_req, &wide_resp);
+    ASSERT_EQ(0, wide_resp.status().status_code()) << wide_resp.status().error_msgs(0);
+    EXPECT_EQ(1, wide_resp.vacuum_state().to_delete_low());
+    EXPECT_EQ(21, wide_resp.vacuum_state().to_delete_high());
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30003, 10))); // propose deletes nothing
+}
+
+// When every version the walk reaches is still within the grace window, the round proposes nothing and
+// deletes nothing (the whole partition range is the intersection across tablets, so one grace-blocked
+// tablet zeroes the round).
+TEST_P(LakeVacuumTest, test_incremental_grace_blocked) {
+    // All versions committed AFTER the grace timestamp (commit_time 4e9 > grace 1000): none deletable.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30004, "version": 2, "prev_garbage_version": 0, "commit_time": 4000000000 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30004, "version": 3, "prev_garbage_version": 2, "commit_time": 4000000001 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30004, "version": 4, "prev_garbage_version": 3, "commit_time": 4000000002 })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(4);
+    request.set_grace_timestamp(1000);
+    request.set_max_versions_per_round(100);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(30004);
+    info->set_min_version(1);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // Nothing proposed; every version retained.
+    EXPECT_GE(response.vacuum_state().to_delete_low(), response.vacuum_state().to_delete_high());
+    EXPECT_EQ(0, response.vacuumed_files());
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30004, 4)));
+}
+
+// End-to-end drain: a long chain under a small per-round budget takes several propose/commit rounds
+// (following the resume cursor) to reclaim everything below the retain floor. Driving the round-trip to
+// convergence must delete every garbage version and keep only the floor.
+TEST_P(LakeVacuumTest, test_incremental_multi_round_drain) {
+    // Chain v6 -> v5 -> v4 -> v3 -> v2 -> bottom(0).
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30005, "version": 2, "prev_garbage_version": 0, "commit_time": 1002 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30005, "version": 3, "prev_garbage_version": 2, "commit_time": 1003 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30005, "version": 4, "prev_garbage_version": 3, "commit_time": 1004 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30005, "version": 5, "prev_garbage_version": 4, "commit_time": 1005 })DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30005, "version": 6, "prev_garbage_version": 5, "commit_time": 1006 })DEL")));
+
+    VacuumStatePB state;    // empty -> first round is fresh
+    int64_t pass_floor = 0; // the FE captures the pass retain floor on the fresh round and holds it constant
+    bool drained = false;
+    for (int round = 0; round < 20 && !drained; round++) {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_partition_id(3000);
+        request.set_min_retain_version(6);
+        request.set_grace_timestamp(4000000000);
+        request.set_max_versions_per_round(2); // small budget -> multiple rounds
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(30005);
+        info->set_min_version(1);
+        // A fresh round is one whose walk starts from the top (no resume cursor carried in).
+        bool fresh = (state.next_propose_start_version() == 0);
+        request.mutable_vacuum_state()->CopyFrom(state);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        const auto& resp = response.vacuum_state();
+        // Mirror the FE: the BE echoes pass_start_version only on a fresh round, so capture it there and
+        // replay it on every resume round's commit (which validates pass_start_version >= delete-range high).
+        if (fresh && resp.pass_start_version() > 0) {
+            pass_floor = resp.pass_start_version();
+        }
+        state = resp;
+        state.set_pass_start_version(pass_floor);
+        // Drained once the round both proposes nothing and leaves no resume cursor.
+        drained = state.to_delete_low() >= state.to_delete_high() && state.next_propose_start_version() == 0;
+    }
+    ASSERT_TRUE(drained) << "pass did not converge within the round budget";
+    // Everything below the retain floor 6 reclaimed; only the floor remains.
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30005, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30005, 3)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30005, 4)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30005, 5)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30005, 6)));
+}
+
+// A commit that reclaims a garbage version carrying shared segments must run the shared-file liveness scan:
+// a shared file still referenced by a live rowset at the retain floor is spared; a shared file referenced only
+// by the garbage version is deleted. Exercises the incremental commit's Step 2 (collect_alive_shared_files).
+TEST_P(LakeVacuumTest, test_incremental_shared_file_cleanup) {
+    const std::string kept = "0000000000030010_00000000-0000-0000-0000-00000000000a.dat";
+    const std::string dropped = "0000000000030010_00000000-0000-0000-0000-00000000000b.dat";
+    create_data_file(kept);
+    create_data_file(dropped);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        { "id": 30010, "version": 1, "prev_garbage_version": 0, "commit_time": 1000 })DEL")));
+    // v2 (garbage): both shared segments live here as compaction inputs.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 30010, "version": 2, "prev_garbage_version": 1, "commit_time": 1001,
+            "compaction_inputs": [ { "data_size": 4096, "segment_metas": [
+                { "filename": "0000000000030010_00000000-0000-0000-0000-00000000000a.dat", "shared": true },
+                { "filename": "0000000000030010_00000000-0000-0000-0000-00000000000b.dat", "shared": true } ] } ]
+        })DEL")));
+    // v3 (retain floor): still references the "kept" shared segment in a live rowset.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 30010, "version": 3, "prev_garbage_version": 2, "commit_time": 1002,
+            "rowsets": [ { "data_size": 4096, "segment_metas": [
+                { "filename": "0000000000030010_00000000-0000-0000-0000-00000000000a.dat", "shared": true } ] } ]
+        })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(100);
+    request.set_enable_shared_file_cleanup(true);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(30010);
+    info->set_min_version(1);
+    auto* vs = request.mutable_vacuum_state();
+    vs->set_to_delete_low(2);
+    vs->set_to_delete_high(3);
+    vs->set_pass_start_version(3);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // "kept" is still referenced at the floor -> spared; "dropped" is garbage-only -> deleted; v2 meta gone.
+    EXPECT_TRUE(file_exist(kept));
+    EXPECT_FALSE(file_exist(dropped));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(30010, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(30010, 3)));
+}
+
+// The retain floor is a batch-publish hole on this tablet (no v3), but a materialized snapshot at v4 above it
+// still references the shared segment. The liveness scan must step UP from the hole floor to v4 to find the
+// live reference and spare the file (step-up "anchored" INFO path).
+TEST_P(LakeVacuumTest, test_incremental_shared_stepup_anchored) {
+    const std::string shared = "0000000000030020_00000000-0000-0000-0000-00000000000c.dat";
+    create_data_file(shared);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 30020, "version": 2, "prev_garbage_version": 1, "commit_time": 1000,
+            "compaction_inputs": [ { "data_size": 4096, "segment_metas": [
+                { "filename": "0000000000030020_00000000-0000-0000-0000-00000000000c.dat", "shared": true } ] } ]
+        })DEL")));
+    // No version 3 -> the retain floor is a hole; v4 above it references the shared segment in a live rowset.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 30020, "version": 4, "prev_garbage_version": 1, "commit_time": 1002,
+            "rowsets": [ { "data_size": 4096, "segment_metas": [
+                { "filename": "0000000000030020_00000000-0000-0000-0000-00000000000c.dat", "shared": true } ] } ]
+        })DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(4);
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(100);
+    request.set_max_empty_walk_versions(5);
+    request.set_enable_shared_file_cleanup(true);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(30020);
+    info->set_min_version(1);
+    auto* vs = request.mutable_vacuum_state();
+    vs->set_to_delete_low(2);
+    vs->set_to_delete_high(3);
+    vs->set_pass_start_version(3);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // Step-up from hole floor 3 to materialized v4 finds the live reference -> shared file spared.
+    EXPECT_TRUE(file_exist(shared));
+}
+
+// The retain floor is a hole and NO materialized snapshot exists within max_empty_walk_versions above it, so
+// the liveness scan cannot resolve the tablet's references and abandons shared cleanup this round (clear),
+// keeping all candidates (step-up "abandoned" WARNING/clear path).
+TEST_P(LakeVacuumTest, test_incremental_shared_stepup_abandoned) {
+    const std::string shared = "0000000000030021_00000000-0000-0000-0000-00000000000d.dat";
+    create_data_file(shared);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 30021, "version": 2, "prev_garbage_version": 1, "commit_time": 1000,
+            "compaction_inputs": [ { "data_size": 4096, "segment_metas": [
+                { "filename": "0000000000030021_00000000-0000-0000-0000-00000000000d.dat", "shared": true } ] } ]
+        })DEL")));
+    // No version >= 3: the floor and everything within the step-up bound above it are holes.
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_partition_id(3000);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(4000000000);
+    request.set_max_versions_per_round(100);
+    request.set_max_empty_walk_versions(2);
+    request.set_enable_shared_file_cleanup(true);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(30021);
+    info->set_min_version(1);
+    auto* vs = request.mutable_vacuum_state();
+    vs->set_to_delete_low(2);
+    vs->set_to_delete_high(3);
+    vs->set_pass_start_version(3);
+    vacuum(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // No materialized snapshot within the bound -> shared cleanup abandoned, candidate kept.
+    EXPECT_TRUE(file_exist(shared));
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 

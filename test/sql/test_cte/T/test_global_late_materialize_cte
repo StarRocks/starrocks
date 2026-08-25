@@ -1,0 +1,61 @@
+-- name: test_global_late_materialize_cte
+CREATE TABLE `lm_t` (
+  `k1` bigint NULL,
+  `v1` varchar(255) NULL,
+  `v2` varchar(255) NULL,
+  `v3` varchar(255) NULL,
+  `v9` varchar(255) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO lm_t VALUES
+(1, 'a1', 'x', 'c1', 'm1'),
+(2, 'a2', 'x', 'c2', 'm2'),
+(3, 'a3', 'y', 'c3', 'm3'),
+(4, 'a4', 'y', 'c4', 'm4'),
+(5, 'a5', 'x', 'c5', 'm5'),
+(6, 'a6', 'z', 'c6', 'm6'),
+(7, 'a7', 'z', 'c7', 'm7'),
+(8, 'a8', 'x', 'c8', 'm8'),
+(9, 'a9', 'y', 'c9', 'm9'),
+(10, 'a10', 'z', 'c10', 'm10');
+-- The defect needs a materialized CTE rather than an inlined one, and global late
+-- materialization. Both are off for most plan tests, so set them explicitly.
+set cbo_cte_reuse_rate = 0;
+set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
+-- Pin the low-cardinality rewrite off. It is unrelated to what this tests, and leaving it on
+-- makes the outcome depend on whether a global dictionary happened to be collected for v1/v2:
+-- where one was, these statements failed with "Dict Decode failed, Dict can't take cover all
+-- key", which is a separate defect in the dictionary-plus-late-materialization path.
+set cbo_enable_low_cardinality_optimize = false;
+set low_cardinality_optimize_v2 = false;
+-- A CTE consumed on both sides of an outer join whose ON clause reads a late-materialized
+-- column of the left side. The fetch of that column used to be pushed into whichever child
+-- merely depended on the same scan -- the right side, which consumes the same CTE -- and was
+-- then dropped from the join itself, leaving the join's own predicate reading a column no
+-- input produced: "Invalid plan: ... required cols {n} cannot obtain from input cols".
+--
+-- `a.v1 = a.k1` compares a varchar against a bigint and both sides come from the left input,
+-- which is what forces a NestLoopJoin and keeps the predicate on the late-materialized column.
+-- It matches nothing here, so every left row survives exactly once and the LIMIT never has to
+-- break a tie.
+with c1 as (select k1, v1, v2 from lm_t order by k1 limit 5),
+     c2 as (select count(*) as n from lm_t),
+     c3 as (select y.k1 as k, count(*) as cnt, max(x.v9) as m from lm_t x
+            join c1 y on y.k1 = x.k1 group by y.k1)
+select c2.n, a.k1, a.v1, a.v2, coalesce(z.cnt, 13) as cnt, z.m
+from c1 a cross join c2 left outer join c3 z on a.v1 = a.k1
+order by a.k1 limit 14;
+-- A CTE consumer carrying its own predicate. Nothing told late materialization that the
+-- predicate's column has to exist by the time the consumer runs, so the column stayed deferred
+-- and the fragment builder could not turn its column ref into an expression: "Cannot convert
+-- ColumnRefOperator to Expr".
+with c as (select k1, v1, v2, v3 from lm_t),
+     d as (select count(*) as n from c where v2 = 'x')
+select a.k1, a.v1, d.n from c a cross join d order by a.k1 limit 5;
+-- Same shape, but the consumer's predicate reads a column the outer select never asks for.
+with c as (select k1, v1, v2, v3 from lm_t),
+     d as (select count(*) as n from c where v3 = 'c7')
+select a.k1, a.v2, d.n from c a cross join d order by a.k1 limit 5;

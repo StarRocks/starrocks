@@ -833,6 +833,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_meta : txn_log.op_write().dels_meta()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built tombstone sstables (empty name = del file had no sstable)
+        for (const auto& del_sst : txn_log.op_write().del_ssts()) {
+            if (!del_sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+            }
+        }
         collect_vi_files(txn_log.op_write().rowset());
     }
     if (txn_log.has_op_compaction()) {
@@ -867,6 +873,11 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             }
             for (const auto& del_meta : op_write.dels_meta()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
+            }
+            for (const auto& del_sst : op_write.del_ssts()) {
+                if (!del_sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+                }
             }
             collect_vi_files(op_write.rowset());
         }

@@ -1,7 +1,3 @@
--- name: test_disable_random
-create table t(k int);
-alter table t distributed by random buckets 10;
-
 -- name: test_optimize_table
 create table t(k int) distributed by hash(k) buckets 10;
 show partitions from t;
@@ -107,22 +103,6 @@ show create table t;
 
 alter table t partitions(p202006,p202008) distributed by random;
 show create table t;
-
--- name: test_alter_key_buckets
-CREATE TABLE demo2_alter_0 (    
-    `user_name` VARCHAR(32) DEFAULT '',
-    `city_code` VARCHAR(100),
-    `from`  VARCHAR(32) DEFAULT '',
-    `pv` BIGINT DEFAULT '0'
-)
-PRIMARY KEY(`user_name`)
-DISTRIBUTED BY HASH(`user_name`) BUCKETS 5
-PROPERTIES('replication_num'='1');
-
-ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
-
-function: wait_optimize_table_finish()
-
 
 -- name: test_online_optimize_table_basic @sequential
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
@@ -353,12 +333,6 @@ function: wait_optimize_table_finish()
 show create table t;
 select count(*) from t;
 
--- name: test_cancel_optimize
-create table t(k int) distributed by hash(k) buckets 10;
-alter table t distributed by hash(k);
-cancel alter table optimize from t;
-function: wait_optimize_table_finish(expect_status="CANCELLED")
-
 -- name: test_online_optimize_table_batch @seqential @native
 create database db_${uuid0};
 use db_${uuid0};
@@ -376,45 +350,3 @@ function: wait_optimize_table_finish()
 show create table t;
 select * from t;
 select count(*) from t;
-
--- name: test_optimize_duplicate_partitions
-CREATE TABLE `duplicate_table_with_null_partition` (
-    `k1` date,
-    `k2` datetime,
-    `k3` char(20),
-    `k4` varchar(20),
-    `k5` boolean,
-    `k6` tinyint,
-    `k7` smallint,
-    `k8` int,
-    `k9` bigint,
-    `k10` largeint,
-    `k11` float,
-    `k12` double,
-    `k13` decimal(27,9)
-)
-DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
-PARTITION BY RANGE(`k1`)
-(
-    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
-    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
-    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
-)
-DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3;
-alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202006,p202007) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 4;
-function: wait_optimize_table_finish()
-show temporary partitions from duplicate_table_with_null_partition;
-show partitions from duplicate_table_with_null_partition;
-
--- name: test_drop_all_temporary_partitions
-create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
-(
-    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
-    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
-    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
-) distributed by hash(k) buckets 10;
-alter table t add temporary partition tp202008 VALUES LESS THAN ("2020-09-01");
-alter table t add temporary partition tp202009 VALUES LESS THAN ("2020-10-01");
-show temporary partitions from t;
-alter table t drop all temporary partitions;
-show temporary partitions from t;

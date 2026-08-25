@@ -39,14 +39,17 @@
 namespace starrocks {
 
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
+// The `compare_at` result is multiplied by `sort_order`, so the null hint must be `null_first`, which already
+// carries the `sort_order` factor. Using `nan_direction()` here would cancel that factor out and place the NULLs
+// at the opposite end of a descending run, disagreeing with how the runs themselves were sorted.
 inline int compare_column(const ColumnPtr& lc, size_t m, const ColumnPtr& rc, size_t n, const SortDesc* sort_desc) {
     int sort_order = 1;
-    int nan_direction = -1;
+    int null_first = -1;
     if (sort_desc) {
         sort_order = sort_desc->sort_order;
-        nan_direction = sort_desc->nan_direction();
+        null_first = sort_desc->null_first;
     }
-    return lc->compare_at(m, n, *rc, nan_direction) * sort_order;
+    return lc->compare_at(m, n, *rc, null_first) * sort_order;
 }
 
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
@@ -827,8 +830,12 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
 // The order of rows is determinate by mask sequence.
 class MaskMergeIterator final : public MergeIterator {
 public:
-    explicit MaskMergeIterator(std::vector<ChunkIteratorPtr> children, RowSourceMaskBuffer* mask_buffer)
-            : MergeIterator(std::move(children)), _chunks(_children.size()), _mask_buffer(mask_buffer) {
+    explicit MaskMergeIterator(std::vector<ChunkIteratorPtr> children, RowSourceMaskBuffer* mask_buffer,
+                               RowSourceMaskBuffer* selection_buffer)
+            : MergeIterator(std::move(children)),
+              _chunks(_children.size()),
+              _mask_buffer(mask_buffer),
+              _selection_buffer(selection_buffer) {
         DCHECK(_mask_buffer);
     }
 
@@ -841,6 +848,11 @@ protected:
 private:
     std::vector<MergingChunk> _chunks;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    // Optional row-selection stream aligned one-to-one with _mask_buffer. A non-zero
+    // source number means keep the row; zero means consume it from the source iterator
+    // without appending it. Vertical UNSHARE compaction records this stream while
+    // processing the key group and replays it for every value group.
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
 };
 
 inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
@@ -854,6 +866,12 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
     if (!st_or.ok()) {
         return st_or.status();
     }
+    if (_selection_buffer != nullptr) {
+        ASSIGN_OR_RETURN(bool selection_remaining, _selection_buffer->has_remaining());
+        if (selection_remaining != st_or.value()) {
+            return Status::InternalError("row-source mask and selection buffers have different lengths");
+        }
+    }
     while (st_or.value() && rows < _chunk_size) {
         RowSourceMask mask = _mask_buffer->current();
         uint16_t child = mask.get_source_num();
@@ -864,10 +882,38 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         }
         DCHECK_GT(min_chunk.remaining_rows(), 0);
 
+        // A filtered row is still represented in the source mask so every value-group
+        // child advances over exactly the same physical rows as the key group. It is not
+        // emitted to the output chunk.
+        if (_selection_buffer != nullptr && _selection_buffer->current().get_source_num() == 0) {
+            min_chunk.advance(1);
+            _mask_buffer->advance();
+            _selection_buffer->advance();
+            if (min_chunk.remaining_rows() == 0) {
+                st = fill(child);
+                if (!st.ok() && !st.is_end_of_file()) {
+                    return st;
+                }
+            }
+            st_or = _mask_buffer->has_remaining();
+            if (!st_or.ok()) {
+                return st_or.status();
+            }
+            ASSIGN_OR_RETURN(bool selection_remaining, _selection_buffer->has_remaining());
+            if (selection_remaining != st_or.value()) {
+                return Status::InternalError("row-source mask and selection buffers have different lengths");
+            }
+            continue;
+        }
+
         size_t offset = min_chunk.compared_row();
         size_t min_chunk_num_rows = min_chunk._chunk->num_rows();
         size_t append_row_num = 0;
         size_t max_same_source_count = _mask_buffer->max_same_source_count(child, min_chunk.remaining_rows());
+        if (_selection_buffer != nullptr) {
+            max_same_source_count = std::min(max_same_source_count, _selection_buffer->max_same_source_count(
+                                                                            /*source=*/1, max_same_source_count));
+        }
         if (max_same_source_count == min_chunk_num_rows) {
             DCHECK(offset == 0);
             // all rows in |min_chunk| are from the same source chunk and |min_chunk|'s current offset is 0,
@@ -879,6 +925,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
                         source_masks->emplace_back(_mask_buffer->current());
                     }
                     _mask_buffer->advance();
+                    if (_selection_buffer != nullptr) {
+                        _selection_buffer->advance();
+                    }
                 }
                 return refill(child);
             } else {
@@ -904,6 +953,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
                 source_masks->emplace_back(_mask_buffer->current());
             }
             _mask_buffer->advance();
+            if (_selection_buffer != nullptr) {
+                _selection_buffer->advance();
+            }
         }
 
         DCHECK_LE(rows, _chunk_size);
@@ -918,6 +970,12 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         st_or = _mask_buffer->has_remaining();
         if (!st_or.ok()) {
             return st_or.status();
+        }
+        if (_selection_buffer != nullptr) {
+            ASSIGN_OR_RETURN(bool selection_remaining, _selection_buffer->has_remaining());
+            if (selection_remaining != st_or.value()) {
+                return Status::InternalError("row-source mask and selection buffers have different lengths");
+            }
         }
     }
     if (!st.ok()) {
@@ -966,12 +1024,12 @@ inline Status MaskMergeIterator::commit_slot(size_t child, size_t slot) {
 }
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         RowSourceMaskBuffer* mask_buffer) {
-    if (children.size() == 1) {
+                                         RowSourceMaskBuffer* mask_buffer, RowSourceMaskBuffer* selection_buffer) {
+    if (children.size() == 1 && selection_buffer == nullptr) {
         return children[0];
     }
-    DCHECK(children.size() > 1 && children.size() <= RowSourceMask::MAX_SOURCES);
-    return std::make_shared<MaskMergeIterator>(children, mask_buffer);
+    DCHECK(!children.empty() && children.size() <= RowSourceMask::MAX_SOURCES);
+    return std::make_shared<MaskMergeIterator>(children, mask_buffer, selection_buffer);
 }
 
 } // namespace starrocks

@@ -16,6 +16,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.LoadKind;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -347,7 +349,12 @@ public class StmtExecutorTest {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ConnectContext.threadLocalInfo.set(ctx);
         StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+        ConnectContext executorContext = new ConnectContext();
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(executorContext, LoadKind.INSERT_FROM_TABLE)) {
+            // A completed attempt is enough to make the diagnostic node visible.
+        }
+        StmtExecutor executor = new StmtExecutor(executorContext, stmt);
         RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
 
         Assertions.assertNotNull(profile);
@@ -356,6 +363,7 @@ public class StmtExecutorTest {
         Assertions.assertNotNull(summaryProfile);
         Assertions.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
+        Assertions.assertNotNull(profile.getChild(PreSplitProfile.PROFILE_NAME));
     }
 
     @Test

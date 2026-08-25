@@ -1044,7 +1044,7 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupStmt() {
         ShowResourceGroupStmt stmt = new ShowResourceGroupStmt("test_group", false, false, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(12, metaData.getColumnCount());
+        Assertions.assertEquals(13, metaData.getColumnCount());
         Assertions.assertEquals("name", metaData.getColumn(0).getName());
         Assertions.assertEquals("id", metaData.getColumn(1).getName());
         Assertions.assertEquals("cpu_weight_percent", metaData.getColumn(2).getName());
@@ -1055,8 +1055,9 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("big_query_mem_limit", metaData.getColumn(7).getName());
         Assertions.assertEquals("concurrency_limit", metaData.getColumn(8).getName());
         Assertions.assertEquals("spill_mem_limit_threshold", metaData.getColumn(9).getName());
-        Assertions.assertEquals("classifiers", metaData.getColumn(10).getName());
-        Assertions.assertEquals("warehouses", metaData.getColumn(11).getName());
+        Assertions.assertEquals("mem_used_pct_limit", metaData.getColumn(10).getName());
+        Assertions.assertEquals("classifiers", metaData.getColumn(11).getName());
+        Assertions.assertEquals("warehouses", metaData.getColumn(12).getName());
     }
 
     @Test
@@ -1344,10 +1345,30 @@ public class ShowStmtMetaTest {
     public void testShowSnapshotStmt() {
         ShowSnapshotStmt stmt = new ShowSnapshotStmt("test_db", null, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(3, metaData.getColumnCount());
+        Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Snapshot", metaData.getColumn(0).getName());
         Assertions.assertEquals("Timestamp", metaData.getColumn(1).getName());
         Assertions.assertEquals("Status", metaData.getColumn(2).getName());
+        Assertions.assertEquals("ClusterId", metaData.getColumn(3).getName());
+        Assertions.assertEquals("FinishTime", metaData.getColumn(4).getName());
+        Assertions.assertEquals("TTL", metaData.getColumn(5).getName());
+        Assertions.assertEquals("ExpireTime", metaData.getColumn(6).getName());
+    }
+
+    @Test
+    public void testShowSnapshotStmtWithTimestamp() {
+        ShowSnapshotStmt stmt = new ShowSnapshotStmt("test_db", null, NodePosition.ZERO);
+        stmt.setSnapshotName("backup1");
+        stmt.setTimestamp("2018-05-05-15-34-26");
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(9, metaData.getColumnCount());
+        Assertions.assertEquals("Database", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Details", metaData.getColumn(3).getName());
+        Assertions.assertEquals("Status", metaData.getColumn(4).getName());
+        Assertions.assertEquals("ClusterId", metaData.getColumn(5).getName());
+        Assertions.assertEquals("FinishTime", metaData.getColumn(6).getName());
+        Assertions.assertEquals("TTL", metaData.getColumn(7).getName());
+        Assertions.assertEquals("ExpireTime", metaData.getColumn(8).getName());
     }
 
     @Test
@@ -1504,11 +1525,14 @@ public class ShowStmtMetaTest {
     public void testShowFailPointStatement() {
         ShowFailPointStatement stmt = new ShowFailPointStatement(null, null, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(4, metaData.getColumnCount());
+        Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("TriggerMode", metaData.getColumn(1).getName());
         Assertions.assertEquals("Times/Probability", metaData.getColumn(2).getName());
         Assertions.assertEquals("Host", metaData.getColumn(3).getName());
+        // Appended after Host so existing positional consumers keep working.
+        Assertions.assertEquals("TriggerCount", metaData.getColumn(4).getName());
+        Assertions.assertEquals("PausedThreads", metaData.getColumn(5).getName());
     }
 
     @Test

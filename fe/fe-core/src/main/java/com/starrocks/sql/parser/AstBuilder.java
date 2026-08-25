@@ -203,6 +203,7 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -954,12 +955,28 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return listPartitionDesc;
     }
 
+    /**
+     * A partition expression reaches us through the generic functionCall rule, but not every function
+     * call comes back as a FunctionCallExpr: the DATE_FUNCTIONS family (date_add, adddate, date_sub,
+     * subdate, days_sub) is rewritten into a TimestampArithmeticExpr while it is being parsed. Casting
+     * blindly leaked a ClassCastException to the client, so reject those the same way the RANGE(...)
+     * partition path already does.
+     */
+    private FunctionCallExpr getPartitionFunctionCallExpr(ParseNode node, NodePosition pos) {
+        if (!(node instanceof FunctionCallExpr)) {
+            String exprSql = node instanceof Expr ? ExprToSql.toSql((Expr) node) : String.valueOf(node);
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "PARTITION BY"), pos);
+        }
+        return (FunctionCallExpr) node;
+    }
+
     private PartitionDesc getPartitionDesc(com.starrocks.sql.parser.StarRocksParser.PartitionDescContext context,
                                            List<ColumnDef> columnDefs) {
         List<PartitionDesc> partitionDescList = new ArrayList<>();
         // for automatic partition
         if (context.functionCall() != null) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+            FunctionCallExpr functionCallExpr =
+                    getPartitionFunctionCallExpr(visit(context.functionCall()), createPos(context));
             String functionName = functionCallExpr.getFunctionName();
             // except date_trunc, time_slice use generated column as partition column
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)
@@ -1028,7 +1045,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                         Identifier identifier = (Identifier) visit(partitionExpr.identifier());
                         multiDescList.add(identifier);
                     } else if (partitionExpr.functionCall() != null) {
-                        FunctionCallExpr expr = (FunctionCallExpr) visit(partitionExpr.functionCall());
+                        FunctionCallExpr expr =
+                                getPartitionFunctionCallExpr(visit(partitionExpr.functionCall()), createPos(context));
                         multiDescList.add(expr);
                     } else {
                         throw new ParsingException("Partition column list is empty", createPos(context));
@@ -4384,6 +4402,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new DropRepositoryStmt(((Identifier) visit(context.identifier())).getValue(), createPos(context));
     }
 
+    // ----------------------------------------------- Snapshot Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitDropSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropSnapshotStatementContext context) {
+        String snapshotName = ((Identifier) visit(context.snapshotName)).getValue();
+        String repoName = ((Identifier) visit(context.repoName)).getValue();
+        return new DropSnapshotStmt(snapshotName, repoName, context.FORCE() != null, createPos(context));
+    }
+
     // -------------------------------- Sql BlackList And WhiteList Statement ------------------------------------------
 
     @Override
@@ -4977,6 +5005,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                             "Invalid PROBABILITY value %f, it should be in range [0, 1]", probability));
                 }
                 return new UpdateFailPointStatusStatement(failpointName, probability, backendList, createPos(ctx));
+            } else if (ctx.PAUSE() != null) {
+                return UpdateFailPointStatusStatement.pauseStatement(failpointName, backendList, createPos(ctx));
             }
             return new UpdateFailPointStatusStatement(failpointName, true, backendList, createPos(ctx));
         } else {
@@ -9283,7 +9313,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         List<PartitionDesc> partitionDescList = new ArrayList<>();
         com.starrocks.sql.parser.StarRocksParser.IdentifierListContext identifierListContext = context.identifierList();
         if (context.functionCall() != null) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+            FunctionCallExpr functionCallExpr =
+                    getPartitionFunctionCallExpr(visit(context.functionCall()), createPos(context));
             String functionName = functionCallExpr.getFunctionName();
             // except date_trunc, time_slice, str_to_date use generated column as partition column
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)
@@ -9307,7 +9338,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                         Identifier identifier = (Identifier) visit(partitionExpr.identifier());
                         multiDescList.add(identifier);
                     } else if (partitionExpr.functionCall() != null) {
-                        FunctionCallExpr expr = (FunctionCallExpr) visit(partitionExpr.functionCall());
+                        FunctionCallExpr expr =
+                                getPartitionFunctionCallExpr(visit(partitionExpr.functionCall()), createPos(context));
                         multiDescList.add(expr);
                     } else {
                         throw new ParsingException("Partition column list is empty", createPos(context));

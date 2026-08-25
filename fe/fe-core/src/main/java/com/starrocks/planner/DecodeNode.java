@@ -125,7 +125,7 @@ public class DecodeNode extends PlanNode {
 
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                 candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl)), 0, true);
     }
 
     @Override
@@ -152,5 +152,12 @@ public class DecodeNode extends PlanNode {
 
     public Map<Integer, Integer> getDictIdToStringIds() {
         return dictIdToStringIds;
+    }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a decode operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
     }
 }

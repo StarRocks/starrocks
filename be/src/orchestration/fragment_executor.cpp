@@ -352,10 +352,10 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
 
 // Mark every scan whose output is reduced by a row-filtering operator (a SELECT carrying a residual
 // predicate that could not be pushed into the scan) sitting ABOVE it but below the TopN limit. An ANN
-// top-k scan consumes this so its filter resolver uses the exact brute-force path instead of a
-// segment-level k-limit that would under-return. This observes the real execution tree (not a planner
-// heuristic), so it stays correct regardless of how single-column predicates are placed. A TopN resets
-// the marker: a filter above the limit is applied post-limit and cannot break completeness.
+// top-k scan consumes this so its filter resolver can apply the configured underfill fallback policy.
+// This observes the real execution tree (not a planner heuristic), so the marker stays accurate
+// regardless of how single-column predicates are placed. A TopN resets the marker: a filter above the
+// limit is applied post-limit and cannot affect the scan's top-k completeness.
 static void mark_filtered_above_scans(ExecNode* node, bool saw_filter) {
     switch (node->type()) {
     case TPlanNodeType::SORT_NODE:
@@ -375,41 +375,6 @@ static void mark_filtered_above_scans(ExecNode* node, bool saw_filter) {
     for (auto* child : node->children()) {
         mark_filtered_above_scans(child, saw_filter);
     }
-}
-
-static void collect_non_broadcast_rf_ids(const ExecNode* node, std::unordered_set<int32_t>& filter_ids) {
-    for (const auto* child : node->children()) {
-        collect_non_broadcast_rf_ids(child, filter_ids);
-    }
-    if (node->type() == TPlanNodeType::HASH_JOIN_NODE) {
-        const auto* join_node = down_cast<const HashJoinNode*>(node);
-        if (join_node->distribution_mode() != TJoinDistributionMode::BROADCAST) {
-            for (const auto* rf : join_node->build_runtime_filters()) {
-                filter_ids.insert(rf->filter_id());
-            }
-        }
-    }
-}
-
-static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
-        const ExecNode* node, BroadcastJoinRightOffsprings& broadcast_join_right_offsprings) {
-    std::vector<std::unordered_set<int32_t>> offsprings_per_child;
-    std::unordered_set<int32_t> offsprings;
-    offsprings_per_child.reserve(node->children().size());
-    for (const auto* child : node->children()) {
-        auto child_offspring = collect_broadcast_join_right_offsprings(child, broadcast_join_right_offsprings);
-        offsprings.insert(child_offspring.begin(), child_offspring.end());
-        offsprings_per_child.push_back(std::move(child_offspring));
-    }
-    offsprings.insert(node->id());
-    if (node->type() == TPlanNodeType::HASH_JOIN_NODE) {
-        const auto* join_node = down_cast<const HashJoinNode*>(node);
-        if (join_node->distribution_mode() == TJoinDistributionMode::BROADCAST &&
-            join_node->can_generate_global_runtime_filter()) {
-            broadcast_join_right_offsprings.insert(offsprings_per_child[1].begin(), offsprings_per_child[1].end());
-        }
-    }
-    return offsprings;
 }
 
 Status FragmentExecutor::add_scan_ranges_partition_values(RuntimeState* runtime_state,
@@ -488,13 +453,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     RETURN_IF_ERROR(ExecFactory::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl,
                                              &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
-    std::unordered_set<int32_t> filter_ids;
-    collect_non_broadcast_rf_ids(plan, filter_ids);
-    runtime_state->set_non_broadcast_rf_ids(std::move(filter_ids));
-    BroadcastJoinRightOffsprings broadcast_join_right_offsprings_map;
-    collect_broadcast_join_right_offsprings(plan, broadcast_join_right_offsprings_map);
-    runtime_state->set_broadcast_join_right_offsprings(std::move(broadcast_join_right_offsprings_map));
-    plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
     runtime_state->set_fragment_root_id(plan->id());
@@ -768,6 +726,26 @@ static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGro
     }
 }
 
+bool FragmentExecutor::is_final_sink_type(TDataSinkType::type type) {
+    switch (type) {
+    case TDataSinkType::RESULT_SINK:
+    case TDataSinkType::OLAP_TABLE_SINK:
+    case TDataSinkType::MULTI_OLAP_TABLE_SINK:
+    case TDataSinkType::MEMORY_SCRATCH_SINK:
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
+    case TDataSinkType::HIVE_TABLE_SINK:
+    case TDataSinkType::TABLE_FUNCTION_TABLE_SINK:
+    case TDataSinkType::EXPORT_SINK:
+    case TDataSinkType::BLACKHOLE_TABLE_SINK:
+    case TDataSinkType::DICTIONARY_CACHE_SINK:
+        return true;
+    default:
+        return false;
+    }
+}
+
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
@@ -789,11 +767,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
         const auto& tsink = request.output_sink();
-        if (tsink.type == TDataSinkType::RESULT_SINK || tsink.type == TDataSinkType::OLAP_TABLE_SINK ||
-            tsink.type == TDataSinkType::MULTI_OLAP_TABLE_SINK || tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK ||
-            tsink.type == TDataSinkType::ICEBERG_TABLE_SINK || tsink.type == TDataSinkType::HIVE_TABLE_SINK ||
-            tsink.type == TDataSinkType::EXPORT_SINK || tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK ||
-            tsink.type == TDataSinkType::DICTIONARY_CACHE_SINK) {
+        if (is_final_sink_type(tsink.type)) {
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,

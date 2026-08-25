@@ -115,8 +115,8 @@ public class MergeTabletJob extends TabletReshardJob {
 
     @Override
     public void init() throws StarRocksException {
-        try {
-            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            reserveTableForReshard(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         } catch (TabletReshardException e) {
             // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
             // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
@@ -213,6 +213,12 @@ public class MergeTabletJob extends TabletReshardJob {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
                 if (physicalPartition == null) {
+                    // The partition was dropped mid-job (DROP PARTITION / TRUNCATE are permitted while
+                    // the table is in TABLET_RESHARD). Its publish will never be retried again, so drop
+                    // any failure reason it left behind instead of reporting a failure that can no
+                    // longer recover -- note this skip also leaves allPartitionFinished alone, so the
+                    // job goes on to finish.
+                    reshardingPhysicalPartition.setPublishFailureReason(null);
                     continue;
                 }
 
@@ -227,6 +233,20 @@ public class MergeTabletJob extends TabletReshardJob {
                         || publishResult.publishState() == PublishState.FAILED) {
                     // Publish not started or publish failed
                     allPartitionFinished = false;
+                    // Remember why THIS partition's publish failed so a job stuck retrying can
+                    // explain itself; without it ERROR_MESSAGE is empty and the cause lives only in
+                    // fe.log. Kept until this partition publishes (an IN_PROGRESS retry must not
+                    // blank it) and scoped per partition so recovery here is not masked by a
+                    // sibling partition that is still retrying.
+                    if (publishResult.publishState() == PublishState.FAILED) {
+                        reshardingPhysicalPartition.setPublishFailureReason(publishResult.failureReason());
+                        // A failed publish is retried until it succeeds, but only once its backoff has
+                        // elapsed: resubmitting the same doomed publish on every tick of the reshard
+                        // daemon is what turned one stuck publish into a hot loop.
+                        if (!reshardingPhysicalPartition.isPublishRetryDue()) {
+                            continue;
+                        }
+                    }
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
@@ -239,6 +259,8 @@ public class MergeTabletJob extends TabletReshardJob {
                     // Publish is in progress
                     allPartitionFinished = false;
                 } else if (publishResult.publishState() == PublishState.SUCCESS) {
+                    // This partition published: its earlier failure (if any) has recovered.
+                    reshardingPhysicalPartition.setPublishFailureReason(null);
                     // Publish success, update new tablet ranges
                     Map<Long, TabletRange> tabletRanges = publishResult.tabletRanges();
                     for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
@@ -289,7 +311,9 @@ public class MergeTabletJob extends TabletReshardJob {
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
      * 4. Set tablet state to NORMAL
-     * 5. Set job state to FINISHED
+     * 5. Update metrics
+     * 6. Release the merged shards' creation-time placement pin
+     * 7. Set job state to FINISHED
      */
     @Override
     protected void runCleaningJob() {
@@ -322,7 +346,11 @@ public class MergeTabletJob extends TabletReshardJob {
             MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(System.currentTimeMillis() - createdTimeMs);
         }
 
-        // 6. Set job state to FINISHED
+        // 6. Release the merged shards' creation-time placement pin so the balancer can spread them
+        //    now, instead of when the source shards are finally reclaimed tens of minutes later.
+        clearPlacementPreference(reshardingPhysicalPartitions);
+
+        // 7. Set job state to FINISHED
         setJobState(JobState.FINISHED);
     }
 
@@ -465,6 +493,19 @@ public class MergeTabletJob extends TabletReshardJob {
         return sb.toString();
     }
 
+    // First partition currently retrying a failed publish, or null when none is. Read live from the
+    // per-partition state so a partition that recovers drops out without any job-level bookkeeping.
+    @Override
+    protected String anyPublishFailureReason() {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            String reason = reshardingPhysicalPartition.getPublishFailureReason();
+            if (reason != null) {
+                return reason;
+            }
+        }
+        return null;
+    }
+
     @Override
     public TTabletReshardJobsItem getInfo() {
         TTabletReshardJobsItem item = new TTabletReshardJobsItem();
@@ -473,7 +514,6 @@ public class MergeTabletJob extends TabletReshardJob {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             item.setDb_name("");
-            LOG.warn("Failed to get database name for tablet reshard job. {}", this);
         } else {
             item.setDb_name(db.getFullName());
         }
@@ -482,7 +522,6 @@ public class MergeTabletJob extends TabletReshardJob {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) {
             item.setTable_name("");
-            LOG.warn("Failed to get table name for tablet reshard job. {}", this);
         } else {
             item.setTable_name(table.getName());
         }
@@ -493,11 +532,7 @@ public class MergeTabletJob extends TabletReshardJob {
         item.setParallel_tablets(getParallelTablets());
         item.setCreated_time(createdTimeMs / 1000);
         item.setFinished_time(finishedTimeMs / 1000);
-        if (errorMessage != null) {
-            item.setError_message(errorMessage);
-        } else {
-            item.setError_message("");
-        }
+        item.setError_message(reportedErrorMessage());
         return item;
     }
 

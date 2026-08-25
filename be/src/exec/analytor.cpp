@@ -18,6 +18,7 @@
 #include <ios>
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -199,6 +200,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
 
+    // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
+    // index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(analytic_node.analytic_functions[i].nodes[0].fn);
+    }
+
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
     _should_set_partition_size = false;
@@ -287,16 +295,21 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             // we should always use nullable aggregate function.
             is_input_nullable = true;
             const AggregateFunction* func = nullptr;
+            const auto& fname = fn.name.function_name;
             std::string real_fn_name = fn.name.function_name;
             if (fn.ignore_nulls) {
-                DCHECK(fn.name.function_name == "first_value" || fn.name.function_name == "last_value" ||
-                       fn.name.function_name == "lead" || fn.name.function_name == "lag");
+                DCHECK(fname == "first_value" || fname == "last_value" || fname == "lead" || fname == "lag");
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
-                _need_partition_materializing = true;
+                // `lag ... IGNORE NULLS` only looks backward, so it can run in streaming mode instead of
+                // materializing the whole partition.
+                // `lead ... IGNORE NULLS` and `first_value`/`last_value` IGNORE NULLS still require the full materialized data.
+                const bool is_lag_ignore_nulls = (fname == "lag");
+                if (!(is_lag_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
+                    _need_partition_materializing = true;
+                }
             }
-            const auto& fname = fn.name.function_name;
             auto real_arg_type = arg_type.type;
             if (fname == "max_by" || fname == "min_by" || fname == "max_by_v2" || fname == "min_by_v2") {
                 const TypeDescriptor arg1_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
@@ -345,6 +358,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                      next_state_align_size;
         }
     }
+
+    // Fails prepare after the aggregate FunctionContexts have been created, so that the analytor is
+    // destroyed (and closed) in a half-prepared state.
+    FAIL_POINT_TRIGGER_EXECUTE(analytor_prepare_failed,
+                               { return Status::InternalError("injected failure in Analytor::prepare"); });
 
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
@@ -422,11 +440,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
     if (_range_end_boundary.expr_ctx != nullptr) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_range_end_boundary.expr_ctx, state));
-    }
-
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
     return _prepare_processing_mode(state, runtime_profile);
@@ -857,6 +870,20 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         const int64_t referenced_position =
                 _is_range_window ? _current_row_position : std::min(_current_row_position, _get_frame_for_rows().end);
         if (_get_global_position(referenced_position) <= remove_end_position) {
+            return;
+        }
+    }
+
+    // Respect per-function look-back watermarks (e.g. `lag ... IGNORE NULLS`, whose oldest needed
+    // row can be earlier than the frame bound when NULLs are skipped).
+    for (size_t i = 0; i < _agg_functions.size(); i++) {
+        const std::optional<int64_t> min_retained_position_opt = _agg_functions[i]->get_min_retained_position(
+                _agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i]);
+
+        // We can not remove any rows that the aggregation still needs.
+        // N.B.: `remove_end_position` is exclusive, so a `<` is appropriate.
+        if (min_retained_position_opt.has_value() &&
+            _get_global_position(min_retained_position_opt.value()) < remove_end_position) {
             return;
         }
     }
@@ -1670,4 +1697,7 @@ AnalytorPtr AnalytorFactory::create(int i) {
     }
     return _analytors[i];
 }
+
+DEFINE_FAIL_POINT(analytor_prepare_failed);
+
 } // namespace starrocks

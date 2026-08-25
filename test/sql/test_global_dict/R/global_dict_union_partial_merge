@@ -1,0 +1,36 @@
+-- name: test_global_dict_union_partial_merge
+CREATE TABLE lc_union_partial (
+    id INT,
+    `s1` VARCHAR(50),
+    `s2` VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO lc_union_partial VALUES (0, 'a', 'x');
+-- result:
+-- !result
+INSERT INTO lc_union_partial VALUES (1, 'b', 'y');
+-- result:
+-- !result
+[UC]analyze full table lc_union_partial;
+function: wait_global_dict_ready('`s1`', 'lc_union_partial')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('`s2`', 'lc_union_partial')
+-- result:
+
+-- !result
+SELECT * FROM (
+  SELECT s1 AS a, s1 AS b FROM lc_union_partial
+  UNION ALL
+  SELECT s2, CAST(id AS VARCHAR(50)) FROM lc_union_partial
+) t ORDER BY 1, 2;
+-- result:
+a	a
+b	b
+x	0
+y	1
+-- !result
