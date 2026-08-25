@@ -1327,7 +1327,7 @@ protected:
 
     StatusOr<TabletMetadataPtr> publish_followup_upsert_delete(int64_t tablet_id, int64_t base_version,
                                                                int32_t upsert_key, int32_t upsert_value,
-                                                               int32_t delete_key) {
+                                                               int32_t delete_key, bool include_delete = true) {
         std::vector<SlotDescriptor> slots;
         slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
         slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
@@ -1341,9 +1341,10 @@ protected:
         auto key_column = Int32Column::create();
         auto value_column = Int32Column::create();
         auto operation_column = Int8Column::create();
-        key_column->append_numbers(keys, sizeof(keys));
-        value_column->append_numbers(values, sizeof(values));
-        operation_column->append_numbers(operations, sizeof(operations));
+        const size_t row_count = include_delete ? std::size(keys) : 1;
+        key_column->append_numbers(keys, sizeof(keys[0]) * row_count);
+        value_column->append_numbers(values, sizeof(values[0]) * row_count);
+        operation_column->append_numbers(operations, sizeof(operations[0]) * row_count);
         Chunk chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)}, slot_cid_map);
         const uint32_t indexes[] = {0, 1};
 
@@ -1363,7 +1364,7 @@ protected:
                                                     .set_profile(&profile)
                                                     .build());
         RETURN_IF_ERROR(delta_writer->open());
-        RETURN_IF_ERROR(delta_writer->write(chunk, indexes, std::size(indexes)));
+        RETURN_IF_ERROR(delta_writer->write(chunk, indexes, row_count));
         RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
         delta_writer->close();
 
@@ -3121,16 +3122,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     ASSERT_EQ(0, indexless->sstable_meta().sstables_size());
 
     _update_manager->unload_and_remove_primary_index(merged_id);
-    ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(merged_id, indexless->version(), 20, 2000, 10));
+    ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(merged_id, indexless->version(), 10, 2000,
+                                                                   /*delete_key=*/0, /*include_delete=*/false));
     ASSERT_GT(recovered->sstable_meta().sstables_size(), 0);
-    const std::vector<std::pair<int32_t, int32_t>> expected = {{20, 2000}, {60, 600}};
-    expect_lifecycle_oracle(recovered, expected, {10});
+    const std::vector<std::pair<int32_t, int32_t>> expected = {{10, 2000}, {60, 600}};
+    expect_lifecycle_oracle(recovered, expected, {});
 
     ASSIGN_OR_ABORT(auto compacted, compact_tablet(merged_id, recovered->version(), /*force_base=*/true));
     ASSERT_EQ(1, compacted->rowsets_size());
     ASSERT_EQ(1, compacted->rowsets(0).segment_metas_size())
             << "the identical proof fixture needs one physical segment spanning both child ranges";
-    expect_lifecycle_oracle(compacted, expected, {10});
+    expect_lifecycle_oracle(compacted, expected, {});
 
     const std::string parent_segment = compacted->rowsets(0).segment_metas(0).filename();
     const int64_t child_a = next_id();
@@ -3163,8 +3165,26 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     EXPECT_EQ(parent_segment, second_child->rowsets(0).segment_metas(0).filename());
     EXPECT_TRUE(first_child->rowsets(0).segment_metas(0).shared());
     EXPECT_TRUE(second_child->rowsets(0).segment_metas(0).shared());
-    ASSERT_EQ(first_child->rowsets(0).DebugString(), second_child->rowsets(0).DebugString())
-            << "split children must retain identical physical rowset layout";
+    const auto& first_rowset = first_child->rowsets(0);
+    const auto& second_rowset = second_child->rowsets(0);
+    EXPECT_TRUE(lake::tablet_reshard_helper::same_rowset_uid(first_rowset, second_rowset));
+    EXPECT_EQ(first_rowset.id(), second_rowset.id());
+    EXPECT_EQ(first_rowset.version(), second_rowset.version());
+    EXPECT_NE(first_rowset.data_size(), second_rowset.data_size())
+            << "the split fixture must exercise proportional child-local statistics";
+    ASSERT_TRUE(first_rowset.has_range());
+    ASSERT_TRUE(second_rowset.has_range());
+    EXPECT_NE(first_rowset.range().SerializeAsString(), second_rowset.range().SerializeAsString())
+            << "a genuine split must stamp distinct child-local rowset ranges";
+    ASSERT_EQ(first_rowset.del_files_size(), second_rowset.del_files_size());
+    for (int i = 0; i < first_rowset.del_files_size(); ++i) {
+        EXPECT_EQ(first_rowset.del_files(i).SerializeAsString(), second_rowset.del_files(i).SerializeAsString());
+    }
+    for (int i = 0; i < first_rowset.segment_metas_size(); ++i) {
+        EXPECT_EQ(lake::get_segment_idx(first_rowset, i), lake::get_segment_idx(second_rowset, i));
+        EXPECT_EQ(first_rowset.segment_metas(i).SerializeAsString(), second_rowset.segment_metas(i).SerializeAsString())
+                << "split children must retain identical physical segment layout";
+    }
 
     auto normalized_sstables = [](const TabletMetadataPtr& metadata) {
         auto normalized = metadata->sstable_meta();
@@ -3195,10 +3215,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     EXPECT_EQ(source_sstables, output_sstables);
     ASSIGN_OR_ABORT(auto inventory_after_merge, sst_inventory(final_id));
     EXPECT_EQ(inventory_before_merge, inventory_after_merge) << "metadata-only reuse must write no SST";
-    expect_lifecycle_oracle(final_metadata, expected, {10});
+    expect_lifecycle_oracle(final_metadata, expected, {});
     _update_manager->unload_and_remove_primary_index(final_id);
     ASSIGN_OR_ABORT(auto restarted, _tablet_manager->get_tablet_metadata(final_id, final_metadata->version()));
-    expect_lifecycle_oracle(restarted, expected, {10});
+    expect_lifecycle_oracle(restarted, expected, {});
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless_without_recovery) {

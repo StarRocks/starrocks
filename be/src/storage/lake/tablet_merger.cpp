@@ -2372,12 +2372,45 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
     return result;
 }
 
+bool same_rowset_physical_layout(const RowsetMetadataPB& left, const RowsetMetadataPB& right) {
+    if (!tablet_reshard_helper::same_rowset_uid(left, right) ||
+        left.segment_metas_size() != right.segment_metas_size()) {
+        return false;
+    }
+    for (int i = 0; i < left.segment_metas_size(); ++i) {
+        if (get_segment_idx(left, i) != get_segment_idx(right, i)) {
+            return false;
+        }
+    }
+
+    // SPLIT stamps child-local rowset ranges and apportions logical statistics, while the physical
+    // segment and delete-file declarations remain inherited. Compare every other rowset field,
+    // using segment_metas as the canonical physical declaration and normalizing its effective index.
+    auto normalized = [](const RowsetMetadataPB& rowset) {
+        RowsetMetadataPB result(rowset);
+        result.clear_range();
+        result.clear_num_rows();
+        result.clear_data_size();
+        result.clear_num_dels();
+        result.clear_deprecated_segments();
+        result.clear_deprecated_segment_size();
+        result.clear_deprecated_segment_encryption_metas();
+        result.clear_deprecated_bundle_file_offsets();
+        result.clear_deprecated_shared_segments();
+        for (auto& segment : *result.mutable_segment_metas()) {
+            segment.clear_segment_idx();
+        }
+        return result;
+    };
+    return normalized(left).SerializeAsString() == normalized(right).SerializeAsString();
+}
+
 bool identical_rowset_layouts(const TabletMetadataPB& canonical, const TabletMetadataPB& candidate) {
     if (canonical.rowsets_size() != candidate.rowsets_size()) return false;
     for (int i = 0; i < canonical.rowsets_size(); ++i) {
         const auto& left = canonical.rowsets(i);
         const auto& right = candidate.rowsets(i);
-        if (!left.has_uid() || !right.has_uid() || left.SerializeAsString() != right.SerializeAsString()) {
+        if (!same_rowset_physical_layout(left, right)) {
             return false;
         }
     }
