@@ -77,6 +77,15 @@ This topic introduces the following types of BE configurations:
 - Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
 - Introduced in: v3.4.5
 
+### lake_compaction_hold_input_segments
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_metadata_cache_limit`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576

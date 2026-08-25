@@ -74,6 +74,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述： 确定是否在完成优雅退出前等待至少一个指示SHUTDOWN状态的FE心跳响应。启用后，优雅关闭进程将持续运行直至通过心跳RPC返回给FE SHUTDOWN状态变化，确保FE在两次常规心跳探测间隔期间有足够时间感知终止状态。
 - 引入版本：v3.4.5
 
+### lake_compaction_hold_input_segments
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_metadata_cache_limit` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
+- 引入版本：v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
