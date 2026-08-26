@@ -466,9 +466,18 @@ void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool
     // the prefetch on matched the arm with it off on every counter, inside the round-to-round
     // noise. The prefetch earns its keep only once the region spills past the block -- on a
     // 105-column table, whose region is ~1.8 MB, it is worth about 8% of wall clock.
-    if (auto size_or = read_file->get_size(); size_or.ok()) {
+    // Prefer the size the tablet metadata already carries. get_size() is cheap here -- the
+    // footer read has run and populated the cache's size entry -- but it is still a lookup,
+    // and this runs once per segment per query.
+    uint64_t file_size = 0;
+    if (_segment_file_info.size.has_value() && *_segment_file_info.size > 0) {
+        file_size = static_cast<uint64_t>(*_segment_file_info.size);
+    } else if (auto size_or = read_file->get_size(); size_or.ok() && *size_or > 0) {
+        file_size = static_cast<uint64_t>(*size_or);
+    }
+    if (file_size > 0) {
         if (small_index_region_covered_by_footer_read(
-                    _small_index_region_offset, static_cast<uint64_t>(*size_or),
+                    _small_index_region_offset, file_size,
                     static_cast<uint64_t>(config::starlet_star_cache_block_size_bytes))) {
             g_small_index_prefetch_covered << 1;
             VLOG(2) << "skip small index region prefetch of " << _small_index_region_size
