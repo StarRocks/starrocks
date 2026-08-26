@@ -64,7 +64,7 @@ description: "Alphabetical t - z"
 ## `tablet_merge_sstable_meta_lazy_rebuild_total`
 
 - 単位: カウント
-- 説明: ソース SST メタデータを省略し、後続の最初の書き込みでプライマリキーインデックスを再構築するタブレットマージの累計回数。
+- 説明: ソース SST メタデータを省略し、次にプライマリキーインデックスをロードする処理または利用側がそのインデックスを再構築するタブレットマージの累計回数。
 
 ## `tablet_merge_sstable_meta_private_total`
 

@@ -64,7 +64,7 @@ description: "Alphabetical t - z"
 ## `tablet_merge_sstable_meta_lazy_rebuild_total`
 
 - 单位: 计数
-- 描述: 省略源 SST 元数据并由后续第一个写入任务重建主键索引的 tablet 合并累计次数。
+- 描述: 省略源 SST 元数据，使下一次加载主键索引的操作或使用方重建该索引的 tablet 合并累计次数。
 
 ## `tablet_merge_sstable_meta_private_total`
 

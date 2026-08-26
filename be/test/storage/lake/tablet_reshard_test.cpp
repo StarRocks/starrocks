@@ -2872,6 +2872,19 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
             mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
         }
 
+        std::map<std::string, int> omitted_sst_counts;
+        for (const auto* source : {mutable_left.get(), mutable_right.get()}) {
+            for (const auto& sstable : source->sstable_meta().sstables()) {
+                ++omitted_sst_counts[sstable.filename()];
+            }
+        }
+        ASSERT_FALSE(omitted_sst_counts.empty());
+        for (const auto& [filename, count] : omitted_sst_counts) {
+            ASSERT_EQ(1, count) << "fixture source SST filename is not unique: " << filename;
+        }
+        ASSIGN_OR_ABORT(auto left_sst_inventory_before_merge, sst_inventory(left_id));
+        ASSIGN_OR_ABORT(auto right_sst_inventory_before_merge, sst_inventory(right_id));
+
         int classifier_opens = 0;
         bool classifier_active = false;
         auto* sync = SyncPoint::GetInstance();
@@ -2896,18 +2909,43 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
 
         const auto& merged = published.at(target_id);
         ASSERT_EQ(0, merged->sstable_meta().sstables_size());
-        std::set<std::string> omitted;
+        std::map<std::string, int> published_source_counts;
         for (const auto& [tablet_id, source] : published) {
             if (tablet_id == target_id) continue;
-            for (const auto& sstable : source->sstable_meta().sstables()) omitted.insert(sstable.filename());
+            for (const auto& sstable : source->sstable_meta().sstables()) {
+                ++published_source_counts[sstable.filename()];
+            }
         }
-        std::set<std::string> handed_off;
+        EXPECT_EQ(omitted_sst_counts, published_source_counts);
+
+        std::map<std::string, int> expected_target_sst_orphan_counts = omitted_sst_counts;
+        ASSIGN_OR_ABORT(auto left_sst_inventory_after_merge, sst_inventory(left_id));
+        ASSIGN_OR_ABORT(auto right_sst_inventory_after_merge, sst_inventory(right_id));
+        for (const auto& [before, after] :
+             {std::pair{&left_sst_inventory_before_merge, &left_sst_inventory_after_merge},
+              std::pair{&right_sst_inventory_before_merge, &right_sst_inventory_after_merge}}) {
+            for (const auto& filename : *after) {
+                if (!before->contains(filename)) {
+                    expected_target_sst_orphan_counts.emplace(filename, 1);
+                }
+            }
+        }
+
+        std::map<std::string, int> actual_handoff_counts;
         for (const auto& orphan : merged->orphan_files()) {
-            if (!omitted.contains(orphan.name())) continue;
+            if (!orphan.name().ends_with(".sst")) continue;
+            EXPECT_TRUE(expected_target_sst_orphan_counts.contains(orphan.name()))
+                    << "unexpected source SST orphan handoff: " << orphan.name();
             EXPECT_TRUE(orphan.shared());
-            handed_off.insert(orphan.name());
+            ++actual_handoff_counts[orphan.name()];
         }
-        EXPECT_EQ(omitted, handed_off);
+        EXPECT_EQ(expected_target_sst_orphan_counts, actual_handoff_counts);
+        for (const auto& [filename, count] : actual_handoff_counts) {
+            EXPECT_EQ(1, count) << "source SST must be handed off exactly once: " << filename;
+        }
+        for (const auto& [filename, count] : omitted_sst_counts) {
+            EXPECT_EQ(1, actual_handoff_counts[filename]) << "omitted source SST handoff missing: " << filename;
+        }
 
         _update_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened_merge, _tablet_manager->get_tablet_metadata(target_id, merged->version()));

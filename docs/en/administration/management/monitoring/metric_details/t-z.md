@@ -64,7 +64,7 @@ description: "Alphabetical t - z"
 ## `tablet_merge_sstable_meta_lazy_rebuild_total`
 
 - Unit: Count
-- Description: Cumulative number of tablet merges that omitted source SST metadata so the first subsequent writer rebuilds the Primary Key index.
+- Description: Cumulative number of tablet merges that omitted source SST metadata so the next operation or user that loads the Primary Key index rebuilds it.
 
 ## `tablet_merge_sstable_meta_private_total`
 
