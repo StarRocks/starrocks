@@ -1650,7 +1650,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.isFileBundling()).thenReturn(true);
         PhysicalPartition pp = mock(PhysicalPartition.class);
-        // Two visible indexes, each with a distinct tablet.
+        // Two latest visible logical indexes, each with a distinct tablet.
         Tablet t1 = mock(Tablet.class);
         Tablet t2 = mock(Tablet.class);
         MaterializedIndex idx1 = mock(MaterializedIndex.class);

@@ -614,12 +614,13 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     }
 
     /**
-     * The lake ADD/DROP INDEX fast path is provably safe against concurrent partition
-     * creation: the owned tablet set is snapshotted once at runPendingJob and every later
-     * phase iterates only that snapshot ({@link #partitionToTablets}); no table-level shadow
-     * meta is registered before FINISHED; the catalog flip at FINISHED is an idempotent,
-     * table-level-only change; and cancel performs FE-only cleanup with no per-partition work.
-     * A partition created after the snapshot is simply outside the job's scope.
+     * The lake ADD/DROP INDEX fast path is safe against concurrent partition creation:
+     * runPendingJob snapshots the owned partition/tablet set for task dispatch, and the
+     * FINISHED_REWRITING transition derives {@link #commitVersionMap} from those partition IDs.
+     * Normal and force publish resolve the latest logical indexes only inside that fixed partition
+     * set. No table-level shadow metadata is registered before FINISHED, and the catalog flip at
+     * FINISHED is an idempotent table-level change. A partition created after the snapshot is
+     * therefore outside the job's task, version, publish, and cancellation scope.
      */
     @Override
     public boolean allowConcurrentPartitionCreation() {
