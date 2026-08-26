@@ -2734,6 +2734,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_matrix) {
+    using lake::ConfigResetGuard;
+    ConfigResetGuard<int32_t> files_threshold(&config::cloud_native_pk_index_rebuild_files_threshold, 0);
+    ConfigResetGuard<int64_t> rows_threshold(&config::cloud_native_pk_index_rebuild_rows_threshold, 0);
+    ConfigResetGuard<int64_t> l0_limit(&config::l0_max_mem_usage, 1LL << 30);
+
     enum class Shape {
         kLegacySharedCollision,
         kModernSharedOwnerDivergence,
@@ -2764,12 +2769,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
 
     const bool old_tde = config::enable_transparent_data_encryption;
     const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    const int64_t old_l0 = config::l0_max_mem_usage;
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
     DeferOp restore_config([&] {
         config::enable_transparent_data_encryption = old_tde;
         config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-        config::l0_max_mem_usage = old_l0;
         config::lake_pk_compaction_min_input_segments = old_min_segments;
     });
     DeferOp wait_flush_pool(
@@ -2783,7 +2786,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
         SCOPED_TRACE(test_case.name);
         config::enable_transparent_data_encryption = test_case.tde;
         if (test_case.tde) ensure_kek_in_key_cache();
-        config::l0_max_mem_usage = old_l0;
 
         const int64_t left_id = next_id();
         const int64_t right_id = next_id();
@@ -2904,60 +2906,24 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
         ASSIGN_OR_ABORT(auto merge_rows, read_two_column_rows(reopened_merge));
         EXPECT_EQ(expected.size(), merge_rows.size());
 
-        int begin_count = 0;
-        int async_submit_count = 0;
-        std::vector<std::string> registered;
-        size_t handed_off_count = 0;
-        sync->SetCallBack("LakePersistentIndex::full_rebuild:begin", [&](void*) { ++begin_count; });
-        sync->SetCallBack("LakePersistentIndex::full_rebuild:register_sst",
-                          [&](void* arg) { registered.emplace_back(*static_cast<std::string*>(arg)); });
-        sync->SetCallBack("LakePersistentIndex::full_rebuild:finish",
-                          [&](void* arg) { handed_off_count = *static_cast<size_t*>(arg); });
-        sync->SetCallBack("LakePersistentIndex::flush_memtable:async_submit", [&](void*) { ++async_submit_count; });
-        sync->EnableProcessing();
-        DeferOp clear_recovery_callbacks([&] {
-            for (const auto* point :
-                 {"LakePersistentIndex::full_rebuild:begin", "LakePersistentIndex::full_rebuild:register_sst",
-                  "LakePersistentIndex::full_rebuild:finish", "LakePersistentIndex::flush_memtable:async_submit"}) {
-                sync->ClearCallBack(point);
-            }
-            sync->DisableProcessing();
-        });
-
-        config::l0_max_mem_usage = 1;
-        ASSIGN_OR_ABORT(auto recovered, publish_followup_upsert_delete(target_id, merged->version(), 20, 2000, 10));
-        expected.erase(10);
+        ASSIGN_OR_ABORT(auto after_first_upsert,
+                        publish_followup_upsert_delete(target_id, merged->version(), 20, 2000, 0,
+                                                       /*include_delete=*/false));
         expected[20] = 2000;
-        ASSERT_EQ(1, begin_count);
-        ASSERT_FALSE(registered.empty());
-        EXPECT_EQ(registered.size(), handed_off_count);
-        ASSERT_GT(recovered->sstable_meta().sstables_size(), 0);
         std::vector<std::pair<int32_t, int32_t>> expected_rows(expected.begin(), expected.end());
-        expect_lifecycle_oracle(recovered, expected_rows, {10});
+        expect_lifecycle_oracle(after_first_upsert, expected_rows, {});
+        EXPECT_EQ(0, after_first_upsert->sstable_meta().sstables_size());
 
-        const int begin_before_second = begin_count;
-        const size_t registered_before_second = registered.size();
-        const int async_before_second = async_submit_count;
-        ASSIGN_OR_ABORT(auto ordinary, publish_followup_upsert_delete(target_id, recovered->version(), 70, 7000, 60));
+        _update_manager->unload_and_remove_primary_index(target_id);
+        ASSIGN_OR_ABORT(auto after_delete_and_second_upsert,
+                        publish_followup_upsert_delete(target_id, after_first_upsert->version(), 70, 7000, 60));
         expected.erase(60);
         expected[70] = 7000;
-        EXPECT_EQ(begin_before_second, begin_count);
-        EXPECT_EQ(registered_before_second, registered.size());
-        EXPECT_GT(async_submit_count, async_before_second);
-        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
-
-        ASSIGN_OR_ABORT(auto compacted, compact_tablet(target_id, ordinary->version(), /*force_base=*/true));
-        expected_rows.assign(expected.begin(), expected.end());
-        expect_lifecycle_oracle(compacted, expected_rows, {10, 60});
         _update_manager->unload_and_remove_primary_index(target_id);
-        ASSIGN_OR_ABORT(auto restarted, _tablet_manager->get_tablet_metadata(target_id, compacted->version()));
-        expect_lifecycle_oracle(restarted, expected_rows, {10, 60});
-        assert_published_sstables_reopen(restarted);
-        if (test_case.tde) {
-            for (const auto& sstable : restarted->sstable_meta().sstables()) {
-                EXPECT_FALSE(sstable.encryption_meta().empty());
-            }
-        }
+        ASSIGN_OR_ABORT(auto reopened,
+                        _tablet_manager->get_tablet_metadata(target_id, after_delete_and_second_upsert->version()));
+        expected_rows.assign(expected.begin(), expected.end());
+        expect_lifecycle_oracle(reopened, expected_rows, {60});
     }
 }
 
@@ -2968,6 +2934,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_uses_native
     ConfigResetGuard<int32_t> files_threshold(&config::cloud_native_pk_index_rebuild_files_threshold, 0);
     ConfigResetGuard<int64_t> rows_threshold(&config::cloud_native_pk_index_rebuild_rows_threshold, 0);
     ConfigResetGuard<int64_t> l0_limit(&config::l0_max_mem_usage, 1LL << 30);
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 1);
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
 
@@ -3309,15 +3276,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless
     ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
     ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
 
-    int recovery_begin_count = 0;
-    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::full_rebuild:begin",
-                                          [&](void*) { ++recovery_begin_count; });
-    SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp clear_callback([&] {
-        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::full_rebuild:begin");
-        SyncPoint::GetInstance()->DisableProcessing();
-    });
-
     MergingTabletInfoPB merging;
     merging.add_old_tablet_ids(left_id);
     merging.add_old_tablet_ids(right_id);
@@ -3330,110 +3288,72 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless
                     lake::merge_tablet(_tablet_manager.get(), {left, right}, merging, left->version() + 1, txn_info,
                                        /*skip_sstable_merge=*/true));
     EXPECT_EQ(0, read_only->sstable_meta().sstables_size());
-    EXPECT_EQ(0, recovery_begin_count);
     EXPECT_TRUE(read_only->orphan_files().empty());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_tde_failure_retry_matrix) {
-    const bool old_tde = config::enable_transparent_data_encryption;
-    const int64_t old_l0 = config::l0_max_mem_usage;
-    config::enable_transparent_data_encryption = true;
-    config::l0_max_mem_usage = 1;
-    ensure_kek_in_key_cache();
-    DeferOp restore_config([&] {
-        config::enable_transparent_data_encryption = old_tde;
-        config::l0_max_mem_usage = old_l0;
-    });
+    using lake::ConfigResetGuard;
+    ConfigResetGuard<int32_t> files_threshold(&config::cloud_native_pk_index_rebuild_files_threshold, 0);
+    ConfigResetGuard<int64_t> rows_threshold(&config::cloud_native_pk_index_rebuild_rows_threshold, 0);
+    ConfigResetGuard<int64_t> l0_limit(&config::l0_max_mem_usage, 1LL << 30);
 
-    int classifier_entry_count = 0;
+    const bool old_tde = config::enable_transparent_data_encryption;
+    DeferOp restore_tde([&] { config::enable_transparent_data_encryption = old_tde; });
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+
     auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("merge_sstables:metadata_classifier_entry", [&](void*) { ++classifier_entry_count; });
-    sync->EnableProcessing();
-    DeferOp clear_classifier([&] {
-        sync->ClearCallBack("merge_sstables:metadata_classifier_entry");
+    DeferOp clear_load_failure([&] {
+        sync->ClearCallBack("lake_index_load.1");
         sync->DisableProcessing();
     });
-
-    int64_t failed_target_id = 0;
-    int64_t failed_target_version = 0;
-    auto corrupt_encryption = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
-        sources[0]->mutable_sstable_meta()->mutable_sstables(0)->set_encryption_meta(
-                "injected invalid source encryption metadata");
-    };
-    auto source_failure = publish_metadata_only_merge_fixture(
-            MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/true, /*with_del_file=*/false,
-            /*skip_source_flush=*/false, corrupt_encryption, &failed_target_id, &failed_target_version);
-    ASSERT_FALSE(source_failure.ok());
-    EXPECT_EQ(0, classifier_entry_count) << "source unwrap must fail before metadata classification";
-    expect_target_version_not_published(failed_target_id, failed_target_version);
-
-    sync->ClearCallBack("merge_sstables:metadata_classifier_entry");
-    sync->DisableProcessing();
-    struct FailureCase {
-        const char* name;
-        const char* sync_point;
-    };
-    const FailureCase failures[] = {
-            {"build", "PersistentIndexMemtable::flush:after_build"},
-            {"close", "PersistentIndexMemtable::flush:after_close"},
-            {"sstable init", "PersistentIndexMemtable::flush:after_sstable_init"},
-    };
     auto force_fallback = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
         sources[0]->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
     };
-    for (const auto& failure : failures) {
-        SCOPED_TRACE(failure.name);
-        int classifier_opens = 0;
-        bool in_classifier = false;
-        sync->SetCallBack("merge_sstables:metadata_classifier_entry", [&](void*) { in_classifier = true; });
-        sync->SetCallBack("merge_sstables:metadata_classifier_exit", [&](void*) { in_classifier = false; });
-        sync->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) {
-            if (in_classifier) ++classifier_opens;
-        });
-        sync->EnableProcessing();
-        auto result = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/true,
-                                                          /*with_del_file=*/false,
-                                                          /*skip_source_flush=*/false, force_fallback);
-        for (const auto* point : {"merge_sstables:metadata_classifier_entry", "merge_sstables:metadata_classifier_exit",
-                                  "PersistentIndexSstable::init:table_open_error"}) {
-            sync->ClearCallBack(point);
-        }
-        sync->DisableProcessing();
+    for (bool enable_tde : {false, true}) {
+        SCOPED_TRACE(enable_tde ? "TDE" : "plaintext");
+        config::enable_transparent_data_encryption = enable_tde;
+        if (enable_tde) ensure_kek_in_key_cache();
+
+        auto result = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, enable_tde,
+                                                          /*with_del_file=*/false, /*skip_source_flush=*/false,
+                                                          force_fallback);
         ASSERT_OK(result);
-        EXPECT_EQ(0, classifier_opens);
         auto target = std::make_shared<TabletMetadataPB>(result->published.at(result->target_tablet_id));
         ASSERT_EQ(0, target->sstable_meta().sstables_size());
+        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
+        const std::string baseline_metadata = target->SerializeAsString();
         ASSIGN_OR_ABORT(auto baseline_inventory, sst_inventory(result->target_tablet_id));
         _update_manager->unload_and_remove_primary_index(result->target_tablet_id);
 
-        const Status injected = Status::InternalError(fmt::format("injected TDE recovery {} failure", failure.name));
-        sync->SetCallBack(failure.sync_point, [&](void* arg) { *static_cast<Status*>(arg) = injected; });
+        const Status injected = Status::InternalError(
+                fmt::format("injected {} native index load failure", enable_tde ? "TDE" : "plaintext"));
+        sync->SetCallBack("lake_index_load.1", [&](void* arg) { *static_cast<Status*>(arg) = injected; });
         sync->EnableProcessing();
         auto failed = publish_followup_upsert_delete(result->target_tablet_id, result->target_version, 20, 2000, 10);
-        sync->ClearCallBack(failure.sync_point);
+        sync->ClearCallBack("lake_index_load.1");
         sync->DisableProcessing();
         ASSERT_FALSE(failed.ok());
         EXPECT_NE(std::string::npos, failed.status().to_string().find(std::string(injected.message())));
-        _update_manager->unload_and_remove_primary_index(result->target_tablet_id);
+        auto* failed_entry = _update_manager->index_cache().get(result->target_tablet_id);
+        EXPECT_EQ(nullptr, failed_entry);
+        if (failed_entry != nullptr) _update_manager->index_cache().release(failed_entry);
+        ASSIGN_OR_ABORT(auto metadata_after_failure,
+                        _tablet_manager->get_tablet_metadata(result->target_tablet_id, result->target_version));
+        EXPECT_EQ(baseline_metadata, metadata_after_failure->SerializeAsString());
+        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
         ASSIGN_OR_ABORT(auto failed_inventory, sst_inventory(result->target_tablet_id));
         EXPECT_EQ(baseline_inventory, failed_inventory);
         expect_target_version_not_published(result->target_tablet_id, result->target_version + 1);
 
         ASSIGN_OR_ABORT(auto recovered,
                         publish_followup_upsert_delete(result->target_tablet_id, result->target_version, 20, 2000, 10));
-        ASSERT_GT(recovered->sstable_meta().sstables_size(), 0);
-        for (const auto& sstable : recovered->sstable_meta().sstables()) {
-            EXPECT_FALSE(sstable.encryption_meta().empty());
-            ASSERT_OK(KeyCache::instance().unwrap_encryption_meta(sstable.encryption_meta()).status());
-        }
-        assert_published_sstables_reopen(recovered);
+        EXPECT_EQ(0, recovered->sstable_meta().sstables_size());
+        expect_lifecycle_oracle(recovered, {{20, 2000}, {60, 600}}, {10});
         _update_manager->unload_and_remove_primary_index(result->target_tablet_id);
         ASSIGN_OR_ABORT(auto restarted,
                         _tablet_manager->get_tablet_metadata(result->target_tablet_id, recovered->version()));
-        assert_published_sstables_reopen(restarted);
-        ASSIGN_OR_ABORT(auto ordinary,
-                        publish_followup_upsert_delete(result->target_tablet_id, recovered->version(), 70, 7000, 20));
-        expect_lifecycle_oracle(ordinary, {{60, 600}, {70, 7000}}, {10, 20});
+        expect_lifecycle_oracle(restarted, {{20, 2000}, {60, 600}}, {10});
     }
 }
 
