@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
 #include "storage/rowset/column_iterator.h"
@@ -90,10 +91,20 @@ struct ColumnPartialUpdateState {
     // translated to physical positions by adding `upt_segment_physical_rowid_offset`
     // — the source segment's physical rowid base (the iterator's range_start; 0 for
     // non-shared segments and for the non-lake path, where physical == logical).
-    void build_rss_rowid_to_update_rowid(uint32_t upt_segment_physical_rowid_offset) {
+    // |owned|: one byte per row of src_rss_rowids, or empty for "own every row" (every publish but a
+    // SPLIT child's cross publish). A cross published child is handed its siblings' rows along with its
+    // own, and NEITHER branch below is its to take for such a row: the update belongs to whichever
+    // sibling owns the key, and taking the insert branch would materialize a key outside this child's
+    // range. The rss_rowid alone cannot tell the two apart -- a sibling's key that this child's
+    // inherited sstables still answer for looks like an update, and one they do not looks like an
+    // insert -- so the mask has to be passed in.
+    void build_rss_rowid_to_update_rowid(uint32_t upt_segment_physical_rowid_offset, const Filter& owned = Filter{}) {
         rss_rowid_to_update_rowid.clear();
         insert_rowids.clear();
         for (uint32_t upt_row_id = 0; upt_row_id < src_rss_rowids.size(); upt_row_id++) {
+            if (!owned.empty() && owned[upt_row_id] == 0) {
+                continue;
+            }
             uint64_t each_rss_rowid = src_rss_rowids[upt_row_id];
             // build rssid & rowid -> update file's rowid
             // each_rss_rowid == UINT64_MAX means that key not exist in pk index

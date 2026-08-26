@@ -411,15 +411,22 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
 // Submits chunks from all segments to a single shared thread pool token, enabling
 // cross-segment parallelism.
 Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
-                                                       std::vector<SegmentPKIteratorPtr>& pk_iters,
-                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+                                                       std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                                       std::vector<Filter>* owned_per_segment) {
     const uint32_t num_segments = pk_iters.size();
     rss_rowids_per_segment->resize(num_segments);
+    if (owned_per_segment != nullptr) {
+        owned_per_segment->assign(num_segments, Filter{});
+    }
 
     struct RssRowidSlot {
         size_t begin_rowid = 0;
         size_t count = 0;
         std::vector<uint64_t> values;
+        // Moved off the chunk ref before the lookup task runs, so the merge below can concatenate the
+        // segment's mask in chunk order. Empty when this chunk carried none.
+        Filter owned;
     };
 
     std::mutex mutex;
@@ -437,6 +444,7 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
             auto slot = std::make_unique<RssRowidSlot>();
             slot->begin_rowid = segment_logical_offset;
             slot->count = current.chunk->num_rows();
+            slot->owned = current.owned;
             segment_logical_offset += slot->count;
             per_segment_slots[seg_idx].push_back(std::move(slot));
             auto* slot_ptr = per_segment_slots[seg_idx].back().get();
@@ -488,6 +496,24 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
         output.resize(total);
         for (auto& slot : slots) {
             memcpy(output.data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
+        }
+        if (owned_per_segment == nullptr) {
+            continue;
+        }
+        // Only materialize a mask for a segment that actually has one; leaving it empty is what tells
+        // the consumer "own every row", and is what every non-cross publish produces.
+        const bool has_mask =
+                std::any_of(slots.begin(), slots.end(), [](const auto& slot) { return !slot->owned.empty(); });
+        if (!has_mask) {
+            continue;
+        }
+        auto& owned_output = (*owned_per_segment)[seg_idx];
+        owned_output.assign(total, 1);
+        for (auto& slot : slots) {
+            if (slot->owned.empty()) {
+                continue;
+            }
+            memcpy(owned_output.data() + slot->begin_rowid, slot->owned.data(), slot->count * sizeof(uint8_t));
         }
     }
 
