@@ -359,4 +359,21 @@ public class PaimonColumnConverterTest {
         Assertions.assertFalse(((ScalarType) result).isDatetimeNtz());
         Assertions.assertEquals(DateType.DATETIME, result);
     }
+
+    @Test
+    public void testConvertArrayOfVariant() {
+        org.apache.paimon.types.ArrayType paimonType =
+                new org.apache.paimon.types.ArrayType(new org.apache.paimon.types.VariantType());
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assertions.assertTrue(result.isArrayType());
+        Assertions.assertTrue(result.containsVariant());
+    }
+
+    @Test
+    public void testConvertMultisetStaysUnknown() {
+        org.apache.paimon.types.MultisetType paimonType =
+                new org.apache.paimon.types.MultisetType(new org.apache.paimon.types.IntType());
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assertions.assertEquals(com.starrocks.type.UnknownType.UNKNOWN_TYPE, result);
+    }
 }
