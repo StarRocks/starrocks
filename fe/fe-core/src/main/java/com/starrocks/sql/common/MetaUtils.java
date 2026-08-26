@@ -44,6 +44,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.CreateSyncMVStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -282,8 +283,9 @@ public class MetaUtils {
     }
 
     /**
-     * Per-index variant: returns the sort-key columns of the materialized index identified by
-     * {@code indexMetaId}. Rollups and materialized views can have a sort-key arity that differs
+     * Per-index variant: returns the tablet-boundary columns of the materialized index identified by
+     * {@code indexMetaId}. For a primary-key index with a separate sort key, tablet boundaries and
+     * write routing stay in primary-key space. Rollups and materialized views can have an arity that differs
      * from the base index — the alignment math in
      * {@link com.starrocks.planner.RangeColocateScanDispatch} must use the index's own arity, or
      * range-colocate alignment iteration livelocks on the diverging MV (E1).
@@ -317,7 +319,22 @@ public class MetaUtils {
         }
         List<Column> schema = indexMeta.getSchema();
         List<Column> sortKeyColumns = new ArrayList<>();
-        if (indexMeta.getSortKeyIdxes() != null) {
+        if (usesPrimaryKeyForRange(olapTable, indexMeta)) {
+            for (Column column : schema) {
+                boolean isKey = column.isKey();
+                if (keynessOverride != null) {
+                    for (Map.Entry<String, Boolean> e : keynessOverride.entrySet()) {
+                        if (e.getKey().equalsIgnoreCase(column.getName())) {
+                            isKey = e.getValue();
+                            break;
+                        }
+                    }
+                }
+                if (isKey) {
+                    sortKeyColumns.add(column);
+                }
+            }
+        } else if (indexMeta.getSortKeyIdxes() != null) {
             for (Integer sortKeyColumnIndex : indexMeta.getSortKeyIdxes()) {
                 sortKeyColumns.add(schema.get(sortKeyColumnIndex));
             }
@@ -340,9 +357,62 @@ public class MetaUtils {
         return sortKeyColumns;
     }
 
+    public static boolean hasSeparateSortKey(OlapTable olapTable, long indexMetaId) {
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
+        if (indexMeta == null) {
+            throw new IllegalArgumentException(String.format(
+                    "OlapTable %s has no MaterializedIndexMeta for indexMetaId %d",
+                    olapTable.getName(), indexMetaId));
+        }
+        return usesPrimaryKeyForRange(olapTable, indexMeta);
+    }
+
+    /**
+     * Whether this index routes by its primary key rather than by its ORDER BY.
+     *
+     * <p>Range distribution is part of the test, and deliberately lives here rather than at the call
+     * sites: a HASH-distributed primary-key table has always been allowed an ORDER BY that differs from
+     * its primary key, and for that shape the sort key is still the answer. Leaving the test to callers
+     * made it something each one could forget -- and every caller of
+     * {@link #getRangeDistributionColumns(OlapTable, long)} that forgot it would silently be handed the
+     * primary-key columns for a table whose routing has nothing to do with them.
+     */
+    private static boolean usesPrimaryKeyForRange(OlapTable olapTable, MaterializedIndexMeta indexMeta) {
+        if (!olapTable.isRangeDistribution()) {
+            return false;
+        }
+        if (indexMeta.getKeysType() != KeysType.PRIMARY_KEYS || indexMeta.getSortKeyIdxes() == null) {
+            return false;
+        }
+        List<Integer> primaryKeyIdxes = new ArrayList<>();
+        List<Column> schema = indexMeta.getSchema();
+        for (int i = 0; i < schema.size(); ++i) {
+            if (schema.get(i).isKey()) {
+                primaryKeyIdxes.add(i);
+            }
+        }
+        return !primaryKeyIdxes.equals(indexMeta.getSortKeyIdxes());
+    }
+
+    /** Returns the physical ORDER BY columns, independent of range-routing semantics. */
+    public static List<Column> getPhysicalSortKeyColumns(OlapTable olapTable, long indexMetaId) {
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
+        if (indexMeta == null) {
+            throw new IllegalArgumentException(String.format(
+                    "OlapTable %s has no MaterializedIndexMeta for indexMetaId %d",
+                    olapTable.getName(), indexMetaId));
+        }
+        List<Column> schema = indexMeta.getSchema();
+        if (indexMeta.getSortKeyIdxes() != null) {
+            return indexMeta.getSortKeyIdxes().stream().map(schema::get).collect(Collectors.toList());
+        }
+        return schema.stream().filter(Column::isKey).collect(Collectors.toList());
+    }
+
     /**
      * Resolves the colocate columns for a range distribution table.
-     * Colocate columns must be a prefix of the sort key (range distribution columns).
+     * Colocate columns must be a prefix of the range-routing columns. These are the primary-key
+     * columns for a primary-key table with a separate physical sort key.
      *
      * @param olapTable the table
      * @param colocateColumnNames the explicitly specified colocate column names,

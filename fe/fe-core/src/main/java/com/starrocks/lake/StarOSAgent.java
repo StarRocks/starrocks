@@ -685,15 +685,18 @@ public class StarOSAgent {
      * Create shards for a tablet split.
      *
      * <p>Each new shard joins its own list of group ids (PACK group per colocate range). Unless
-     * {@code spreadNewShards} is set, it also pins placement to its old shard via
+     * {@code unpinPlacement} is set, it also pins placement to its old shard via
      * {@code PlacementRelationship.WITH_SHARD} so an online split reuses the source worker's warm
-     * cache. Pre-split passes {@code spreadNewShards == true}: the source tablet is empty, so the
-     * WITH_SHARD pin is dropped and StarOS spreads the new shards across workers (via the SPREAD
-     * group), preventing every tablet's delta-writer / flush / spill-merge from funneling onto one
-     * node during the load that follows. The colocate PACK group, when present, is unaffected.
+     * cache. Callers pass {@code unpinPlacement == true} when there is no warm cache worth keeping:
+     * pre-split (the source tablet is empty) and an ORDER BY != PK online split of a still-small
+     * index (its new shards are rewritten wholesale by the following UNSHARE compaction, which would
+     * otherwise run entirely on the source worker). The WITH_SHARD pin is then dropped and StarOS
+     * spreads the new shards across workers via the SPREAD group, preventing every tablet's
+     * delta-writer / flush / spill-merge -- and that UNSHARE rewrite -- from funneling onto one node.
+     * The colocate PACK group, when present, is unaffected.
      *
      * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id (used only for
-     * the WITH_SHARD pin; ignored when {@code spreadNewShards} is true).
+     * the WITH_SHARD pin; ignored when {@code unpinPlacement} is true).
      * {@code newShardIdToGroupIds} maps each new shard id to its target group ids
      * (typically {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must
      * have the same key set; the call fails if a new shard has no group assignment.
@@ -704,7 +707,7 @@ public class StarOSAgent {
                                                  FileCacheInfo cacheInfo,
                                                  @NotNull Map<String, String> properties,
                                                  ComputeResource computeResource,
-                                                 boolean spreadNewShards) throws DdlException {
+                                                 boolean unpinPlacement) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         try {
@@ -724,7 +727,7 @@ public class StarOSAgent {
                 builder.clearPlacementPreferences();
                 builder.clearGroupIds();
                 builder.addAllGroupIds(groupIds);
-                if (!spreadNewShards) {
+                if (!unpinPlacement) {
                     builder.addPlacementPreferences(PlacementPreference.newBuilder()
                             .setPlacementPolicy(PlacementPolicy.PACK)
                             .setPlacementRelationship(PlacementRelationship.WITH_SHARD)

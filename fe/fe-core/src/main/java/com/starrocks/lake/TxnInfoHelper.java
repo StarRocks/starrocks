@@ -33,8 +33,10 @@ public class TxnInfoHelper {
                 state.getTxnCommitAttachment() != null) {
             CompactionTxnCommitAttachment attachment = (CompactionTxnCommitAttachment) state.getTxnCommitAttachment();
             infoPB.forcePublish = attachment.getForceCommit();
+            infoPB.unshareCompaction = attachment.isUnshare();
         } else {
             infoPB.forcePublish = false;
+            infoPB.unshareCompaction = false;
         }
         infoPB.setGtid(state.getGlobalTransactionId());
         // if restoreForcePublish is true, the txn is commited in snapshot but not publish successfully,

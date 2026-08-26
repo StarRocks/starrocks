@@ -92,6 +92,7 @@ public class TxnInfoHelperTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRestoreGtid() {
         TransactionState state = Mockito.mock(TransactionState.class, Mockito.RETURNS_DEEP_STUBS);
 
@@ -116,6 +117,19 @@ public class TxnInfoHelperTest {
         // restoreGtid should be globalTransactionId + 1
         assertNotNull(info.restoreGtid);
         assertEquals(2001L, info.restoreGtid.longValue());
+=======
+    public void testFromUnshareCompactionTransaction() {
+        TransactionState state = Mockito.mock(TransactionState.class, Mockito.RETURNS_DEEP_STUBS);
+        Mockito.when(state.getSourceType()).thenReturn(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
+        Mockito.when(state.getTxnCommitAttachment())
+                .thenReturn(new CompactionTxnCommitAttachment(false, true));
+        Mockito.when(state.getTransactionType().toProto()).thenReturn(null);
+
+        TxnInfoPB info = TxnInfoHelper.fromTransactionState(state);
+
+        assertFalse(info.forcePublish);
+        assertTrue(info.unshareCompaction);
+>>>>>>> ccb5c7129a6... [Enhancement] FE: schedule an ORDER BY range split and keep the parent readable (#77872)
     }
 
     private static TUniqueId tid(long hi, long lo) {
