@@ -142,14 +142,40 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
+// A rowset has to be rewritten by the UNSHARE compaction whenever it can hold rows this tablet does
+// not own. Two shapes qualify, and only one of them is visible as a `shared` segment:
+//
+//  - The parent's segments, which the split hands to every child verbatim. `shared` says so.
+//  - A segment a REWRITE produced out of a cross-published one -- a row-mode partial update (which a
+//    SQL UPDATE downgrades to on this shape) or the auto-increment rewrite.
+//    SegmentRewriter copies the source segment's own columns verbatim, every row of them, so the
+//    output holds the siblings' rows as well; and MetaFileBuilder::apply_opwrite then CLEARS `shared`
+//    on it, because the file really is private to this tablet. What is left saying the rowset may
+//    hold a sibling's rows is the rowset's own range, which convert_txn_log_for_splitting stamped on
+//    the cross-published op_write and apply_opwrite copied into the metadata.
+//
+// On a sort-key == PK tablet that range is enough on its own: Rowset::set_segment_tablet_range turns
+// it into a rowid interval and every read clips the rewrite output. Here it is not -- the range
+// describes no rowid interval in sort-key space and set_segment_tablet_range withholds it -- so
+// nothing removes the siblings' rows until this compaction does, and skipping the rowset leaves them
+// permanently visible to the wrong child (duplicate primary keys on any unpruned read).
+static bool needs_unshare(const RowsetMetadataPB& rowset, bool range_is_the_only_restriction) {
+    const bool contains_shared_segment = std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                                                     [](const SegmentMetadataPB& segment) { return segment.shared(); });
+    return contains_shared_segment || (range_is_the_only_restriction && rowset.has_range());
+}
+
 StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
+    // Only claim a rowset that has no shared segment where the row-level PrimaryKeyRangeFilter will
+    // actually run: Horizontal/VerticalCompactionTask build it for `is_unshare &&
+    // has_separate_sort_key()` only. Without the filter the rewrite would copy the siblings' rows
+    // into an output that carries neither a range nor a shared segment -- strictly worse than
+    // leaving the rowset alone, since the range is what clips it at read time there.
+    const bool range_is_the_only_restriction =
+            TabletSchema::create(_tablet_metadata->schema())->has_separate_sort_key();
     std::vector<RowsetPtr> input_rowsets;
     for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
-        const auto& rowset = _tablet_metadata->rowsets(i);
-        const bool contains_shared_segment =
-                std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
-                            [](const SegmentMetadataPB& segment) { return segment.shared(); });
-        if (contains_shared_segment) {
+        if (needs_unshare(_tablet_metadata->rowsets(i), range_is_the_only_restriction)) {
             input_rowsets.emplace_back(
                     std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
         }
@@ -514,24 +540,27 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     // tablet range because it has no rowid interval in sort-key space, and the row-level
     // PrimaryKeyRangeFilter is only built for the UNSHARE compaction. So an ordinary compaction here
     // would merge the siblings' rows into its output and mark that output private -- and
-    // UnshareCompactionPolicy only picks rowsets that still carry a shared segment, so the
+    // UnshareCompactionPolicy claims a rowset only while it still says it may hold them, so the
     // contaminated rowset is never rewritten and those rows go on to be served by the wrong child
     // after cutover.
     //
+    // The same reasoning covers a cross-published rowset whose segments a partial-update rewrite has
+    // already made private: its own range is the last thing saying it may hold a sibling's rows (see
+    // needs_unshare), and an ordinary compaction would drop that too. Both are the same predicate.
+    //
     // The window is bounded: the UNSHARE transaction is scheduled with the split and, once it
-    // commits, no rowset carries a shared segment and this guard stops matching. Waiting is what the
+    // commits, no rowset is left that needs it and this guard stops matching. Waiting is what the
     // design trades for the split being metadata-only.
     // Tested cheapest-first: only a ranged tablet whose sort key is not the primary key can ever be
-    // in this state, and both of those are schema properties. The segment walk below is
+    // in this state, and both of those are schema properties. The rowset walk below is
     // O(rowsets x segments), so it must not run for every ordinary ranged tablet.
     if (tablet_metadata->has_range() && TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
-        const bool carries_shared_segment =
+        const bool awaiting_unshare =
                 std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
                             [](const RowsetMetadataPB& rowset) {
-                                return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
-                                                   [](const SegmentMetadataPB& segment) { return segment.shared(); });
+                                return needs_unshare(rowset, /*range_is_the_only_restriction=*/true);
                             });
-        if (carries_shared_segment) {
+        if (awaiting_unshare) {
             VLOG(2) << "skip ordinary compaction while a split's shared segments await UNSHARE, tablet="
                     << tablet_metadata->id() << " version=" << tablet_metadata->version();
             return std::vector<RowsetPtr>{};
