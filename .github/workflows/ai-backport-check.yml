@@ -1,4 +1,4 @@
-name: BACKPORT VERIFY
+name: AI BACKPORT CHECK
 
 # Divergence gate: compare the AI-recommended backport set (from the advisory comment's
 # <!-- backport-affected-json --> marker) against the author's ticked version boxes.
@@ -6,12 +6,13 @@ name: BACKPORT VERIFY
 #   AI absent    -> success (fail-open)
 #   differ+acked -> success
 #   differ       -> failure  (author re-ticks OR posts the exact confirmation line)
-# The `backport-verify` commit status is the gate; it replaces the static "confirm the AI
-# backport recommendation" checkbox.
+# The `ai-backport-check` commit status is the gate; it replaces the static "confirm the AI
+# backport recommendation" checkbox. (Distinct from pr-checker's `backport-check`, which is
+# the checkbox->label mechanism that drives the actual backport at merge.)
 #
 # THIN CALLER: all logic lives in ci-tool/lib/backport_verify_run.py (resolve the PR, scope
 # it, read the advisory AI set + the author's ticks, decide, post the status + sticky
-# comments). `backport-verify` is a required status on main and the runner ALWAYS posts on
+# comments). `ai-backport-check` is a required status on main and the runner ALWAYS posts on
 # base==main (success "not applicable" for non-backportable / mergify-bp PRs), so a required
 # context never leaves a PR pending.
 
@@ -31,7 +32,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: backport-verify-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: ai-backport-check-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
@@ -58,7 +59,7 @@ jobs:
       EV_BODY: ${{ github.event.comment.body }}
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
-      - name: backport-verify gate
+      - name: ai-backport-check gate
         run: |
           set -euo pipefail
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool

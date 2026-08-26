@@ -7,8 +7,8 @@ name: AI BACKPORT ADVISORY
 #     showing the AI-recommended release lines + reasons vs the author's checkbox.
 # COMMENT ONLY: this never ticks the body version checkboxes and never posts @Mergifyio.
 # The author reads the advisory, then BY HAND ticks the version boxes; pr-checker converts
-# checkbox -> label and the static backport matrix executes at merge. The backport-verify
-# gate (backport-verify.yml) then requires an explicit confirmation ONLY when the ticked
+# checkbox -> label and the static backport matrix executes at merge. The ai-backport-check
+# gate (ai-backport-check.yml) then requires an explicit confirmation ONLY when the ticked
 # boxes differ from this recommendation (the affected set is embedded here as a marker).
 #
 # Affected lines are derived by `claude` over local git + gh (no plugin / no code_kb),
@@ -173,5 +173,5 @@ jobs:
           # ${AFF} (no claude here). COMMENT ONLY — the body version checkboxes are never
           # touched; the author ticks them by hand guided by this advisory.
           # --head-sha stamps the advisory's machine-readable markers (backport-affected-json +
-          # head-sha) that the backport-verify divergence gate reads.
+          # head-sha) that the ai-backport-check divergence gate reads.
           ./bin/ai_backport_decide.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --ai-lead --advisory --no-dry-run --skip-ai --head-sha ${{ github.event.pull_request.head.sha }}

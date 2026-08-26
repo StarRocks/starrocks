@@ -153,8 +153,8 @@ jobs:
           exit 1
 
   # NOTE: the author's acknowledgement of the AI backport recommendation is no longer a
-  # static checkbox here. It is handled by the `backport-verify` divergence gate
-  # (.github/workflows/backport-verify.yml): the gate only requires an explicit
+  # static checkbox here. It is handled by the `ai-backport-check` divergence gate
+  # (.github/workflows/ai-backport-check.yml): the gate only requires an explicit
   # confirmation when the ticked version boxes actually DIFFER from the AI recommendation,
   # so a matching selection needs no action and the ack cannot decay into a rote checkbox.
 
