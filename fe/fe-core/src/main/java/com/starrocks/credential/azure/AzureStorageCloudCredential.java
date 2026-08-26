@@ -106,11 +106,12 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
         if (!endpoint.isEmpty()) {
             // If user specific endpoint, they don't need to specific storage account anymore
             // Like if user is using Azurite, they need to specific endpoint
+            String hadoopEndpoint = stripEndpointScheme(endpoint);
             if (!sharedKey.isEmpty()) {
-                String key = String.format("fs.azure.account.key.%s", endpoint);
+                String key = String.format("fs.azure.account.key.%s", hadoopEndpoint);
                 generatedConfigurationMap.put(key, sharedKey);
             } else if (!container.isEmpty() && !sasToken.isEmpty()) {
-                String key = String.format("fs.azure.sas.%s.%s", container, endpoint);
+                String key = String.format("fs.azure.sas.%s.%s", container, hadoopEndpoint);
                 generatedConfigurationMap.put(key, sasToken);
             }
         } else {
@@ -142,6 +143,16 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 generatedConfigurationMap.put(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID, tenantId);
             }
         }
+    }
+
+    private static String stripEndpointScheme(String endpoint) {
+        if (endpoint.regionMatches(true, 0, "https://", 0, "https://".length())) {
+            return endpoint.substring("https://".length());
+        }
+        if (endpoint.regionMatches(true, 0, "http://", 0, "http://".length())) {
+            return endpoint.substring("http://".length());
+        }
+        return endpoint;
     }
 
     @Override
