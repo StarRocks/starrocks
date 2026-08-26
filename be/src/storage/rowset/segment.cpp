@@ -89,6 +89,12 @@ bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_minute("starrocks", "s
 bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_bytes_minute("starrocks",
                                                                        "segment_small_index_prefetch_bytes_minute",
                                                                        &g_small_index_prefetch_bytes, 60);
+bvar::Adder<int64_t> g_small_index_prefetch_covered; // NOLINT
+// How many prefetches were skipped because the footer read had already brought the region in
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_covered_minute("starrocks",
+                                                                         "segment_small_index_prefetch_covered_minute",
+                                                                         &g_small_index_prefetch_covered, 60);
 
 namespace starrocks {
 
@@ -421,6 +427,16 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
 //   * a segment's file is opened once per column iterator, and a scan builds many, so the
 //     same range was re-warmed repeatedly (68 calls where 1 sufficed).
 // touch_cache() made each repeat cheap, but cheap-and-pointless is still pointless.
+bool Segment::small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
+                                                        uint64_t block_size) {
+    if (block_size == 0 || file_size == 0) {
+        // No block cache to reason about; let the prefetch run as before.
+        return false;
+    }
+    const uint64_t last_block_start = ((file_size - 1) / block_size) * block_size;
+    return region_offset >= last_block_start;
+}
+
 void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache) {
     if (_small_index_region_size == 0 || !config::enable_segment_tail_index_prefetch) {
         // Legacy layout, or the read gate is off: indexes are located and read as before.
@@ -439,6 +455,28 @@ void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool
                 << read_file->filename();
         return;
     }
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // The region is written immediately before the footer, and parse_segment_footer() has
+    // necessarily read the footer already -- which, on a block cache, pulls the file's whole
+    // last block. When the region starts inside that block there is nothing left to warm:
+    // touch_cache() would walk every byte of it to find them all present.
+    //
+    // This is not a corner case. A 17-column segment carries a ~74 KB region, so it always
+    // lands in that block: measured on SSB SF100, all 673 calls did the walk and the arm with
+    // the prefetch on matched the arm with it off on every counter, inside the round-to-round
+    // noise. The prefetch earns its keep only once the region spills past the block -- on a
+    // 105-column table, whose region is ~1.8 MB, it is worth about 8% of wall clock.
+    if (auto size_or = read_file->get_size(); size_or.ok()) {
+        if (small_index_region_covered_by_footer_read(
+                    _small_index_region_offset, static_cast<uint64_t>(*size_or),
+                    static_cast<uint64_t>(config::starlet_star_cache_block_size_bytes))) {
+            g_small_index_prefetch_covered << 1;
+            VLOG(2) << "skip small index region prefetch of " << _small_index_region_size
+                    << " bytes (already covered by the footer read) for " << read_file->filename();
+            return;
+        }
+    }
+#endif
     std::call_once(_small_index_prefetch_once, [&] {
         if (Status st = read_file->touch_cache(_small_index_region_offset, _small_index_region_size); !st.ok()) {
             VLOG(2) << "small index region prefetch failed for " << read_file->filename() << ": " << st;
