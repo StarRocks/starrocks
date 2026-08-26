@@ -132,6 +132,27 @@ Rowset::~Rowset() {
     }
 }
 
+namespace {
+
+// Whether segment |segment_idx| can hold rows this tablet does not own, and so has to have the tablet
+// range applied to it before its rows are read.
+//
+// `shared` says so directly: the split handed that segment to every child. A rowset carrying its OWN
+// range says so too, and it is not the same set -- convert_txn_log_for_splitting stamps this tablet's
+// range onto a cross-published op_write, and the segment a row-mode partial update rewrites out of one
+// is private to this tablet (MetaFileBuilder clears `shared`, because the file really is not shared)
+// while still holding every row of the source segment, the siblings' rows included. Without this a
+// reader would serve those rows. A rowset this tablet wrote itself carries no range of its own and is
+// in range by construction, so it stays unclipped and pays nothing.
+bool may_hold_rows_of_other_tablets(const RowsetMetadataPB& rowset, int32_t segment_idx) {
+    if (segment_idx >= rowset.segment_metas_size()) {
+        return false;
+    }
+    return rowset.segment_metas(segment_idx).shared() || rowset.has_range();
+}
+
+} // namespace
+
 StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
     const TabletRangePB* range_pb = nullptr;
     if (_metadata->has_range()) {
@@ -365,8 +386,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         // Consult shared() by the segment's true metadata position, recorded at load time. The loaded
         // position i is NOT the metadata index in segment-range / partial-compaction modes.
         const int32_t meta_pos = segments[i].segment_meta_pos;
-        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
-            shared_segment_range.has_value()) {
+        if (may_hold_rows_of_other_tablets(*_metadata, meta_pos) && shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
 
@@ -460,8 +480,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
         auto& seg_ptr = segments[i].segment;
         seg_options.tablet_range = std::nullopt;
         const int32_t meta_pos = segments[i].segment_meta_pos;
-        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
-            shared_segment_range.has_value()) {
+        if (may_hold_rows_of_other_tablets(*_metadata, meta_pos) && shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
@@ -517,8 +536,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         }
         seg_options.tablet_range = std::nullopt;
         const int32_t meta_pos = segments[i].segment_meta_pos;
-        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
-            shared_segment_range.has_value()) {
+        if (may_hold_rows_of_other_tablets(*_metadata, meta_pos) && shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
         // Apply per-segment rowid range if provided
