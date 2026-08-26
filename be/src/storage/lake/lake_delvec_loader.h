@@ -13,8 +13,11 @@
 // limitations under the License.
 #pragma once
 
+#include <condition_variable>
+#include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <tuple>
 
 #include "common/statusor.h"
@@ -38,19 +41,51 @@ namespace starrocks::lake {
 // would scale CPU and allocation with bitmap size times the column-group count.
 class CompactionDelvecHolder {
 public:
-    DelVectorPtr find(const TabletSegmentId& tsid, int64_t version) {
-        std::lock_guard<std::mutex> l(_mutex);
-        auto it = _delvecs.find(std::make_tuple(tsid.tablet_id, tsid.segment_id, version));
-        return it == _delvecs.end() ? nullptr : it->second;
-    }
-    void put(const TabletSegmentId& tsid, int64_t version, DelVectorPtr delvec) {
-        std::lock_guard<std::mutex> l(_mutex);
-        _delvecs.emplace(std::make_tuple(tsid.tablet_id, tsid.segment_id, version), std::move(delvec));
+    // Single-flight get-or-load: at most one caller runs |load| for a given (segment, version);
+    // concurrent callers of the same key wait on the condition variable and share the loaded
+    // instance. Range-split parallel compaction shares one holder across concurrent PK subtasks,
+    // and without per-key in-flight coordination they would miss together and each re-read and
+    // re-parse the same delvec file, multiplying remote IO and transient bitmap memory by the
+    // subtask count. A failed load clears the in-flight mark before notifying -- errors are not
+    // cached -- so a waiter takes over and retry semantics survive.
+    Status get_or_load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec,
+                       const std::function<Status(DelVectorPtr*)>& load) {
+        const auto key = std::make_tuple(tsid.tablet_id, tsid.segment_id, version);
+        std::unique_lock<std::mutex> lk(_mutex);
+        while (true) {
+            auto it = _delvecs.find(key);
+            if (it != _delvecs.end()) {
+                *pdelvec = it->second;
+                return Status::OK();
+            }
+            if (_loading.insert(key).second) {
+                break;
+            }
+            _cv.wait(lk);
+        }
+        lk.unlock();
+        DelVectorPtr loaded;
+        auto st = load(&loaded);
+        lk.lock();
+        _loading.erase(key);
+        if (st.ok()) {
+            _delvecs.emplace(key, loaded);
+        }
+        _cv.notify_all();
+        if (!st.ok()) {
+            return st;
+        }
+        *pdelvec = std::move(loaded);
+        return Status::OK();
     }
 
 private:
+    using Key = std::tuple<int64_t, uint32_t, int64_t>;
     std::mutex _mutex;
-    std::map<std::tuple<int64_t, uint32_t, int64_t>, DelVectorPtr> _delvecs;
+    std::condition_variable _cv;
+    std::map<Key, DelVectorPtr> _delvecs;
+    // Keys with a load in flight; guarded by _mutex.
+    std::set<Key> _loading;
 };
 
 class LakeDelvecLoader : public DelvecLoader {

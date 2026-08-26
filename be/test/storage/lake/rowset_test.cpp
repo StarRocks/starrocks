@@ -14,7 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <optional>
+#include <thread>
 #include <unordered_set>
 
 #include "base/testutil/assert.h"
@@ -317,6 +320,57 @@ TEST_F(LakeRowsetTest, test_hold_segments_falls_back_for_segment_range_rowset) {
     ASSERT_EQ(first.size(), second.size());
     for (size_t i = 0; i < first.size(); i++) {
         EXPECT_EQ(first[i].get(), second[i].get());
+    }
+}
+
+// Range-split parallel compaction shares one Rowset across concurrent subtasks; the held-segment
+// load must be single-flight, or every subtask that misses loads and parses the complete input set
+// (full remote IO plus a private copy each, with cache filling off). Elect-one semantics: N
+// concurrent callers produce exactly one load, and everyone gets the same held instances. The
+// elected load is held in flight long enough for every other thread to arrive, so the pre-fix
+// behavior (each thread loading its own copy) would be caught as loads > 1.
+TEST_F(LakeRowsetTest, test_hold_segments_single_flight) {
+    create_rowsets_for_testing();
+    _tablet_mgr->metacache()->prune();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    std::atomic<int> loads{0};
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::segments::load_for_hold", [&](void*) {
+        loads++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::segments::load_for_hold");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+    constexpr int kThreads = 4;
+    std::vector<std::vector<SegmentPtr>> results(kThreads);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int t = 0; t < kThreads; t++) {
+        threads.emplace_back([&, t]() {
+            auto res = rowset->segments(lake_io_opts);
+            EXPECT_TRUE(res.ok());
+            if (res.ok()) {
+                results[t] = std::move(res).value();
+            }
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+
+    EXPECT_EQ(1, loads.load());
+    for (int t = 0; t < kThreads; t++) {
+        ASSERT_EQ(3, results[t].size());
+        for (size_t i = 0; i < results[t].size(); i++) {
+            EXPECT_EQ(results[0][i].get(), results[t][i].get());
+        }
     }
 }
 

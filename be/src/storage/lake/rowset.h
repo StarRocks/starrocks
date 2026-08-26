@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -343,6 +344,12 @@ private:
     // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
     // Rowset instance, which for compaction is the whole task.
     std::vector<SegmentPtr> _held_segments;
+    // Single-flight election for the held-segment load: true while one caller is loading outside
+    // the lock. Range-split subtasks that miss together must not each load the full input set;
+    // waiters block on _held_segments_cv, and a failed (or unheld) load clears the flag before
+    // notifying so a waiter takes over and retry semantics survive.
+    bool _held_segments_loading = false;
+    std::condition_variable _held_segments_cv;
     // Delvec store shared by every pass's delvec loader, same lifetime and guard rules as
     // _held_segments; created lazily on the primary-key compaction read path.
     // mutable: lazily created inside const init_segment_read_options.

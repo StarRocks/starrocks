@@ -884,15 +884,40 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         effective_opts.fill_metadata_cache = true;
     }
     if (effective_opts.hold_segments) {
-        std::lock_guard<std::mutex> l(_held_segments_mutex);
-        if (!_held_segments.empty()) {
-            return _held_segments;
+        // Single-flight election: range-split parallel compaction shares this Rowset across
+        // concurrent subtasks, and the load below runs outside the lock to keep remote IO off it.
+        // Without election, subtasks that miss together each load and parse the complete input set
+        // -- full remote IO plus a private copy per loser, with cache filling off -- so peak memory
+        // and CPU scale with the subtask count. One caller loads; the rest wait on the condition
+        // variable. Every non-publishing exit below clears the flag before notifying, so a waiter
+        // takes over and retry-after-failure survives.
+        std::unique_lock<std::mutex> lk(_held_segments_mutex);
+        while (true) {
+            if (!_held_segments.empty()) {
+                return _held_segments;
+            }
+            if (!_held_segments_loading) {
+                _held_segments_loading = true;
+                break;
+            }
+            _held_segments_cv.wait(lk);
         }
+    }
+    if (effective_opts.hold_segments) {
+        TEST_SYNC_POINT_CALLBACK("Rowset::segments::load_for_hold", nullptr);
     }
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = effective_opts;
-    RETURN_IF_ERROR(load_segments(&loaded, seg_options, nullptr));
+    auto load_status = load_segments(&loaded, seg_options, nullptr);
+    if (!load_status.ok()) {
+        if (effective_opts.hold_segments) {
+            std::lock_guard<std::mutex> l(_held_segments_mutex);
+            _held_segments_loading = false;
+            _held_segments_cv.notify_all();
+        }
+        return load_status;
+    }
     std::vector<SegmentPtr> segments;
     segments.reserve(loaded.size());
     for (auto& ls : loaded) {
@@ -915,16 +940,19 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         if (pos < 0 || static_cast<size_t>(pos) >= ordered.size()) {
             LOG(WARNING) << "loaded segments are not a full metadata-ordered set, not holding them. tablet: "
                          << _tablet_id << ", rowset: " << metadata().id();
+            std::lock_guard<std::mutex> l(_held_segments_mutex);
+            _held_segments_loading = false;
+            _held_segments_cv.notify_all();
             return segments;
         }
         ordered[pos] = segments[i];
     }
+    // Only the elected loader reaches this publication, so the held set is written exactly once;
+    // waiters woken by the notify read it under the same lock.
     std::lock_guard<std::mutex> l(_held_segments_mutex);
-    if (_held_segments.empty()) {
-        _held_segments = std::move(ordered);
-    }
-    // Return the held set rather than the local one: a caller that lost the race must not keep a
-    // second copy of every input segment alive for the rest of the task.
+    _held_segments = std::move(ordered);
+    _held_segments_loading = false;
+    _held_segments_cv.notify_all();
     return _held_segments;
 }
 

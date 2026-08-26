@@ -16,6 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+#include <vector>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "fs/fs_util.h"
@@ -366,6 +371,58 @@ TEST_F(LakeDelvecLoaderTest, test_load_with_compaction_delvec_holder) {
     DelVectorPtr other;
     EXPECT_FALSE(next_pass.load(TabletSegmentId(tablet_id, segment_id + 1), version, &other).ok());
     EXPECT_FALSE(next_pass.load(tsid, version + 1, &other).ok());
+}
+
+// Range-split parallel compaction shares one holder across concurrent PK subtasks; get_or_load
+// must be single-flight per key: concurrent callers that miss together produce exactly one load,
+// everyone shares that instance, and a failed load releases the key for a retry instead of
+// caching the error or leaving waiters stuck.
+TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_single_flight) {
+    auto holder = std::make_shared<CompactionDelvecHolder>();
+    const TabletSegmentId tsid(10009, 900);
+    const int64_t version = 7;
+
+    std::atomic<int> loads{0};
+    constexpr int kThreads = 4;
+    std::vector<DelVectorPtr> results(kThreads);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int t = 0; t < kThreads; t++) {
+        threads.emplace_back([&, t]() {
+            DelVectorPtr dv;
+            auto st = holder->get_or_load(tsid, version, &dv, [&](DelVectorPtr* out) {
+                loads++;
+                // Keep the elected load in flight long enough for every other thread to arrive.
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                *out = std::make_shared<DelVector>();
+                return Status::OK();
+            });
+            EXPECT_TRUE(st.ok());
+            results[t] = std::move(dv);
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    EXPECT_EQ(1, loads.load());
+    for (int t = 0; t < kThreads; t++) {
+        ASSERT_TRUE(results[t] != nullptr);
+        EXPECT_EQ(results[0].get(), results[t].get());
+    }
+
+    // A failed load must release the in-flight key: the next caller retries and can succeed.
+    const TabletSegmentId failing(10009, 901);
+    DelVectorPtr dv;
+    EXPECT_FALSE(
+            holder->get_or_load(failing, version, &dv, [](DelVectorPtr*) { return Status::InternalError("boom"); })
+                    .ok());
+    EXPECT_TRUE(holder->get_or_load(failing, version, &dv,
+                                    [](DelVectorPtr* out) {
+                                        *out = std::make_shared<DelVector>();
+                                        return Status::OK();
+                                    })
+                        .ok());
+    EXPECT_TRUE(dv != nullptr);
 }
 
 // Test load with pk_builder
