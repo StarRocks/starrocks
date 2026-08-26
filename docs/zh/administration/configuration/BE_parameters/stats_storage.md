@@ -538,7 +538,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：打开带有尾部索引区的 segment（参见 `enable_segment_tail_index_region`）时，是否用一次读取把整个索引区取回，使随后各列的索引加载从 Data Cache 命中，而不是各自发起一次请求。没有尾部索引区的 segment 不受影响。此外，当本次读取不会填充 Data Cache，或索引区大于 `segment_tail_index_prefetch_max_bytes` 时，也会跳过预取。设为 `false` 可以在不重写数据的情况下回退预取。
+- 描述：打开带有尾部索引区的 segment（参见 `enable_segment_tail_index_region`）时，是否用一次读取把整个索引区取回，使随后各列的索引加载从 Data Cache 命中，而不是各自发起一次请求。没有尾部索引区的 segment 不受影响。此外，以下情况也会跳过预取：本次读取不会填充 Data Cache；索引区大于 `segment_tail_index_prefetch_max_bytes`；以及读取 footer 时已经把整个索引区带了进来——只要索引区起点落在文件最后一个 cache block 内就属于这种情况，窄表通常如此。设为 `false` 可以在不重写数据的情况下回退预取。
 - 引入版本：v4.2.0
 
 ### enable_segment_tail_index_region
@@ -547,7 +547,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：Segment 写入时，是否把所有列的 ordinal index 和页级 zone map 连同 short key index 一起，放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。查询在读取任何数据页之前都必须先加载这些索引，把它们聚在一起后一次读取即可全部覆盖。这主要降低存算分离集群的冷查询延迟——否则每一处分散的索引读取都要单独访问一次对象存储。该配置仅影响写入侧，且只影响作为单个列组写入的 segment：纵向 Compaction 和部分列更新重写仍保持原有布局。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
+- 描述：Segment 写入时，是否把所有列的 ordinal index 和页级 zone map 连同 short key index 一起，放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。查询在读取任何数据页之前都必须先加载这些索引，把它们聚在一起后一次读取即可全部覆盖。这主要降低存算分离集群的冷查询延迟——否则每一处分散的索引读取都要单独访问一次对象存储。该配置仅影响写入侧。所有会写出 segment footer 的写入路径都会产出该区域，纵向 Compaction 和部分列更新重写也包括在内：纵向写入时，每个写完的列的索引写入器会跨列组保留下来，最后一并落盘，因此靠前列组的索引同样落在尾部。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
 - 引入版本：v4.2.0
 
 ### enable_size_tiered_compaction_strategy
