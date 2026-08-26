@@ -413,15 +413,13 @@ TEST_F(LakeDelvecLoaderTest, test_compaction_delvec_holder_single_flight) {
     // A failed load must release the in-flight key: the next caller retries and can succeed.
     const TabletSegmentId failing(10009, 901);
     DelVectorPtr dv;
-    EXPECT_FALSE(
-            holder->get_or_load(failing, version, &dv, [](DelVectorPtr*) { return Status::InternalError("boom"); })
-                    .ok());
-    EXPECT_TRUE(holder->get_or_load(failing, version, &dv,
-                                    [](DelVectorPtr* out) {
-                                        *out = std::make_shared<DelVector>();
-                                        return Status::OK();
-                                    })
-                        .ok());
+    EXPECT_FALSE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr*) {
+                           return Status::InternalError("boom");
+                       }).ok());
+    EXPECT_TRUE(holder->get_or_load(failing, version, &dv, [](DelVectorPtr* out) {
+                          *out = std::make_shared<DelVector>();
+                          return Status::OK();
+                      }).ok());
     EXPECT_TRUE(dv != nullptr);
 }
 
