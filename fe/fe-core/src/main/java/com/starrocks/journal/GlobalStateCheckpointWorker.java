@@ -16,7 +16,6 @@ package com.starrocks.journal;
 
 import com.starrocks.lake.snapshot.SnapshotInfoHelper;
 import com.starrocks.leader.CheckpointController;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -49,9 +48,6 @@ public class GlobalStateCheckpointWorker extends CheckpointWorker {
 
             globalStateMgr.saveImage();
             replayedJournalId = globalStateMgr.getReplayedJournalId();
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
-            }
             servingGlobalState.setImageJournalId(journalId);
 
             if (needClusterSnapshotInfo) {

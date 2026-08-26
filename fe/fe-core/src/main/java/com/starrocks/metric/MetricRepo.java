@@ -328,8 +328,12 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
+    public static LongCounterMetric COUNTER_EDIT_LOG_CURRENT;
+    public static LongCounterMetric COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES;
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
+    public static LongCounterMetric COUNTER_IMAGE_WRITE_FAILED;
     public static LongCounterMetric COUNTER_IMAGE_PUSH;
+    public static LongCounterMetric COUNTER_IMAGE_PUSH_FAILED;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_REJECT;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
@@ -934,11 +938,29 @@ public final class MetricRepo {
         COUNTER_EDIT_LOG_SIZE_BYTES =
                 new LongCounterMetric("edit_log_size_bytes", MetricUnit.BYTES, "size of edit log");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
+        COUNTER_EDIT_LOG_CURRENT = new LongCounterMetric(
+                "edit_log", MetricUnit.OPERATIONS, "number of edit logs retained since the last cleanup");
+        COUNTER_EDIT_LOG_CURRENT.addLabel(new MetricLabel("type", "current"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_CURRENT);
+        COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES = new LongCounterMetric(
+                "edit_log", MetricUnit.BYTES, "bytes of edit logs written since the last cleanup");
+        COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.addLabel(new MetricLabel("type", "current_bytes"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES);
         COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
+        COUNTER_IMAGE_WRITE.addLabel(new MetricLabel("type", "success"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);
+        COUNTER_IMAGE_WRITE_FAILED = new LongCounterMetric(
+                "image_write", MetricUnit.OPERATIONS, "counter of image generation failures");
+        COUNTER_IMAGE_WRITE_FAILED.addLabel(new MetricLabel("type", "failed"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE_FAILED);
         COUNTER_IMAGE_PUSH = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
                 "counter of image succeeded in pushing to other frontends");
+        COUNTER_IMAGE_PUSH.addLabel(new MetricLabel("type", "success"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH);
+        COUNTER_IMAGE_PUSH_FAILED = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
+                "counter of image failed in pushing to other frontends");
+        COUNTER_IMAGE_PUSH_FAILED.addLabel(new MetricLabel("type", "failed"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH_FAILED);
 
         COUNTER_SHORTCIRCUIT_QUERY = new LongCounterMetric("shortcircuit_query", MetricUnit.REQUESTS, "total shortcircuit query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);

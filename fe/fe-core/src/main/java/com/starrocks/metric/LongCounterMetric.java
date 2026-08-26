@@ -55,4 +55,13 @@ public class LongCounterMetric extends CounterMetric<Long> {
     public Long getValue() {
         return value.longValue();
     }
+
+    public void reset() {
+        value.reset();
+    }
+
+    public void update(long newValue) {
+        value.reset();
+        value.add(newValue);
+    }
 }
