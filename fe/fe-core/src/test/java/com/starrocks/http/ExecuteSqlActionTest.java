@@ -13,8 +13,8 @@
 // limitations under the License.
 package com.starrocks.http;
 
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
