@@ -2751,13 +2751,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
                         publish_followup_upsert_delete(fixture.merged_tablet, BelowFloorLegacyFixture::kMergedVersion,
                                                        /*upsert_key=*/10,
                                                        /*upsert_value=*/1010, /*delete_key=*/20));
-        ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
-        EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
-        const std::vector<std::string> keys = {encode_int_primary_key(10), encode_int_primary_key(20)};
-        ASSIGN_OR_ABORT(auto values, load_index_values(after_dml, fixture.merged_tablet, keys));
-        ASSERT_EQ(2, values.size());
-        EXPECT_NE(IndexValue(NullIndexValue), values[0]);
-        EXPECT_EQ(IndexValue(NullIndexValue), values[1]);
+        expect_lifecycle_oracle(after_dml, {{10, 1010}}, {20});
 
         ASSIGN_OR_ABORT(auto compacted,
                         compact_tablet(fixture.merged_tablet, after_dml->version(), /*force_base=*/true));
