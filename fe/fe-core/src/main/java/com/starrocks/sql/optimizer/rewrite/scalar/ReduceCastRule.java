@@ -159,6 +159,14 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return false;
         }
 
+        // A floating point -> integral/boolean cast discards the fractional part, so the middle cast
+        // carries a value change that the size check below cannot see: PrimitiveType.getTypeSize()
+        // reports 8 bytes for FLOAT, DOUBLE and BIGINT alike, so no narrowing is detected.
+        // e.g. cast(cast(100 / 3 as bigint) as varchar) must stay '33', not '33.333333333333336'
+        if (grandChild.isFloatingPointType() && !child.isFloatingPointType()) {
+            return false;
+        }
+
         // cascaded cast cannot be reduced if middle type's size is smaller than two sides
         // e.g. cast(cast(smallint as tinyint) as int)
         if (parentSlotSize > childSlotSize && childSlotSize < grandChildSlotSize) {
