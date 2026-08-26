@@ -279,6 +279,17 @@ public class MergeSamePredicateScalarAggTest extends TPCDSPlanTestBase {
     }
 
     @Test
+    public void testThirdBranchJoinsAGroupThatAlreadyReadsItsColumn() throws Exception {
+        // count(*) and max(v2) form a metadata-capable group; avg(v2) then reads a column the group already
+        // reads, so folding it in costs no extra bytes and saves a scan. The group's accepted aggregates must be
+        // compared in the leader's column-ref space for that to be visible.
+        String sql = "select (select count(*) from t0) a, (select max(v2) from t0) b, (select avg(v2) from t0) c";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: t0"));
+        Assertions.assertEquals(0, countOccurrences(plan, "MetaScan"));
+    }
+
+    @Test
     public void testChainCollapsesToSingleInputDropsJoin() throws Exception {
         // when every input of the chain merges into one branch there is no edge left, so the join disappears
         String sql = "select * from (select count(v1) c1 from t0) a, (select count(v1) c2 from t0) b";

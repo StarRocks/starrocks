@@ -167,11 +167,19 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
                 if (rename == null) {
                     continue;
                 }
+                // Normalize before accumulating. groupAggs is compared column-ref-wise against later branches,
+                // and every branch's aggregations are expressed over *its own* scan's refs, so keeping a raw
+                // accepted call here would compare two different relations' ids and read as "a column the group
+                // does not already read".
+                List<CallOperator> otherAggs = renameAggregations(other, rename);
+                if (otherAggs == null) {
+                    continue;
+                }
                 List<CallOperator> combined = new ArrayList<>(groupAggs);
-                combined.addAll(other.aggregations.values());
+                combined.addAll(otherAggs);
                 boolean combinedHasFastPath = hasMetadataOnlyFastPath(combined, leader, context);
                 if (!combinedHasFastPath
-                        && wouldReadMoreData(groupAggs, groupHasFastPath, other, rename, context)) {
+                        && wouldReadMoreData(groupAggs, groupHasFastPath, otherAggs, other, context)) {
                     continue;
                 }
                 group.add(j);
@@ -580,6 +588,25 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
     }
 
     /**
+     * {@code other}'s aggregations rewritten onto the leader's scan column refs, or null if any of them does not
+     * survive the rewrite as a {@link CallOperator}. {@link #buildMergedBranch} repeats this for the branches that
+     * end up in a group; doing it here keeps every list of accepted aggregates in one column-ref space.
+     */
+    private static List<CallOperator> renameAggregations(Branch other,
+                                                         Map<ColumnRefOperator, ScalarOperator> rename) {
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rename);
+        List<CallOperator> renamed = new ArrayList<>(other.aggregations.size());
+        for (CallOperator call : other.aggregations.values()) {
+            ScalarOperator rewritten = rewriter.rewrite(call);
+            if (!(rewritten instanceof CallOperator)) {
+                return null;
+            }
+            renamed.add((CallOperator) rewritten);
+        }
+        return renamed;
+    }
+
+    /**
      * Whether folding {@code other} into the group would make the merged branch read column data that the two of
      * them do not already read apart. Only asked when the merged aggregate set has lost its metadata-only fast
      * path, and only then does the answer differ from "no".
@@ -590,17 +617,16 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
      * a zone-map lookup on {@code a} into a full read of it - and when both sides were metadata-only, because the
      * merged scan still has one column picked for it by {@link PruneScanColumnRule} where before it read nothing.
      */
-    private static boolean wouldReadMoreData(List<CallOperator> groupAggs, boolean groupHasFastPath, Branch other,
-                                             Map<ColumnRefOperator, ScalarOperator> rename,
+    private static boolean wouldReadMoreData(List<CallOperator> groupAggs, boolean groupHasFastPath,
+                                             List<CallOperator> otherAggs, Branch other,
                                              OptimizerContext context) {
+        // whether the branch has a fast path does not depend on which relation's refs its calls carry
         boolean otherHasFastPath = hasMetadataOnlyFastPath(other.aggregations.values(), other, context);
         if (!groupHasFastPath && !otherHasFastPath) {
             return false;
         }
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rename);
         ColumnRefSet otherColumns = new ColumnRefSet();
-        other.aggregations.values().forEach(
-                call -> otherColumns.union(Utils.extractColumnRef(rewriter.rewrite(call))));
+        otherAggs.forEach(call -> otherColumns.union(Utils.extractColumnRef(call)));
         ColumnRefSet groupColumns = new ColumnRefSet();
         groupAggs.forEach(call -> groupColumns.union(Utils.extractColumnRef(call)));
 
