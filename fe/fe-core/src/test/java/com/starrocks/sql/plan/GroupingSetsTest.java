@@ -333,6 +333,41 @@ public class GroupingSetsTest extends PlanTestBase {
         }
     }
 
+    private static int countMatches(String haystack, String needle) {
+        int n = 0;
+        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length())) {
+            n++;
+        }
+        return n;
+    }
+
+    @Test
+    public void testPushDownGroupingSetAvgReusesExistingAggregations() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // avg(x) is computed as sum(x)/count(x). When the query already asks for count(x), the
+            // decomposition must bind to that existing output column instead of adding a second,
+            // identical count to the CTE - and the coarser level must then re-aggregate it once
+            // rather than once per consumer.
+            String withSiblingCount = "select t1b, t1c, t1d, avg(t1g), count(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String plan = getFragmentPlan(withSiblingCount);
+            Assertions.assertEquals(1, countMatches(plan, "count(7: t1g)"),
+                    "avg's count(t1g) should reuse the query's own count(t1g), plan:\n" + plan);
+
+            // two avg() over the same argument likewise need only one sum/count pair
+            String twoAvgs = "select t1b, t1c, t1d, avg(t1g), avg(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            String twoAvgsPlan = getFragmentPlan(twoAvgs);
+            Assertions.assertEquals(1, countMatches(twoAvgsPlan, "count(7: t1g)"),
+                    "duplicate avg() should share one count, plan:\n" + twoAvgsPlan);
+            Assertions.assertEquals(1, countMatches(twoAvgsPlan, "sum(CAST(7: t1g AS DOUBLE))"),
+                    "duplicate avg() should share one sum, plan:\n" + twoAvgsPlan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
     @Test
     public void testPushDownGroupingSetUnsupportedFn() throws Exception {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
