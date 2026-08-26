@@ -193,12 +193,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 throw new AlterCancelException("table does not exist, tableId: " + tableId);
             }
-            // Collect every live tablet under every physical partition.
+            // Collect every latest visible tablet under every physical partition.
             // Snapshot is immutable for the remainder of the job.
+            partitionToTablets.clear();
+            tabletToIndexMetaId.clear();
             for (PhysicalPartition pp : table.getAllPhysicalPartitions()) {
                 List<Long> tabletIds = new ArrayList<>();
-                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    long indexMetaId = idx.getId();
+                for (MaterializedIndex idx : pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    long indexMetaId = idx.getMetaId();
                     for (Tablet tablet : idx.getTablets()) {
                         tabletIds.add(tablet.getId());
                         tabletToIndexMetaId.put(tablet.getId(), indexMetaId);
@@ -788,15 +790,20 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     }
                     Long indexMetaId = tabletToIndexMetaId.get(tabletId);
                     Preconditions.checkNotNull(indexMetaId, tabletId);
+                    MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
+                    MaterializedIndex latestIndex = pp.getLatestIndex(indexMetaId);
+                    if (indexMeta == null || latestIndex == null || latestIndex.getTablet(tabletId) == null) {
+                        throw new AlterCancelException("latest index metadata not found for tablet " + tabletId);
+                    }
                     TTabletSchema readSchema = schemaCache.computeIfAbsent(indexMetaId, id ->
-                            SchemaInfo.fromMaterializedIndex(table, id, table.getIndexMetaByMetaId(id))
+                            SchemaInfo.fromMaterializedIndex(table, id, indexMeta)
                                     .toTabletSchema());
                     // For the fast path, shadow tablet == origin tablet and
                     // shadow index == origin index (no shadow created).
                     AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(cn.getId(), dbId, tableId, ppId,
-                            indexMetaId, tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
+                            latestIndex.getId(), tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
                             /*generatedColumnReq=*/ null, readSchema);
-                    populateAlterRequest(task, indexMetaId, table.getIndexMetaByMetaId(indexMetaId), table);
+                    populateAlterRequest(task, indexMetaId, indexMeta, table);
                     batchTask.addTask(task);
                 }
             }
