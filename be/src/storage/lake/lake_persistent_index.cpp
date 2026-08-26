@@ -72,21 +72,6 @@ LakePersistentIndex::~LakePersistentIndex() {
     _sstable_filesets.clear();
 }
 
-template <typename InputSstables>
-void drop_input_sstable_caches_on_corruption(TabletManager* tablet_mgr, int64_t tablet_id,
-                                             const InputSstables& input_sstables, const char* operation,
-                                             const Status& status) {
-    if (!status.is_corruption()) {
-        return;
-    }
-    StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-    LOG(WARNING) << "PK index " << operation << " hit corruption, dropping local cache of " << input_sstables.size()
-                 << " input sstables, tablet_id=" << tablet_id << ", error: " << status;
-    for (const auto& sstable_pb : input_sstables) {
-        (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(tablet_id, sstable_pb.filename()));
-    }
-}
-
 StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
         const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
         const TabletMetadataPtr& metadata) {
@@ -757,6 +742,18 @@ Status LakePersistentIndex::prepare_merging_iterator(
         TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
         std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level, bool* contain_shared_sstables) {
+    sstable::ReadOptions read_options;
+    // No need to cache input sst's blocks.
+    read_options.fill_cache = false;
+    std::vector<sstable::Iterator*> iters;
+    DeferOp free_iters([&] {
+        for (sstable::Iterator* iter : iters) {
+            delete iter;
+        }
+    });
+
+    iters.reserve(metadata->sstable_meta().sstables().size());
+    std::stringstream ss_debug;
     std::vector<PersistentIndexSstablePB> sstables_to_merge;
     // Pick sstable for merge, decide to use base merge or cumulative merge.
     pick_sstables_for_merge(metadata->sstable_meta(), &sstables_to_merge, merge_base_level);
@@ -771,27 +768,6 @@ Status LakePersistentIndex::prepare_merging_iterator(
     for (const auto& sstable_pb : sstables_to_merge) {
         txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
     }
-    return prepare_merging_iterator_for_sstables(tablet_mgr, metadata, sstables_to_merge, merging_sstables,
-                                                 merging_iter_ptr, contain_shared_sstables);
-}
-
-Status LakePersistentIndex::prepare_merging_iterator_for_sstables(
-        TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-        const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
-        std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables) {
-    sstable::ReadOptions read_options;
-    // No need to cache input sst's blocks.
-    read_options.fill_cache = false;
-    std::vector<sstable::Iterator*> iters;
-    DeferOp free_iters([&] {
-        for (sstable::Iterator* iter : iters) {
-            delete iter;
-        }
-    });
-
-    iters.reserve(sstables_to_merge.size());
-    std::stringstream ss_debug;
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         ASSIGN_OR_RETURN(auto sstable,
@@ -842,9 +818,8 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
     }
 
     sstable::Options options;
-    auto merger =
-            std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), base_level_merge,
-                                             tablet_mgr, metadata->id(), false /* enable_multiple_output_files */);
+    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(),
+                                                   base_level_merge, tablet_mgr, metadata->id(), false);
     while (iter_ptr->Valid()) {
         const Slice cur_key = iter_ptr->key();
         if (!seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(seek_range.stop_key)) >= 0) {
@@ -958,12 +933,23 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     // input list in `txn_log`, which prepare_merging_iterator fills with the full picked
     // set before opening anything, so corruption hit while opening an input is covered
     // too (the failing file never makes it into `sstable_vec`).
+    auto drop_input_cache_on_corruption = [&](const Status& st) {
+        if (!st.is_corruption()) {
+            return;
+        }
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of "
+                     << txn_log->op_compaction().input_sstables_size()
+                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
+        for (const auto& sstable_pb : txn_log->op_compaction().input_sstables()) {
+            (void)drop_corrupted_sstable_cache(tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()));
+        }
+    };
     // build merge iterator
     auto prepare_st = prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
                                                &merge_base_level, &contain_shared_sstables);
     if (!prepare_st.ok()) {
-        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), txn_log->op_compaction().input_sstables(),
-                                                "sst compaction", prepare_st);
+        drop_input_cache_on_corruption(prepare_st);
         return prepare_st;
     }
     if (merging_iter_ptr == nullptr) {
@@ -971,16 +957,14 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
         return Status::OK();
     }
     if (!merging_iter_ptr->Valid()) {
-        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), txn_log->op_compaction().input_sstables(),
-                                                "sst compaction", merging_iter_ptr->status());
+        drop_input_cache_on_corruption(merging_iter_ptr->status());
         return merging_iter_ptr->status();
     }
     // merge sstable files.
     auto merge_results_or = merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata,
                                            contain_shared_sstables);
     if (!merge_results_or.ok()) {
-        drop_input_sstable_caches_on_corruption(tablet_mgr, metadata->id(), txn_log->op_compaction().input_sstables(),
-                                                "sst compaction", merge_results_or.status());
+        drop_input_cache_on_corruption(merge_results_or.status());
         return merge_results_or.status();
     }
     auto& merge_results = merge_results_or.value();

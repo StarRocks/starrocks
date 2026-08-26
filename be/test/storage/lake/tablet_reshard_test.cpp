@@ -9756,6 +9756,145 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_rejects_sig
     EXPECT_EQ(source_before, source->SerializeAsString());
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any_side_effect) {
+    int source_flush_count = 0;
+    int delvec_writer_count = 0;
+    int dcg_output_count = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("merge_sstables:source_pk_flush", [&](void*) { ++source_flush_count; });
+    sync->SetCallBack("merge_delvecs:writer_invocations",
+                      [&](void* arg) { delvec_writer_count += *static_cast<int*>(arg); });
+    sync->SetCallBack("merge_dcg_meta:after_write_cols", [&](void*) { ++dcg_output_count; });
+    sync->EnableProcessing();
+    DeferOp clear_callbacks([&] {
+        sync->ClearCallBack("merge_sstables:source_pk_flush");
+        sync->ClearCallBack("merge_delvecs:writer_invocations");
+        sync->ClearCallBack("merge_dcg_meta:after_write_cols");
+        sync->DisableProcessing();
+    });
+
+    auto run_case = [&](uint32_t rowset_id, bool primary_key, bool skip_sstable_merge, bool expect_rejection) {
+        SCOPED_TRACE(fmt::format("rowset_id={}, primary_key={}, skip_sstable_merge={}", rowset_id, primary_key,
+                                 skip_sstable_merge));
+        constexpr int64_t kBaseVersion = 1;
+        constexpr int64_t kNewVersion = 2;
+        constexpr int kNumRows = 2;
+        const int64_t source_a_id = next_id();
+        const int64_t source_b_id = next_id();
+        const int64_t target_id = next_id();
+        const int64_t txn_id = next_id();
+        for (int64_t tablet_id : {source_a_id, source_b_id, target_id}) {
+            prepare_tablet_dirs(tablet_id);
+        }
+
+        const std::string segment_name = fmt::format("rowset_zero_shared_{}.dat", txn_id);
+        const uint64_t segment_size =
+                write_two_column_segment(target_id, segment_name, kNumRows, [](int key) { return key * 10; });
+        auto build_source = [&](int64_t tablet_id, int lower_key, int upper_key, int source_index) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(kBaseVersion);
+            metadata->set_next_rowset_id(rowset_id + 1);
+            const auto [c0_uid, c1_uid] = set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+            (void)c0_uid;
+            metadata->set_enable_persistent_index(primary_key);
+            if (primary_key) {
+                metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+            } else {
+                metadata->mutable_schema()->set_keys_type(DUP_KEYS);
+            }
+            metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower_key));
+            metadata->mutable_range()->set_lower_bound_included(true);
+            metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper_key));
+            metadata->mutable_range()->set_upper_bound_included(false);
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(rowset_id);
+            rowset->set_version(kBaseVersion);
+            rowset->set_num_rows(kNumRows);
+            rowset->set_data_size(segment_size);
+            rowset->mutable_range()->CopyFrom(metadata->range());
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(segment_name);
+            segment->set_size(segment_size);
+            segment->set_num_rows(kNumRows);
+            segment->set_shared(true);
+            stamp_physical_identity_uid(rowset, segment_name);
+            (*metadata->mutable_rowset_to_schema())[rowset_id] = metadata->schema().id();
+
+            const std::string cols_name = lake::gen_cols_filename(txn_id + source_index + 1);
+            write_c1_only_cols_file(tablet_id, cols_name, kNumRows, [&](int row) {
+                return row >= lower_key && row < upper_key ? 1000 * (source_index + 1) + row : row * 10;
+            });
+            auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[rowset_id];
+            dcg.add_column_files(cols_name);
+            dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+            dcg.add_versions(kBaseVersion);
+            dcg.add_shared_files(false);
+
+            DelVector delvec;
+            const uint32_t deleted_rowid = static_cast<uint32_t>(source_index);
+            delvec.init(kBaseVersion + source_index, &deleted_rowid, 1);
+            add_delvec(metadata.get(), tablet_id, kBaseVersion + source_index, rowset_id,
+                       fmt::format("rowset_zero_{}_{}.delvec", txn_id, source_index), delvec.save());
+            return metadata;
+        };
+
+        auto source_a = build_source(source_a_id, /*lower_key=*/0, /*upper_key=*/1, /*source_index=*/0);
+        auto source_b = build_source(source_b_id, /*lower_key=*/1, /*upper_key=*/2, /*source_index=*/1);
+        const std::vector<std::string> source_pbs_before = {source_a->SerializeAsString(),
+                                                            source_b->SerializeAsString()};
+        ASSIGN_OR_ABORT(auto files_before, directory_inventory(_location_provider->segment_root_location(target_id)));
+        ASSIGN_OR_ABORT(auto metadata_before,
+                        directory_inventory(_location_provider->metadata_root_location(target_id)));
+
+        MergingTabletInfoPB merging_info;
+        merging_info.add_old_tablet_ids(source_a_id);
+        merging_info.add_old_tablet_ids(source_b_id);
+        merging_info.set_new_tablet_id(target_id);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        source_flush_count = 0;
+        delvec_writer_count = 0;
+        dcg_output_count = 0;
+        auto merged = lake::merge_tablet(_tablet_manager.get(), {source_a, source_b}, merging_info, kNewVersion,
+                                         txn_info, skip_sstable_merge);
+
+        EXPECT_EQ(source_pbs_before[0], source_a->SerializeAsString());
+        EXPECT_EQ(source_pbs_before[1], source_b->SerializeAsString());
+        ASSIGN_OR_ABORT(auto files_after, directory_inventory(_location_provider->segment_root_location(target_id)));
+        ASSIGN_OR_ABORT(auto metadata_after,
+                        directory_inventory(_location_provider->metadata_root_location(target_id)));
+        EXPECT_EQ(metadata_before, metadata_after);
+        if (expect_rejection) {
+            EXPECT_TRUE(merged.status().is_invalid_argument()) << merged.status();
+            EXPECT_TRUE(merged.status().message().contains(fmt::format("tablet {}", source_a_id))) << merged.status();
+            EXPECT_TRUE(merged.status().message().contains("rowset 0")) << merged.status();
+            EXPECT_EQ(0, source_flush_count);
+            EXPECT_EQ(0, delvec_writer_count);
+            EXPECT_EQ(0, dcg_output_count);
+            EXPECT_EQ(files_before, files_after);
+        } else {
+            EXPECT_OK(merged.status());
+            if (primary_key) {
+                EXPECT_GT(delvec_writer_count, 0);
+            } else {
+                EXPECT_EQ(0, delvec_writer_count);
+            }
+            EXPECT_GT(dcg_output_count, 0);
+            EXPECT_NE(files_before, files_after);
+            EXPECT_EQ(primary_key && !skip_sstable_merge ? 2 : 0, source_flush_count);
+        }
+    };
+
+    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*skip_sstable_merge=*/false, /*expect_rejection=*/true);
+    run_case(/*rowset_id=*/1, /*primary_key=*/true, /*skip_sstable_merge=*/false, /*expect_rejection=*/false);
+    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*skip_sstable_merge=*/true, /*expect_rejection=*/false);
+    run_case(/*rowset_id=*/0, /*primary_key=*/false, /*skip_sstable_merge=*/false, /*expect_rejection=*/false);
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_exhausted_live_rowset_domain_without_sst) {
     const int64_t base_version = 1;
     const int64_t source_tablet = next_id();

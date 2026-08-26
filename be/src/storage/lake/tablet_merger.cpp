@@ -2788,6 +2788,16 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
             recovery_visible_source.clear_sstable_meta();
             RETURN_IF_ERROR(compute_supported_next_rowset_id(recovery_visible_source));
         }
+        if (!skip_sstable_merge && is_primary_key(*old_tablet_metadata)) {
+            for (const auto& rowset : old_tablet_metadata->rowsets()) {
+                const uint64_t source_rowset_id = static_cast<uint64_t>(rowset.id());
+                if (source_rowset_id == 0) {
+                    return Status::InvalidArgument(
+                            fmt::format("Writable primary-key tablet merge source tablet {} has invalid rowset {}",
+                                        old_tablet_metadata->id(), source_rowset_id));
+                }
+            }
+        }
         merge_contexts.emplace_back(old_tablet_metadata);
     }
 

@@ -51,29 +51,20 @@ io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
 
 } // namespace
 
-Status drop_sstable_cache(const std::string& path) {
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    auto fs_or = FileSystemFactory::CreateSharedFromString(path);
-    if (!fs_or.ok()) {
-        LOG(INFO) << "drop local cache for " << path << ", error:" << fs_or.status();
-        return fs_or.status();
-    }
-    auto drop_status = (*fs_or)->drop_local_cache(path);
-    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::drop_cache", const_cast<std::string*>(&path));
-    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::drop_corrupted_cache", &drop_status);
-    LOG(INFO) << "drop local cache for " << path << ", error:" << drop_status;
-    return drop_status;
-#else
-    return Status::NotSupported("drop local cache is only supported in shared-data mode");
-#endif
-}
-
 Status drop_corrupted_sstable_cache(const std::string& path) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     if (!config::lake_clear_corrupted_cache_data) {
         return Status::NotSupported("lake_clear_corrupted_cache_data is turned off");
     }
-    return drop_sstable_cache(path);
+    auto fs_or = FileSystemFactory::CreateSharedFromString(path);
+    if (!fs_or.ok()) {
+        LOG(INFO) << "clear corrupted cache for " << path << ", error:" << fs_or.status();
+        return fs_or.status();
+    }
+    auto drop_status = (*fs_or)->drop_local_cache(path);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::drop_corrupted_cache", &drop_status);
+    LOG(INFO) << "clear corrupted cache for " << path << ", error:" << drop_status;
+    return drop_status;
 #else
     return Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
 #endif

@@ -15,7 +15,6 @@
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 
 #include "base/debug/trace.h"
-#include "base/testutil/sync_point.h"
 #include "column/serde/column_array_serde.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -37,29 +36,6 @@
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
-
-KeyValueMerger::~KeyValueMerger() {
-    if (_outputs_released) return;
-
-    for (size_t builder_index = 0; builder_index < _output_builders.size(); ++builder_index) {
-        auto& builder_wrapper = _output_builders[builder_index];
-        if (!builder_wrapper.finish_attempted) {
-            TEST_SYNC_POINT_CALLBACK("KeyValueMerger::cleanup:abandon", &builder_index);
-            builder_wrapper.table_builder->Abandon();
-        }
-        builder_wrapper.table_builder.reset();
-        if (!builder_wrapper.close_attempted) {
-            builder_wrapper.close_attempted = true;
-            TEST_SYNC_POINT_CALLBACK("KeyValueMerger::cleanup:close", &builder_index);
-            (void)builder_wrapper.wf->close();
-        }
-        builder_wrapper.wf.reset();
-        const auto location = _tablet_mgr->sst_location(_tablet_id, builder_wrapper.filename);
-        auto status = fs::delete_file(location);
-        LOG_IF(WARNING, !status.ok() && !status.is_not_found())
-                << "failed to clean up key-value merger output " << location << ": " << status;
-    }
-}
 
 Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     // Iterator-owned slices stay valid until iter_ptr->Next(); both the parse
@@ -113,8 +89,12 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
         }
         // `max_rss_rowid` already lives in the source sstable's effective id
-        // space. It must not be shifted by rssid_offset again because that
-        // would double-count the offset in the same-version tie-break below.
+        // space (per the canonical convention documented at
+        // tablet_merger.cpp::project_source_max_rss_rowid). It must NOT be
+        // shifted by rssid_offset again — doing so double-counts the offset
+        // and inflates the apparent watermark above the true effective max,
+        // which can flip the same-version tie-break below to pick the wrong
+        // input sstable.
     }
 
     auto version = index_value_ver.values(0).version();
@@ -215,23 +195,14 @@ Status KeyValueMerger::flush() {
 StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> KeyValueMerger::finish() {
     RETURN_IF_ERROR(flush());
     std::vector<KeyValueMergerOutput> results;
-    for (size_t builder_index = 0; builder_index < _output_builders.size(); ++builder_index) {
-        auto& builder_wrapper = _output_builders[builder_index];
-        TEST_SYNC_POINT_CALLBACK("KeyValueMerger::finish:finish_attempt", &builder_index);
-        builder_wrapper.finish_attempted = true;
+    for (auto& builder_wrapper : _output_builders) {
         RETURN_IF_ERROR(builder_wrapper.table_builder->Finish());
-        const uint64_t filesize = builder_wrapper.table_builder->FileSize();
-        const auto [start_key, end_key] = builder_wrapper.table_builder->KeyRange();
-        builder_wrapper.close_attempted = true;
-        Status close_status = builder_wrapper.wf->close();
-        std::pair<size_t, Status*> close_result{builder_index, &close_status};
-        TEST_SYNC_POINT_CALLBACK("KeyValueMerger::finish:close_status", &close_result);
-        if (!close_status.ok()) return close_status;
-        results.emplace_back(KeyValueMerger::KeyValueMergerOutput{builder_wrapper.filename, filesize,
-                                                                  builder_wrapper.encryption_meta,
-                                                                  start_key.to_string(), end_key.to_string()});
+        RETURN_IF_ERROR(builder_wrapper.wf->close());
+        results.emplace_back(KeyValueMerger::KeyValueMergerOutput{
+                builder_wrapper.filename, builder_wrapper.table_builder->FileSize(), builder_wrapper.encryption_meta,
+                builder_wrapper.table_builder->KeyRange().first.to_string(),
+                builder_wrapper.table_builder->KeyRange().second.to_string()});
     }
-    _outputs_released = true;
     return results;
 }
 
