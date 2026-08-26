@@ -411,6 +411,48 @@ TEST_F(CacheTest, TouchUpdatesRecencyOnShardedCache) {
     ASSERT_EQ(3000, lookup_cache(cache.get(), keys[2]));
 }
 
+TEST_F(CacheTest, InsertDefersDeleterUntilCleanup) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * kNumShards));
+
+    insert_cache(cache.get(), keys[0], 1000, 1);
+
+    CacheCleanup cleanup;
+    std::string encoded;
+    auto* handle = cache->insert(EncodeKey(&encoded, keys[1]), EncodeValue(2000), 1, &CacheTest::Deleter,
+                                 CachePriority::NORMAL, &cleanup);
+    cache->release(handle, &cleanup);
+
+    ASSERT_TRUE(_deleted_keys.empty());
+    ASSERT_EQ(-1, lookup_cache(cache.get(), keys[0]));
+    ASSERT_EQ(2000, lookup_cache(cache.get(), keys[1]));
+
+    cleanup.cleanup();
+    ASSERT_EQ(std::vector<int>({keys[0]}), _deleted_keys);
+    ASSERT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReleaseDefersDeleterUntilCleanup) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * kNumShards));
+
+    std::string encoded;
+    auto* handle = cache->insert(EncodeKey(&encoded, 100), EncodeValue(1000), 1, &CacheTest::Deleter);
+    cache->set_capacity(0);
+
+    CacheCleanup cleanup;
+    cache->release(handle, &cleanup);
+
+    ASSERT_TRUE(_deleted_keys.empty());
+    ASSERT_FALSE(cleanup.empty());
+    ASSERT_EQ(0, cache->get_memory_usage());
+
+    cleanup.cleanup();
+    ASSERT_EQ(std::vector<int>({100}), _deleted_keys);
+    ASSERT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
 TEST_F(CacheTest, TouchMissingKeyDoesNotAffectRecencyOrStats) {
     const size_t entry_charge = entry_charge_for_int_key();
     LRUCache cache;

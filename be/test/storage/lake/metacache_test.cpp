@@ -14,12 +14,20 @@
 
 #include "storage/lake/metacache.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <future>
+#include <unordered_map>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/scoped_cleanup.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
@@ -340,6 +348,80 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
             EXPECT_EQ(final_result, res);
         }
     }
+}
+
+static uint32_t cache_shard(std::string_view key) {
+    CacheKey cache_key(key);
+    return cache_key.hash(cache_key.data(), cache_key.size(), 0) >> (32 - kNumShardBits);
+}
+
+static std::array<std::string, 2> find_segment_paths_in_same_cache_shard() {
+    std::unordered_map<uint32_t, std::string> first_path_by_shard;
+    for (int i = 0;; ++i) {
+        auto path = fmt::format("deferred_cleanup_segment_{}.dat", i);
+        auto [it, inserted] = first_path_by_shard.emplace(cache_shard(path), path);
+        if (!inserted) {
+            return {it->second, std::move(path)};
+        }
+    }
+}
+
+TEST_F(LakeMetacacheTest, test_segment_eviction_runs_outside_metacache_lock) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    const auto paths = find_segment_paths_in_same_cache_shard();
+    auto victim = std::make_shared<Segment>(fs, FileInfo{paths[0]}, 100, schema, _tablet_mgr.get());
+    auto replacement = std::make_shared<Segment>(fs, FileInfo{paths[1]}, 101, schema, _tablet_mgr.get());
+
+    const size_t victim_charge = victim->mem_usage() + LRUCache::key_handle_size(CacheKey(paths[0]));
+    const size_t replacement_charge = replacement->mem_usage() + LRUCache::key_handle_size(CacheKey(paths[1]));
+    Metacache metacache(std::max(victim_charge, replacement_charge) * kNumShards);
+    metacache.cache_segment(paths[0], victim);
+
+    auto* victim_ptr = victim.get();
+    std::weak_ptr<Segment> victim_weak = victim;
+    victim.reset();
+
+    std::promise<void> deleter_entered;
+    auto deleter_entered_future = deleter_entered.get_future();
+    std::promise<void> allow_deletion;
+    auto allow_deletion_future = allow_deletion.get_future().share();
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::Metacache::cache_value_deleter", [&](void* arg) {
+        auto* value = static_cast<CacheValue*>(arg);
+        auto* segment = std::get_if<std::shared_ptr<Segment>>(value);
+        if (segment != nullptr && segment->get() == victim_ptr) {
+            deleter_entered.set_value();
+            allow_deletion_future.wait();
+        }
+    });
+    sync_point->EnableProcessing();
+    auto sync_point_cleanup = MakeScopedCleanup([&]() {
+        sync_point->DisableProcessing();
+        sync_point->ClearCallBack("lake::Metacache::cache_value_deleter");
+    });
+
+    auto insert_future = std::async(std::launch::async, [&]() { metacache.cache_segment(paths[1], replacement); });
+    bool deletion_released = false;
+    auto unblock_deleter = MakeScopedCleanup([&]() {
+        if (!deletion_released) {
+            allow_deletion.set_value();
+        }
+    });
+
+    using namespace std::chrono_literals;
+    ASSERT_EQ(std::future_status::ready, deleter_entered_future.wait_for(5s));
+
+    auto lookup_future = std::async(std::launch::async, [&]() { return metacache.lookup_segment(paths[1]); });
+    EXPECT_EQ(std::future_status::ready, lookup_future.wait_for(1s));
+
+    allow_deletion.set_value();
+    deletion_released = true;
+    unblock_deleter.cancel();
+
+    EXPECT_EQ(replacement, lookup_future.get());
+    insert_future.get();
+    EXPECT_TRUE(victim_weak.expired());
 }
 
 TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {

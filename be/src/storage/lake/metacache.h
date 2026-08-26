@@ -23,6 +23,7 @@
 
 namespace starrocks {
 class Cache;
+class CacheCleanup;
 class CacheKey;
 class DelVector;
 class Segment;
@@ -91,12 +92,13 @@ public:
     size_t capacity() const;
 
 private:
-    static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
+    static void cache_value_deleter(const CacheKey& key, void* value);
 
-    std::shared_ptr<Segment> _lookup_segment_no_lock(std::string_view key);
-    void _cache_segment_no_lock(std::string_view key, size_t mem_cost, std::shared_ptr<Segment> segment);
+    std::shared_ptr<Segment> _lookup_segment_no_lock(std::string_view key, CacheCleanup* cleanup);
+    void _cache_segment_no_lock(std::string_view key, size_t mem_cost, std::shared_ptr<Segment> segment,
+                                CacheCleanup* cleanup);
 
-    void insert(std::string_view key, CacheValue* ptr, size_t size);
+    void insert(std::string_view key, CacheValue* ptr, size_t size, CacheCleanup* cleanup = nullptr);
 
     std::unique_ptr<Cache> _cache;
 

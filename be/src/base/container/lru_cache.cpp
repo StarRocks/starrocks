@@ -12,6 +12,17 @@
 
 namespace starrocks {
 
+CacheCleanup::~CacheCleanup() {
+    cleanup();
+}
+
+void CacheCleanup::cleanup() {
+    for (auto* handle : _handles) {
+        handle->free();
+    }
+    _handles.clear();
+}
+
 uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
     // Similar to murmur hash
     const uint32_t m = 0xc6a4a793;
@@ -239,7 +250,7 @@ Cache::Handle* LRUCache::lookup(const CacheKey& key, uint32_t hash) {
     return reinterpret_cast<Cache::Handle*>(e);
 }
 
-void LRUCache::release(Cache::Handle* handle) {
+void LRUCache::release(Cache::Handle* handle, CacheCleanup* cleanup) {
     if (handle == nullptr) {
         return;
     }
@@ -270,7 +281,11 @@ void LRUCache::release(Cache::Handle* handle) {
 
     // free handle out of mutex
     if (last_ref) {
-        e->free();
+        if (cleanup != nullptr) {
+            cleanup->_handles.push_back(e);
+        } else {
+            e->free();
+        }
     }
 }
 
@@ -316,7 +331,8 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
 }
 
 Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
-                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority,
+                                CacheCleanup* cleanup) {
     size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
     size_t kv_mem_size = value_size + key_mem_size;
     auto* e = reinterpret_cast<LRUHandle*>(malloc(key_mem_size));
@@ -368,8 +384,12 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
 
     // we free the entries here outside of mutex for
     // performance reasons
-    for (auto entry : last_ref_list) {
-        entry->free();
+    if (cleanup != nullptr) {
+        cleanup->_handles.insert(cleanup->_handles.end(), last_ref_list.begin(), last_ref_list.end());
+    } else {
+        for (auto* entry : last_ref_list) {
+            entry->free();
+        }
     }
 
     return reinterpret_cast<Cache::Handle*>(e);
@@ -461,9 +481,10 @@ bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
 }
 
 Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size,
-                                       void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+                                       void (*deleter)(const CacheKey& key, void* value), CachePriority priority,
+                                       CacheCleanup* cleanup) {
     const uint32_t hash = _hash_slice(key);
-    return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority);
+    return _shards[_shard(hash)].insert(key, hash, value, value_size, deleter, priority, cleanup);
 }
 
 Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
@@ -471,9 +492,9 @@ Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
     return _shards[_shard(hash)].lookup(key, hash);
 }
 
-void ShardedLRUCache::release(Handle* handle) {
+void ShardedLRUCache::release(Handle* handle, CacheCleanup* cleanup) {
     auto* h = reinterpret_cast<LRUHandle*>(handle);
-    _shards[_shard(h->hash)].release(handle);
+    _shards[_shard(h->hash)].release(handle, cleanup);
 }
 
 void ShardedLRUCache::touch(const CacheKey& key) {

@@ -35,8 +35,8 @@ namespace starrocks {
 class RecordingCache final : public Cache {
 public:
     Handle* insert(const CacheKey& /*key*/, void* /*value*/, size_t /*value_size*/,
-                   void (*/*deleter*/)(const CacheKey& key, void* value),
-                   CachePriority /*priority*/ = CachePriority::NORMAL) override {
+                   void (* /*deleter*/)(const CacheKey& key, void* value),
+                   CachePriority /*priority*/ = CachePriority::NORMAL, CacheCleanup* /*cleanup*/ = nullptr) override {
         return nullptr;
     }
 
@@ -46,7 +46,7 @@ public:
         return &_handle;
     }
 
-    void release(Handle* /*handle*/) override { ++release_calls; }
+    void release(Handle* /*handle*/, CacheCleanup* /*cleanup*/ = nullptr) override { ++release_calls; }
 
     void touch(const CacheKey& key) override {
         ++touch_calls;
