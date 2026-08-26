@@ -41,11 +41,16 @@ import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.LazyComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,6 +66,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class WarehouseManagerEPackTest {
@@ -576,4 +582,58 @@ public class WarehouseManagerEPackTest {
             Assertions.assertEquals(resumeTime, localWarehouse.getResumeTime());
         }
     }
+
+    private static class WarnCounterAppender extends AbstractAppender {
+        private final AtomicInteger warnCount = new AtomicInteger();
+
+        WarnCounterAppender() {
+            super("warehouse-manager-epack-warn-counter", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            if (event.getLevel() == Level.WARN) {
+                warnCount.incrementAndGet();
+            }
+        }
+
+        int getWarnCount() {
+            return warnCount.get();
+        }
+    }
+
+    private record NamingOutcome(String name, int warnCount) { }
+
+    private NamingOutcome nameComputeResource(WarehouseManagerEPack mgr, ComputeResource computeResource) {
+        WarnCounterAppender appender = new WarnCounterAppender();
+        org.apache.logging.log4j.core.Logger logger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(WarehouseManagerEPack.class);
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            return new NamingOutcome(mgr.getComputeResourceName(computeResource), appender.getWarnCount());
+        } finally {
+            logger.removeAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    public void testGetComputeResourceNameIsSilentForUnacquiredLazyResource() {
+        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+        AtomicInteger acquisitions = new AtomicInteger();
+        LazyComputeResource lazy = LazyComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, () -> {
+            acquisitions.incrementAndGet();
+            return CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, LocalWarehouse.DEFAULT_CLUSTER_ID);
+        });
+
+        NamingOutcome outcome = nameComputeResource(mgr, lazy);
+
+        Assertions.assertEquals("", outcome.name());
+        Assertions.assertEquals(0, acquisitions.get(),
+                "naming must not acquire the compute resource");
+        Assertions.assertEquals(0, outcome.warnCount(),
+                "a statement that never acquired a CN group is a normal state and must not log a warning");
+    }
+
 }

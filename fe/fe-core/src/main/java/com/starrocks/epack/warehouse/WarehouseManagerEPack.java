@@ -135,8 +135,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         try {
             CNGroupResource cnGroupResource = CNGroupUtils.getAcquiredCNGroupResource(computeResource);
             if (cnGroupResource == null) {
-                LOG.warn("Failed to get compute resource name for computeResource: {}, cnGroupResource is null",
-                        computeResource);
+                LOG.debug("No CN group acquired yet for computeResource: {}", computeResource);
                 return "";
             }
             LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(cnGroupResource.getWarehouseId());
