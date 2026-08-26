@@ -44,7 +44,7 @@ public:
               _tablet_id(tablet_id),
               _enable_multiple_output_files(enable_multiple_output_files) {}
 
-    ~KeyValueMerger();
+    ~KeyValueMerger() = default;
 
     struct TableBuilderWrapper {
         std::string filename;
@@ -53,8 +53,6 @@ public:
         std::unique_ptr<sstable::FilterPolicy> filter_policy;
         // destroy first.
         std::unique_ptr<sstable::TableBuilder> table_builder;
-        bool finish_attempted = false;
-        bool close_attempted = false;
     };
 
     struct KeyValueMergerOutput {
@@ -91,7 +89,6 @@ private:
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
     std::vector<TableBuilderWrapper> _output_builders;
-    bool _outputs_released = false;
     // Scratch buffers reused across merge()/flush() to avoid per-key protobuf
     // allocator churn. Cleared between calls so internal capacity is retained.
     IndexValuesWithVerPB _merge_pb_scratch;

@@ -133,7 +133,6 @@ public:
 
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
-    // Run generic persistent-index major compaction in parallel.
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
                                          const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
@@ -226,12 +225,6 @@ private:
                                            std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
                                            std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level,
                                            bool* contain_shared_sstables);
-
-    static Status prepare_merging_iterator_for_sstables(
-            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-            const std::vector<PersistentIndexSstablePB>& sstables_to_merge,
-            std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-            std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* contain_shared_sstables);
 
     static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
             std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
