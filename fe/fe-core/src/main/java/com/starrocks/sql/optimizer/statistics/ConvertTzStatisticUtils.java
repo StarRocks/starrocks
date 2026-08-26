@@ -115,7 +115,7 @@ public final class ConvertTzStatisticUtils {
             ConstantOperator converted;
             try {
                 converted = ScalarOperatorFunctions.convert_tz(parsedKey.get(), fromTz.get(), toTz.get());
-            } catch (DateTimeException e) {
+            } catch (DateTimeException | SemanticException e) {
                 return Optional.empty();
             }
 
