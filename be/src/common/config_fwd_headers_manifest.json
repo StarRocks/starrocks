@@ -839,6 +839,7 @@
         "enable_segment_data_page_concurrent_prefetch",
         "segment_data_page_prefetch_concurrency",
         "segment_data_page_prefetch_thread_num",
+        "starlet_star_cache_block_size_bytes",
         "enable_bitmap_index_memory_page_cache",
         "enable_zonemap_index_memory_page_cache",
         "enable_ordinal_index_memory_page_cache",

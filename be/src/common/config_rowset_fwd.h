@@ -174,6 +174,10 @@ CONF_Int16(bitmap_max_filter_ratio, "1");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
+#ifdef USE_STAROS
+CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
+
+#endif
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");

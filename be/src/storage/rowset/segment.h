@@ -258,6 +258,14 @@ public:
     // IO without paying for the plan.
     uint64_t small_index_region_size() const { return _small_index_region_size; }
 
+    // Whether the file's last cache block already holds the whole small index region. The footer
+    // sits at the very end of the file and is always read before anything else, and a block cache
+    // serves that read by fetching the whole block it falls in -- so a region starting inside that
+    // block is warm before any prefetch could run. Takes the block size rather than reading the
+    // config so it stays a pure function, testable without a cache.
+    static bool small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
+                                                          uint64_t block_size);
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(const LakeIOOptions& lake_io_opts = {});
