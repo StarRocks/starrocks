@@ -2310,6 +2310,171 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     }
 }
 
+// Order the fixture's tablet by c1, which is not its primary key, so MetaUtils::hasSeparateSortKey's
+// storage-side twin (TabletSchema::has_separate_sort_key) holds. c1 is the one non-key column the
+// partial write below carries, which is what DeltaWriter::is_partial_update_with_sort_key_conflict
+// demands of a row-mode partial update: the rewrite has to order the segment it emits.
+static void make_sort_key_differ_from_pk(TabletMetadata* metadata) {
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->clear_sort_key_idxes();
+    schema_pb->add_sort_key_idxes(1);
+}
+
+// The same cross-published row-mode partial update as above, on a tablet whose ORDER BY key differs
+// from its primary key -- and there the range on the rowset buys nothing, because
+// Rowset::set_segment_tablet_range withholds it: a primary-key range describes no rowid interval in a
+// segment laid out by a different key. So the rewrite output, which holds every source row and is
+// private to this tablet (MetaFileBuilder::apply_opwrite clears `shared` and mints a fresh uid on it,
+// both correctly), has nothing left masking the rows a sibling owns -- rows this tablet never resolved,
+// carrying c2's declared default instead of their real value.
+//
+// A lake primary-key scan is segment rows minus delete vector, so those rows come back: the key is
+// served once by the rowset that legitimately holds it and once more from here. The delete vector is
+// what has to say otherwise, and this asserts both halves of that -- the file still holds all n rows,
+// and the tablet serves exactly n, each with its owner's values.
+//
+// Two children of one split each rewrite the same cross-published op_write into a file of their own, so
+// their two rowsets carry different uids and the query-parent alias a split pins reads to until its
+// UNSHARE lands (build_parent_tablet_metadata -> merge_tablet) cannot deduplicate them. Whatever this
+// tablet leaves unmasked its sibling serves a second copy of, which is why the mask, not the later
+// UNSHARE rewrite, is what has to be right here.
+TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_masks_unowned_rows_without_a_range) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column-mode partial update is refused outright on a separate sort key";
+    }
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+    const int kOwnedRows = kOwnedUpper - kOwnedLower;
+    const int kUnownedRows = n - kOwnedRows;
+    ASSERT_GT(kUnownedRows, 0) << "the sibling rows are the whole point of this test";
+
+    make_sort_key_differ_from_pk(_tablet_metadata.get());
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    ASSERT_TRUE(_tablet_schema->has_separate_sort_key())
+            << "without this the rowset range clips the rewrite and there is nothing to observe";
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: a local full write puts every key -- this child's and its siblings' -- in the index.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish the partial update, exactly as convert_txn_log_for_splitting leaves it --
+    // this tablet's range stamped on the rowset, every segment marked shared.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    // Guards the staging as much as the fix: only the owned keys were re-indexed, so only their old
+    // rows were displaced. All n here would mean the selector never engaged.
+    EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
+    // The fix itself: the rewrite output's own delete vector accounts for every sibling row in it.
+    EXPECT_EQ(kUnownedRows, metadata->rowsets(1).num_dels())
+            << "the rewrite output must mask the rows this tablet does not own";
+
+    // Every key exactly once, with its owner's values -- the owned ones updated by the rewrite, the
+    // rest still as the baseline rowset wrote them. Without the mask the scan also returns the
+    // siblings' copies out of the rewrite output, carrying c2's default.
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  return owned ? (c1 == c0 * 5 && c2 == c0 * 4) : (c1 == c0 * 3 && c2 == c0 * 4);
+              }));
+
+    // And the file really does hold them: the mask is what hides them, not a narrowed rewrite.
+    const auto& rewritten = metadata->rowsets(1);
+    ASSERT_EQ(1, rewritten.segment_metas_size());
+    EXPECT_FALSE(rewritten.segment_metas(0).shared()) << "the rewrite output is private to this tablet";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto segment_path = _tablet_mgr->segment_location(tablet_id, rewritten.segment_metas(0).filename());
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{segment_path}, /*segment_id=*/0, _tablet_schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.tablet_id = tablet_id;
+    opts.stats = &stats;
+    opts.chunk_size = 128;
+    ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
+    auto read_chunk = ChunkFactory::new_chunk(*_schema, 128);
+    std::map<int, std::pair<int, int>> rows;
+    while (true) {
+        read_chunk->reset();
+        auto st = seg_iter->get_next(read_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < read_chunk->num_rows(); i++) {
+            auto row = read_chunk->get(i);
+            rows[row[0].get_int32()] = {row[1].get_int32(), row[2].get_int32()};
+        }
+    }
+    seg_iter->close();
+
+    ASSERT_EQ(static_cast<size_t>(n), rows.size());
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        auto it = rows.find(key);
+        ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
+        EXPECT_EQ(key * 5, it->second.first) << "key " << key;
+        EXPECT_EQ(owned ? key * 4 : 10, it->second.second) << "key " << key;
+    }
+}
+
 // Column-mode partial update on a cross-published rowset. This handler builds its OWN
 // SegmentPKIterators, so it needs its own selector: the mapping it derives from the index decides
 // which source row gets which update, and taking a sibling's row rewrites a value this child does not
